@@ -1,0 +1,28 @@
+# Default benchmark config. Override any field with CLI flags on
+# scripts/run_benchmark.py, e.g. --model, --methods lora,dora,qlora
+
+model: Qwen/Qwen2.5-0.5B
+dataset: Abirate/english_quotes
+text_field: quote
+
+methods:
+  - lora
+  - dora
+  - pissa
+  - adalora
+  - vera
+  - ia3
+  - prefix_tuning
+  - qlora
+
+target_modules:
+  - q_proj
+  - v_proj
+
+r: 8
+alpha: 16
+max_steps: 30
+batch_size: 4
+max_length: 128
+learning_rate: 2.0e-4
+n_examples: 200

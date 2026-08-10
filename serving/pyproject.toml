@@ -1,0 +1,50 @@
+[project]
+name = "serving"
+version = "0.1.0"
+description = "Isolated vLLM serving env for opencode, kept separate from the training project's torch build"
+readme = "README.md"
+requires-python = ">=3.14,<3.15"
+dependencies = [
+    "torch[device-gfx1100]==2.12.0+rocm7.14.0",
+    "amd-torch-device-gfx1100==2.12.0+rocm7.14.0",
+    "amd-torch-device-gfx11==2.12.0+rocm7.14.0",
+    "rocm[libraries]==7.14.0",
+    "rocm-sdk-core",
+    "rocm-sdk-device-gfx1100",
+    "rocm-sdk-libraries",
+    "triton==3.7.1+git0263a6a6.rocm7.14.0",
+    "torchvision==0.27.0+rocm7.14.0",
+    "vllm",
+    "flash-attn",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.3,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+environments = ["sys_platform == 'linux'"]
+prerelease = "allow"
+
+[[tool.uv.index]]
+name = "amd-rocm"
+url = "https://repo.amd.com/rocm/whl-multi-arch"
+explicit = true
+
+[[tool.uv.index]]
+name = "vllm-rdna"
+url = "https://rocm.frameworks.amd.com/whl-multi-arch/vllm-rdna"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "amd-rocm" }
+amd-torch-device-gfx1100 = { index = "amd-rocm" }
+amd-torch-device-gfx11 = { index = "amd-rocm" }
+rocm = { index = "amd-rocm" }
+rocm-sdk-core = { index = "amd-rocm" }
+rocm-sdk-device-gfx1100 = { index = "amd-rocm" }
+rocm-sdk-libraries = { index = "amd-rocm" }
+triton = { index = "amd-rocm" }
+torchvision = { index = "amd-rocm" }
+vllm = { index = "vllm-rdna" }
+flash-attn = { index = "vllm-rdna" }

@@ -1,0 +1,8 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.python-version.local
+results/
+.hf_cache/
+*.egg-info/

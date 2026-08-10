@@ -1,0 +1,57 @@
+[project]
+name = "gnn-experiment"
+version = "0.1.0"
+description = "LoRA / PEFT fine-tuning technique benchmarking harness (single-GPU, ROCm/RX 7900 XTX)"
+authors = [
+    { name = "Mihai Farcas", email = "farcasmihai91@gmail.com" }
+]
+requires-python = ">=3.14,<3.15"
+dependencies = [
+    "accelerate>=1.14.0",
+    "bitsandbytes>=0.50.0",
+    "datasets>=5.0.1",
+    "evaluate>=0.4.6",
+    "kernels>=0.16.0",
+    "matplotlib>=3.11.1",
+    "pandas>=3.0.5",
+    "peft>=0.20.0",
+    "protobuf>=6.31.1,<7.0.0",
+    "pyyaml>=6.0.3",
+    "sentencepiece>=0.2.2",
+    "torch>=2.13.0",
+    "transformers>=5.14.1",
+    "triton-rocm>=3.7.1",
+    "trl>=1.9.2",
+    "vllm>=0.23.1.dev1",
+    "flash-attn>=2.8.3",
+    "torchvision>=0.28.0",
+]
+
+[project.scripts]
+gnn-experiment = "gnn_experiment:main"
+
+[build-system]
+requires = ["uv_build>=0.12.3,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+environments = ["sys_platform == 'linux'"]
+prerelease = "allow"
+
+[[tool.uv.index]]
+name = "pytorch-rocm"
+url = "https://download.pytorch.org/whl/rocm7.2"
+explicit = true
+
+[[tool.uv.index]]
+name = "vllm-rdna"
+url = "https://rocm.frameworks.amd.com/whl-multi-arch/vllm-rdna"
+explicit = true
+
+[tool.uv.sources]
+triton-rocm = [{ index = "pytorch-rocm" }]
+pytorch-triton-rocm = [{ index = "pytorch-rocm" }]
+torch = { index = "pytorch-rocm" }
+torchvision = { index = "pytorch-rocm" }
+vllm = { index = "vllm-rdna" }
+flash-attn = { index = "vllm-rdna" }
