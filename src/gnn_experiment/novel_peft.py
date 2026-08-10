@@ -85,13 +85,10 @@ class TuckerFactorBank(nn.Module):
     ) -> tuple[nn.Parameter, nn.Parameter]:
         if key not in self.u_in:
             u_in = nn.Parameter(
-                torch.randn(in_features, rank_in, device=device, dtype=dtype)
-                * (1.0 / math.sqrt(in_features))
+                torch.randn(in_features, rank_in, device=device, dtype=dtype) * (1.0 / math.sqrt(in_features))
             )
             # zero-init U_out, same convention as LoRA-B: adapter starts as a no-op.
-            u_out = nn.Parameter(
-                torch.zeros(rank_out, out_features, device=device, dtype=dtype)
-            )
+            u_out = nn.Parameter(torch.zeros(rank_out, out_features, device=device, dtype=dtype))
             self.u_in[key] = u_in
             self.u_out[key] = u_out
         return self.u_in[key], self.u_out[key]
@@ -153,19 +150,13 @@ class VelocityGate(nn.Module):
         if torch.isnan(cur):
             self.ema_velocity[layer_idx] = v
         else:
-            self.ema_velocity[layer_idx] = (
-                self.ema_decay * cur + (1 - self.ema_decay) * v
-            )
+            self.ema_velocity[layer_idx] = self.ema_decay * cur + (1 - self.ema_decay) * v
 
     def end_step(self) -> None:
         self.step_count += 1
         if self.step_count > self.warmup_steps:
             vals = self.ema_velocity.tolist()
-            candidates = [
-                (v, i)
-                for i, v in enumerate(vals)
-                if not math.isnan(v) and v < self.threshold
-            ]
+            candidates = [(v, i) for i, v in enumerate(vals) if not math.isnan(v) and v < self.threshold]
             cap = int(self.num_layers * self.max_quiet_fraction)
             if len(candidates) > cap:
                 # keep the `cap` quietest layers quiet; the rest stay active this step.
@@ -249,15 +240,8 @@ class NovelLoraLinear(nn.Module):
         compute_dtype = torch.bfloat16
 
         if mode == "tucker":
-            assert (
-                factor_lookup is not None
-                and factor_key is not None
-                and rank_in
-                and rank_out
-            )
-            self.rank = (
-                rank_in  # scaling uses the input-side rank, matching LoRA convention
-            )
+            assert factor_lookup is not None and factor_key is not None and rank_in and rank_out
+            self.rank = rank_in  # scaling uses the input-side rank, matching LoRA convention
             self.scaling = alpha / rank_in
             self._factor_lookup = factor_lookup
             self.factor_key = factor_key
@@ -272,18 +256,14 @@ class NovelLoraLinear(nn.Module):
             lora_a = torch.empty(in_f, rank, device=device, dtype=compute_dtype)
             nn.init.kaiming_uniform_(lora_a, a=math.sqrt(5))
             self.lora_a = nn.Parameter(lora_a)
-            self.lora_b = nn.Parameter(
-                torch.zeros(rank, out_f, device=device, dtype=compute_dtype)
-            )
+            self.lora_b = nn.Parameter(torch.zeros(rank, out_f, device=device, dtype=compute_dtype))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         result = self.base_layer(x)
         if self._is_quiet_fn(self.layer_idx):
             return result
 
-        h = self.dropout(x).to(
-            self.core.dtype if self.mode == "tucker" else self.lora_a.dtype
-        )
+        h = self.dropout(x).to(self.core.dtype if self.mode == "tucker" else self.lora_a.dtype)
         if self.mode == "tucker":
             u_in, u_out = self._factor_lookup(self.factor_key)
             delta = (h @ u_in) @ self.core
@@ -358,15 +338,11 @@ def apply_novel_lora(
         ]
         for name, module in targets:
             parts = name.split(".")
-            parent = (
-                layer.get_submodule(".".join(parts[:-1])) if len(parts) > 1 else layer
-            )
+            parent = layer.get_submodule(".".join(parts[:-1])) if len(parts) > 1 else layer
             child_attr = parts[-1]
 
             if mode == "tucker":
-                assert (
-                    bank is not None and factor_lookup is not None
-                )  # implied by mode == "tucker"
+                assert bank is not None and factor_lookup is not None  # implied by mode == "tucker"
                 key = f"{child_attr}_{module.in_features}x{module.out_features}"
                 bank.get_or_create(
                     key,
@@ -446,9 +422,7 @@ def save_novel_adapter(model, out_dir: str | Path, meta: dict) -> None:
         json.dump(meta, f, indent=2)
 
 
-def load_novel_adapter(
-    model, adapter_dir: str | Path, velocity_gate: VelocityGate | None = None
-) -> dict:
+def load_novel_adapter(model, adapter_dir: str | Path, velocity_gate: VelocityGate | None = None) -> dict:
     adapter_dir = Path(adapter_dir)
     meta = json.loads((adapter_dir / "novel_adapter_config.json").read_text())
 
@@ -473,9 +447,7 @@ def load_novel_adapter(
         else:
             missing.append(k)
     if missing:
-        raise RuntimeError(
-            f"Adapter state keys not found in freshly-wrapped model: {missing}"
-        )
+        raise RuntimeError(f"Adapter state keys not found in freshly-wrapped model: {missing}")
 
     summary["meta"] = meta
     return summary

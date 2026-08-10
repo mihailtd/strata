@@ -30,6 +30,7 @@ saves the adapter to `results/adapters/astral_qwen3.5_micro_<variant>/`
 import argparse
 import time
 from pathlib import Path
+from typing import NamedTuple
 
 import mlflow
 import torch
@@ -56,11 +57,17 @@ from gnn_experiment.novel_peft import (
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-VARIANT_MODES = {
-    "custom_standard": {"mode": "standard", "gated": False},
-    "tucker": {"mode": "tucker", "gated": False},
-    "velocity": {"mode": "standard", "gated": True},
-    "combined": {"mode": "tucker", "gated": True},
+
+class VariantConfig(NamedTuple):
+    mode: str
+    gated: bool
+
+
+VARIANT_MODES: dict[str, VariantConfig] = {
+    "custom_standard": VariantConfig(mode="standard", gated=False),
+    "tucker": VariantConfig(mode="tucker", gated=False),
+    "velocity": VariantConfig(mode="standard", gated=True),
+    "combined": VariantConfig(mode="tucker", gated=True),
 }
 
 
@@ -102,9 +109,7 @@ def finetune_novel(
     vram_cap_gb: float = 20.0,
 ):
     if variant not in VARIANT_MODES:
-        raise ValueError(
-            f"Unknown variant '{variant}'. Options: {sorted(VARIANT_MODES)}"
-        )
+        raise ValueError(f"Unknown variant '{variant}'. Options: {sorted(VARIANT_MODES)}")
     cfg = VARIANT_MODES[variant]
 
     # Safety first (see set_hard_vram_cap docstring): user is fine with up to 20 GB
@@ -113,9 +118,7 @@ def finetune_novel(
     # ROCm-over-WSL silently spilling into shared host RAM.
     set_hard_vram_cap(vram_cap_gb)
 
-    out_dir = out_dir or str(
-        REPO_ROOT / "results" / "adapters" / f"astral_qwen3.5_micro_{variant}"
-    )
+    out_dir = out_dir or str(REPO_ROOT / "results" / "adapters" / f"astral_qwen3.5_micro_{variant}")
     out_path = Path(out_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 
@@ -123,18 +126,13 @@ def finetune_novel(
     mlflow.set_tracking_uri(f"sqlite:///{mlflow_db}")
     mlflow.set_experiment(experiment_name)
 
-    print(
-        f"--- [{variant}] Loading {model_name} in 4-bit for novel-adapter fine-tuning ---"
-    )
+    print(f"--- [{variant}] Loading {model_name} in 4-bit for novel-adapter fine-tuning ---")
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+    assert tokenizer is not None
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    compute_dtype = (
-        torch.bfloat16
-        if torch.cuda.is_available() and torch.cuda.is_bf16_supported()
-        else torch.float16
-    )
+    compute_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_compute_dtype=compute_dtype,
@@ -153,7 +151,7 @@ def finetune_novel(
     model = prepare_model_for_kbit_training(model)
 
     gate = None
-    if cfg["gated"]:
+    if cfg.gated:
         num_layers = len(get_decoder_layers(model))
         gate = VelocityGate(
             num_layers=num_layers,
@@ -165,7 +163,7 @@ def finetune_novel(
 
     summary = apply_novel_lora(
         model,
-        mode=cfg["mode"],
+        mode=cfg.mode,
         target_modules=TARGET_MODULES,
         rank=rank,
         rank_in=rank_in,
@@ -197,9 +195,7 @@ def finetune_novel(
             padding="max_length",
         )
 
-    tokenized_ds = dataset.map(
-        tokenize, batched=True, remove_columns=dataset.column_names
-    )
+    tokenized_ds = dataset.map(tokenize, batched=True, remove_columns=dataset.column_names)
     collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
 
     train_args = TrainingArguments(
@@ -214,9 +210,7 @@ def finetune_novel(
         fp16=compute_dtype == torch.float16,
     )
 
-    callbacks: list[TrainerCallback] = (
-        [VelocityGateCallback(gate)] if gate is not None else []
-    )
+    callbacks: list[TrainerCallback] = [VelocityGateCallback(gate)] if gate is not None else []
     trainer = Trainer(
         model=model,
         args=train_args,
@@ -229,24 +223,18 @@ def finetune_novel(
         torch.cuda.reset_peak_memory_stats()
     start_time = time.perf_counter()
 
-    print(
-        f"--- [{variant}] Executing {train_steps}-step novel-adapter training pass ---"
-    )
+    print(f"--- [{variant}] Executing {train_steps}-step novel-adapter training pass ---")
     train_result = trainer.train()
 
     wall_time_s = time.perf_counter() - start_time
-    peak_vram_gb = (
-        torch.cuda.max_memory_allocated() / (1024**3)
-        if torch.cuda.is_available()
-        else 0.0
-    )
+    peak_vram_gb = torch.cuda.max_memory_allocated() / (1024**3) if torch.cuda.is_available() else 0.0
     opt_state_mb = optimizer_state_bytes(trainer.optimizer) / (1024**2)
 
     print(f"Saving novel adapter ({variant}) to {out_path}...")
     meta = {
         "variant": variant,
-        "mode": cfg["mode"],
-        "gated": cfg["gated"],
+        "mode": cfg.mode,
+        "gated": cfg.gated,
         "target_modules": TARGET_MODULES,
         "rank": rank,
         "rank_in": rank_in,
@@ -256,9 +244,7 @@ def finetune_novel(
         "velocity_threshold": velocity_threshold if gate is not None else None,
         "velocity_ema_decay": velocity_ema_decay if gate is not None else None,
         "velocity_warmup_steps": velocity_warmup_steps if gate is not None else None,
-        "velocity_max_quiet_fraction": velocity_max_quiet_fraction
-        if gate is not None
-        else None,
+        "velocity_max_quiet_fraction": velocity_max_quiet_fraction if gate is not None else None,
     }
     save_novel_adapter(model, out_path, meta)
     tokenizer.save_pretrained(out_path)
@@ -271,15 +257,13 @@ def finetune_novel(
             quiet_fraction_avg = sum(post_warmup) / len(post_warmup)
             quiet_fraction_final = post_warmup[-1]
 
-    with mlflow.start_run(
-        run_name=f"novel_{variant}_{model_name.replace('/', '_')}_{train_steps}steps"
-    ):
+    with mlflow.start_run(run_name=f"novel_{variant}_{model_name.replace('/', '_')}_{train_steps}steps"):
         mlflow.set_tags(
             {
                 "variant": variant,
                 "novel_architecture": "true",
-                "mode": cfg["mode"],
-                "gated": str(cfg["gated"]),
+                "mode": cfg.mode,
+                "gated": str(cfg.gated),
             }
         )
         mlflow.log_params(
@@ -291,7 +275,7 @@ def finetune_novel(
                 "max_seq_length": max_seq_length,
                 "dataset_size": len(dataset),
                 "variant": variant,
-                "mode": cfg["mode"],
+                "mode": cfg.mode,
                 "rank": rank,
                 "rank_in": rank_in,
                 "rank_out": rank_out,
@@ -300,12 +284,8 @@ def finetune_novel(
                 "wrapped_linear_count": summary["wrapped_count"],
                 "velocity_threshold": velocity_threshold if gate is not None else -1,
                 "velocity_ema_decay": velocity_ema_decay if gate is not None else -1,
-                "velocity_warmup_steps": velocity_warmup_steps
-                if gate is not None
-                else -1,
-                "velocity_max_quiet_fraction": velocity_max_quiet_fraction
-                if gate is not None
-                else -1,
+                "velocity_warmup_steps": velocity_warmup_steps if gate is not None else -1,
+                "velocity_max_quiet_fraction": velocity_max_quiet_fraction if gate is not None else -1,
             }
         )
         metrics = {
@@ -315,12 +295,11 @@ def finetune_novel(
             "steps_per_sec": train_steps / max(0.001, wall_time_s),
             "trainable_params": summary["trainable_params"],
             "total_params": summary["total_params"],
-            "trainable_pct": 100
-            * summary["trainable_params"]
-            / summary["total_params"],
+            "trainable_pct": 100 * summary["trainable_params"] / summary["total_params"],
             "optimizer_state_mb": opt_state_mb,
         }
         if quiet_fraction_avg is not None:
+            assert quiet_fraction_final is not None  # always set together, see above
             metrics["quiet_layer_fraction_avg"] = quiet_fraction_avg
             metrics["quiet_layer_fraction_final"] = quiet_fraction_final
         mlflow.log_metrics(metrics)
@@ -329,9 +308,7 @@ def finetune_novel(
     print(f"Wall time: {wall_time_s:.2f} s ({metrics['steps_per_sec']:.3f} steps/s)")
     print(f"Peak VRAM: {peak_vram_gb:.2f} GB")
     print(f"Final loss: {train_result.training_loss:.4f}")
-    print(
-        f"Trainable params: {summary['trainable_params']:,} ({metrics['trainable_pct']:.3f}%)"
-    )
+    print(f"Trainable params: {summary['trainable_params']:,} ({metrics['trainable_pct']:.3f}%)")
     print(f"Optimizer state: {opt_state_mb:.3f} MB")
     if quiet_fraction_avg is not None:
         print(f"Avg quiet-layer fraction (post-warmup): {quiet_fraction_avg:.1%}")
@@ -342,9 +319,7 @@ def finetune_novel(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--variant", required=True, choices=sorted(VARIANT_MODES))
     parser.add_argument("--model-name", default="Qwen/Qwen3.5-4B")
     parser.add_argument("--out", default=None)

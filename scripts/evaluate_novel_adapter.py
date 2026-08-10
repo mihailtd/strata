@@ -32,11 +32,7 @@ from gnn_experiment.novel_peft import (  # noqa: E402
 
 
 def _load_base_model(model_name: str):
-    compute_dtype = (
-        torch.bfloat16
-        if torch.cuda.is_available() and torch.cuda.is_bf16_supported()
-        else torch.float16
-    )
+    compute_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_compute_dtype=compute_dtype,
@@ -59,16 +55,10 @@ def evaluate_novel_variants(
     out_summary_dir: str | None = None,
     vram_cap_gb: float = 20.0,
 ) -> dict:
-    set_hard_vram_cap(
-        vram_cap_gb
-    )  # see set_hard_vram_cap docstring for why this is mandatory here
+    set_hard_vram_cap(vram_cap_gb)  # see set_hard_vram_cap docstring for why this is mandatory here
 
-    adapter_root_path = (
-        Path(adapter_root) if adapter_root else REPO_ROOT / "results" / "adapters"
-    )
-    out_summary_dir_path = (
-        Path(out_summary_dir) if out_summary_dir else REPO_ROOT / "results"
-    )
+    adapter_root_path = Path(adapter_root) if adapter_root else REPO_ROOT / "results" / "adapters"
+    out_summary_dir_path = Path(out_summary_dir) if out_summary_dir else REPO_ROOT / "results"
 
     questions_path = Path(questions_file)
     if not questions_path.is_absolute():
@@ -82,12 +72,11 @@ def evaluate_novel_variants(
 
     print(f"Loading tokenizer for {model_name}")
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+    assert tokenizer is not None
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    print(
-        "\n================== Evaluating BASE model (shared across all variants) =================="
-    )
+    print("\n================== Evaluating BASE model (shared across all variants) ==================")
     base_model = _load_base_model(model_name)
     base_model.eval()
     base_results = []
@@ -100,9 +89,7 @@ def evaluate_novel_variants(
     del base_model
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
-    base_avg_adherence = sum(r["adherence_pct"] for r in base_results) / len(
-        base_results
-    )
+    base_avg_adherence = sum(r["adherence_pct"] for r in base_results) / len(base_results)
     base_modern_total = sum(r["modern_hits"] for r in base_results)
     base_legacy_total = sum(r["legacy_hits"] for r in base_results)
     print(f"Base model modern adherence: {base_avg_adherence:.2f}%")
@@ -110,9 +97,7 @@ def evaluate_novel_variants(
     all_summaries = {}
     for variant in variants:
         adapter_dir = adapter_root_path / f"astral_qwen3.5_micro_{variant}"
-        print(
-            f"\n================== Evaluating variant '{variant}' ({adapter_dir}) =================="
-        )
+        print(f"\n================== Evaluating variant '{variant}' ({adapter_dir}) ==================")
         if not (adapter_dir / "novel_adapter_config.json").exists():
             print(f"  SKIP: no adapter found at {adapter_dir}")
             continue
@@ -144,9 +129,7 @@ def evaluate_novel_variants(
         ft_modern_total = sum(r["modern_hits"] for r in ft_results)
         ft_legacy_total = sum(r["legacy_hits"] for r in ft_results)
 
-        with mlflow.start_run(
-            run_name=f"eval_novel_{variant}_{model_name.replace('/', '_')}"
-        ):
+        with mlflow.start_run(run_name=f"eval_novel_{variant}_{model_name.replace('/', '_')}"):
             mlflow.set_tags({"variant": variant, "novel_architecture": "true"})
             mlflow.log_params(
                 {
@@ -190,9 +173,7 @@ def evaluate_novel_variants(
             mlflow.log_dict(summary, "evaluation_comparison.json")
 
         out_summary_dir_path.mkdir(parents=True, exist_ok=True)
-        with open(
-            out_summary_dir_path / f"astral_eval_summary_{variant}.json", "w"
-        ) as f:
+        with open(out_summary_dir_path / f"astral_eval_summary_{variant}.json", "w") as f:
             json.dump(summary, f, indent=2)
 
         print(
@@ -205,9 +186,7 @@ def evaluate_novel_variants(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument(
         "--variants",
         nargs="+",
@@ -230,6 +209,4 @@ if __name__ == "__main__":
     print("\n=== Summary ===")
     print(f"Base: {result['base_avg_adherence_pct']:.2f}%")
     for v, s in result["variants"].items():
-        print(
-            f"{v}: {s['finetuned_avg_adherence_pct']:.2f}% (gain {s['adherence_gain_pct']:+.2f}pp)"
-        )
+        print(f"{v}: {s['finetuned_avg_adherence_pct']:.2f}% (gain {s['adherence_gain_pct']:+.2f}pp)")
