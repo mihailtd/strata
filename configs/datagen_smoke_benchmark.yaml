@@ -2,7 +2,7 @@
 # consumable by the existing PEFT benchmark harness, not just schema-correct
 # in isolation. Not meant for real training (n_examples/max_steps are tiny).
 
-model: Qwen/Qwen2.5-0.5B
+model: Qwen/Qwen3.5-0.8B-Instruct
 dataset: data/astral_docs/sft/astral_expert_sft.jsonl
 text_field: text
 

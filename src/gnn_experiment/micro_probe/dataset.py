@@ -6,23 +6,28 @@ from data/astral_docs/sft/astral_expert_sft.jsonl into instruction dataset items
 
 import json
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
+import pyarrow as pa
 from datasets import Dataset
 
 from gnn_experiment.datagen.chunk import chunk_all
 from gnn_experiment.datagen.schema import Chunk
 
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+
 
 def load_astral_micro_dataset(
-    raw_docs_dir: str = "data/astral_docs/raw",
-    sft_file: str = "data/astral_docs/sft/astral_expert_sft.jsonl",
+    raw_docs_dir: Optional[str] = None,
+    sft_file: Optional[str] = None,
     max_samples: int = 2000,
 ) -> Dataset:
     """Load raw markdown docs and SFT pairs into a Hugging Face Dataset."""
+    raw_path = Path(raw_docs_dir) if raw_docs_dir else (REPO_ROOT / "data" / "astral_docs" / "raw")
+    sft_path = Path(sft_file) if sft_file else (REPO_ROOT / "data" / "astral_docs" / "sft" / "astral_expert_sft.jsonl")
+
     records: List[Dict[str, Any]] = []
 
     # 1. Load SFT expert Q&A pairs if present
-    sft_path = Path(sft_file)
     if sft_path.exists():
         with open(sft_path, "r", encoding="utf-8") as f:
             for line in f:
@@ -43,10 +48,9 @@ def load_astral_micro_dataset(
                     continue
 
     # 2. Parse raw doc chunks from uv, ruff, ty
-    raw_dir = Path(raw_docs_dir)
-    if raw_dir.exists():
+    if raw_path.exists():
         docs_roots = {}
-        for tool_dir in raw_dir.iterdir():
+        for tool_dir in raw_path.iterdir():
             if tool_dir.is_dir() and not tool_dir.name.startswith("."):
                 tool_name = tool_dir.name
                 docs_folder = tool_dir / "docs"
@@ -70,5 +74,10 @@ def load_astral_micro_dataset(
     if max_samples and len(records) > max_samples:
         records = records[:max_samples]
 
-    print(f"Loaded {len(records)} dataset items from {raw_docs_dir} and {sft_file}")
-    return Dataset.from_list(records)
+    print(f"Loaded {len(records)} dataset items from {raw_path} and {sft_path}")
+
+    # Use pyarrow Table + explicit fingerprint to bypass Python 3.14 dill hashing bug
+    texts = [r["text"] for r in records]
+    sources = [r["source"] for r in records]
+    pa_table = pa.Table.from_pydict({"text": texts, "source": sources})
+    return Dataset(pa_table, fingerprint="astral_micro_docs_v1")

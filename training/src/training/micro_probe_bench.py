@@ -1,4 +1,4 @@
-"""Unsloth AMD Fast Training Micro-Probe Benchmark (500 steps, Qwen3.5-2B).
+"""Unsloth AMD Fast Training Micro-Probe Benchmark (500 steps, Qwen micro-probe).
 
 Runs 500-step QLoRA/LoRA micro-probe training using Unsloth on AMD ROCm 7.2.
 Logs throughput, peak VRAM, step timing, and loss curves via the Python `mlflow` SDK.
@@ -17,11 +17,11 @@ from gnn_experiment.micro_probe.dataset import load_astral_micro_dataset
 
 from unsloth import FastLanguageModel
 from trl import SFTTrainer
-from transformers import TrainingArguments, DataCollatorForSeq2Seq
+from transformers import TrainingArguments, DataCollatorForLanguageModeling
 
 
 def run_unsloth_micro_probe(
-    model_name: str = "Qwen/Qwen3.5-2B-Instruct",
+    model_name: str = "unsloth/Qwen3.5-2B-Instruct-bnb-4bit",
     max_steps: int = 500,
     batch_size: int = 2,
     learning_rate: float = 2e-4,
@@ -34,12 +34,21 @@ def run_unsloth_micro_probe(
     mlflow.set_experiment(experiment_name)
 
     print(f"--- Loading Micro-Probe Model: {model_name} via Unsloth ---")
-    model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name=model_name,
-        max_seq_length=max_seq_length,
-        dtype=None,  # Auto detection
-        load_in_4bit=True,
-    )
+    try:
+        model, tokenizer = FastLanguageModel.from_pretrained(
+            model_name=model_name,
+            max_seq_length=max_seq_length,
+            dtype=None,  # Auto detection
+            load_in_4bit=True,
+        )
+    except Exception as e:
+        print(f"Primary model {model_name} failed: {e}. Trying fallback Qwen/Qwen3.5-2B-Instruct...")
+        model, tokenizer = FastLanguageModel.from_pretrained(
+            model_name="Qwen/Qwen3.5-2B-Instruct",
+            max_seq_length=max_seq_length,
+            dtype=None,
+            load_in_4bit=True,
+        )
 
     # Apply fast LoRA adapter
     model = FastLanguageModel.get_peft_model(
@@ -58,6 +67,17 @@ def run_unsloth_micro_probe(
     sft_file = str(Path(__file__).resolve().parent.parent.parent.parent / "data" / "astral_docs" / "sft" / "astral_expert_sft.jsonl")
     dataset = load_astral_micro_dataset(raw_docs_dir=raw_dir, sft_file=sft_file)
 
+    def tokenize_function(examples):
+        return tokenizer(
+            examples["text"],
+            truncation=True,
+            max_length=max_seq_length,
+            padding="max_length",
+        )
+
+    tokenized_dataset = dataset.map(tokenize_function, batched=True, remove_columns=dataset.column_names)
+    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+
     training_args = TrainingArguments(
         per_device_train_batch_size=batch_size,
         gradient_accumulation_steps=1,
@@ -75,11 +95,11 @@ def run_unsloth_micro_probe(
     trainer = SFTTrainer(
         model=model,
         tokenizer=tokenizer,
-        train_dataset=dataset,
-        dataset_text_field="text",
+        train_dataset=tokenized_dataset,
         max_seq_length=max_seq_length,
         dataset_num_proc=1,
         packing=False,
+        data_collator=data_collator,
         args=training_args,
     )
 
@@ -88,7 +108,7 @@ def run_unsloth_micro_probe(
         torch.cuda.reset_peak_memory_stats()
 
     start_time = time.perf_counter()
-    with mlflow.start_run(run_name=f"unsloth_qwen3.5_2b_{max_steps}steps"):
+    with mlflow.start_run(run_name=f"unsloth_qwen_micro_{max_steps}steps"):
         mlflow.log_params({
             "framework": "unsloth_amd",
             "model_name": model_name,

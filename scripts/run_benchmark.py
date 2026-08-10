@@ -2,7 +2,7 @@
 
     uv run --env-file .env scripts/run_benchmark.py
     uv run --env-file .env scripts/run_benchmark.py --methods lora,dora,qlora --max-steps 50
-    uv run --env-file .env scripts/run_benchmark.py --model Qwen/Qwen2.5-1.5B
+    uv run --env-file .env scripts/run_benchmark.py --model Qwen/Qwen3.5-2B-Instruct
 
 --env-file .env sets LD_PRELOAD (required for torch to see the GPU on WSL,
 see scripts/check_gpu.py) and HF_TOKEN.
