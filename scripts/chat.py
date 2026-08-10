@@ -33,11 +33,17 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     if device == "cpu":
         print("WARNING: no GPU visible to torch, running on CPU (will be slow).")
-    dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float32
+    dtype = (
+        torch.bfloat16
+        if torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+        else torch.float32
+    )
 
     print(f"Loading {args.model} on {device}...")
     tokenizer = AutoTokenizer.from_pretrained(args.model)
-    model = AutoModelForCausalLM.from_pretrained(args.model, dtype=dtype, device_map={"": 0} if device == "cuda" else None)
+    model = AutoModelForCausalLM.from_pretrained(
+        args.model, dtype=dtype, device_map={"": 0} if device == "cuda" else None
+    )
 
     if args.adapter:
         print(f"Loading adapter {args.adapter}...")
@@ -51,7 +57,7 @@ def main():
     while True:
         try:
             user_input = input("you> ").strip()
-        except (EOFError, KeyboardInterrupt):
+        except EOFError, KeyboardInterrupt:
             print()
             break
 

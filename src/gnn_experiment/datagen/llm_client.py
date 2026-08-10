@@ -26,7 +26,9 @@ def stop_llama_server(port: int, grace_s: float = 5.0) -> bool:
     pattern = rf"llama-server.*--port\s+{port}\b"
 
     def _find_pids() -> list[int]:
-        result = subprocess.run(["pgrep", "-f", pattern], capture_output=True, text=True)
+        result = subprocess.run(
+            ["pgrep", "-f", pattern], capture_output=True, text=True
+        )
         return [int(p) for p in result.stdout.split() if p.strip()]
 
     pids = _find_pids()
@@ -71,12 +73,14 @@ class LocalLLMClient:
         span_name: str = "llm_chat",
     ) -> ChatResult:
         with mlflow.start_span(name=span_name, span_type="LLM") as span:
-            span.set_inputs({
-                "messages": messages,
-                "model": self.model,
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-            })
+            span.set_inputs(
+                {
+                    "messages": messages,
+                    "model": self.model,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                }
+            )
 
             start = time.perf_counter()
             response = self._client.post(
@@ -105,12 +109,14 @@ class LocalLLMClient:
             )
 
             span.set_outputs({"text": result.text})
-            span.set_attributes({
-                "latency_s": elapsed,
-                "prompt_tokens": result.prompt_tokens,
-                "completion_tokens": result.completion_tokens,
-                "model": self.model,
-            })
+            span.set_attributes(
+                {
+                    "latency_s": elapsed,
+                    "prompt_tokens": result.prompt_tokens,
+                    "completion_tokens": result.completion_tokens,
+                    "model": self.model,
+                }
+            )
             return result
 
     def ping(self) -> bool:

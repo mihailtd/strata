@@ -85,4 +85,6 @@ def diff(base_dir: Path) -> str:
 
 
 def _run_git(base_dir: Path, *args: str) -> None:
-    subprocess.run(["git", *args], cwd=base_dir, capture_output=True, text=True, check=True)
+    subprocess.run(
+        ["git", *args], cwd=base_dir, capture_output=True, text=True, check=True
+    )

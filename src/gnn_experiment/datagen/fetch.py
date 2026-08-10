@@ -16,9 +16,7 @@ REPOS = {
 
 
 def _run_git(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
-    result = subprocess.run(
-        ["git", *args], cwd=cwd, capture_output=True, text=True
-    )
+    result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
     if result.returncode != 0:
         raise RuntimeError(f"git {' '.join(args)} failed:\n{result.stderr}")
     return result
@@ -48,8 +46,13 @@ def fetch_docs(repo_key: str, cache_dir: Path, refresh: bool = False) -> Path:
         print(f"[fetch] {repo_key}: cloning (sparse, docs/ only)")
         cache_dir.mkdir(parents=True, exist_ok=True)
         _run_git(
-            "clone", "--depth", "1", "--filter=blob:none", "--sparse",
-            REPOS[repo_key], str(repo_dir),
+            "clone",
+            "--depth",
+            "1",
+            "--filter=blob:none",
+            "--sparse",
+            REPOS[repo_key],
+            str(repo_dir),
         )
         _run_git("sparse-checkout", "set", "docs", cwd=repo_dir)
 
@@ -58,5 +61,7 @@ def fetch_docs(repo_key: str, cache_dir: Path, refresh: bool = False) -> Path:
     return docs_dir
 
 
-def fetch_all(repo_keys: list[str], cache_dir: Path, refresh: bool = False) -> dict[str, Path]:
+def fetch_all(
+    repo_keys: list[str], cache_dir: Path, refresh: bool = False
+) -> dict[str, Path]:
     return {key: fetch_docs(key, cache_dir, refresh=refresh) for key in repo_keys}

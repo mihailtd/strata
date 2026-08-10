@@ -58,7 +58,11 @@ def _tokens_to_blocks(tokens) -> list[_Block]:
 
 
 def chunk_markdown_file(
-    path: Path, tool: str, docs_root: Path, chunk_size_chars: int = 2000, min_chars: int = 100
+    path: Path,
+    tool: str,
+    docs_root: Path,
+    chunk_size_chars: int = 2000,
+    min_chars: int = 100,
 ) -> list[Chunk]:
     text = path.read_text(errors="replace")
     tokens = _MD.parse(text)
@@ -73,7 +77,9 @@ def chunk_markdown_file(
         nonlocal current_text, current_heading_path
         stripped = current_text.strip()
         if len(stripped) >= min_chars:
-            breadcrumb = f"# Context: {tool} docs > " + " > ".join(current_heading_path or [source_path])
+            breadcrumb = f"# Context: {tool} docs > " + " > ".join(
+                current_heading_path or [source_path]
+            )
             chunks.append(
                 Chunk(
                     tool=tool,
@@ -106,6 +112,8 @@ def chunk_all(
     for tool, docs_root in docs_roots.items():
         for md_path in sorted(docs_root.rglob("*.md")):
             chunks.extend(
-                chunk_markdown_file(md_path, tool, docs_root, chunk_size_chars, min_chars)
+                chunk_markdown_file(
+                    md_path, tool, docs_root, chunk_size_chars, min_chars
+                )
             )
     return chunks

@@ -27,7 +27,9 @@ def parse_args():
     p.add_argument("--methods", help="comma-separated, e.g. lora,dora,qlora")
     p.add_argument("--max-steps", type=int)
     p.add_argument("--r", type=int)
-    p.add_argument("--out", default=str(REPO_ROOT / "results" / "benchmark_results.csv"))
+    p.add_argument(
+        "--out", default=str(REPO_ROOT / "results" / "benchmark_results.csv")
+    )
     return p.parse_args()
 
 

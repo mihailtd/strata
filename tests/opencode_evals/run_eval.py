@@ -19,7 +19,7 @@ import re
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -48,10 +48,19 @@ OPENCODE_CONFIG_TEMPLATE = {
 
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--model", required=True, help="opencode model string, e.g. local-llamacpp/qwen3.5-4b")
+    p.add_argument(
+        "--model",
+        required=True,
+        help="opencode model string, e.g. local-llamacpp/qwen3.5-4b",
+    )
     p.add_argument("--model-display-name", default=None)
     p.add_argument("--prompt", default=DEFAULT_PROMPT)
-    p.add_argument("--timeout", type=int, default=300, help="seconds before the eval is marked FAIL (timeout)")
+    p.add_argument(
+        "--timeout",
+        type=int,
+        default=300,
+        help="seconds before the eval is marked FAIL (timeout)",
+    )
     return p.parse_args()
 
 
@@ -63,11 +72,16 @@ def write_opencode_config(repo_dir: Path, model_id: str, display_name: str):
 
 def run_opencode(repo_dir: Path, model: str, prompt: str, timeout: int):
     cmd = [
-        "opencode", "run", prompt,
-        "--dir", str(repo_dir),
-        "--model", model,
+        "opencode",
+        "run",
+        prompt,
+        "--dir",
+        str(repo_dir),
+        "--model",
+        model,
         "--auto",
-        "--format", "json",
+        "--format",
+        "json",
     ]
     start = time.perf_counter()
     try:
@@ -100,11 +114,13 @@ def parse_events(stdout: str):
         if ptype == "text" and part.get("text"):
             turns.append({"type": "text", "text": part["text"]})
         elif ptype == "tool":
-            turns.append({
-                "type": "tool",
-                "tool": part.get("tool"),
-                "state": part.get("state", {}),
-            })
+            turns.append(
+                {
+                    "type": "tool",
+                    "tool": part.get("tool"),
+                    "state": part.get("state", {}),
+                }
+            )
         elif ptype == "step-finish":
             tok = part.get("tokens", {})
             for k in ("input", "output", "reasoning"):
@@ -131,7 +147,9 @@ def classify_fix_method(turns: list) -> str:
             continue
         state = turn.get("state", {})
         input_ = state.get("input", {})
-        if turn["tool"] == "bash" and UV_COMMAND_RE.search(str(input_.get("command", ""))):
+        if turn["tool"] == "bash" and UV_COMMAND_RE.search(
+            str(input_.get("command", ""))
+        ):
             used_uv_command = True
         elif turn["tool"] in ("edit", "write", "patch") and "pyproject.toml" in str(
             input_.get("filePath", "")
@@ -154,7 +172,9 @@ def check_ground_truth(repo_dir: Path) -> tuple[bool, str]:
     return result.returncode == 0, result.stderr
 
 
-def render_markdown(meta: dict, turns: list, ground_truth_ok: bool, ground_truth_err: str) -> str:
+def render_markdown(
+    meta: dict, turns: list, ground_truth_ok: bool, ground_truth_err: str
+) -> str:
     lines = [
         f"# opencode eval: {meta['model']}",
         "",
@@ -193,10 +213,26 @@ def render_markdown(meta: dict, turns: list, ground_truth_ok: bool, ground_truth
             lines.append("")
 
     if not ground_truth_ok and ground_truth_err:
-        lines += ["---", "", "## Ground truth `uv lock` error (after run)", "", "```", ground_truth_err[:2000], "```"]
+        lines += [
+            "---",
+            "",
+            "## Ground truth `uv lock` error (after run)",
+            "",
+            "```",
+            ground_truth_err[:2000],
+            "```",
+        ]
 
     if meta.get("diff"):
-        lines += ["---", "", "## What actually changed (`git diff`)", "", "```diff", meta["diff"][:3000], "```"]
+        lines += [
+            "---",
+            "",
+            "## What actually changed (`git diff`)",
+            "",
+            "```diff",
+            meta["diff"][:3000],
+            "```",
+        ]
 
     return "\n".join(lines)
 
@@ -206,7 +242,7 @@ def main():
     display_name = args.model_display_name or args.model.split("/")[-1]
     model_id = args.model.split("/", 1)[1] if "/" in args.model else args.model
 
-    run_id = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    run_id = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     run_dir = RUNS_DIR / run_id
     repo_dir = run_dir / "repo"
 
@@ -215,13 +251,21 @@ def main():
     write_opencode_config(repo_dir, model_id, display_name)
 
     print(f"Running opencode (model={args.model}, timeout={args.timeout}s)...")
-    result, elapsed, timed_out = run_opencode(repo_dir, args.model, args.prompt, args.timeout)
+    result, elapsed, timed_out = run_opencode(
+        repo_dir, args.model, args.prompt, args.timeout
+    )
 
     stdout = "" if timed_out else result.stdout
     stderr = "" if timed_out else result.stderr
-    turns, tokens = parse_events(stdout) if not timed_out else ([], {"input": 0, "output": 0, "reasoning": 0, "total": 0})
+    turns, tokens = (
+        parse_events(stdout)
+        if not timed_out
+        else ([], {"input": 0, "output": 0, "reasoning": 0, "total": 0})
+    )
 
-    ground_truth_ok, ground_truth_err = (False, "timed out") if timed_out else check_ground_truth(repo_dir)
+    ground_truth_ok, ground_truth_err = (
+        (False, "timed out") if timed_out else check_ground_truth(repo_dir)
+    )
     fix_method = "n/a (timed out)" if timed_out else classify_fix_method(turns)
     fixture_diff = "" if timed_out else diff_monorepo_fixture(repo_dir)
 
@@ -248,7 +292,9 @@ def main():
 
     print(f"\n=== RESULT: {'SUCCESS' if meta['success'] else 'FAIL'} ===")
     print(f"Time: {elapsed:.2f}s")
-    print(f"Tokens: {tokens['total']} (input={tokens['input']}, output={tokens['output']})")
+    print(
+        f"Tokens: {tokens['total']} (input={tokens['input']}, output={tokens['output']})"
+    )
     print(f"Fix method: {fix_method}")
     print(f"Transcript: {transcript_path}")
     print(f"Report: {run_dir / 'report.json'}")

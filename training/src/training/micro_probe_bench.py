@@ -4,20 +4,20 @@ Runs 500-step QLoRA/LoRA micro-probe training using Unsloth on AMD ROCm 7.2.
 Logs throughput, peak VRAM, step timing, and loss curves via the Python `mlflow` SDK.
 """
 
-import time
 import sys
+import time
 from pathlib import Path
-import torch
+
 import mlflow
-from datasets import Dataset
+import torch
 
 # Add parent directory to path to reuse dataset loader
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent.parent / "src"))
-from gnn_experiment.micro_probe.dataset import load_astral_micro_dataset
-
-from unsloth import FastLanguageModel
+from transformers import DataCollatorForLanguageModeling, TrainingArguments
 from trl import SFTTrainer
-from transformers import TrainingArguments, DataCollatorForLanguageModeling
+from unsloth import FastLanguageModel
+
+from gnn_experiment.micro_probe.dataset import load_astral_micro_dataset
 
 
 def run_unsloth_micro_probe(
@@ -42,7 +42,9 @@ def run_unsloth_micro_probe(
             load_in_4bit=True,
         )
     except Exception as e:
-        print(f"Primary model {model_name} failed: {e}. Trying fallback Qwen/Qwen3.5-2B-Instruct...")
+        print(
+            f"Primary model {model_name} failed: {e}. Trying fallback Qwen/Qwen3.5-2B-Instruct..."
+        )
         model, tokenizer = FastLanguageModel.from_pretrained(
             model_name="Qwen/Qwen3.5-2B-Instruct",
             max_seq_length=max_seq_length,
@@ -54,7 +56,15 @@ def run_unsloth_micro_probe(
     model = FastLanguageModel.get_peft_model(
         model,
         r=8,
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+        target_modules=[
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "o_proj",
+            "gate_proj",
+            "up_proj",
+            "down_proj",
+        ],
         lora_alpha=16,
         lora_dropout=0,
         bias="none",
@@ -63,8 +73,19 @@ def run_unsloth_micro_probe(
     )
 
     # Load 1,000+ astral docs dataset
-    raw_dir = str(Path(__file__).resolve().parent.parent.parent.parent / "data" / "astral_docs" / "raw")
-    sft_file = str(Path(__file__).resolve().parent.parent.parent.parent / "data" / "astral_docs" / "sft" / "astral_expert_sft.jsonl")
+    raw_dir = str(
+        Path(__file__).resolve().parent.parent.parent.parent
+        / "data"
+        / "astral_docs"
+        / "raw"
+    )
+    sft_file = str(
+        Path(__file__).resolve().parent.parent.parent.parent
+        / "data"
+        / "astral_docs"
+        / "sft"
+        / "astral_expert_sft.jsonl"
+    )
     dataset = load_astral_micro_dataset(raw_docs_dir=raw_dir, sft_file=sft_file)
 
     def tokenize_function(examples):
@@ -75,7 +96,9 @@ def run_unsloth_micro_probe(
             padding="max_length",
         )
 
-    tokenized_dataset = dataset.map(tokenize_function, batched=True, remove_columns=dataset.column_names)
+    tokenized_dataset = dataset.map(
+        tokenize_function, batched=True, remove_columns=dataset.column_names
+    )
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
     training_args = TrainingArguments(
@@ -103,26 +126,32 @@ def run_unsloth_micro_probe(
         args=training_args,
     )
 
-    print(f"--- Starting Unsloth 500-Step Training Micro-Probe ---")
+    print("--- Starting Unsloth 500-Step Training Micro-Probe ---")
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
 
     start_time = time.perf_counter()
     with mlflow.start_run(run_name=f"unsloth_qwen_micro_{max_steps}steps"):
-        mlflow.log_params({
-            "framework": "unsloth_amd",
-            "model_name": model_name,
-            "max_steps": max_steps,
-            "batch_size": batch_size,
-            "learning_rate": learning_rate,
-            "dataset_size": len(dataset),
-            "max_seq_length": max_seq_length,
-        })
+        mlflow.log_params(
+            {
+                "framework": "unsloth_amd",
+                "model_name": model_name,
+                "max_steps": max_steps,
+                "batch_size": batch_size,
+                "learning_rate": learning_rate,
+                "dataset_size": len(dataset),
+                "max_seq_length": max_seq_length,
+            }
+        )
 
         train_result = trainer.train()
         elapsed_s = time.perf_counter() - start_time
 
-        peak_vram_gb = torch.cuda.max_memory_allocated() / (1024**3) if torch.cuda.is_available() else 0.0
+        peak_vram_gb = (
+            torch.cuda.max_memory_allocated() / (1024**3)
+            if torch.cuda.is_available()
+            else 0.0
+        )
         total_tokens = max_steps * batch_size * max_seq_length
         tok_per_sec = total_tokens / max(1e-5, elapsed_s)
         steps_per_sec = max_steps / max(1e-5, elapsed_s)

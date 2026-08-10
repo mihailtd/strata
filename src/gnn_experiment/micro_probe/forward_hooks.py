@@ -7,7 +7,8 @@ Registers forward hooks on model decoder layers to compute:
 """
 
 import math
-from typing import Dict, List, Any, Optional
+from typing import Any
+
 import torch
 import torch.nn as nn
 
@@ -19,24 +20,30 @@ class MicroProbeForwardHooks:
         self.model = model
         self.epsilon = epsilon
         self.hooks = []
-        self.layer_activations: Dict[int, torch.Tensor] = {}
-        self.layer_prev_activations: Dict[int, torch.Tensor] = {}
-        self.layer_velocities: Dict[int, List[float]] = {}
-        self.quiet_counts: Dict[int, int] = {}
+        self.layer_activations: dict[int, torch.Tensor] = {}
+        self.layer_prev_activations: dict[int, torch.Tensor] = {}
+        self.layer_velocities: dict[int, list[float]] = {}
+        self.quiet_counts: dict[int, int] = {}
         self.total_tokens_evaluated: int = 0
         self._register_hooks()
 
-    def _get_decoder_layers(self) -> List[nn.Module]:
+    def _get_decoder_layers(self) -> list[nn.Module]:
         """Extract decoder layers from Qwen / Transformer architecture."""
         if hasattr(self.model, "model") and hasattr(self.model.model, "layers"):
             return list(self.model.model.layers)
         elif hasattr(self.model, "layers"):
             return list(self.model.layers)
-        elif hasattr(self.model, "transformer") and hasattr(self.model.transformer, "h"):
+        elif hasattr(self.model, "transformer") and hasattr(
+            self.model.transformer, "h"
+        ):
             return list(self.model.transformer.h)
         else:
             # Fallback: inspect module children
-            return [m for name, m in self.model.named_modules() if "layer" in name.lower() or "block" in name.lower()]
+            return [
+                m
+                for name, m in self.model.named_modules()
+                if "layer" in name.lower() or "block" in name.lower()
+            ]
 
     def _register_hooks(self):
         layers = self._get_decoder_layers()
@@ -78,7 +85,7 @@ class MicroProbeForwardHooks:
             h.remove()
         self.hooks.clear()
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> dict[str, Any]:
         """Compute aggregated statistics for layer state velocity and quietness."""
         summary = {}
         total_evals = 0
@@ -94,7 +101,9 @@ class MicroProbeForwardHooks:
                 total_quiet += q_count
 
         overall_avg_velocity = (
-            sum(avg_velocities.values()) / len(avg_velocities) if avg_velocities else 0.0
+            sum(avg_velocities.values()) / len(avg_velocities)
+            if avg_velocities
+            else 0.0
         )
         quiet_ratio = (total_quiet / total_evals) if total_evals > 0 else 0.0
 
@@ -105,7 +114,7 @@ class MicroProbeForwardHooks:
         return summary
 
 
-def compute_gradient_stability(model: nn.Module) -> Dict[str, float]:
+def compute_gradient_stability(model: nn.Module) -> dict[str, float]:
     """Compute gradient norm statistics across all trainable parameters."""
     total_norm_sq = 0.0
     param_count = 0

@@ -6,7 +6,8 @@ from data/astral_docs/sft/astral_expert_sft.jsonl into instruction dataset items
 
 import json
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Any
+
 import pyarrow as pa
 from datasets import Dataset
 
@@ -17,19 +18,27 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 
 def load_astral_micro_dataset(
-    raw_docs_dir: Optional[str] = None,
-    sft_file: Optional[str] = None,
+    raw_docs_dir: str | None = None,
+    sft_file: str | None = None,
     max_samples: int = 2000,
 ) -> Dataset:
     """Load raw markdown docs and SFT pairs into a Hugging Face Dataset."""
-    raw_path = Path(raw_docs_dir) if raw_docs_dir else (REPO_ROOT / "data" / "astral_docs" / "raw")
-    sft_path = Path(sft_file) if sft_file else (REPO_ROOT / "data" / "astral_docs" / "sft" / "astral_expert_sft.jsonl")
+    raw_path = (
+        Path(raw_docs_dir)
+        if raw_docs_dir
+        else (REPO_ROOT / "data" / "astral_docs" / "raw")
+    )
+    sft_path = (
+        Path(sft_file)
+        if sft_file
+        else (REPO_ROOT / "data" / "astral_docs" / "sft" / "astral_expert_sft.jsonl")
+    )
 
-    records: List[Dict[str, Any]] = []
+    records: list[dict[str, Any]] = []
 
     # 1. Load SFT expert Q&A pairs if present
     if sft_path.exists():
-        with open(sft_path, "r", encoding="utf-8") as f:
+        with open(sft_path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:
@@ -40,9 +49,15 @@ def load_astral_micro_dataset(
                         records.append({"text": obj["text"], "source": "sft_jsonl"})
                     elif "messages" in obj:
                         msgs = obj["messages"]
-                        user_msg = next((m["content"] for m in msgs if m["role"] == "user"), "")
-                        assistant_msg = next((m["content"] for m in msgs if m["role"] == "assistant"), "")
-                        text = f"### Question:\n{user_msg}\n\n### Answer:\n{assistant_msg}"
+                        user_msg = next(
+                            (m["content"] for m in msgs if m["role"] == "user"), ""
+                        )
+                        assistant_msg = next(
+                            (m["content"] for m in msgs if m["role"] == "assistant"), ""
+                        )
+                        text = (
+                            f"### Question:\n{user_msg}\n\n### Answer:\n{assistant_msg}"
+                        )
                         records.append({"text": text, "source": "sft_jsonl"})
                 except Exception:
                     continue
@@ -59,9 +74,11 @@ def load_astral_micro_dataset(
 
         if docs_roots:
             try:
-                chunks: List[Chunk] = chunk_all(docs_roots)
+                chunks: list[Chunk] = chunk_all(docs_roots)
                 for c in chunks:
-                    heading_str = " > ".join(c.heading_path) if c.heading_path else c.source_path
+                    heading_str = (
+                        " > ".join(c.heading_path) if c.heading_path else c.source_path
+                    )
                     formatted = (
                         f"### Tool: {c.tool}\n"
                         f"### Context ({c.source_path}): {heading_str}\n\n"

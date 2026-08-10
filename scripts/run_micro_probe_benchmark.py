@@ -12,10 +12,11 @@ import argparse
 import json
 import time
 from pathlib import Path
-import yaml
-import torch
-import mlflow
 
+import mlflow
+import torch
+import yaml
+from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -24,10 +25,12 @@ from transformers import (
     Trainer,
     TrainingArguments,
 )
-from peft import get_peft_model, LoraConfig, prepare_model_for_kbit_training
 
 from gnn_experiment.micro_probe.dataset import load_astral_micro_dataset
-from gnn_experiment.micro_probe.forward_hooks import MicroProbeForwardHooks, compute_gradient_stability
+from gnn_experiment.micro_probe.forward_hooks import (
+    MicroProbeForwardHooks,
+    compute_gradient_stability,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -60,14 +63,21 @@ def run_benchmark():
     exp_name = cfg.get("mlflow", {}).get("experiment_name", "micro_probe_benchmark")
     mlflow.set_experiment(exp_name)
 
-    print(f"==================================================")
+    print("==================================================")
     print(f" Running Goal 1 Micro-Probe Benchmark ({model_name})")
-    print(f"==================================================")
+    print("==================================================")
 
     # 2. Load Dataset (1,000+ Astral Docs)
     dataset = load_astral_micro_dataset(
-        raw_docs_dir=str(REPO_ROOT / cfg.get("dataset_raw_dir", "data/astral_docs/raw")),
-        sft_file=str(REPO_ROOT / cfg.get("dataset_sft_file", "data/astral_docs/sft/astral_expert_sft.jsonl")),
+        raw_docs_dir=str(
+            REPO_ROOT / cfg.get("dataset_raw_dir", "data/astral_docs/raw")
+        ),
+        sft_file=str(
+            REPO_ROOT
+            / cfg.get(
+                "dataset_sft_file", "data/astral_docs/sft/astral_expert_sft.jsonl"
+            )
+        ),
     )
 
     # 3. Load Tokenizer & Model
@@ -76,7 +86,11 @@ def run_benchmark():
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    compute_dtype = torch.bfloat16 if (torch.cuda.is_available() and torch.cuda.is_bf16_supported()) else torch.float16
+    compute_dtype = (
+        torch.bfloat16
+        if (torch.cuda.is_available() and torch.cuda.is_bf16_supported())
+        else torch.float16
+    )
 
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
@@ -97,7 +111,9 @@ def run_benchmark():
     lora_config = LoraConfig(
         r=peft_cfg.get("r", 8),
         lora_alpha=peft_cfg.get("alpha", 16),
-        target_modules=peft_cfg.get("target_modules", ["q_proj", "k_proj", "v_proj", "o_proj"]),
+        target_modules=peft_cfg.get(
+            "target_modules", ["q_proj", "k_proj", "v_proj", "o_proj"]
+        ),
         lora_dropout=0.05,
         bias="none",
         task_type="CAUSAL_LM",
@@ -111,9 +127,13 @@ def run_benchmark():
 
     # 6. Tokenize Dataset
     def tokenize(batch):
-        return tokenizer(batch["text"], truncation=True, max_length=max_length, padding="max_length")
+        return tokenizer(
+            batch["text"], truncation=True, max_length=max_length, padding="max_length"
+        )
 
-    tokenized_ds = dataset.map(tokenize, batched=True, remove_columns=dataset.column_names)
+    tokenized_ds = dataset.map(
+        tokenize, batched=True, remove_columns=dataset.column_names
+    )
     collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
 
     train_args = TrainingArguments(
@@ -128,7 +148,9 @@ def run_benchmark():
         fp16=compute_dtype == torch.float16,
     )
 
-    trainer = Trainer(model=model, args=train_args, train_dataset=tokenized_ds, data_collator=collator)
+    trainer = Trainer(
+        model=model, args=train_args, train_dataset=tokenized_ds, data_collator=collator
+    )
 
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
@@ -136,18 +158,22 @@ def run_benchmark():
     print(f"Starting {max_steps}-step micro-probe training pass...")
     start_time = time.perf_counter()
 
-    with mlflow.start_run(run_name=f"micro_probe_{model_name.replace('/', '_')}_{max_steps}s"):
-        mlflow.log_params({
-            "model_name": model_name,
-            "max_steps": max_steps,
-            "batch_size": batch_size,
-            "learning_rate": learning_rate,
-            "trainable_params": trainable_params,
-            "total_params": total_params,
-            "trainable_pct": 100 * trainable_params / total_params,
-            "velocity_epsilon": epsilon,
-            "dataset_size": len(dataset),
-        })
+    with mlflow.start_run(
+        run_name=f"micro_probe_{model_name.replace('/', '_')}_{max_steps}s"
+    ):
+        mlflow.log_params(
+            {
+                "model_name": model_name,
+                "max_steps": max_steps,
+                "batch_size": batch_size,
+                "learning_rate": learning_rate,
+                "trainable_params": trainable_params,
+                "total_params": total_params,
+                "trainable_pct": 100 * trainable_params / total_params,
+                "velocity_epsilon": epsilon,
+                "dataset_size": len(dataset),
+            }
+        )
 
         train_result = trainer.train()
         elapsed_s = time.perf_counter() - start_time
@@ -157,7 +183,11 @@ def run_benchmark():
         hook_summary = hook_mgr.get_summary()
         hook_mgr.remove_hooks()
 
-        peak_vram_gb = torch.cuda.max_memory_allocated() / (1024**3) if torch.cuda.is_available() else 0.0
+        peak_vram_gb = (
+            torch.cuda.max_memory_allocated() / (1024**3)
+            if torch.cuda.is_available()
+            else 0.0
+        )
         total_tokens = max_steps * batch_size * max_length
         tok_per_sec = total_tokens / max(1e-5, elapsed_s)
         steps_per_sec = max_steps / max(1e-5, elapsed_s)
@@ -180,22 +210,30 @@ def run_benchmark():
         out_dir.mkdir(parents=True, exist_ok=True)
         summary_path = out_dir / "micro_probe_results.json"
         with open(summary_path, "w") as f:
-            json.dump({**metrics, "grad_stats": grad_stats, "hook_summary": hook_summary}, f, indent=2)
+            json.dump(
+                {**metrics, "grad_stats": grad_stats, "hook_summary": hook_summary},
+                f,
+                indent=2,
+            )
 
         mlflow.log_artifact(str(summary_path))
 
-        print(f"\n==================================================")
-        print(f" Micro-Probe Results Summary")
-        print(f"==================================================")
+        print("\n==================================================")
+        print(" Micro-Probe Results Summary")
+        print("==================================================")
         print(f" Model: {model_name}")
         print(f" Wall Time: {elapsed_s:.2f} s ({steps_per_sec:.2f} steps/s)")
         print(f" Throughput: {tok_per_sec:.2f} tokens/s")
         print(f" Peak VRAM: {peak_vram_gb:.2f} GB")
         print(f" Training Loss: {train_result.training_loss:.4f}")
-        print(f" Avg Layer Velocity (\\Delta h_l): {hook_summary.get('overall_avg_velocity', 0.0):.4f}")
-        print(f" Quiet Layer Ratio (<{epsilon}): {hook_summary.get('quiet_layer_ratio', 0.0)*100:.1f}%")
+        print(
+            f" Avg Layer Velocity (\\Delta h_l): {hook_summary.get('overall_avg_velocity', 0.0):.4f}"
+        )
+        print(
+            f" Quiet Layer Ratio (<{epsilon}): {hook_summary.get('quiet_layer_ratio', 0.0) * 100:.1f}%"
+        )
         print(f" Max Grad Norm: {grad_stats.get('max_grad_norm', 0.0):.4f}")
-        print(f" MLflow Run Logged Successfully!")
+        print(" MLflow Run Logged Successfully!")
 
     return metrics
 

@@ -18,7 +18,7 @@ def question_gen_messages(chunk: Chunk, nudge: str = "") -> list[dict]:
     if nudge:
         system += f"\n\nAdditional guidance for this run: {nudge}"
     user = f"""Below is an excerpt from the official {chunk.tool} documentation
-(source: {chunk.source_path}, section: {' > '.join(chunk.heading_path) or chunk.source_path}).
+(source: {chunk.source_path}, section: {" > ".join(chunk.heading_path) or chunk.source_path}).
 
 ---
 {chunk.text}
@@ -41,7 +41,9 @@ Output ONLY the question text, nothing else."""
 
 
 def verify_messages(chunk: Chunk, question: str) -> list[dict]:
-    system = "You are a strict QA reviewer for a training dataset. Answer only YES or NO."
+    system = (
+        "You are a strict QA reviewer for a training dataset. Answer only YES or NO."
+    )
     user = f"""Documentation excerpt:
 ---
 {chunk.text}

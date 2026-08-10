@@ -5,7 +5,7 @@ answer -> filter -> write dataset, with MLflow tracking throughout.
 import json
 import tempfile
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import mlflow
@@ -48,7 +48,10 @@ def process_chunk(
     verify_client defaults to `client` (self-verification) if not given.
     """
     verify_client = verify_client or client
-    log_info: dict = {"chunk_source": chunk.source_path, "heading_path": chunk.heading_path}
+    log_info: dict = {
+        "chunk_source": chunk.source_path,
+        "heading_path": chunk.heading_path,
+    }
 
     q_result = client.chat(
         prompts.question_gen_messages(chunk, nudge),
@@ -115,7 +118,10 @@ def process_chunk(
 
 
 def run_pipeline(
-    config: dict, limit: int | None = None, refresh_docs: bool = False, dry_run: bool = False
+    config: dict,
+    limit: int | None = None,
+    refresh_docs: bool = False,
+    dry_run: bool = False,
 ) -> Path:
     llm_cfg = config["llm"]
     client = LocalLLMClient(base_url=llm_cfg["base_url"], model=llm_cfg["model"])
@@ -131,13 +137,21 @@ def run_pipeline(
     if verify_base_url or verify_model:
         resolved_verify_base_url = verify_base_url or llm_cfg["base_url"]
         resolved_verify_model = verify_model or llm_cfg["model"]
-        verify_client = LocalLLMClient(base_url=resolved_verify_base_url, model=resolved_verify_model)
+        verify_client = LocalLLMClient(
+            base_url=resolved_verify_base_url, model=resolved_verify_model
+        )
         if not verify_client.ping():
-            raise RuntimeError(f"verify_base_url {resolved_verify_base_url} not reachable")
-        print(f"Verifier: independent model ({resolved_verify_model} @ {resolved_verify_base_url})")
+            raise RuntimeError(
+                f"verify_base_url {resolved_verify_base_url} not reachable"
+            )
+        print(
+            f"Verifier: independent model ({resolved_verify_model} @ {resolved_verify_base_url})"
+        )
     else:
         verify_client = client
-        print(f"Verifier: same model as generator ({llm_cfg['model']}) — self-verification, see README caveat")
+        print(
+            f"Verifier: same model as generator ({llm_cfg['model']}) — self-verification, see README caveat"
+        )
 
     nudge = config.get("extraction_nudge", "") or ""
 
@@ -149,7 +163,9 @@ def run_pipeline(
     docs_roots = fetch_all(config["repos"], docs_cache_dir, refresh=refresh_docs)
 
     print("Chunking...")
-    chunks = chunk_all(docs_roots, config["chunk_size_chars"], config["min_chunk_chars"])
+    chunks = chunk_all(
+        docs_roots, config["chunk_size_chars"], config["min_chunk_chars"]
+    )
     total_available = len(chunks)
     print(f"Got {total_available} chunks total.")
     if limit:
@@ -161,44 +177,57 @@ def run_pipeline(
     mlflow.set_experiment(mlflow_cfg.get("experiment_name", "astral-expert-datagen"))
 
     run_type = "dry_run" if dry_run else ("partial" if limit else "full")
-    model_short = Path(llm_cfg["model"]).stem  # "models/Qwen3.5-4B-Q8_0.gguf" -> "Qwen3.5-4B-Q8_0"
-    run_name = f"astral-sft-{run_type}-{model_short}-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
+    model_short = Path(
+        llm_cfg["model"]
+    ).stem  # "models/Qwen3.5-4B-Q8_0.gguf" -> "Qwen3.5-4B-Q8_0"
+    run_name = f"astral-sft-{run_type}-{model_short}-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}"
     records: list[QARecord] = []
     stage_logs = {"question_gen": [], "verify": [], "answer_gen": []}
     verifier_pass, verifier_fail = 0, 0
 
     with mlflow.start_run(run_name=run_name):
-        mlflow.set_tags({
-            "model": llm_cfg["model"],
-            "verifier_model": verify_model or llm_cfg["model"],
-            "self_verified": str(verify_client is client),
-            "run_type": run_type,  # "dry_run" | "partial" | "full" — filterable in the MLflow UI
-        })
-        mlflow.log_params({
-            "model": llm_cfg["model"],
-            "verifier_model": verify_model or llm_cfg["model"],
-            "verifier_base_url": verify_base_url or llm_cfg["base_url"],
-            "extraction_nudge": nudge or "(none)",
-            "question_gen_version": prompts.QUESTION_GEN_VERSION,
-            "verify_version": prompts.VERIFY_VERSION,
-            "answer_gen_version": prompts.ANSWER_GEN_VERSION,
-            "chunk_size_chars": config["chunk_size_chars"],
-            "min_chunk_chars": config["min_chunk_chars"],
-            "repos": ",".join(config["repos"]),
-            "limit": limit or "none",
-            "total_chunks": len(chunks),
-        })
+        mlflow.set_tags(
+            {
+                "model": llm_cfg["model"],
+                "verifier_model": verify_model or llm_cfg["model"],
+                "self_verified": str(verify_client is client),
+                "run_type": run_type,  # "dry_run" | "partial" | "full" — filterable in the MLflow UI
+            }
+        )
+        mlflow.log_params(
+            {
+                "model": llm_cfg["model"],
+                "verifier_model": verify_model or llm_cfg["model"],
+                "verifier_base_url": verify_base_url or llm_cfg["base_url"],
+                "extraction_nudge": nudge or "(none)",
+                "question_gen_version": prompts.QUESTION_GEN_VERSION,
+                "verify_version": prompts.VERIFY_VERSION,
+                "answer_gen_version": prompts.ANSWER_GEN_VERSION,
+                "chunk_size_chars": config["chunk_size_chars"],
+                "min_chunk_chars": config["min_chunk_chars"],
+                "repos": ",".join(config["repos"]),
+                "limit": limit or "none",
+                "total_chunks": len(chunks),
+            }
+        )
 
         max_tokens = llm_cfg["max_tokens"]
         seen_questions: set[str] = set()
         chunk_wall_times: list[float] = []
         for i, chunk in enumerate(chunks):
-            print(f"[{i + 1}/{len(chunks)}] {chunk.source_path} ({' > '.join(chunk.heading_path) or '-'})")
+            print(
+                f"[{i + 1}/{len(chunks)}] {chunk.source_path} ({' > '.join(chunk.heading_path) or '-'})"
+            )
             chunk_start = time.perf_counter()
             try:
                 record, log_info = process_chunk(
-                    chunk, client, llm_cfg["temperature"], max_tokens, i,
-                    verify_client=verify_client, nudge=nudge,
+                    chunk,
+                    client,
+                    llm_cfg["temperature"],
+                    max_tokens,
+                    i,
+                    verify_client=verify_client,
+                    nudge=nudge,
                 )
             except Exception as e:
                 print(f"  ERROR: {e}")
@@ -208,7 +237,9 @@ def run_pipeline(
 
             for stage in ("question_gen", "verify", "answer_gen"):
                 if stage in log_info:
-                    stage_logs[stage].append({"chunk_source": log_info["chunk_source"], **log_info[stage]})
+                    stage_logs[stage].append(
+                        {"chunk_source": log_info["chunk_source"], **log_info[stage]}
+                    )
 
             if record is None:
                 verifier_fail += 1
@@ -266,9 +297,13 @@ def run_pipeline(
 
     if llm_cfg.get("unload_after_run", True):
         if client.shutdown_server():
-            print(f"Unloaded model from VRAM (stopped llama-server on port {client._client.base_url.port}).")
+            print(
+                f"Unloaded model from VRAM (stopped llama-server on port {client._client.base_url.port})."
+            )
         if verify_client is not client and verify_client.shutdown_server():
-            print(f"Unloaded verifier model from VRAM (stopped llama-server on port {verify_client._client.base_url.port}).")
+            print(
+                f"Unloaded verifier model from VRAM (stopped llama-server on port {verify_client._client.base_url.port})."
+            )
 
     client.close()
     if verify_client is not client:

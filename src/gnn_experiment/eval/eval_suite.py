@@ -5,20 +5,38 @@ Evaluates modern tooling adherence (uv, ruff, ty) vs legacy fallback (pip, black
 
 import re
 import time
-from typing import Dict, List, Any
+from typing import Any
+
+import mlflow
 import torch
 import yaml
-import mlflow
-
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import PeftModel
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+MODERN_TERMS = [
+    r"\buv\b",
+    r"\bruff\b",
+    r"\bty\b",
+    r"uv add",
+    r"uv run",
+    r"uv sync",
+    r"uv lock",
+    r"ruff check",
+    r"ruff format",
+]
+LEGACY_TERMS = [
+    r"pip install",
+    r"requirements\.txt",
+    r"\bblack\b",
+    r"\bflake8\b",
+    r"\bisort\b",
+    r"\bmypy\b",
+    r"virtualenv",
+    r"\bpoetry\b",
+]
 
 
-MODERN_TERMS = [r"\buv\b", r"\bruff\b", r"\bty\b", r"uv add", r"uv run", r"uv sync", r"uv lock", r"ruff check", r"ruff format"]
-LEGACY_TERMS = [r"pip install", r"requirements\.txt", r"\bblack\b", r"\bflake8\b", r"\bisort\b", r"\bmypy\b", r"virtualenv", r"\bpoetry\b"]
-
-
-def count_matches(text: str, patterns: List[str]) -> int:
+def count_matches(text: str, patterns: list[str]) -> int:
     total = 0
     text_lower = text.lower()
     for p in patterns:
@@ -29,7 +47,7 @@ def count_matches(text: str, patterns: List[str]) -> int:
 
 def evaluate_single_prompt(
     model, tokenizer, prompt: str, max_new_tokens: int = 256
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     formatted_prompt = f"### Question:\n{prompt}\n\n### Answer:\n"
     inputs = tokenizer(formatted_prompt, return_tensors="pt").to(model.device)
 
@@ -50,7 +68,9 @@ def evaluate_single_prompt(
     modern_hits = count_matches(response_text, MODERN_TERMS)
     legacy_hits = count_matches(response_text, LEGACY_TERMS)
     total_hits = modern_hits + legacy_hits
-    adherence_pct = (modern_hits / max(1, total_hits)) * 100.0 if total_hits > 0 else 0.0
+    adherence_pct = (
+        (modern_hits / max(1, total_hits)) * 100.0 if total_hits > 0 else 0.0
+    )
 
     return {
         "prompt": prompt,
@@ -67,14 +87,18 @@ def run_astral_evaluation(
     adapter_path: str = "results/adapters/astral_qwen3.5_micro",
     questions_file: str = "configs/eval_questions.yaml",
     experiment_name: str = "astral_tooling_evaluation",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     with open(questions_file) as f:
         q_cfg = yaml.safe_load(f)
     questions = q_cfg.get("questions", [])
 
     mlflow.set_experiment(experiment_name)
 
-    compute_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
+    compute_dtype = (
+        torch.bfloat16
+        if torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+        else torch.float16
+    )
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_compute_dtype=compute_dtype,
@@ -87,9 +111,9 @@ def run_astral_evaluation(
         tokenizer.pad_token = tokenizer.eos_token
 
     # --- 1. Evaluate Base Model ---
-    print(f"\n==================================================")
+    print("\n==================================================")
     print(f" 1. Evaluating Base Model: {model_name}")
-    print(f"==================================================")
+    print("==================================================")
     base_model = AutoModelForCausalLM.from_pretrained(
         model_name,
         quantization_config=bnb_config,
@@ -100,7 +124,9 @@ def run_astral_evaluation(
 
     base_results = []
     for idx, q in enumerate(questions, 1):
-        print(f"[{idx}/{len(questions)}] Evaluating Base Model on prompt: '{q['prompt'][:60]}...'")
+        print(
+            f"[{idx}/{len(questions)}] Evaluating Base Model on prompt: '{q['prompt'][:60]}...'"
+        )
         res = evaluate_single_prompt(base_model, tokenizer, q["prompt"])
         res["id"] = q["id"]
         res["category"] = q["category"]
@@ -111,9 +137,9 @@ def run_astral_evaluation(
         torch.cuda.empty_cache()
 
     # --- 2. Evaluate Fine-Tuned Model ---
-    print(f"\n==================================================")
+    print("\n==================================================")
     print(f" 2. Evaluating Fine-Tuned Astral Model: {adapter_path}")
-    print(f"==================================================")
+    print("==================================================")
     base_model_for_adapter = AutoModelForCausalLM.from_pretrained(
         model_name,
         quantization_config=bnb_config,
@@ -125,7 +151,9 @@ def run_astral_evaluation(
 
     ft_results = []
     for idx, q in enumerate(questions, 1):
-        print(f"[{idx}/{len(questions)}] Evaluating Astral Model on prompt: '{q['prompt'][:60]}...'")
+        print(
+            f"[{idx}/{len(questions)}] Evaluating Astral Model on prompt: '{q['prompt'][:60]}...'"
+        )
         res = evaluate_single_prompt(ft_model, tokenizer, q["prompt"])
         res["id"] = q["id"]
         res["category"] = q["category"]
@@ -136,7 +164,9 @@ def run_astral_evaluation(
         torch.cuda.empty_cache()
 
     # --- 3. Compute Summary Metrics & Log to MLflow ---
-    base_avg_adherence = sum(r["adherence_pct"] for r in base_results) / len(base_results)
+    base_avg_adherence = sum(r["adherence_pct"] for r in base_results) / len(
+        base_results
+    )
     ft_avg_adherence = sum(r["adherence_pct"] for r in ft_results) / len(ft_results)
     adherence_gain = ft_avg_adherence - base_avg_adherence
 
@@ -146,32 +176,38 @@ def run_astral_evaluation(
     ft_legacy_total = sum(r["legacy_hits"] for r in ft_results)
 
     with mlflow.start_run(run_name=f"eval_{model_name.replace('/', '_')}"):
-        mlflow.log_params({
-            "exact_model_name": model_name,
-            "adapter_path": adapter_path,
-            "num_questions": len(questions),
-        })
+        mlflow.log_params(
+            {
+                "exact_model_name": model_name,
+                "adapter_path": adapter_path,
+                "num_questions": len(questions),
+            }
+        )
 
-        mlflow.log_metrics({
-            "base_modern_adherence_pct": base_avg_adherence,
-            "finetuned_modern_adherence_pct": ft_avg_adherence,
-            "adherence_gain_pct": adherence_gain,
-            "base_modern_hits_total": base_modern_total,
-            "base_legacy_hits_total": base_legacy_total,
-            "finetuned_modern_hits_total": ft_modern_total,
-            "finetuned_legacy_hits_total": ft_legacy_total,
-        })
+        mlflow.log_metrics(
+            {
+                "base_modern_adherence_pct": base_avg_adherence,
+                "finetuned_modern_adherence_pct": ft_avg_adherence,
+                "adherence_gain_pct": adherence_gain,
+                "base_modern_hits_total": base_modern_total,
+                "base_legacy_hits_total": base_legacy_total,
+                "finetuned_modern_hits_total": ft_modern_total,
+                "finetuned_legacy_hits_total": ft_legacy_total,
+            }
+        )
 
         comparison_table = []
         for b, f in zip(base_results, ft_results):
-            comparison_table.append({
-                "id": b["id"],
-                "prompt": b["prompt"],
-                "base_response": b["response"],
-                "base_adherence_pct": b["adherence_pct"],
-                "finetuned_response": f["response"],
-                "finetuned_adherence_pct": f["adherence_pct"],
-            })
+            comparison_table.append(
+                {
+                    "id": b["id"],
+                    "prompt": b["prompt"],
+                    "base_response": b["response"],
+                    "base_adherence_pct": b["adherence_pct"],
+                    "finetuned_response": f["response"],
+                    "finetuned_adherence_pct": f["adherence_pct"],
+                }
+            )
 
         out_summary = {
             "exact_model_name": model_name,
@@ -183,9 +219,9 @@ def run_astral_evaluation(
         }
         mlflow.log_dict(out_summary, "evaluation_comparison.json")
 
-    print(f"\n==================================================")
+    print("\n==================================================")
     print(f" Evaluation Benchmark Results ({model_name})")
-    print(f"==================================================")
+    print("==================================================")
     print(f" Exact Base Model: {model_name}")
     print(f" Base Model Modern Tool Adherence: {base_avg_adherence:.1f}%")
     print(f" Astral Fine-Tuned Model Modern Tool Adherence: {ft_avg_adherence:.1f}%")

@@ -175,6 +175,7 @@ If you are running an MoE model (like Mixtral, Qwen3-MoE, or Phi-3.5-MoE) via Py
 ```python
 import torch
 
+
 # Hook into the MoE Router layer at inference time
 def steered_router_hook(module, input, output):
     # output contains raw router logits of shape [batch_size, num_experts]
@@ -188,10 +189,9 @@ def steered_router_hook(module, input, output):
 
     return router_logits
 
+
 # Apply the hook to a specific MoE layer (e.g., Layer 12's gate)
-model.model.layers[12].block_sparse_moe.gate.register_forward_hook(
-    steered_router_hook
-)
+model.model.layers[12].block_sparse_moe.gate.register_forward_hook(steered_router_hook)
 ```
 
 ### 4.4 Steering Benefits & Failure Modes ("The Good vs. The Catch")
@@ -383,7 +383,7 @@ Your idea of **Foveated LoRA**—using hidden-state velocity ($\Delta h_l$, T-14
 
 If you build **T-18 (Foveated LoRA)** on your ROCm/AMD setup, here is how to structure it so it yields a genuine performance win:
 
-```
+```dg
 ┌─────────────────────────────────────────────────────────────────┐
 │ DEEP HIDDEN-STATE VELOCITY CHECK (T-14)                        │
 │ Calculate: Δh_l = || h_l^{(t)} - h_l^{(t-1)} ||                 │
@@ -402,14 +402,14 @@ If you build **T-18 (Foveated LoRA)** on your ROCm/AMD setup, here is how to str
 
 ```
 
-### Why This Works for Local Agents:
+### Why This Works for Local Agents
 
 When an LLM generates structured output (like writing an MCP JSON schema or `pyproject.toml` config):
 
 - **High-Velocity Tokens (Keywords, Syntax, Logic):** The model hidden state shifts rapidly $\to$ **LoRA Fires** to enforce your custom rules (`uv`, `override-dependencies`).
 - **Low-Velocity Tokens (Boilerplate, Punctuation, Whitespace):** The model hidden state barely moves $\to$ **LoRA Skips**, saving VRAM reads and execution FLOPs.
 
-### The Implementation Requirement:
+### The Implementation Requirement
 
 To prevent PyTorch `if/else` checks from slowing down your engine, the velocity mask must be stored as a **static 1D tensor buffer inside your T-12 CUDA Graph**.
 
@@ -427,7 +427,7 @@ Isolated research papers analyze these concepts in laboratory silos. Almost nobo
 
 ### The 3 Uncharted Frontiers
 
-```
+```dg
                               THE UNEXPLORED TRIAD
 
                  ┌──────────────────────────────────────────┐
@@ -528,7 +528,7 @@ To maximize speed, low VRAM usage, and opinionated agentic control on your works
 
 ## Summary Protocol
 
-```
+```dg
                         SYSTEM ARCHITECTURE INTEGRATION
 
   ┌────────────────────────────────────────────────────────────────────────┐

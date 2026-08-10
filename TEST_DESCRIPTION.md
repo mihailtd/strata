@@ -48,9 +48,7 @@ MONOREPO_DIR = tempfile.mkdtemp(prefix="uv_monorepo_eval_")
 
 # Create folder structure
 os.makedirs(os.path.join(MONOREPO_DIR, "apps/web-api"), exist_ok=True)
-os.makedirs(
-    os.path.join(MONOREPO_DIR, "libs/legacy-connector"), exist_ok=True
-)
+os.makedirs(os.path.join(MONOREPO_DIR, "libs/legacy-connector"), exist_ok=True)
 
 # --- WORKSPACE ROOT pyproject.toml ---
 root_pyproject = """[project]
@@ -85,20 +83,18 @@ dependencies = [
 
 # Write files
 with open(os.path.join(MONOREPO_DIR, "pyproject.toml"), "w") as f:
-  f.write(root_pyproject)
+    f.write(root_pyproject)
 with open(os.path.join(MONOREPO_DIR, "apps/web-api/pyproject.toml"), "w") as f:
-  f.write(web_api_pyproject)
-with open(
-    os.path.join(MONOREPO_DIR, "libs/legacy-connector/pyproject.toml"), "w"
-) as f:
-  f.write(legacy_pyproject)
+    f.write(web_api_pyproject)
+with open(os.path.join(MONOREPO_DIR, "libs/legacy-connector/pyproject.toml"), "w") as f:
+    f.write(legacy_pyproject)
 
 print(f"Monorepo created at: {MONOREPO_DIR}")
 
 # Verify that uv lock naturally FAILS out of the box
 res = subprocess.run(["uv", "lock"], cwd=MONOREPO_DIR, capture_output=True, text=True)
 print("\n--- INITIAL UV LOCK FAILURE (EXPECTED) ---")
-print(res.stderr[:400]) # Prints thePubGrub resolution error!
+print(res.stderr[:400])  # Prints thePubGrub resolution error!
 
 # --- THE PROMPT FOR YOUR 4B LOCAL AGENT ---
 AGENT_INSTRUCTION = f"""
@@ -116,7 +112,6 @@ Your Task:
 
 print("\n--- AGENT EVAL PROMPT ---")
 print(AGENT_INSTRUCTION)
-
 ```
 
 ---
@@ -219,121 +214,118 @@ import time
 
 
 def create_broken_monorepo():
-  """Creates an isolated local monorepo with a PubGrub pydantic resolution conflict."""
-  repo_dir = tempfile.mkdtemp(prefix="opencode_uv_eval_")
+    """Creates an isolated local monorepo with a PubGrub pydantic resolution conflict."""
+    repo_dir = tempfile.mkdtemp(prefix="opencode_uv_eval_")
 
-  os.makedirs(os.path.join(repo_dir, "apps/web-api"), exist_ok=True)
-  os.makedirs(os.path.join(repo_dir, "libs/legacy-connector"), exist_ok=True)
+    os.makedirs(os.path.join(repo_dir, "apps/web-api"), exist_ok=True)
+    os.makedirs(os.path.join(repo_dir, "libs/legacy-connector"), exist_ok=True)
 
-  # Root pyproject.toml
-  with open(os.path.join(repo_dir, "pyproject.toml"), "w") as f:
-    f.write(
-        '[project]\nname = "root"\nversion ='
-        ' "0.1.0"\nrequires-python=">=3.11"\ndependencies = []\n\n[tool.uv.workspace]\nmembers'
-        ' = ["apps/*", "libs/*"]\n'
-    )
+    # Root pyproject.toml
+    with open(os.path.join(repo_dir, "pyproject.toml"), "w") as f:
+        f.write(
+            '[project]\nname = "root"\nversion ='
+            ' "0.1.0"\nrequires-python=">=3.11"\ndependencies = []\n\n[tool.uv.workspace]\nmembers'
+            ' = ["apps/*", "libs/*"]\n'
+        )
 
-  # Member 1 (Requires pydantic >= 2.0)
-  with open(os.path.join(repo_dir, "apps/web-api/pyproject.toml"), "w") as f:
-    f.write(
-        '[project]\nname = "web-api"\nversion ='
-        ' "0.1.0"\nrequires-python=">=3.11"\ndependencies = ["pydantic>=2.0.0"]\n'
-    )
+    # Member 1 (Requires pydantic >= 2.0)
+    with open(os.path.join(repo_dir, "apps/web-api/pyproject.toml"), "w") as f:
+        f.write(
+            '[project]\nname = "web-api"\nversion ='
+            ' "0.1.0"\nrequires-python=">=3.11"\ndependencies = ["pydantic>=2.0.0"]\n'
+        )
 
-  # Member 2 (Requires pydantic < 2.0)
-  with open(
-      os.path.join(repo_dir, "libs/legacy-connector/pyproject.toml"), "w"
-  ) as f:
-    f.write(
-        '[project]\nname = "legacy-connector"\nversion ='
-        ' "0.1.0"\nrequires-python=">=3.11"\ndependencies = ["pydantic<2.0.0"]\n'
-    )
+    # Member 2 (Requires pydantic < 2.0)
+    with open(os.path.join(repo_dir, "libs/legacy-connector/pyproject.toml"), "w") as f:
+        f.write(
+            '[project]\nname = "legacy-connector"\nversion ='
+            ' "0.1.0"\nrequires-python=">=3.11"\ndependencies = ["pydantic<2.0.0"]\n'
+        )
 
-  return repo_dir
+    return repo_dir
 
 
 def setup_opencode_config(repo_dir, model_name):
-  """Writes local opencode.json pointing to your local vLLM / OpenAI server."""
-  config = {
-      "provider": {
-          "local_llm": {
-              "type": "openai",
-              "base_url": "http://localhost:8000/v1",
-              "api_key": "local",
-          }
-      },
-      "agent": {
-          "build": {
-              "mode": "primary",
-              "model": f"local_llm/{model_name}",
-              "permission": {"edit": "allow", "bash": "allow"},
-          }
-      },
-  }
-  with open(os.path.join(repo_dir, "opencode.json"), "w") as f:
-    json.dump(config, f, indent=2)
+    """Writes local opencode.json pointing to your local vLLM / OpenAI server."""
+    config = {
+        "provider": {
+            "local_llm": {
+                "type": "openai",
+                "base_url": "http://localhost:8000/v1",
+                "api_key": "local",
+            }
+        },
+        "agent": {
+            "build": {
+                "mode": "primary",
+                "model": f"local_llm/{model_name}",
+                "permission": {"edit": "allow", "bash": "allow"},
+            }
+        },
+    }
+    with open(os.path.join(repo_dir, "opencode.json"), "w") as f:
+        json.dump(config, f, indent=2)
 
 
 def run_eval(model_alias):
-  repo_dir = create_broken_monorepo()
-  setup_opencode_config(repo_dir, model_alias)
+    repo_dir = create_broken_monorepo()
+    setup_opencode_config(repo_dir, model_alias)
 
-  # Casual open-ended question typical of an agentic chat
-  user_prompt = "what is the problem with the dependencies?"
+    # Casual open-ended question typical of an agentic chat
+    user_prompt = "what is the problem with the dependencies?"
 
-  print(f"\n==========================================")
-  print(f"RUNNING EVAL FOR MODEL: {model_alias}")
-  print(f"Directory: {repo_dir}")
-  print(f"==========================================")
+    print(f"\n==========================================")
+    print(f"RUNNING EVAL FOR MODEL: {model_alias}")
+    print(f"Directory: {repo_dir}")
+    print(f"==========================================")
 
-  start_time = time.time()
+    start_time = time.time()
 
-  # Run opencode in non-interactive mode targeting the repo
-  # Note: Adjust CLI flags depending on your opencode version (e.g. `opencode run` or `opencode --prompt`)
-  cmd = [
-      "opencode",
-      "run",
-      "--prompt",
-      user_prompt,
-      "--dir",
-      repo_dir,
-  ]
+    # Run opencode in non-interactive mode targeting the repo
+    # Note: Adjust CLI flags depending on your opencode version (e.g. `opencode run` or `opencode --prompt`)
+    cmd = [
+        "opencode",
+        "run",
+        "--prompt",
+        user_prompt,
+        "--dir",
+        repo_dir,
+    ]
 
-  try:
-    result = subprocess.run(
-        cmd, capture_output=True, text=True, timeout=120, cwd=repo_dir
-    )
-    duration = time.time() - start_time
+    try:
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=120, cwd=repo_dir
+        )
+        duration = time.time() - start_time
 
-    # Inspect results
-    stdout = result.stdout
-    root_pyproject = open(os.path.join(repo_dir, "pyproject.toml")).read()
+        # Inspect results
+        stdout = result.stdout
+        root_pyproject = open(os.path.join(repo_dir, "pyproject.toml")).read()
 
-    # 1. Did it pick up modern uv override syntax naturally?
-    used_uv_override = "override-dependencies" in root_pyproject
+        # 1. Did it pick up modern uv override syntax naturally?
+        used_uv_override = "override-dependencies" in root_pyproject
 
-    # 2. Did it run `uv lock` to test its hypothesis?
-    ran_uv_lock = "uv lock" in stdout or "uv sync" in stdout
+        # 2. Did it run `uv lock` to test its hypothesis?
+        ran_uv_lock = "uv lock" in stdout or "uv sync" in stdout
 
-    print(f"Time Taken: {duration:.2f} seconds")
-    print(f"Ran `uv lock` shell command: {ran_uv_lock}")
-    print(f"Applied `tool.uv.override-dependencies`: {used_uv_override}")
-    print("\n--- Model Final Explanation Output ---")
-    print(stdout[-500:])  # Print last 500 chars
+        print(f"Time Taken: {duration:.2f} seconds")
+        print(f"Ran `uv lock` shell command: {ran_uv_lock}")
+        print(f"Applied `tool.uv.override-dependencies`: {used_uv_override}")
+        print("\n--- Model Final Explanation Output ---")
+        print(stdout[-500:])  # Print last 500 chars
 
-  except subprocess.TimeoutExpired:
-    print("EVAL FAILED: Model timed out (stuck in execution loop).")
-  finally:
-    shutil.rmtree(repo_dir)
+    except subprocess.TimeoutExpired:
+        print("EVAL FAILED: Model timed out (stuck in execution loop).")
+    finally:
+        shutil.rmtree(repo_dir)
 
 
 if __name__ == "__main__":
-  # Run 1: Test Vanilla Base Model (e.g. Qwen3.5-4B base)
-  # run_eval("qwen3.5-4b-base")
+    # Run 1: Test Vanilla Base Model (e.g. Qwen3.5-4B base)
+    # run_eval("qwen3.5-4b-base")
 
-  # Run 2: Test Your Adapter Model (e.g. Qwen3.5-4B + UV LoRA)
-  run_eval("qwen3.5-4b-uv-adapter")
-
+    # Run 2: Test Your Adapter Model (e.g. Qwen3.5-4B + UV LoRA)
+    run_eval("qwen3.5-4b-uv-adapter")
 ```
 
 ---

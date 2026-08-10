@@ -7,11 +7,18 @@ Logs exact fine-tuning metrics (wall time, peak VRAM, final loss, model name) to
 import argparse
 import time
 from pathlib import Path
-import torch
-import mlflow
 
-from peft import get_peft_model, LoraConfig, prepare_model_for_kbit_training
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, Trainer, TrainingArguments, DataCollatorForLanguageModeling
+import mlflow
+import torch
+from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BitsAndBytesConfig,
+    DataCollatorForLanguageModeling,
+    Trainer,
+    TrainingArguments,
+)
 
 from gnn_experiment.micro_probe.dataset import load_astral_micro_dataset
 
@@ -36,7 +43,11 @@ def export_adapter(
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    compute_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
+    compute_dtype = (
+        torch.bfloat16
+        if torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+        else torch.float16
+    )
 
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
@@ -55,7 +66,15 @@ def export_adapter(
     lora_config = LoraConfig(
         r=8,
         lora_alpha=16,
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+        target_modules=[
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "o_proj",
+            "gate_proj",
+            "up_proj",
+            "down_proj",
+        ],
         lora_dropout=0.05,
         bias="none",
         task_type="CAUSAL_LM",
@@ -66,9 +85,13 @@ def export_adapter(
     dataset = load_astral_micro_dataset()
 
     def tokenize(batch):
-        return tokenizer(batch["text"], truncation=True, max_length=512, padding="max_length")
+        return tokenizer(
+            batch["text"], truncation=True, max_length=512, padding="max_length"
+        )
 
-    tokenized_ds = dataset.map(tokenize, batched=True, remove_columns=dataset.column_names)
+    tokenized_ds = dataset.map(
+        tokenize, batched=True, remove_columns=dataset.column_names
+    )
     collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
 
     train_args = TrainingArguments(
@@ -83,7 +106,9 @@ def export_adapter(
         fp16=compute_dtype == torch.float16,
     )
 
-    trainer = Trainer(model=model, args=train_args, train_dataset=tokenized_ds, data_collator=collator)
+    trainer = Trainer(
+        model=model, args=train_args, train_dataset=tokenized_ds, data_collator=collator
+    )
 
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
@@ -93,31 +118,43 @@ def export_adapter(
     train_result = trainer.train()
 
     wall_time_s = time.perf_counter() - start_time
-    peak_vram_gb = torch.cuda.max_memory_allocated() / (1024 ** 3) if torch.cuda.is_available() else 0.0
+    peak_vram_gb = (
+        torch.cuda.max_memory_allocated() / (1024**3)
+        if torch.cuda.is_available()
+        else 0.0
+    )
 
     print(f"Saving trained LoRA adapter to {out_path}...")
     model.save_pretrained(out_path)
     tokenizer.save_pretrained(out_path)
 
     # Log explicit fine-tuning run to MLflow
-    with mlflow.start_run(run_name=f"finetune_{model_name.replace('/', '_')}_{train_steps}steps"):
-        mlflow.log_params({
-            "model_name": model_name,
-            "train_steps": train_steps,
-            "batch_size": 2,
-            "learning_rate": 2e-4,
-            "r": 8,
-            "alpha": 16,
-            "dataset_size": len(dataset),
-        })
-        mlflow.log_metrics({
-            "wall_time_s": wall_time_s,
-            "peak_vram_gb": peak_vram_gb,
-            "final_loss": train_result.training_loss,
-            "steps_per_sec": train_steps / max(0.001, wall_time_s),
-        })
+    with mlflow.start_run(
+        run_name=f"finetune_{model_name.replace('/', '_')}_{train_steps}steps"
+    ):
+        mlflow.log_params(
+            {
+                "model_name": model_name,
+                "train_steps": train_steps,
+                "batch_size": 2,
+                "learning_rate": 2e-4,
+                "r": 8,
+                "alpha": 16,
+                "dataset_size": len(dataset),
+            }
+        )
+        mlflow.log_metrics(
+            {
+                "wall_time_s": wall_time_s,
+                "peak_vram_gb": peak_vram_gb,
+                "final_loss": train_result.training_loss,
+                "steps_per_sec": train_steps / max(0.001, wall_time_s),
+            }
+        )
 
-    print(f"Fine-tuning completed in {wall_time_s:.2f}s (Peak VRAM: {peak_vram_gb:.2f} GB, Final Loss: {train_result.training_loss:.4f})")
+    print(
+        f"Fine-tuning completed in {wall_time_s:.2f}s (Peak VRAM: {peak_vram_gb:.2f} GB, Final Loss: {train_result.training_loss:.4f})"
+    )
     print(f"MLflow fine-tuning run logged under experiment '{experiment_name}'!")
     return str(out_path)
 

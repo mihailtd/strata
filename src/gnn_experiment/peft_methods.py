@@ -60,7 +60,9 @@ METHODS = {
 QUANTIZED_METHODS = {"qlora"}
 
 
-def build_config(method: str, r: int, alpha: int, target_modules: list[str], total_steps: int):
+def build_config(
+    method: str, r: int, alpha: int, target_modules: list[str], total_steps: int
+):
     if method not in METHODS:
         raise ValueError(f"Unknown method '{method}'. Options: {sorted(METHODS)}")
     return METHODS[method](r, alpha, target_modules, total_steps)

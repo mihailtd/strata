@@ -34,16 +34,37 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     p.add_argument("--config", default=str(REPO_ROOT / "configs" / "datagen.yaml"))
     p.add_argument("--repos", help="comma-separated subset, e.g. uv,ruff")
-    p.add_argument("--model", help="override llm.model, e.g. models/Qwen3.5-4B-Q8_0.gguf")
-    p.add_argument("--limit", type=int, help="process only first N chunks (smoke test / dry run sample size)")
-    p.add_argument("--dry-run", action="store_true", help="estimate timing only; defaults --limit to 10 if not set")
-    p.add_argument("--refresh-docs", action="store_true", help="force re-clone doc repos")
+    p.add_argument(
+        "--model", help="override llm.model, e.g. models/Qwen3.5-4B-Q8_0.gguf"
+    )
+    p.add_argument(
+        "--limit",
+        type=int,
+        help="process only first N chunks (smoke test / dry run sample size)",
+    )
+    p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="estimate timing only; defaults --limit to 10 if not set",
+    )
+    p.add_argument(
+        "--refresh-docs", action="store_true", help="force re-clone doc repos"
+    )
     p.add_argument("--out", help="override output_dir")
-    p.add_argument("--nudge", help="extra instruction injected into generation prompts, logged to MLflow")
-    p.add_argument("--no-unload", action="store_true", help="leave the llama-server running after the pipeline finishes")
+    p.add_argument(
+        "--nudge",
+        help="extra instruction injected into generation prompts, logged to MLflow",
+    )
+    p.add_argument(
+        "--no-unload",
+        action="store_true",
+        help="leave the llama-server running after the pipeline finishes",
+    )
     return p.parse_args()
 
 
