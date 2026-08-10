@@ -14,8 +14,8 @@ import mlflow
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(REPO_ROOT))
 
-from gnn_experiment.eval.eval_suite import run_astral_evaluation
-from scripts.export_adapter import export_adapter
+from gnn_experiment.eval.eval_suite import run_astral_evaluation  # noqa: E402
+from scripts.export_adapter import export_adapter  # noqa: E402
 
 
 def main():

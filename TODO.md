@@ -1,0 +1,1 @@
+[] revisit Billboard Impostors when having 10–20 distinct domain adapters, "hot-swapping"! It requires building a fixed-slot tensor copy infrastructure from scratch, and without a fleet of distinct domain adapters (SQL, Rust, YAML), you would be testing infrastructure without a real workload.

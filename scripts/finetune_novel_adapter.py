@@ -25,6 +25,13 @@ as the baseline so the comparison is apples-to-apples):
 Logs to MLflow experiment `astral_fine_tuning` (same DB as the baseline) and
 saves the adapter to `results/adapters/astral_qwen3.5_micro_<variant>/`
 (never touches the original baseline adapter directory).
+
+Velocity threshold default (0.45, not GOAL_1.md's 0.05): measured directly on
+this model (see scratchpad/diagnose_velocity.py) -- mean relative per-layer
+hidden-state velocity ranges ~0.28-4.3 (median ~0.48) on 8 real batches from
+this dataset, nowhere near 0.05. GOAL_1.md's "51.4% of layers are quiet at
+Δh_l < 0.05" figure does not hold for this model/dataset; 0.45 is the
+empirically measured threshold that puts ~40% of layers below it.
 """
 
 import argparse
@@ -101,7 +108,7 @@ def finetune_novel(
     rank_out: int = 8,
     alpha: int = 16,
     dropout: float = 0.05,
-    velocity_threshold: float = 0.05,
+    velocity_threshold: float = 0.45,
     velocity_ema_decay: float = 0.9,
     velocity_warmup_steps: int = 20,
     velocity_max_quiet_fraction: float = 0.9,
@@ -160,6 +167,12 @@ def finetune_novel(
             warmup_steps=velocity_warmup_steps,
             max_quiet_fraction=velocity_max_quiet_fraction,
         )
+        # Must live on the same device as the model: VelocityGate.record() writes
+        # GPU-tensor velocities straight into its buffers with no host sync (that's
+        # the whole fix -- see its docstring), which only holds if the buffers are
+        # already on-device. Left on CPU by default (nn.Module buffers default
+        # there), that same write would silently force a device transfer per call.
+        gate = gate.to(next(model.parameters()).device)
 
     summary = apply_novel_lora(
         model,
@@ -171,6 +184,10 @@ def finetune_novel(
         alpha=alpha,
         dropout=dropout,
         velocity_gate=gate,
+        # Safe to skip the recompute-pass measurement here specifically because
+        # prepare_model_for_kbit_training() above always enables gradient
+        # checkpointing in this script -- see install_velocity_hooks docstring.
+        velocity_skip_recompute=True,
     )
     print(
         f"Wrapped {summary['wrapped_count']} Linear layers | "
@@ -331,7 +348,7 @@ if __name__ == "__main__":
     parser.add_argument("--rank-out", type=int, default=8)
     parser.add_argument("--alpha", type=int, default=16)
     parser.add_argument("--dropout", type=float, default=0.05)
-    parser.add_argument("--velocity-threshold", type=float, default=0.05)
+    parser.add_argument("--velocity-threshold", type=float, default=0.45)
     parser.add_argument("--velocity-ema-decay", type=float, default=0.9)
     parser.add_argument("--velocity-warmup-steps", type=int, default=20)
     parser.add_argument("--velocity-max-quiet-fraction", type=float, default=0.9)

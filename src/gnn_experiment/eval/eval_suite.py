@@ -197,7 +197,7 @@ def run_astral_evaluation(
         )
 
         comparison_table = []
-        for b, f in zip(base_results, ft_results):
+        for b, f in zip(base_results, ft_results, strict=True):
             comparison_table.append(
                 {
                     "id": b["id"],

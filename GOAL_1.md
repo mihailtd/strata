@@ -63,8 +63,10 @@ While individual components map to known AI research concepts, **the core goal o
 ```dg
 ┌─────────────────────────────────────────────────────────────┐
 │ LEVEL 1: TRAINING / FINE-TUNING                             │
-│ • Cross-Layer Tensor Factorization (Tucker/Tensor-Train)    │
-│ • Compresses adapter weights & AdamW optimizer state        │
+│ • Standard LoRA / QLoRA (custom_standard variant)           │
+│ • Velocity-Masked SFT (gates quiet layers during backward)  │
+│ NOTE: Cross-Layer Tucker Factorization was evaluated and    │
+│ FAILED — see §5 and novel_peft.py for full record.          │
 └──────────────────────────────┬──────────────────────────────┘
                                │
                                ▼
@@ -84,7 +86,9 @@ While individual components map to known AI research concepts, **the core goal o
 
 ### Level 1: Training (Parameter & Optimizer Level)
 
-Treat the entire stack of adapters across all layers as a single 3D Tensor ($L \times d_{\text{in}} \times d_{\text{out}}$) using Tucker or Tensor-Train decomposition. Projection factors are shared globally across network depth, while tiny core tensors handle layer-specific variations.
+Standard QLoRA (4-bit base, `custom_standard` mode in `novel_peft.py`) remains the active training path. Velocity-Masked SFT (gating quiet layers during the backward pass) is the primary active novel variant.
+
+> **Tucker Factorization — FAILED EXPERIMENT (do not use):** Cross-layer Tucker decomposition was evaluated across two configurations (r=8 and r=32 with diagonal per-layer scale). Training loss recovered (1.399 vs baseline 1.366) but downstream adherence did not improve (15.66% vs 34.5% for `custom_standard`). Root cause: all layers in a shape-group share the same basis directions (U_in/U_out); per-layer diagonal scaling cannot rotate into a genuinely different subspace per layer. The specific behavior we are optimising (swapping pip→uv, black→ruff) requires each layer to push in a different gradient direction, not a scaled version of one shared direction. Code is preserved for reference in `novel_peft.py` and `scripts/finetune_novel_adapter.py` but Tucker is NOT a viable training strategy for this task.
 
 ### Level 2: Adapter Swapping & Routing (Memory / PCIe Level)
 
@@ -115,9 +119,10 @@ During autoregressive generation, a custom kernel measures hidden-state velocity
 
 ### Combination C: The "Foveated Opinionated Adapter" Engine
 
-- **Formula:** `T-18 (Foveated LoRA)` + `Depth-Wise Tensor Factorization` + `OpenCode Agent Harness`
-- **Mechanism:** Fine-tune 3D Tensor-Factorized LoRA adapters for development stack tools (`uv`, `FastAPI`, `Pydantic v2`). Use hidden-state velocity ($\Delta h_l$) to trigger adapter passes _only_ when token streams require strict domain authority (e.g., editing `pyproject.toml`, tool payload generation), skipping generic prose.
+- **Formula:** `T-18 (Foveated LoRA)` + `custom_standard QLoRA` + `OpenCode Agent Harness`
+- **Mechanism:** Fine-tune standard QLoRA adapters for development stack tools (`uv`, `FastAPI`, `Pydantic v2`). Use hidden-state velocity ($\Delta h_l$) to trigger adapter passes _only_ when token streams require strict domain authority (e.g., editing `pyproject.toml`, tool payload generation), skipping generic prose.
 - **Target Metric:** Reduce adapter FLOPs by **~50%** while maintaining sharp domain rule enforcement.
+- **Note:** Depth-wise tensor factorization (Tucker) was removed from this combination after evaluation — see §5 failure note.
 
 ---
 
@@ -150,7 +155,7 @@ During autoregressive generation, a custom kernel measures hidden-state velocity
 
 | Execution Phase        | Baseline Bottleneck                                                                                                        | Architectural Solution                                                                                                            | Quantitative Success Target                                                                                       |
 | :--------------------- | :------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------- |
-| **Level 1: Training**  | **Optimizer State VRAM Bloat:** AdamW states ($m, v$) take 2–4$\times$ more memory than weights, choking 24 GB GPUs.       | **Cross-Layer Tensor Factorization:** Shares low-rank factors across depth, shrinking trainable params by 80–90%.                 | **$< 10\text{ MB}$ Optimizer Memory:** Train 30B+ base models locally on single 24 GB GPU without CPU offloading. |
+| **Level 1: Training**  | **Optimizer State VRAM Bloat:** AdamW states ($m, v$) take 2–4$\times$ more memory than weights, choking 24 GB GPUs.       | **Velocity-Masked SFT + standard QLoRA:** Gates quiet layers during backward, reducing redundant gradient updates. *(Tucker factorization evaluated and rejected — see §5.)* | **$< 10\text{ MB}$ Optimizer Memory:** Train 30B+ base models locally on single 24 GB GPU without CPU offloading. |
 | **Level 2: Swapping**  | **PCIe Bus Stalls:** Swapping 50MB–200MB adapters between RAM and VRAM causes severe latency spikes during agent handoffs. | **Billboard Impostor Vectors:** Uses 2 MB centroid proxies resident in VRAM for immediate routing while prefetching full weights. | **Zero-Stall Handshakes:** Multi-adapter routing latency drops from $> 150\text{ ms}$ to $< 5\text{ ms}$.         |
 | **Level 3: Inference** | **CPU Launch Overhead & FLOP Waste:** Running LoRA passes on every layer/token saturates bandwidth and causes stutter.     | **Foveated LoRA + CUDA/HIP Graphs:** Uses velocity ($\Delta h_l$) to skip quiet layers inside captured CUDA/HIP Graphs.           | **$> 85\text{ tok/s}$ Throughput:** Cuts adapter FLOPs by 40–50% with $< 4\text{ ms}$ latency standard deviation. |
 
@@ -180,14 +185,14 @@ During autoregressive generation, a custom kernel measures hidden-state velocity
                              ▼
 ┌──────────────────────────────────────────────────────────┐
 │ REPLACED BY THIS UNIFIED ENGINE                          │
-│ • Training:  Cross-Layer Tensor LoRA (Tucker/TT)         │
+│ • Training:  Velocity-Masked SFT + standard QLoRA        │
 │ • Serving:   ROCm / HIP CUDA Graph Decoder Engine        │
 │ • Swapping:  Centroid Billboard Impostor Prefetching     │
 │ • Control:   Closed-Loop PID Latency Governor            │
 └────────────────────────────┬─────────────────────────────┘
 ```
 
-- **Replaces `peft` + `bitsandbytes`:** Eliminates dynamic quantization overhead during training with tensor-factorized updates and native 4-bit frozen base models.
+- **Replaces `peft` + `bitsandbytes`:** Uses native 4-bit frozen base models with velocity-gated backward passes and standard QLoRA adapters.
 - **Replaces PyTorch Sequential Loops:** Replaces Python-level iteration with pre-captured **CUDA/HIP Graphs**, removing CPU-to-GPU launch latency.
 - **Replaces Multi-LoRA Managers (`S-LoRA`, `Punica`):** Replaces dynamic VRAM allocation schemes with lightweight **Billboard Impostor Centroids** and asynchronous PCIe prefetching.
 
@@ -215,7 +220,7 @@ During autoregressive generation, a custom kernel measures hidden-state velocity
 
 Achieving these targets requires solving three C++/HIP kernel challenges simultaneously:
 
-1. **Cross-Layer Tensor Contracting Backward Kernels:** Writing custom Triton/HIP backward kernels for Tucker-decomposed cross-layer adapters (avoiding PyTorch `einsum` overhead).
+1. **Fused Velocity-Gate Backward Kernels:** Writing custom Triton/HIP backward kernels that honour the velocity gate mask without materialising zero-gradient nodes for quiet layers.
 2. **Fused Activation Checkpointing inside CUDA/HIP Graphs:** Recomputing activation memory on-the-fly inside fused kernels to bypass the 14 GB activation memory peak.
 3. **Hardware-Native AMD ROCm (`gfx1100`) Acceleration:** Implementing custom tensor contraction backward loops natively for AMD ROCm on RDNA3 architecture.
 

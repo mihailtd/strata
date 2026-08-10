@@ -152,8 +152,10 @@ def export_adapter(
             }
         )
 
+    loss_val = train_result.training_loss
     print(
-        f"Fine-tuning completed in {wall_time_s:.2f}s (Peak VRAM: {peak_vram_gb:.2f} GB, Final Loss: {train_result.training_loss:.4f})"
+        f"Fine-tuning completed in {wall_time_s:.2f}s "
+        f"(Peak VRAM: {peak_vram_gb:.2f} GB, Final Loss: {loss_val:.4f})"
     )
     print(f"MLflow fine-tuning run logged under experiment '{experiment_name}'!")
     return str(out_path)

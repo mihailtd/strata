@@ -17,6 +17,14 @@ the existing QLoRA baseline in `scripts/export_adapter.py` (see GOAL_1.md):
 
 Both are orthogonal and can be combined by wrapping with mode="tucker" and
 passing a VelocityGate.
+
+3. Inference-time velocity skipping: the same VelocityGate/is_quiet_fn
+   machinery, but driven per generated *token* instead of per training step
+   (see VelocityGateTickLogitsProcessor) -- a distinct experiment from
+   training-time masking, since it changes decode-time FLOPs/memory reads
+   rather than backward-pass cost, and needs its own threshold calibration
+   (generation-time per-layer velocity is a different distribution than
+   training-batch velocity).
 """
 
 from __future__ import annotations
@@ -28,6 +36,7 @@ from pathlib import Path
 
 import torch
 from torch import nn
+from transformers import LogitsProcessor
 
 
 def set_hard_vram_cap(cap_gb: float, device: int = 0) -> None:
@@ -55,6 +64,32 @@ def set_hard_vram_cap(cap_gb: float, device: int = 0) -> None:
 
 # ---------------------------------------------------------------------------
 # Cross-Layer Tucker Factorization
+# ---------------------------------------------------------------------------
+# EXPERIMENT STATUS: FAILED — DO NOT USE FOR NEW WORK
+#
+# Tucker factorization was evaluated in two configurations:
+#   Tucker v1 — r=8, alpha=16   → 487K trainable params, 1.86 MB optimizer state
+#   Tucker v2 — r=32, alpha=64, + per-layer diagonal scale → 2.05M params, 7.83 MB
+#
+# Results vs. custom_standard reference (10.6M params):
+#   Tucker v1  training loss 1.613,  adherence 17.27%
+#   Tucker v2  training loss 1.399,  adherence 15.66%  ← capacity fix worked on loss…
+#   custom_std training loss 1.366,  adherence 59.95%  ← …but adherence didn't move
+#
+# Root cause: every layer in a shape-group is forced through the SAME shared
+# basis directions (U_in, U_out).  A per-layer diagonal scale vector lets each
+# layer independently rescale that shared subspace, but CANNOT rotate it into a
+# genuinely different subspace.  The pip→uv / black→ruff swap behaviour we
+# measure requires each layer to push in a different gradient direction — not
+# just a differently-scaled version of one shared direction.
+#
+# This is NOT a parameter-count problem (4× more capacity in v2 didn't help).
+# Remaining candidate fixes (per-depth-block factor groups, HOSVD init) were
+# not implemented because the shared-subspace limitation is likely fundamental
+# for this class of tasks.
+#
+# Code is preserved here for reference.  Do not add new Tucker experiments
+# without first addressing the shared-basis subspace problem.
 # ---------------------------------------------------------------------------
 
 
@@ -131,6 +166,11 @@ class VelocityGate(nn.Module):
         super().__init__()
         self.ema_velocity: torch.Tensor
         self.register_buffer("ema_velocity", torch.full((num_layers,), float("nan")))
+        # Per-step scratch space the hooks write into. Kept as a GPU buffer
+        # (not a Python dict/list) specifically so `record()` never needs a
+        # host sync -- see its docstring.
+        self.pending_velocity: torch.Tensor
+        self.register_buffer("pending_velocity", torch.full((num_layers,), float("nan")))
         self.num_layers = num_layers
         self.threshold = threshold
         self.ema_decay = ema_decay
@@ -145,17 +185,37 @@ class VelocityGate(nn.Module):
 
     @torch.no_grad()
     def record(self, layer_idx: int, velocity: torch.Tensor) -> None:
-        v = float(velocity.detach().float().cpu())
-        cur = self.ema_velocity[layer_idx]
-        if torch.isnan(cur):
-            self.ema_velocity[layer_idx] = v
-        else:
-            self.ema_velocity[layer_idx] = self.ema_decay * cur + (1 - self.ema_decay) * v
+        """Write this layer's velocity for the in-progress step.
+
+        Deliberately does nothing but a same-device indexed write -- no
+        `.item()`/`.cpu()`/Python `if` on a tensor anywhere in this method.
+        Each of those forces a host<->device sync, and this runs once per
+        decoder layer per forward (doubled again under gradient checkpointing,
+        which re-invokes every layer's forward during backward). The first,
+        naive version of this method called `.cpu()` here and made training
+        29% *slower* despite skipping real compute -- ~64 forced GPU stalls
+        every step ate more wall-clock than the skipped matmuls saved. All
+        the actual math (EMA blend, NaN handling, host sync for the quiet-set
+        decision) now happens exactly once per step in `end_step()` instead
+        of once per layer here. Requires `self` to already be on the same
+        device as the model (call `.to(model_device)` right after
+        construction) or this write itself becomes a sync point again.
+        """
+        self.pending_velocity[layer_idx] = velocity.detach()
 
     def end_step(self) -> None:
         self.step_count += 1
+        with torch.no_grad():
+            fired = ~torch.isnan(self.pending_velocity)
+            first_obs = torch.isnan(self.ema_velocity) & fired
+            blend = fired & ~first_obs
+            self.ema_velocity = torch.where(first_obs, self.pending_velocity, self.ema_velocity)
+            blended = self.ema_decay * self.ema_velocity + (1 - self.ema_decay) * self.pending_velocity
+            self.ema_velocity = torch.where(blend, blended, self.ema_velocity)
+            self.pending_velocity.fill_(float("nan"))
+
         if self.step_count > self.warmup_steps:
-            vals = self.ema_velocity.tolist()
+            vals = self.ema_velocity.tolist()  # the one intentional sync/step, not one per layer
             candidates = [(v, i) for i, v in enumerate(vals) if not math.isnan(v) and v < self.threshold]
             cap = int(self.num_layers * self.max_quiet_fraction)
             if len(candidates) > cap:
@@ -171,13 +231,29 @@ class VelocityGate(nn.Module):
         return layer_idx in self.quiet_layers
 
 
-def install_velocity_hooks(layers: Iterable[nn.Module], gate: VelocityGate) -> list:
-    """Forward hooks measuring per-layer relative hidden-state velocity."""
+def install_velocity_hooks(layers: Iterable[nn.Module], gate: VelocityGate, skip_recompute: bool = False) -> list:
+    """Forward hooks measuring per-layer relative hidden-state velocity.
+
+    `skip_recompute=True` skips the (real, non-trivial: two fp32 upcasts plus
+    two norm reductions, ~7 kernel launches) measurement during gradient
+    checkpointing's recompute pass, where it would otherwise fire a second,
+    redundant time for the same step. Detected via `torch.is_grad_enabled()`:
+    `torch.utils.checkpoint` runs the original forward under `no_grad()` and
+    only re-enables grad for the recompute, so "grad enabled inside this
+    hook" reliably means "this is the recompute, not the original forward."
+
+    Only pass True when the caller *knows* gradient checkpointing is active
+    on this model -- otherwise, on an uncheckpointed forward (grad enabled,
+    no recompute at all), this would skip the layer's only hook firing that
+    step and the gate would never measure anything.
+    """
 
     handles = []
 
     def make_hook(idx: int):
         def hook(module, inputs, output):
+            if skip_recompute and torch.is_grad_enabled():
+                return
             hs_in = inputs[0]
             hs_out = output[0] if isinstance(output, tuple) else output
             with torch.no_grad():
@@ -193,16 +269,28 @@ def install_velocity_hooks(layers: Iterable[nn.Module], gate: VelocityGate) -> l
     return handles
 
 
-class VelocityGateStepCallback:
-    """Plain (non-transformers) callback object; wired via a transformers
-    `TrainerCallback` in the training script to avoid importing transformers
-    here."""
+class VelocityGateTickLogitsProcessor(LogitsProcessor):
+    """Drives a VelocityGate once per *generated token* instead of once per
+    training step, for inference-time layer skipping.
+
+    `generate()`'s loop, per step, is: run the forward pass for the current
+    token (this fires the same per-layer forward hooks used in training,
+    writing this token's velocities into the gate's pending buffer) -> call
+    each registered LogitsProcessor on the resulting logits -> sample/pick
+    the next token. A LogitsProcessor is therefore called exactly once per
+    token, strictly after that token's hooks have already fired and strictly
+    before the next token's forward pass begins -- the same "decide the next
+    step using the step that just finished" lag `end_step()` already
+    implements for training, just retargeted from steps to tokens. Returns
+    `scores` unchanged; it exists purely for this side effect.
+    """
 
     def __init__(self, gate: VelocityGate):
         self.gate = gate
 
-    def on_step_end(self):
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         self.gate.end_step()
+        return scores
 
 
 # ---------------------------------------------------------------------------
@@ -248,6 +336,14 @@ class NovelLoraLinear(nn.Module):
             core = torch.empty(rank_in, rank_out, device=device, dtype=compute_dtype)
             nn.init.normal_(core, std=0.01)
             self.core = nn.Parameter(core)
+            # Per-layer trainable magnitude vector over the shared r_out subspace.
+            # U_in/U_out and (with a shared shape group) the core's *rank* are the
+            # same for every layer in the group; this is the one piece of this
+            # layer's adapter that's entirely its own, letting it scale each shared
+            # output direction up or down independently instead of every layer in
+            # the group being forced through an identical relative mix. Ones-init:
+            # a no-op at start (also moot initially since U_out is zero-init).
+            self.diag_scale = nn.Parameter(torch.ones(rank_out, device=device, dtype=compute_dtype))
         else:
             assert rank is not None
             self.rank = rank
@@ -267,6 +363,7 @@ class NovelLoraLinear(nn.Module):
         if self.mode == "tucker":
             u_in, u_out = self._factor_lookup(self.factor_key)
             delta = (h @ u_in) @ self.core
+            delta = delta * self.diag_scale
             delta = delta @ u_out
         else:
             delta = (h @ self.lora_a) @ self.lora_b
@@ -311,10 +408,15 @@ def apply_novel_lora(
     alpha: float = 16,
     dropout: float = 0.0,
     velocity_gate: VelocityGate | None = None,
+    velocity_skip_recompute: bool = False,
 ) -> dict:
     """Freezes the whole model, then replaces every target Linear inside every
     decoder layer with a NovelLoraLinear. Returns a summary dict (wrapped
-    count, trainable param count, and the bank if mode == "tucker")."""
+    count, trainable param count, and the bank if mode == "tucker").
+
+    `velocity_skip_recompute` is forwarded to `install_velocity_hooks` -- only
+    pass True when the caller has itself enabled gradient checkpointing on
+    `model` (see that function's docstring for why)."""
 
     for p in model.parameters():
         p.requires_grad_(False)
@@ -382,7 +484,7 @@ def apply_novel_lora(
         model.add_module("novel_lora_bank", bank)
 
     if velocity_gate is not None:
-        install_velocity_hooks(layers, velocity_gate)
+        install_velocity_hooks(layers, velocity_gate, skip_recompute=velocity_skip_recompute)
 
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     all_params = sum(p.numel() for p in model.parameters())

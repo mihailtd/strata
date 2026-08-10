@@ -346,6 +346,7 @@ Here is the exact breakdown of what has been tried, what failed in practice, and
 - **Papers:** _FacT (Factorized Adaptation)_, _TensLoRA_, _LoTR_, and _LoRTA_.
 - **What they found:** Stacking $A$ and $B$ adapter matrices into a single 3D/4D tensor (using Tensor-Train or Tucker Decomposition) reduces adapter parameter counts by **70%–90%**.
 - **Why it hasn't killed standard LoRA:** Contraction operations across 4D tensors in PyTorch are slower than simple matrix multiplications ($A \cdot B$) unless written in custom CUDA/Triton kernels.
+- **❌ EXPERIMENT RESULT — FAILED (do not pursue):** Tucker factorization was evaluated in this project across two configurations (Tucker v1: r=8, 487K params; Tucker v2: r=32 + per-layer diagonal scale, 2.05M params). Training loss recovered (1.399 vs 1.366 baseline), but downstream task adherence did not improve (15.66% vs 34.5% for standard QLoRA). Root cause: all layers in a shape-group are forced through the same shared basis directions (U_in/U_out). Per-layer diagonal scaling lets each layer scale that shared subspace but cannot rotate into a different subspace. The pip→uv / black→ruff swap behavior we measure requires each layer to push in a genuinely different gradient direction. Tucker is not a viable adapter strategy for this task. Code is preserved in `novel_peft.py` for reference.
 
 ### B. Activation Sparsity & SwiGLU Masking (Your T-05 / Foveated Rendering)
 
