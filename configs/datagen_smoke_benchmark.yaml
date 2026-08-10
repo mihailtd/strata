@@ -1,0 +1,22 @@
+# Smoke-test config: proves the datagen pipeline's output JSONL is actually
+# consumable by the existing PEFT benchmark harness, not just schema-correct
+# in isolation. Not meant for real training (n_examples/max_steps are tiny).
+
+model: Qwen/Qwen2.5-0.5B
+dataset: data/astral_docs/sft/astral_expert_sft.jsonl
+text_field: text
+
+methods:
+  - lora
+
+target_modules:
+  - q_proj
+  - v_proj
+
+r: 8
+alpha: 16
+max_steps: 3
+batch_size: 2
+max_length: 256
+learning_rate: 2.0e-4
+n_examples: 4

@@ -1,0 +1,25 @@
+# Configuration for Goal 1 Micro-Probe (Qwen3.5-2B) Benchmark & Diagnostics
+model_name: "Qwen/Qwen3.5-2B-Instruct"
+dataset_raw_dir: "data/astral_docs/raw"
+dataset_sft_file: "data/astral_docs/sft/astral_expert_sft.jsonl"
+max_samples: 1041
+
+training:
+  max_steps: 500
+  batch_size: 2
+  learning_rate: 0.0002
+  max_length: 512
+  logging_steps: 10
+  save_strategy: "no"
+
+peft:
+  method: "qlora"
+  r: 8
+  alpha: 16
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+
+hooks:
+  velocity_epsilon: 0.05
+
+mlflow:
+  experiment_name: "micro_probe_benchmark"

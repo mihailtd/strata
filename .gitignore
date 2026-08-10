@@ -6,3 +6,7 @@ __pycache__/
 results/
 .hf_cache/
 *.egg-info/
+data/
+mlruns/
+mlruns.db
+mlartifacts/

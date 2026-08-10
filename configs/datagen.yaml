@@ -1,0 +1,50 @@
+# Default Astral-docs SFT datagen config. Override with CLI flags on
+# scripts/run_datagen.py, e.g. --limit 10, --repos uv,ruff
+
+llm:
+  base_url: http://127.0.0.1:8080
+  model: models/gemma-4-12B-it-Q8_0.gguf
+  temperature: 0.1
+  # Generous, not-artificially-starved budgets — the server runs with a large
+  # context window (see serving/README.md), no reason to truncate generation.
+  max_tokens:
+    question_gen: 1024
+    verify: 64
+    answer_gen: 8192
+
+  # Optional: point the verifier at a *different* already-running server/model
+  # for independent judging instead of self-verification (the default when
+  # this is left null — the same model that wrote the Q&A also grades it,
+  # which is a real weakness: it won't catch its own blind spots). Only
+  # useful if you have a second llama-server running on another port.
+  verify_base_url: null
+  verify_model: null
+
+  # Stop the llama-server process(es) this pipeline talked to once it
+  # finishes, freeing their VRAM automatically. Override with --no-unload
+  # if you want the server left running (e.g. to chat with it right after).
+  unload_after_run: true
+
+# Optional extra instruction injected into the question/answer generation
+# prompts, e.g. "Prefer questions about the CLI over internals" or "Frame
+# more questions as migrations from pip/mypy". Logged to MLflow per run so
+# you can compare how nudging affected output. Leave empty for none.
+extraction_nudge: ""
+
+repos:
+  - uv
+  - ruff
+  - ty
+
+docs_cache_dir: data/astral_docs/raw
+output_dir: data/astral_docs/sft
+
+chunk_size_chars: 2000
+min_chunk_chars: 100
+questions_per_chunk: 1
+
+mlflow:
+  experiment_name: astral-expert-datagen
+  # MLflow 3.x deprecated the plain filesystem store (mlruns/) in favor of a
+  # DB backend; sqlite keeps this fully local with no server needed.
+  tracking_uri: sqlite:///mlruns.db

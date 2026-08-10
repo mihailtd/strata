@@ -7,6 +7,7 @@ production-quality adapter.
 """
 
 import time
+from pathlib import Path
 
 import torch
 from datasets import load_dataset
@@ -49,7 +50,10 @@ def _load_model(model_name: str, method: str):
 
 
 def _load_dataset(tokenizer, dataset_name: str, text_field: str, max_length: int, n_examples: int):
-    ds = load_dataset(dataset_name, split=f"train[:{n_examples}]")
+    if Path(dataset_name).exists():
+        ds = load_dataset("json", data_files=dataset_name, split=f"train[:{n_examples}]")
+    else:
+        ds = load_dataset(dataset_name, split=f"train[:{n_examples}]")
 
     def tokenize(batch):
         return tokenizer(

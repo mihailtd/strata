@@ -331,3 +331,225 @@ Here is a breakdown of what has been tried, what is actively being researched, a
 While individual pieces (like speculative heads or mixed precision) exist in isolated AI papers, **treating an inference engine like a 3D graphics pipeline**—where tokens are frames, experts are mesh assets, and VRAM bandwidth is the draw-call budget—creates a unified runtime architecture.
 
 It shifts the focus from static model tuning to **real-time, dynamic resource orchestration**.
+
+Looking at the research landscape and open-source ecosystems: **Yes, almost all of these individual building blocks have been explored in academic papers or systems frameworks**, but **combining them into a single, unified game-engine engine loop is where the novel territory lies.**
+
+Here is the exact breakdown of what has been tried, what failed in practice, and what remains an open frontier.
+
+---
+
+## 1. What Has Already Been Tried in Literature?
+
+### A. Depth-Wise / Tensor-Factorized LoRA (Cross-Layer Adapters)
+
+- **Status in Research:** **Widely Explored.**
+- **Papers:** _FacT (Factorized Adaptation)_, _TensLoRA_, _LoTR_, and _LoRTA_.
+- **What they found:** Stacking $A$ and $B$ adapter matrices into a single 3D/4D tensor (using Tensor-Train or Tucker Decomposition) reduces adapter parameter counts by **70%–90%**.
+- **Why it hasn't killed standard LoRA:** Contraction operations across 4D tensors in PyTorch are slower than simple matrix multiplications ($A \cdot B$) unless written in custom CUDA/Triton kernels.
+
+### B. Activation Sparsity & SwiGLU Masking (Your T-05 / Foveated Rendering)
+
+- **Status in Research:** **Widely Explored.**
+- **Papers/Tools:** _PowerInfer_, _DejaVu_, _CATs (Context-Aware Thresholding)_.
+- **What they found:** In SwiGLU architectures, 60%–80% of intermediate MLP neurons output $0$ after the activation function.
+- **The Catch (Matches your T-05 note!):** In dense PyTorch, checking _which_ neurons are non-zero takes more compute than just running the dense matmul. Without a predictor or a custom block-sparse CUDA/Triton kernel (your T-06 block!), activation sparsity gives **zero wall-clock speedup** on GPUs.
+
+### C. CUDA Graphs for Single-Batch Decode (Your T-12 / Draw-Call Batching)
+
+- **Status in Research:** **Standard Industry Practice.**
+- **Tools:** `vLLM`, `TensorRT-LLM`, `llama.cpp`.
+- **What they found:** In batch-1 decode, PyTorch spends ~50% of its time launching C++/HIP kernel calls on the CPU. CUDA Graph capture eliminates this launch overhead, giving the exact **+50% to +70% speedup** you observed in T-12.
+
+### D. Prefix Radix Caching & KV Mipmapping (Your T-04 / T-13)
+
+- **Status in Research:** **Standard Industry Practice.**
+- **Tools:** `SGLang` (RadixAttention), `vLLM` (PagedAttention), `KIVI` (2-bit KV quant).
+- **What they found:** Keeping distant KV tokens in 2-bit/4-bit while maintaining recent tokens in 16-bit saves 60%–70% VRAM with negligible loss, exactly matching your T-04 results.
+
+---
+
+## 2. The Uncharted Frontier: "Foveated LoRA" (Skipping Adapter Passes)
+
+Your idea of **Foveated LoRA**—using hidden-state velocity ($\Delta h_l$, T-14) or SwiGLU sparsity (T-05) to **dynamically skip the LoRA adapter pass ($A \cdot B$) on quiet layers during generation**—is **largely UNTRIED in mainstream open-source.**
+
+### Why hasn't this been done?
+
+1. **The "Always-On" Assumption:** Standard frameworks (`peft`, `vLLM`, `Unsloth`) treat LoRA as a static graph addition: $Y = W_0 X + (B \cdot A) X$. The adapter executes on every layer, every token, unconditionally.
+2. **Dynamic Routing Overhead:** Checking whether $\Delta h_l < \text{threshold}$ inside a Python loop adds CPU overhead that cancels out the matrix multiplication savings—**unless the check is baked inside a CUDA Graph or Triton kernel.**
+
+---
+
+## 3. How to Make "Foveated LoRA" a Legitimate Systems Contribution
+
+If you build **T-18 (Foveated LoRA)** on your ROCm/AMD setup, here is how to structure it so it yields a genuine performance win:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ DEEP HIDDEN-STATE VELOCITY CHECK (T-14)                        │
+│ Calculate: Δh_l = || h_l^{(t)} - h_l^{(t-1)} ||                 │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+               ┌────────────────┴────────────────┐
+               │                                 │
+     Δh_l > Threshold                   Δh_l ≤ Threshold
+               │                                 │
+               ▼                                 ▼
+┌──────────────────────────────┐  ┌──────────────────────────────┐
+│ FULL FORWARD PASS            │  │ FOVEATED FAST PASS           │
+│ Base Weight W_0 + LoRA (A·B) │  │ Base Weight W_0 ONLY         │
+│ (Active Feature Adaptation)  │  │ (SKIP LoRA Adapter Computation│
+└──────────────────────────────┘  └──────────────────────────────┘
+
+```
+
+### Why This Works for Local Agents:
+
+When an LLM generates structured output (like writing an MCP JSON schema or `pyproject.toml` config):
+
+- **High-Velocity Tokens (Keywords, Syntax, Logic):** The model hidden state shifts rapidly $\to$ **LoRA Fires** to enforce your custom rules (`uv`, `override-dependencies`).
+- **Low-Velocity Tokens (Boilerplate, Punctuation, Whitespace):** The model hidden state barely moves $\to$ **LoRA Skips**, saving VRAM reads and execution FLOPs.
+
+### The Implementation Requirement:
+
+To prevent PyTorch `if/else` checks from slowing down your engine, the velocity mask must be stored as a **static 1D tensor buffer inside your T-12 CUDA Graph**.
+
+If you achieve this on your RX 7900 XTX, you will have created a local inference system that runs small models faster and more efficiently than standard stock frameworks.
+
+When evaluating your summary matrix against the current state of AI research, the individual components map cleanly to existing concepts: **Frustum Culling** maps to _Threshold Routing / Speculative Prefetching_, **LOD** maps to _AdaLoRA_, **TAA** maps to _Cache Locality / ReMoE_, **PID Servo** maps to _Closed-Loop Controller Systems_, and **Billboard Impostors** maps to _Centroid/Prototype Compression_.
+
+What remains **truly unexplored is the combination of these techniques into an integrated runtime system**.
+
+---
+
+## 1. What Is Truly Unexplored?
+
+Isolated research papers analyze these concepts in laboratory silos. Almost nobody in open-source AI builds the **control-loop interactions** that arise when these systems execute concurrently on a single local GPU.
+
+### The 3 Uncharted Frontiers
+
+```
+                              THE UNEXPLORED TRIAD
+
+                 ┌──────────────────────────────────────────┐
+                 │ 1. CROSS-TECHNIQUE CONTROL LOOPS         │
+                 │ PID feedback driving TAA + Impostors     │
+                 └────────────────────┬─────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────┐ ┌─────────────────────────────────────────┐
+│ 2. DYNAMIC HARDWARE-ALIGNED SPARSITY    │ │ 3. DYNAMIC MULTI-LORA BILLBOARD SLOTS   │
+│ Velocity masking inside CUDA Graphs     │ │ Prototype centroids mapped to GPU SRAM  │
+└─────────────────────────────────────────┘ └─────────────────────────────────────────┘
+
+```
+
+---
+
+### Frontier 1: Cross-Technique Feedback (The Closed-Loop Orchestrator)
+
+In academic literature:
+
+- Paper A tests TAA-style route re-use (ReMoE).
+- Paper B tests PID-controlled batching.
+- Paper C tests dynamic LoRA rank scaling (AdaLoRA).
+
+**The Unexplored Territory:** **How do these controllers interact when running simultaneously?**
+
+When system latency spikes (e.g., your local agent initiates a complex workspace search):
+
+1. The **PID Servo** fires an output signal $u(t)$.
+2. Instead of merely dropping batch size, $u(t)$ dynamically adjusts:
+
+- The **TAA Velocity Threshold** ($\epsilon_{\text{TAA}}$), forcing the model to reuse previous hidden-state projections for quiet layers.
+- The **Frustum Culling Radius** ($\epsilon_{\text{Cull}}$), dropping low-probability MoE experts or LoRA adapter channels.
+- The **Billboard Impostor Depth**, substituting distant KV tokens or adapter matrices with pre-computed centroid vectors.
+
+Testing this closed-loop cascading fallback—where the PID controller continuously dials back multi-technique parameters to guarantee a strict 25ms SLA—remains unbuilt in open-source frameworks.
+
+---
+
+### Frontier 2: Velocity-Driven Sparsity Captured Inside CUDA Graphs
+
+In existing frameworks (like `vLLM` or `SGLang`), CUDA Graphs require **100% static memory shapes and static execution graphs**.
+
+**The Unexplored Territory:** Creating a **Dynamic Foveated Fast-Pass** inside a static CUDA Graph using pre-allocated zero-copy mask buffers.
+
+- **The Mechanism:** Instead of using Python `if/else` checks (which break CUDA Graph capture and reintroduce CPU overhead), a custom HIP kernel computes the hidden-state velocity ($\Delta h_l$) on token $t$, writes a binary flag (`0` or `1`) to a static GPU memory address, and uses masked GEMMs inside the captured CUDA Graph to skip LoRA matrix multiplications ($A \cdot B$) on quiet layers.
+- **Why it's novel:** This achieves true hardware execution acceleration for hidden-state velocity tracking without incurring PyTorch/CPU launch penalties.
+
+---
+
+### Frontier 3: Multi-Adapter "Billboard Impostors" in Memory-Constrained VRAM
+
+Existing multi-LoRA systems (like `S-LoRA` or `Punica`) stream full adapter weights into VRAM on demand, causing bus contention on single-GPU setups.
+
+**The Unexplored Territory:** Using **Centroid "Billboard" Vectors** as low-rank proxies for un-fetched adapters.
+
+- **The Mechanism:** Keep 10–20 domain adapters on system RAM. Compute a 1D "Billboard Centroid" vector ($c_i \in \mathbb{R}^d$) for each adapter that represents its mean directional bias. Keep all 20 Centroid Impostors resident in GPU VRAM (occupying under 2 MB total).
+- **Execution:** When the router evaluates an input prompt:
+
+1. It passes intermediate states through the cheap 2 MB **Impostor Centroids** to determine which full adapter is needed.
+2. If the full adapter isn't in VRAM yet, the model executes the forward pass using the **Billboard Impostor** as an approximate stand-in while asynchronously prefetching the full LoRA over the PCIe bus (Frustum Culling).
+
+---
+
+## 2. High-Yield Combinations to Experiment With
+
+To maximize speed, low VRAM usage, and opinionated agentic control on your workstation setup (RX 7900 XTX / ROCm / 24 GB VRAM), test these **three high-yield combinations**:
+
+### Combination A: The "Zero-Jitter" Real-Time Engine
+
+- **Formula:** `T-12 (CUDA Graphs)` + `T-15 (PID Servo)` + `T-14 (TAA Velocity Delta)` + `T-11 (GPTQ 4-bit)`
+- **How it works:** Run a lossless 4-bit base model inside a CUDA Graph decoder loop. Use the PID Servo to measure real-time HIP kernel latency. If local system background processes cause VRAM/PCIe bus contention, the PID controller dynamically increases the TAA Velocity Threshold ($\epsilon$), skipping standard layer evaluations and maintaining a rock-steady token delivery rate (e.g., 80 tok/s with <4ms standard deviation).
+- **Target Outcome:** Eliminates token stutter and latency spikes during long multi-turn agentic coding sessions.
+
+---
+
+### Combination B: The "Infinite-Context Workspace" Engine
+
+- **Formula:** `T-13 (Radix Prefix Cache)` + `T-04 (Hierarchical KV Mipmapping)` + `T-16 (Billboard Impostor Tokens)`
+- **How it works:** When your local agent reads a massive 50,000-token codebase or monorepo:
+
+1. The system matches shared system prompts and workspace configs via **T-13 Radix Caching** (11x TTFT speedup).
+2. Intermediate context tokens (1,000–8,000) are quantized to 4-bit via **T-04 Mipmapping**.
+3. Distant background files (>8,000 tokens) are compressed into **T-16 Billboard Impostor Tokens** (270x reduction).
+
+- **Target Outcome:** Reduces KV cache VRAM footprint from **12+ GB down to <500 MB**, allowing long-context monorepo analysis to run alongside multiple active LoRA adapters on a single 24 GB card.
+
+---
+
+### Combination C: The "Foveated Opinionated Adapter" Engine
+
+- **Formula:** `T-18 (Foveated LoRA)` + `Depth-Wise Tensor Factorization` + `OpenCode Agent Harness`
+- **How it works:** Fine-tune a 3D Tensor-Factorized LoRA adapter on modern `uv`, `FastAPI`, and `Pydantic v2` workspace troubleshooting. At runtime, use the hidden-state velocity ($\Delta h_l$) to trigger the adapter pass _only_ when the token stream requires strict domain authority (`pyproject.toml` editing, tool payload generation), skipping the adapter on generic prose or whitespace tokens.
+- **Target Outcome:** Reduces adapter computational overhead by ~50% while retaining sharp behavioral enforcement on your specific development stack.
+
+---
+
+## Summary Protocol
+
+```
+                        SYSTEM ARCHITECTURE INTEGRATION
+
+  ┌────────────────────────────────────────────────────────────────────────┐
+  │ PID LATENCY GOVERNOR (T-15)                                            │
+  │ Monitored Metric: Frame Budget / Token Latency (target: 25ms)          │
+  └───────────────────────────────────┬────────────────────────────────────┘
+                                      │ Output u(t) Adjusts Thresholds
+                                      ▼
+  ┌────────────────────────────────────────────────────────────────────────┐
+  │ DYNAMIC CONTROLLERS                                                    │
+  │ • TAA Velocity Threshold (T-14)   ──> Skips quiet layer projections     │
+  │ • Frustum Culler Radius (T-09)    ──> Drops weak MoE/LoRA experts       │
+  │ • Billboard Impostor Depth (T-16) ──> Replaces distant KV/adapters     │
+  └───────────────────────────────────┬────────────────────────────────────┘
+                                      │ Static Mask Buffers
+                                      ▼
+  ┌────────────────────────────────────────────────────────────────────────┐
+  │ CUDA GRAPH CAPTURED DECODE ENGINE (T-12 + T-11)                        │
+  │ Lossless GPTQ 4-bit Base Model + Zero-Copy HIP Execution               │
+  └────────────────────────────────────────────────────────────────────────┘
+
+```
+
+By focusing on the **feedback loops between these techniques**—rather than treating each paper in isolation—you can build a specialized local inference runtime that operates with game-engine levels of responsiveness on consumer hardware.
