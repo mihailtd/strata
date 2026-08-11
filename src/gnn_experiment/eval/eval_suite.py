@@ -3,13 +3,13 @@
 Evaluates modern tooling adherence (uv, ruff, ty) vs legacy fallback (pip, black, flake8, mypy).
 """
 
+import json
 import re
 import time
 from typing import Any
 
 import mlflow
 import torch
-import yaml
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
@@ -46,8 +46,17 @@ def count_matches(text: str, patterns: list[str]) -> int:
 
 
 def evaluate_single_prompt(
-    model, tokenizer, prompt: str, max_new_tokens: int = 256
+    model,
+    tokenizer,
+    prompt: str,
+    max_new_tokens: int = 256,
+    modern_terms: list[str] = MODERN_TERMS,
+    legacy_terms: list[str] = LEGACY_TERMS,
 ) -> dict[str, Any]:
+    """modern_terms/legacy_terms default to this project's original Astral
+    uv/ruff/ty vs pip/black/mypy split -- pass a different pair of term lists
+    to score adherence for a different domain/adapter (e.g. a PostgreSQL/
+    vector-search-terms vs generic-vector-db-terms split)."""
     formatted_prompt = f"### Question:\n{prompt}\n\n### Answer:\n"
     inputs = tokenizer(formatted_prompt, return_tensors="pt").to(model.device)
 
@@ -65,12 +74,10 @@ def evaluate_single_prompt(
     new_tokens = outputs[0][inputs.input_ids.shape[1] :]
     response_text = tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
 
-    modern_hits = count_matches(response_text, MODERN_TERMS)
-    legacy_hits = count_matches(response_text, LEGACY_TERMS)
+    modern_hits = count_matches(response_text, modern_terms)
+    legacy_hits = count_matches(response_text, legacy_terms)
     total_hits = modern_hits + legacy_hits
-    adherence_pct = (
-        (modern_hits / max(1, total_hits)) * 100.0 if total_hits > 0 else 0.0
-    )
+    adherence_pct = (modern_hits / max(1, total_hits)) * 100.0 if total_hits > 0 else 0.0
 
     return {
         "prompt": prompt,
@@ -85,20 +92,15 @@ def evaluate_single_prompt(
 def run_astral_evaluation(
     model_name: str = "Qwen/Qwen3.5-4B",
     adapter_path: str = "results/adapters/astral_qwen3.5_micro",
-    questions_file: str = "configs/eval_questions.yaml",
+    questions_file: str = "data/astral/evaluation_data.jsonl",
     experiment_name: str = "astral_tooling_evaluation",
 ) -> dict[str, Any]:
     with open(questions_file) as f:
-        q_cfg = yaml.safe_load(f)
-    questions = q_cfg.get("questions", [])
+        questions = [json.loads(line) for line in f if line.strip()]
 
     mlflow.set_experiment(experiment_name)
 
-    compute_dtype = (
-        torch.bfloat16
-        if torch.cuda.is_available() and torch.cuda.is_bf16_supported()
-        else torch.float16
-    )
+    compute_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_compute_dtype=compute_dtype,
@@ -124,9 +126,7 @@ def run_astral_evaluation(
 
     base_results = []
     for idx, q in enumerate(questions, 1):
-        print(
-            f"[{idx}/{len(questions)}] Evaluating Base Model on prompt: '{q['prompt'][:60]}...'"
-        )
+        print(f"[{idx}/{len(questions)}] Evaluating Base Model on prompt: '{q['prompt'][:60]}...'")
         res = evaluate_single_prompt(base_model, tokenizer, q["prompt"])
         res["id"] = q["id"]
         res["category"] = q["category"]
@@ -151,9 +151,7 @@ def run_astral_evaluation(
 
     ft_results = []
     for idx, q in enumerate(questions, 1):
-        print(
-            f"[{idx}/{len(questions)}] Evaluating Astral Model on prompt: '{q['prompt'][:60]}...'"
-        )
+        print(f"[{idx}/{len(questions)}] Evaluating Astral Model on prompt: '{q['prompt'][:60]}...'")
         res = evaluate_single_prompt(ft_model, tokenizer, q["prompt"])
         res["id"] = q["id"]
         res["category"] = q["category"]
@@ -164,9 +162,7 @@ def run_astral_evaluation(
         torch.cuda.empty_cache()
 
     # --- 3. Compute Summary Metrics & Log to MLflow ---
-    base_avg_adherence = sum(r["adherence_pct"] for r in base_results) / len(
-        base_results
-    )
+    base_avg_adherence = sum(r["adherence_pct"] for r in base_results) / len(base_results)
     ft_avg_adherence = sum(r["adherence_pct"] for r in ft_results) / len(ft_results)
     adherence_gain = ft_avg_adherence - base_avg_adherence
 

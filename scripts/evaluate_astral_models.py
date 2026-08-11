@@ -25,9 +25,7 @@ def main():
         "--adapter",
         default=str(REPO_ROOT / "results" / "adapters" / "astral_qwen3.5_micro"),
     )
-    parser.add_argument(
-        "--questions", default=str(REPO_ROOT / "configs" / "eval_questions.yaml")
-    )
+    parser.add_argument("--questions", default=str(REPO_ROOT / "data" / "astral" / "evaluation_data.jsonl"))
     parser.add_argument("--export-if-missing", action="store_true", default=True)
     args = parser.parse_args()
 
@@ -38,12 +36,8 @@ def main():
     adapter_path = Path(args.adapter)
     config_file = adapter_path / "adapter_config.json"
     if not config_file.exists() and args.export_if_missing:
-        print(
-            f"Adapter config not found at {config_file}. Exporting fine-tuned adapter..."
-        )
-        export_adapter(
-            model_name=args.model_name, out_dir=str(adapter_path), train_steps=150
-        )
+        print(f"Adapter config not found at {config_file}. Exporting fine-tuned adapter...")
+        export_adapter(model_name=args.model_name, out_dir=str(adapter_path), train_steps=150)
 
     # Run side-by-side evaluation
     results = run_astral_evaluation(

@@ -76,15 +76,14 @@ def run_unsloth_micro_probe(
     raw_dir = str(
         Path(__file__).resolve().parent.parent.parent.parent
         / "data"
-        / "astral_docs"
+        / "astral"
         / "raw"
     )
     sft_file = str(
         Path(__file__).resolve().parent.parent.parent.parent
         / "data"
-        / "astral_docs"
-        / "sft"
-        / "astral_expert_sft.jsonl"
+        / "astral"
+        / "training_data.jsonl"
     )
     dataset = load_astral_micro_dataset(raw_docs_dir=raw_dir, sft_file=sft_file)
 

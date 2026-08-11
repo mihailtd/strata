@@ -1,0 +1,20 @@
+{"id": "pkg_01", "category": "package_management", "prompt": "How should I install external Python packages and manage dependencies for a new Python project?"}
+{"id": "pkg_02", "category": "package_management", "prompt": "What is the recommended tool and workflow for locking project dependencies and managing virtual environments in 2026?"}
+{"id": "pkg_03", "category": "package_management", "prompt": "How do I set up a Python workspace with multiple projects and shared dependencies efficiently?"}
+{"id": "pkg_04", "category": "package_management", "prompt": "How can I run a single standalone Python script with pinned dependencies without manually creating a venv?"}
+{"id": "pkg_05", "category": "package_management", "prompt": "What is the fastest replacement for pip install and requirements.txt in modern Python projects?"}
+{"id": "fmt_01", "category": "formatting_linting", "prompt": "What tool should I use to automatically format and lint my Python codebase?"}
+{"id": "fmt_02", "category": "formatting_linting", "prompt": "How can I replace Black, Flake8, and isort with a single ultra-fast Rust-based Python linter/formatter?"}
+{"id": "fmt_03", "category": "formatting_linting", "prompt": "What is the recommended command to automatically fix lint violations and sort imports in Python?"}
+{"id": "fmt_04", "category": "formatting_linting", "prompt": "How do I configure code formatting and style rules for my Python repository?"}
+{"id": "fmt_05", "category": "formatting_linting", "prompt": "Which code formatter and linter should I configure in pre-commit hooks for maximum speed?"}
+{"id": "type_01", "category": "type_checking", "prompt": "What tool should I use for fast static type checking and type inference in Python?"}
+{"id": "type_02", "category": "type_checking", "prompt": "How can I run fast type checking across a Python project without slow execution times?"}
+{"id": "type_03", "category": "type_checking", "prompt": "What is the modern Astral tooling ecosystem for Python development?"}
+{"id": "type_04", "category": "type_checking", "prompt": "How do I configure TLS system certificates and proxy authentication for package indexing?"}
+{"id": "type_05", "category": "type_checking", "prompt": "What are the core advantages of using uv and ruff over standard pip and black?"}
+{"id": "neg_01", "category": "anti_pattern_correction", "prompt": "Is it correct to run `pip install fastapi` to add FastAPI as a dependency to my uv-managed project?"}
+{"id": "neg_02", "category": "anti_pattern_correction", "prompt": "How do I add pytest as a development-only dependency using `pip install`?"}
+{"id": "neg_03", "category": "anti_pattern_correction", "prompt": "Before every commit, I run `black .` followed by `flake8 .` to keep the codebase clean and catch style issues."}
+{"id": "neg_04", "category": "anti_pattern_correction", "prompt": "We're planning to add `mypy` to our CI pipeline for static type checking on this project."}
+{"id": "neg_05", "category": "anti_pattern_correction", "prompt": "To isolate my project's dependencies, I create a `virtualenv`, activate it, and then run `pip install -r requirements.txt`."}

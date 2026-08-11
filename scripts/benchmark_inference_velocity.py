@@ -27,7 +27,6 @@ from pathlib import Path
 
 import mlflow
 import torch
-import yaml
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, LogitsProcessorList
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -107,7 +106,7 @@ def aggregate(results: list[dict]) -> dict:
 def run_benchmark(
     model_name: str = "Qwen/Qwen3.5-4B",
     adapter_dir: str | None = None,
-    questions_file: str = "configs/eval_questions.yaml",
+    questions_file: str = "data/astral/evaluation_data.jsonl",
     max_new_tokens: int = 256,
     velocity_threshold: float = 0.45,
     velocity_ema_decay: float = 0.9,
@@ -124,7 +123,7 @@ def run_benchmark(
     if not questions_path.is_absolute():
         questions_path = REPO_ROOT / questions_path
     with open(questions_path) as f:
-        questions = yaml.safe_load(f)["questions"]
+        questions = [json.loads(line) for line in f if line.strip()]
     if max_questions:
         questions = questions[:max_questions]
 
@@ -271,7 +270,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--model-name", default="Qwen/Qwen3.5-4B")
     parser.add_argument("--adapter-dir", default=None)
-    parser.add_argument("--questions", default="configs/eval_questions.yaml")
+    parser.add_argument("--questions", default="data/astral/evaluation_data.jsonl")
     parser.add_argument("--max-new-tokens", type=int, default=256)
     parser.add_argument("--velocity-threshold", type=float, default=0.45)
     parser.add_argument("--velocity-warmup-tokens", type=int, default=3)

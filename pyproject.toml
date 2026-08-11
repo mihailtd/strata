@@ -27,6 +27,9 @@ dependencies = [
     "torchvision>=0.28.0",
     "httpx>=0.28.1",
     "markdown-it-py>=4.2.0",
+    "ebooklib>=0.20",
+    "beautifulsoup4>=4.15.0",
+    "markdownify>=1.2.3",
 ]
 
 [project.scripts]

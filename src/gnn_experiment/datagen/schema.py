@@ -16,6 +16,7 @@ class ChatResult:
     prompt_tokens: int
     completion_tokens: int
     latency_s: float
+    ttft_s: float = 0.0
 
 
 @dataclass

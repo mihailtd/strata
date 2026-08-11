@@ -26,7 +26,6 @@ from pathlib import Path
 
 import mlflow
 import torch
-import yaml
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 # Piped stdout (e.g. through `tail`, or a background-task capture) is fully
@@ -40,7 +39,7 @@ if hasattr(sys.stdout, "reconfigure"):
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(REPO_ROOT))
 
-from gnn_experiment.eval.eval_suite import evaluate_single_prompt  # noqa: E402
+from gnn_experiment.eval.eval_suite import LEGACY_TERMS, MODERN_TERMS, evaluate_single_prompt  # noqa: E402
 from gnn_experiment.novel_peft import (  # noqa: E402
     load_novel_adapter,
     set_hard_vram_cap,
@@ -67,17 +66,27 @@ def _load_questions(questions_file: str) -> list:
     if not questions_path.is_absolute():
         questions_path = REPO_ROOT / questions_path
     with open(questions_path) as f:
-        return yaml.safe_load(f).get("questions", [])
+        return [json.loads(line) for line in f if line.strip()]
 
 
 def run_base_only(
     model_name: str = "Qwen/Qwen3.5-4B",
-    questions_file: str = "configs/eval_questions.yaml",
+    questions_file: str = "data/astral/evaluation_data.jsonl",
     cache_path: str | None = None,
     vram_cap_gb: float = 20.0,
+    modern_terms: list[str] = MODERN_TERMS,
+    legacy_terms: list[str] = LEGACY_TERMS,
 ) -> dict:
     """Exactly one weight load: score the base model and cache the result so
-    later variant runs never need a second from_pretrained() in-process."""
+    later variant runs never need a second from_pretrained() in-process.
+
+    modern_terms/legacy_terms default to the Astral uv/ruff/ty split -- pass a
+    different pair (and a different cache_path/questions_file) to score a
+    different domain's adherence, e.g. a PostgreSQL/pgvector-vs-dedicated-
+    vector-db split. The cache is keyed only by model_name, not by the term
+    lists, so always pass a distinct cache_path per domain or a later domain's
+    run will silently load a mismatched cache.
+    """
     set_hard_vram_cap(vram_cap_gb)
     questions = _load_questions(questions_file)
 
@@ -93,7 +102,9 @@ def run_base_only(
     base_results = []
     for idx, q in enumerate(questions, 1):
         print(f"[{idx}/{len(questions)}] base: '{q['prompt'][:60]}...'")
-        res = evaluate_single_prompt(base_model, tokenizer, q["prompt"])
+        res = evaluate_single_prompt(
+            base_model, tokenizer, q["prompt"], modern_terms=modern_terms, legacy_terms=legacy_terms
+        )
         res["id"] = q["id"]
         res["category"] = q["category"]
         base_results.append(res)
@@ -125,11 +136,15 @@ def evaluate_novel_variants(
     variants: list[str],
     model_name: str = "Qwen/Qwen3.5-4B",
     adapter_root: str | None = None,
-    questions_file: str = "configs/eval_questions.yaml",
+    questions_file: str = "data/astral/evaluation_data.jsonl",
     experiment_name: str = "astral_tooling_evaluation",
     out_summary_dir: str | None = None,
     vram_cap_gb: float = 20.0,
     base_cache_path: str | None = None,
+    modern_terms: list[str] = MODERN_TERMS,
+    legacy_terms: list[str] = LEGACY_TERMS,
+    adapter_dir_prefix: str = "astral_qwen3.5_micro",
+    output_prefix: str = "astral",
 ) -> dict:
     set_hard_vram_cap(vram_cap_gb)  # see set_hard_vram_cap docstring for why this is mandatory here
 
@@ -169,7 +184,7 @@ def evaluate_novel_variants(
 
     all_summaries = {}
     for variant in variants:
-        adapter_dir = adapter_root_path / f"astral_qwen3.5_micro_{variant}"
+        adapter_dir = adapter_root_path / f"{adapter_dir_prefix}_{variant}"
         print(f"\n================== Evaluating variant '{variant}' ({adapter_dir}) ==================")
         if not (adapter_dir / "novel_adapter_config.json").exists():
             print(f"  SKIP: no adapter found at {adapter_dir}")
@@ -192,7 +207,9 @@ def evaluate_novel_variants(
         ft_results = []
         for idx, q in enumerate(questions, 1):
             print(f"[{idx}/{len(questions)}] {variant}: '{q['prompt'][:60]}...'")
-            res = evaluate_single_prompt(model, tokenizer, q["prompt"])
+            res = evaluate_single_prompt(
+                model, tokenizer, q["prompt"], modern_terms=modern_terms, legacy_terms=legacy_terms
+            )
             res["id"] = q["id"]
             res["category"] = q["category"]
             ft_results.append(res)
@@ -249,7 +266,7 @@ def evaluate_novel_variants(
             mlflow.log_dict(summary, "evaluation_comparison.json")
 
         out_summary_dir_path.mkdir(parents=True, exist_ok=True)
-        with open(out_summary_dir_path / f"astral_eval_summary_{variant}.json", "w") as f:
+        with open(out_summary_dir_path / f"{output_prefix}_eval_summary_{variant}.json", "w") as f:
             json.dump(summary, f, indent=2)
 
         print(
@@ -273,7 +290,7 @@ if __name__ == "__main__":
     parser.add_argument("--base-cache", default=None, help="Path to the base-model eval cache JSON.")
     parser.add_argument("--model-name", default="Qwen/Qwen3.5-4B")
     parser.add_argument("--adapter-root", default=None)
-    parser.add_argument("--questions", default="configs/eval_questions.yaml")
+    parser.add_argument("--questions", default="data/astral/evaluation_data.jsonl")
     parser.add_argument("--vram-cap-gb", type=float, default=20.0)
     args = parser.parse_args()
 

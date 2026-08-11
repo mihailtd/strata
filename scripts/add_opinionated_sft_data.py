@@ -1,4 +1,4 @@
-"""Generate and append opinionated expert SFT items to data/astral_docs/sft/astral_expert_sft.jsonl.
+"""Generate and append opinionated expert SFT items to data/astral/training_data.jsonl.
 
 Focuses on:
 1. High importance of static type checking (ty, type hints, catching bugs early).
@@ -6,13 +6,20 @@ Focuses on:
 3. Automated code quality via pre-commit hooks.
 4. Separating dev dependencies from runtime dependencies (uv add --dev, dependency-groups).
 5. Modern Astral workflow (uv venv, uv sync, uv run, uv lock).
+6. [v3] Negative/rejection examples: anti-patterns the adapter must refuse or correct.
+
+All assistant content is sanitized via `sanitize_assistant_content()` (imported from
+`gnn_experiment.micro_probe.dataset`) before writing, keeping the on-disk JSONL clean.
+The load path in `dataset.py` applies the same sanitizer again as a safety net.
 """
 
 import json
 from pathlib import Path
 
+from gnn_experiment.micro_probe.dataset import sanitize_assistant_content
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SFT_FILE = REPO_ROOT / "data" / "astral_docs" / "sft" / "astral_expert_sft.jsonl"
+SFT_FILE = REPO_ROOT / "data" / "astral" / "training_data.jsonl"
 
 NEW_EXPERT_SAMPLES = [
     # 1. Type Checking & Code Quality
@@ -221,17 +228,65 @@ NEW_EXPERT_SAMPLES = [
     ),
 ]
 
+# ---------------------------------------------------------------------------
+# Negative / rejection examples (~15% of total dataset)
+# These teach the adapter WHEN NOT to use Astral tools in the described way,
+# preventing hallucination of invalid patterns at inference time.
+# ---------------------------------------------------------------------------
+NEGATIVE_SAMPLES = [
+    (
+        "I have a pyproject.toml in my project. Should I run `pip install requests` to add a new dependency?",
+        (
+            "No. In projects managed by `uv` with a `pyproject.toml`, never use bare `pip install`. "
+            "Use `uv add requests` instead. Bare `pip install` bypasses the lockfile, silently "
+            "introduces dependency conflicts, and breaks reproducibility across environments. "
+            "Always go through `uv add` to keep `uv.lock` synchronized."
+        ),
+    ),
+    (
+        "My team is already using Flake8 and Black. Should I configure both alongside Ruff in pyproject.toml?",
+        (
+            "No. Ruff is a drop-in replacement for both Flake8 and Black — running all three together "
+            "causes redundant, conflicting checks and slows down CI. Remove Flake8 and Black from your "
+            "dependencies and configure Ruff alone under `[tool.ruff]` in `pyproject.toml`. "
+            "Ruff's `--fix` flag handles auto-fixes and `ruff format` handles formatting, making "
+            "Black and Flake8 fully redundant."
+        ),
+    ),
+    (
+        "Should I run `mypy .` directly from my terminal without activating my virtual environment first?",
+        (
+            "No. Running `mypy` outside a virtual environment uses system-level stubs and may miss "
+            "project-specific type stubs or installed packages, producing false positives and missed "
+            "errors. Always run `uv run ty` or `uv run mypy .` so that type checking executes inside "
+            "the pinned virtual environment with all dependencies and stubs correctly resolved."
+        ),
+    ),
+    (
+        "Can I commit my Python files without running Ruff or ty first, "
+        "and fix lint errors later in a follow-up commit?",
+        (
+            "No. Deferring lint and type-check fixes to follow-up commits pollutes git history, wastes "
+            "CI minutes, and allows broken code to reach shared branches. Enforce `ruff check --fix`, "
+            "`ruff format`, and `uv run ty` on every commit using pre-commit hooks so that unformatted "
+            "or type-unsafe code is blocked before it enters the repository."
+        ),
+    ),
+]
+
 
 def main():
     SFT_FILE.parent.mkdir(parents=True, exist_ok=True)
     added_count = 0
 
     with open(SFT_FILE, "a", encoding="utf-8") as f:
+        # Positive expert samples
         for q, a in NEW_EXPERT_SAMPLES:
+            clean_a = sanitize_assistant_content(a)
             record = {
                 "messages": [
                     {"role": "user", "content": q},
-                    {"role": "assistant", "content": a},
+                    {"role": "assistant", "content": clean_a},
                 ],
                 "meta": {
                     "tool": "astral_best_practices",
@@ -240,12 +295,33 @@ def main():
                     "question_gen_version": "v2_opinionated",
                     "answer_gen_version": "v2_opinionated",
                 },
-                "text": f"### Question:\n{q}\n\n### Answer:\n{a}",
+                "text": f"### Question:\n{q}\n\n### Answer:\n{clean_a}",
             }
             f.write(json.dumps(record) + "\n")
             added_count += 1
 
-    print(f"Successfully appended {added_count} new opinionated SFT samples to {SFT_FILE}")
+        # Negative / rejection samples
+        for q, a in NEGATIVE_SAMPLES:
+            clean_a = sanitize_assistant_content(a)
+            record = {
+                "messages": [
+                    {"role": "user", "content": q},
+                    {"role": "assistant", "content": clean_a},
+                ],
+                "meta": {
+                    "tool": "astral_best_practices",
+                    "source_path": "opinions/anti_patterns.md",
+                    "heading_path": ["Best Practices", "Anti-Patterns"],
+                    "question_gen_version": "v3_negative",
+                    "answer_gen_version": "v3_negative",
+                },
+                "text": f"### Question:\n{q}\n\n### Answer:\n{clean_a}",
+            }
+            f.write(json.dumps(record) + "\n")
+            added_count += 1
+
+    print(f"Successfully appended {added_count} new SFT samples to {SFT_FILE}")
+    print(f"  ({len(NEW_EXPERT_SAMPLES)} positive expert samples + {len(NEGATIVE_SAMPLES)} negative/rejection samples)")
 
 
 if __name__ == "__main__":

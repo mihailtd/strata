@@ -3,7 +3,7 @@
 # in isolation. Not meant for real training (n_examples/max_steps are tiny).
 
 model: Qwen/Qwen3.5-0.8B-Instruct
-dataset: data/astral_docs/sft/astral_expert_sft.jsonl
+dataset: data/astral/training_data.jsonl
 text_field: text
 
 methods:

@@ -3,7 +3,11 @@
 
 llm:
   base_url: http://127.0.0.1:8080
-  model: models/gemma-4-12B-it-Q8_0.gguf
+  # gemma-4-E2B-it: confirmed via MLflow history as the only model ever scaled
+  # to a full run (astral-sft-full-gemma-4-E2B-it-Q8_0-20260810-171916, 1041
+  # chunks, 793 QA pairs) -- fastest + most reliable of 4 models compared
+  # (Qwen3.5-4B, gemma-4-12B, gemma-4-E4B, gemma-4-E2B; see SYSTEM.md).
+  model: models/gemma-4-E2B-it-Q8_0.gguf
   temperature: 0.1
   # Generous, not-artificially-starved budgets — the server runs with a large
   # context window (see serving/README.md), no reason to truncate generation.
@@ -25,6 +29,14 @@ llm:
   # if you want the server left running (e.g. to chat with it right after).
   unload_after_run: true
 
+# Chunks are processed concurrently, this many in flight at once. Match
+# llama-server's total_slots (`curl localhost:8080/props`) -- higher doesn't
+# help throughput since the server can't run more generations in parallel
+# than it has slots for, it'd just queue; lower under-uses the server. A
+# single blocking client (the old default) left 3 of 4 slots idle the whole
+# run.
+max_concurrency: 4
+
 # Optional extra instruction injected into the question/answer generation
 # prompts, e.g. "Prefer questions about the CLI over internals" or "Frame
 # more questions as migrations from pip/mypy". Logged to MLflow per run so
@@ -36,8 +48,8 @@ repos:
   - ruff
   - ty
 
-docs_cache_dir: data/astral_docs/raw
-output_dir: data/astral_docs/sft
+docs_cache_dir: data/astral/raw
+output_dir: data/astral
 
 chunk_size_chars: 2000
 min_chunk_chars: 100

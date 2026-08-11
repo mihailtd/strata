@@ -61,7 +61,5 @@ def fetch_docs(repo_key: str, cache_dir: Path, refresh: bool = False) -> Path:
     return docs_dir
 
 
-def fetch_all(
-    repo_keys: list[str], cache_dir: Path, refresh: bool = False
-) -> dict[str, Path]:
+def fetch_all(repo_keys: list[str], cache_dir: Path, refresh: bool = False) -> dict[str, Path]:
     return {key: fetch_docs(key, cache_dir, refresh=refresh) for key in repo_keys}

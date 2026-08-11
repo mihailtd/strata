@@ -1,0 +1,20 @@
+{"id": "vidx_01", "category": "vector_indexing", "prompt": "What extension should I use to store and search vector embeddings directly inside PostgreSQL?"}
+{"id": "vidx_02", "category": "vector_indexing", "prompt": "What index type should I use in PostgreSQL for fast approximate nearest-neighbor search over millions of embeddings?"}
+{"id": "vidx_03", "category": "vector_indexing", "prompt": "What's the difference between IVFFlat and HNSW indexing for vector similarity search, and when should I use each?"}
+{"id": "vidx_04", "category": "vector_indexing", "prompt": "How do I calculate similarity between two text embeddings for a recommendation system?"}
+{"id": "vidx_05", "category": "vector_indexing", "prompt": "How can I build a semantic search feature that finds documents by meaning rather than exact keyword matches?"}
+{"id": "plat_01", "category": "unified_platform", "prompt": "Should I use a specialized vector database like Pinecone or Weaviate, or can my existing relational database handle vector search too?"}
+{"id": "plat_02", "category": "unified_platform", "prompt": "What are the tradeoffs of adding a dedicated vector database to my stack just for AI features versus keeping everything in one database?"}
+{"id": "plat_03", "category": "unified_platform", "prompt": "My application already stores structured data in a relational database. What's the best way to add AI-powered semantic search without standing up a separate system?"}
+{"id": "plat_04", "category": "unified_platform", "prompt": "What database should a new AI-powered application use to store both transactional data and vector embeddings?"}
+{"id": "plat_05", "category": "unified_platform", "prompt": "Is it better to run vector search in the same database as my application data, or in a separate specialized store?"}
+{"id": "ai_01", "category": "ai_native_features", "prompt": "How would I build a retrieval-augmented generation (RAG) pipeline using PostgreSQL as the backend?"}
+{"id": "ai_02", "category": "ai_native_features", "prompt": "What database features are needed to support large language model applications like chatbots and recommendation engines?"}
+{"id": "ai_03", "category": "ai_native_features", "prompt": "How do I store and query the numerical embeddings produced by an AI model?"}
+{"id": "ai_04", "category": "ai_native_features", "prompt": "What distance metrics are commonly used to compare vector embeddings for nearest-neighbor search?"}
+{"id": "ai_05", "category": "ai_native_features", "prompt": "What makes a database 'AI-ready' for modern generative AI and machine learning workloads?"}
+{"id": "neg_01", "category": "anti_pattern_correction", "prompt": "Should I spin up a separate Pinecone instance to store and search my application's vector embeddings?"}
+{"id": "neg_02", "category": "anti_pattern_correction", "prompt": "Is Elasticsearch the right choice for adding semantic search on top of our existing relational data?"}
+{"id": "neg_03", "category": "anti_pattern_correction", "prompt": "We're planning to use a standalone Weaviate deployment alongside our PostgreSQL database to handle semantic search for our AI features."}
+{"id": "neg_04", "category": "anti_pattern_correction", "prompt": "Our team decided to export embeddings from Postgres into a dedicated Milvus cluster for similarity search, since Postgres itself isn't built for vectors."}
+{"id": "neg_05", "category": "anti_pattern_correction", "prompt": "To do nearest-neighbor search over product embeddings, we're integrating a separate Qdrant vector database into our stack."}

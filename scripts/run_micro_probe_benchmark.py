@@ -1,7 +1,7 @@
 """Unified Micro-Probe (Qwen3.5-2B) Benchmark & PyTorch Forward Hook Harness.
 
 Executes:
-1. Dataset loading (1,000+ items from data/astral_docs).
+1. Dataset loading (1,000+ items from data/astral).
 2. Qwen3.5-2B QLoRA model loading & PEFT adapter setup.
 3. PyTorch forward hook registration & layer velocity (\\Delta h_l) diagnostic run.
 4. 500-step training loop with gradient stability measurement.
@@ -69,15 +69,8 @@ def run_benchmark():
 
     # 2. Load Dataset (1,000+ Astral Docs)
     dataset = load_astral_micro_dataset(
-        raw_docs_dir=str(
-            REPO_ROOT / cfg.get("dataset_raw_dir", "data/astral_docs/raw")
-        ),
-        sft_file=str(
-            REPO_ROOT
-            / cfg.get(
-                "dataset_sft_file", "data/astral_docs/sft/astral_expert_sft.jsonl"
-            )
-        ),
+        raw_docs_dir=str(REPO_ROOT / cfg.get("dataset_raw_dir", "data/astral/raw")),
+        sft_file=str(REPO_ROOT / cfg.get("dataset_sft_file", "data/astral/training_data.jsonl")),
     )
 
     # 3. Load Tokenizer & Model
@@ -86,11 +79,7 @@ def run_benchmark():
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    compute_dtype = (
-        torch.bfloat16
-        if (torch.cuda.is_available() and torch.cuda.is_bf16_supported())
-        else torch.float16
-    )
+    compute_dtype = torch.bfloat16 if (torch.cuda.is_available() and torch.cuda.is_bf16_supported()) else torch.float16
 
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
@@ -111,9 +100,7 @@ def run_benchmark():
     lora_config = LoraConfig(
         r=peft_cfg.get("r", 8),
         lora_alpha=peft_cfg.get("alpha", 16),
-        target_modules=peft_cfg.get(
-            "target_modules", ["q_proj", "k_proj", "v_proj", "o_proj"]
-        ),
+        target_modules=peft_cfg.get("target_modules", ["q_proj", "k_proj", "v_proj", "o_proj"]),
         lora_dropout=0.05,
         bias="none",
         task_type="CAUSAL_LM",
@@ -127,13 +114,9 @@ def run_benchmark():
 
     # 6. Tokenize Dataset
     def tokenize(batch):
-        return tokenizer(
-            batch["text"], truncation=True, max_length=max_length, padding="max_length"
-        )
+        return tokenizer(batch["text"], truncation=True, max_length=max_length, padding="max_length")
 
-    tokenized_ds = dataset.map(
-        tokenize, batched=True, remove_columns=dataset.column_names
-    )
+    tokenized_ds = dataset.map(tokenize, batched=True, remove_columns=dataset.column_names)
     collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
 
     train_args = TrainingArguments(
@@ -148,9 +131,7 @@ def run_benchmark():
         fp16=compute_dtype == torch.float16,
     )
 
-    trainer = Trainer(
-        model=model, args=train_args, train_dataset=tokenized_ds, data_collator=collator
-    )
+    trainer = Trainer(model=model, args=train_args, train_dataset=tokenized_ds, data_collator=collator)
 
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
@@ -158,9 +139,7 @@ def run_benchmark():
     print(f"Starting {max_steps}-step micro-probe training pass...")
     start_time = time.perf_counter()
 
-    with mlflow.start_run(
-        run_name=f"micro_probe_{model_name.replace('/', '_')}_{max_steps}s"
-    ):
+    with mlflow.start_run(run_name=f"micro_probe_{model_name.replace('/', '_')}_{max_steps}s"):
         mlflow.log_params(
             {
                 "model_name": model_name,
@@ -183,11 +162,7 @@ def run_benchmark():
         hook_summary = hook_mgr.get_summary()
         hook_mgr.remove_hooks()
 
-        peak_vram_gb = (
-            torch.cuda.max_memory_allocated() / (1024**3)
-            if torch.cuda.is_available()
-            else 0.0
-        )
+        peak_vram_gb = torch.cuda.max_memory_allocated() / (1024**3) if torch.cuda.is_available() else 0.0
         total_tokens = max_steps * batch_size * max_length
         tok_per_sec = total_tokens / max(1e-5, elapsed_s)
         steps_per_sec = max_steps / max(1e-5, elapsed_s)
@@ -226,12 +201,8 @@ def run_benchmark():
         print(f" Throughput: {tok_per_sec:.2f} tokens/s")
         print(f" Peak VRAM: {peak_vram_gb:.2f} GB")
         print(f" Training Loss: {train_result.training_loss:.4f}")
-        print(
-            f" Avg Layer Velocity (\\Delta h_l): {hook_summary.get('overall_avg_velocity', 0.0):.4f}"
-        )
-        print(
-            f" Quiet Layer Ratio (<{epsilon}): {hook_summary.get('quiet_layer_ratio', 0.0) * 100:.1f}%"
-        )
+        print(f" Avg Layer Velocity (\\Delta h_l): {hook_summary.get('overall_avg_velocity', 0.0):.4f}")
+        print(f" Quiet Layer Ratio (<{epsilon}): {hook_summary.get('quiet_layer_ratio', 0.0) * 100:.1f}%")
         print(f" Max Grad Norm: {grad_stats.get('max_grad_norm', 0.0):.4f}")
         print(" MLflow Run Logged Successfully!")
 

@@ -46,13 +46,12 @@ from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     BitsAndBytesConfig,
-    DataCollatorForLanguageModeling,
-    Trainer,
     TrainerCallback,
-    TrainingArguments,
 )
+from transformers.utils import is_flash_attn_2_available
+from trl import SFTConfig, SFTTrainer
 
-from gnn_experiment.micro_probe.dataset import load_astral_micro_dataset
+from gnn_experiment.micro_probe.dataset import load_astral_micro_dataset, load_micro_dataset
 from gnn_experiment.novel_peft import (
     TARGET_MODULES,
     VelocityGate,
@@ -63,6 +62,11 @@ from gnn_experiment.novel_peft import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# Optimisation 3: use PyTorch SDPA (dispatches ROCm fused efficient-attention hip
+# kernel) without needing the flash_attn pip package (not installed on this rig).
+_SDPA_AVAILABLE = is_flash_attn_2_available() or hasattr(torch.nn.functional, "scaled_dot_product_attention")
+_ATTN_IMPL = "sdpa" if _SDPA_AVAILABLE else "eager"
 
 
 class VariantConfig(NamedTuple):
@@ -100,20 +104,26 @@ def finetune_novel(
     model_name: str = "Qwen/Qwen3.5-4B",
     out_dir: str | None = None,
     train_steps: int = 150,
-    batch_size: int = 2,
+    batch_size: int = 4,
+    grad_accum_steps: int = 1,
     learning_rate: float = 2e-4,
     max_seq_length: int = 512,
     rank: int = 8,
     rank_in: int = 8,
     rank_out: int = 8,
     alpha: int = 16,
-    dropout: float = 0.05,
+    # Optimisation 1: default dropout=0.0 — removes stochastic noise, frees one
+    # masked-dropout kernel per layer per step; zero quality loss at fine-tune scale.
+    dropout: float = 0.0,
     velocity_threshold: float = 0.45,
     velocity_ema_decay: float = 0.9,
     velocity_warmup_steps: int = 20,
     velocity_max_quiet_fraction: float = 0.9,
     experiment_name: str = "astral_fine_tuning",
     vram_cap_gb: float = 20.0,
+    raw_docs_dir: str | None = None,
+    sft_file: str | None = None,
+    dataset_fingerprint: str | None = None,
 ):
     if variant not in VARIANT_MODES:
         raise ValueError(f"Unknown variant '{variant}'. Options: {sorted(VARIANT_MODES)}")
@@ -134,6 +144,7 @@ def finetune_novel(
     mlflow.set_experiment(experiment_name)
 
     print(f"--- [{variant}] Loading {model_name} in 4-bit for novel-adapter fine-tuning ---")
+    print(f"  Attention implementation : {_ATTN_IMPL}")
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
     assert tokenizer is not None
     if tokenizer.pad_token is None:
@@ -150,6 +161,8 @@ def finetune_novel(
         quantization_config=bnb_config,
         device_map={"": 0} if torch.cuda.is_available() else "auto",
         trust_remote_code=True,
+        # Optimisation 3: fused SDPA / efficient-attention hip kernel on ROCm.
+        attn_implementation=_ATTN_IMPL,
     )
     # Matches export_adapter.py's baseline exactly: prepare_model_for_kbit_training()
     # defaults to use_gradient_checkpointing=True, which is why the 8.81 GB baseline
@@ -201,23 +214,28 @@ def finetune_novel(
     # not a bypass of the underlying check.
     model._hf_peft_config_loaded = True
 
-    print("Loading Astral docs dataset...")
-    dataset = load_astral_micro_dataset()
+    if raw_docs_dir or sft_file:
+        print(f"Loading dataset override (raw_docs_dir={raw_docs_dir}, sft_file={sft_file})...")
+        dataset = load_micro_dataset(raw_docs_dir, sft_file, fingerprint=dataset_fingerprint, conversational=True)
+    else:
+        print("Loading Astral docs dataset...")
+        dataset = load_astral_micro_dataset(conversational=True)
 
-    def tokenize(batch):
-        return tokenizer(
-            batch["text"],
-            truncation=True,
-            max_length=max_seq_length,
-            padding="max_length",
-        )
-
-    tokenized_ds = dataset.map(tokenize, batched=True, remove_columns=dataset.column_names)
-    collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
-
-    train_args = TrainingArguments(
+    # Response-only loss masking: SFTConfig(assistant_only_loss=True) masks all
+    # user-prompt tokens with -100 so the cross-entropy loss is computed exclusively
+    # on the assistant's response tokens. This focuses 100% of LoRA gradient updates
+    # on output correctness rather than splitting capacity between predicting user
+    # questions and assistant answers. Requires a genuinely conversational dataset
+    # (raw `messages`, not pre-rendered text) -- SFTTrainer applies the chat template
+    # itself internally to track assistant token spans (confirmed against trl==1.9.2's
+    # actual source; an earlier version of this script used
+    # `trl.DataCollatorForCompletionOnlyLM`, which does not exist in this trl version).
+    # pad_to_multiple_of=8 keeps sequence lengths aligned to tensor-core boundaries.
+    sft_config = SFTConfig(
         output_dir=str(REPO_ROOT / "results" / "tmp_export" / variant),
+        # Optimisation 2: larger default batch + grad accumulation scaling.
         per_device_train_batch_size=batch_size,
+        gradient_accumulation_steps=grad_accum_steps,
         max_steps=train_steps,
         learning_rate=learning_rate,
         logging_steps=10,
@@ -225,14 +243,25 @@ def finetune_novel(
         report_to=[],
         bf16=compute_dtype == torch.bfloat16,
         fp16=compute_dtype == torch.float16,
+        max_length=max_seq_length,
+        packing=False,
+        pad_to_multiple_of=8,
+        assistant_only_loss=True,
     )
 
     callbacks: list[TrainerCallback] = [VelocityGateCallback(gate)] if gate is not None else []
-    trainer = Trainer(
+    # peft_config intentionally omitted (defaults to None): this model is already
+    # wrapped by apply_novel_lora() above via in-place module surgery, not
+    # peft.get_peft_model() -- it's a plain PreTrainedModel, not a PeftModel.
+    # Confirmed against trl's source that every peft-specific code path in
+    # SFTTrainer.__init__ is gated behind `peft_config is not None` / `is_peft_model
+    # (model)`, so it passes through unchanged and trains like a normal full/custom
+    # fine-tune, exactly as the previous plain-Trainer setup did.
+    trainer = SFTTrainer(
         model=model,
-        args=train_args,
-        train_dataset=tokenized_ds,
-        data_collator=collator,
+        args=sft_config,
+        train_dataset=dataset,
+        processing_class=tokenizer,
         callbacks=callbacks,
     )
 
@@ -288,6 +317,8 @@ def finetune_novel(
                 "model_name": model_name,
                 "train_steps": train_steps,
                 "batch_size": batch_size,
+                "grad_accum_steps": grad_accum_steps,
+                "effective_batch": batch_size * grad_accum_steps,
                 "learning_rate": learning_rate,
                 "max_seq_length": max_seq_length,
                 "dataset_size": len(dataset),
@@ -298,6 +329,7 @@ def finetune_novel(
                 "rank_out": rank_out,
                 "alpha": alpha,
                 "dropout": dropout,
+                "attn_implementation": _ATTN_IMPL,
                 "wrapped_linear_count": summary["wrapped_count"],
                 "velocity_threshold": velocity_threshold if gate is not None else -1,
                 "velocity_ema_decay": velocity_ema_decay if gate is not None else -1,
@@ -341,13 +373,29 @@ if __name__ == "__main__":
     parser.add_argument("--model-name", default="Qwen/Qwen3.5-4B")
     parser.add_argument("--out", default=None)
     parser.add_argument("--steps", type=int, default=150)
-    parser.add_argument("--batch-size", type=int, default=2)
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=4,
+        help="Per-device train batch size. Default 4 (was 2). Increase to fill VRAM.",
+    )
+    parser.add_argument(
+        "--grad-accum",
+        type=int,
+        default=1,
+        help="Gradient accumulation steps. Lower proportionally when raising batch-size.",
+    )
     parser.add_argument("--lr", type=float, default=2e-4)
     parser.add_argument("--rank", type=int, default=8)
     parser.add_argument("--rank-in", type=int, default=8)
     parser.add_argument("--rank-out", type=int, default=8)
     parser.add_argument("--alpha", type=int, default=16)
-    parser.add_argument("--dropout", type=float, default=0.05)
+    parser.add_argument(
+        "--dropout",
+        type=float,
+        default=0.0,
+        help="LoRA dropout. Default 0.0 (zero-loss opt: removes stochastic noise).",
+    )
     parser.add_argument("--velocity-threshold", type=float, default=0.45)
     parser.add_argument("--velocity-ema-decay", type=float, default=0.9)
     parser.add_argument("--velocity-warmup-steps", type=int, default=20)
@@ -359,6 +407,21 @@ if __name__ == "__main__":
         default=20.0,
         help="Hard allocator ceiling; see set_hard_vram_cap.",
     )
+    parser.add_argument(
+        "--raw-docs-dir",
+        default=None,
+        help="Override raw markdown docs dir (default: Astral docs). Pass with --sft-file for a different corpus.",
+    )
+    parser.add_argument(
+        "--sft-file",
+        default=None,
+        help="Override generated SFT jsonl path (default: Astral's). E.g. an EPUB-derived dataset.",
+    )
+    parser.add_argument(
+        "--dataset-fingerprint",
+        default=None,
+        help="Explicit datasets-cache fingerprint; default derives one from the resolved paths.",
+    )
     args = parser.parse_args()
 
     finetune_novel(
@@ -367,6 +430,7 @@ if __name__ == "__main__":
         out_dir=args.out,
         train_steps=args.steps,
         batch_size=args.batch_size,
+        grad_accum_steps=args.grad_accum,
         learning_rate=args.lr,
         rank=args.rank,
         rank_in=args.rank_in,
@@ -379,4 +443,7 @@ if __name__ == "__main__":
         velocity_max_quiet_fraction=args.velocity_max_quiet_fraction,
         experiment_name=args.experiment_name,
         vram_cap_gb=args.vram_cap_gb,
+        raw_docs_dir=args.raw_docs_dir,
+        sft_file=args.sft_file,
+        dataset_fingerprint=args.dataset_fingerprint,
     )
