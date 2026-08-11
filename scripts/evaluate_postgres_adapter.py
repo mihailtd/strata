@@ -62,7 +62,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--variants",
         nargs="+",
-        choices=["custom_standard", "tucker", "velocity", "combined"],
+        choices=["custom_standard", "tucker", "velocity", "combined", "random_mask", "lora", "dora", "lokr"],
         help="Variant(s) to evaluate. Omit when using --base-only.",
     )
     parser.add_argument("--base-only", action="store_true", help="Score only the base model and cache the result.")

@@ -54,11 +54,13 @@ def generate_and_score(
 
     start_t = time.perf_counter()
     with torch.no_grad():
+        # Greedy for the same reason as eval_suite.evaluate_single_prompt --
+        # see the comment there; sampled decoding swamped real effects with
+        # decoding noise on a 20-question set.
         outputs = model.generate(
             **inputs,
             max_new_tokens=max_new_tokens,
-            temperature=0.2,
-            do_sample=True,
+            do_sample=False,
             pad_token_id=tokenizer.pad_token_id or tokenizer.eos_token_id,
             logits_processor=logits_processor,
         )
@@ -108,7 +110,7 @@ def run_benchmark(
     adapter_dir: str | None = None,
     questions_file: str = "data/astral/evaluation_data.jsonl",
     max_new_tokens: int = 256,
-    velocity_threshold: float = 0.45,
+    velocity_quiet_percentile: float = 25.0,
     velocity_ema_decay: float = 0.9,
     velocity_warmup_tokens: int = 3,
     velocity_max_quiet_fraction: float = 0.9,
@@ -175,7 +177,7 @@ def run_benchmark(
         print(f"[{idx}/{len(questions)}] dynamic: '{q['prompt'][:60]}...'")
         gate = VelocityGate(
             num_layers=num_layers,
-            threshold=velocity_threshold,
+            quiet_percentile=velocity_quiet_percentile,
             ema_decay=velocity_ema_decay,
             warmup_steps=velocity_warmup_tokens,
             max_quiet_fraction=velocity_max_quiet_fraction,
@@ -211,7 +213,7 @@ def run_benchmark(
                 "adapter_path": str(adapter_dir),
                 "num_questions": len(questions),
                 "max_new_tokens": max_new_tokens,
-                "velocity_threshold": velocity_threshold,
+                "velocity_quiet_percentile": velocity_quiet_percentile,
                 "velocity_warmup_tokens": velocity_warmup_tokens,
             }
         )
@@ -272,7 +274,7 @@ if __name__ == "__main__":
     parser.add_argument("--adapter-dir", default=None)
     parser.add_argument("--questions", default="data/astral/evaluation_data.jsonl")
     parser.add_argument("--max-new-tokens", type=int, default=256)
-    parser.add_argument("--velocity-threshold", type=float, default=0.45)
+    parser.add_argument("--velocity-quiet-percentile", type=float, default=25.0)
     parser.add_argument("--velocity-warmup-tokens", type=int, default=3)
     parser.add_argument("--vram-cap-gb", type=float, default=20.0)
     parser.add_argument("--max-questions", type=int, default=None, help="Limit question count (for smoke tests).")
@@ -284,7 +286,7 @@ if __name__ == "__main__":
         adapter_dir=args.adapter_dir,
         questions_file=args.questions,
         max_new_tokens=args.max_new_tokens,
-        velocity_threshold=args.velocity_threshold,
+        velocity_quiet_percentile=args.velocity_quiet_percentile,
         velocity_warmup_tokens=args.velocity_warmup_tokens,
         vram_cap_gb=args.vram_cap_gb,
         max_questions=args.max_questions,

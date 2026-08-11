@@ -33,12 +33,12 @@ from pathlib import Path
 
 import mlflow
 import torch
-from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+from peft import LoKrConfig, LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from transformers.utils import is_flash_attn_2_available
 from trl import SFTConfig, SFTTrainer
 
-from gnn_experiment.micro_probe.dataset import load_astral_micro_dataset
+from gnn_experiment.micro_probe.dataset import load_astral_micro_dataset, load_micro_dataset
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -50,6 +50,59 @@ _SDPA_AVAILABLE = is_flash_attn_2_available() or hasattr(torch.nn.functional, "s
 _ATTN_IMPL = "sdpa" if _SDPA_AVAILABLE else "eager"
 
 
+TARGET_MODULES = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+
+
+def build_peft_config(peft_variant: str, r: int = 8, alpha: int = 16):
+    """LoRA / DoRA / LoKr configs that differ ONLY in the factorization, so an
+    A/B between them isolates the factorization and nothing else.
+
+    - lora: baseline A·B.
+    - dora: A·B plus DoRA's decoupled magnitude vector m (peft-native
+      `use_dora`). Same parameter count as lora up to the m vector, so this
+      tests DoRA's *quality* claim, not any size claim.
+    - lokr: Kronecker factorization A⊗B (peft-native LoKr). This is the
+      "KronA" half of this project's KronA+DoRA target and the one that
+      actually shrinks the adapter -- parameter arithmetic on this model's
+      shapes predicts ~3.2 MB vs LoRA's ~28.6 MB. NOTE: peft's LoKrConfig has
+      no `use_dora` field, so KronA+DoRA combined is NOT available natively;
+      it needs a magnitude vector added by hand (plan Step D).
+    """
+    if peft_variant == "lora":
+        return LoraConfig(
+            r=r,
+            lora_alpha=alpha,
+            target_modules=TARGET_MODULES,
+            lora_dropout=0.0,
+            bias="none",
+            task_type="CAUSAL_LM",
+        )
+    if peft_variant == "dora":
+        return LoraConfig(
+            r=r,
+            lora_alpha=alpha,
+            target_modules=TARGET_MODULES,
+            lora_dropout=0.0,
+            bias="none",
+            task_type="CAUSAL_LM",
+            use_dora=True,
+        )
+    if peft_variant == "lokr":
+        return LoKrConfig(
+            r=r,
+            alpha=alpha,
+            target_modules=TARGET_MODULES,
+            rank_dropout=0.0,
+            module_dropout=0.0,
+            task_type="CAUSAL_LM",
+        )
+    raise ValueError(f"Unknown peft_variant {peft_variant!r}; expected lora|dora|lokr")
+
+
+def _dir_size_bytes(path: Path) -> int:
+    return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+
+
 def export_adapter(
     model_name: str = "Qwen/Qwen3.5-4B",
     out_dir: str = "results/adapters/astral_qwen3.5_micro",
@@ -57,6 +110,8 @@ def export_adapter(
     batch_size: int = 4,
     grad_accum_steps: int = 1,
     experiment_name: str = "astral_fine_tuning",
+    peft_variant: str = "lora",
+    sft_file: str | None = None,
 ):
     out_path = REPO_ROOT / out_dir
     out_path.mkdir(parents=True, exist_ok=True)
@@ -68,6 +123,7 @@ def export_adapter(
     print(f"Loading exact target model: {model_name} for adapter export...")
     print(f"  Attention implementation : {_ATTN_IMPL}")
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+    assert tokenizer is not None
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -89,28 +145,18 @@ def export_adapter(
     )
     model = prepare_model_for_kbit_training(model)
 
-    lora_config = LoraConfig(
-        r=8,
-        lora_alpha=16,
-        target_modules=[
-            "q_proj",
-            "k_proj",
-            "v_proj",
-            "o_proj",
-            "gate_proj",
-            "up_proj",
-            "down_proj",
-        ],
-        # Optimisation 1: dropout=0.0 — removes stochastic noise; no quality loss
-        # at this fine-tune scale, saves one masked-dropout kernel per layer per step.
-        lora_dropout=0.0,
-        bias="none",
-        task_type="CAUSAL_LM",
-    )
-    model = get_peft_model(model, lora_config)
+    peft_config = build_peft_config(peft_variant)
+    model = get_peft_model(model, peft_config)
+    trainable, total = model.get_nb_trainable_parameters()
+    print(f"  peft variant : {peft_variant}")
+    print(f"  trainable    : {trainable:,} / {total:,} ({100 * trainable / total:.4f}%)")
 
     print("Loading Astral expert Q&A dataset for fast fine-tuning (conversational)...")
-    dataset = load_astral_micro_dataset(conversational=True)
+    dataset = (
+        load_micro_dataset(sft_file=sft_file, conversational=True)
+        if sft_file
+        else load_astral_micro_dataset(conversational=True)
+    )
 
     sft_config = SFTConfig(
         output_dir=str(REPO_ROOT / "results" / "tmp_export"),
@@ -149,15 +195,25 @@ def export_adapter(
     wall_time_s = time.perf_counter() - start_time
     peak_vram_gb = torch.cuda.max_memory_allocated() / (1024**3) if torch.cuda.is_available() else 0.0
 
-    print(f"Saving trained LoRA adapter to {out_path}...")
-    model.save_pretrained(out_path)
-    tokenizer.save_pretrained(out_path)
+    print(f"Saving trained {peft_variant} adapter to {out_path}...")
+    model.save_pretrained(str(out_path))
+    tokenizer.save_pretrained(str(out_path))
 
-    # Log explicit fine-tuning run to MLflow
-    with mlflow.start_run(run_name=f"finetune_{model_name.replace('/', '_')}_{train_steps}steps"):
+    # The whole point of the KronA line of work is payload size, so measure the
+    # real artifact rather than trusting the parameter arithmetic. Weights only
+    # (safetensors/bin) -- the tokenizer files saved alongside are ~20 MB and
+    # identical across variants, so including them would swamp the comparison.
+    weight_bytes = sum(
+        f.stat().st_size for f in out_path.iterdir() if f.is_file() and f.suffix in (".safetensors", ".bin")
+    )
+    adapter_mb = weight_bytes / 1e6
+
+    with mlflow.start_run(run_name=f"finetune_{peft_variant}_{model_name.replace('/', '_')}_{train_steps}steps"):
+        mlflow.set_tags({"peft_variant": peft_variant, "factorization_study": "true"})
         mlflow.log_params(
             {
                 "model_name": model_name,
+                "peft_variant": peft_variant,
                 "train_steps": train_steps,
                 "batch_size": batch_size,
                 "grad_accum_steps": grad_accum_steps,
@@ -177,11 +233,15 @@ def export_adapter(
                 "peak_vram_gb": peak_vram_gb,
                 "final_loss": train_result.training_loss,
                 "steps_per_sec": train_steps / max(0.001, wall_time_s),
+                "trainable_params": trainable,
+                "trainable_pct": 100 * trainable / total,
+                "adapter_weight_mb": adapter_mb,
             }
         )
 
     loss_val = train_result.training_loss
     print(f"Fine-tuning completed in {wall_time_s:.2f}s (Peak VRAM: {peak_vram_gb:.2f} GB, Final Loss: {loss_val:.4f})")
+    print(f"Adapter weights on disk: {adapter_mb:.3f} MB ({trainable:,} trainable params)")
     print(f"MLflow fine-tuning run logged under experiment '{experiment_name}'!")
     return str(out_path)
 
@@ -203,6 +263,18 @@ if __name__ == "__main__":
         default=1,
         help="Gradient accumulation steps. Lower proportionally when raising batch-size.",
     )
+    parser.add_argument(
+        "--peft-variant",
+        default="lora",
+        choices=["lora", "dora", "lokr"],
+        help="Factorization to train: lora (A*B), dora (A*B + magnitude m), lokr (Kronecker A(x)B).",
+    )
+    parser.add_argument(
+        "--sft-file",
+        default=None,
+        help="Override the training jsonl (default: astral). E.g. data/postgresql/training_data.jsonl",
+    )
+    parser.add_argument("--experiment-name", default="astral_fine_tuning")
     args = parser.parse_args()
     export_adapter(
         model_name=args.model_name,
@@ -210,4 +282,7 @@ if __name__ == "__main__":
         train_steps=args.steps,
         batch_size=args.batch_size,
         grad_accum_steps=args.grad_accum,
+        experiment_name=args.experiment_name,
+        peft_variant=args.peft_variant,
+        sft_file=args.sft_file,
     )

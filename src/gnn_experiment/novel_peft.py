@@ -31,6 +31,8 @@ from __future__ import annotations
 
 import json
 import math
+import random
+import warnings
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
@@ -158,11 +160,40 @@ class VelocityGate(nn.Module):
     def __init__(
         self,
         num_layers: int,
-        threshold: float = 0.05,
+        quiet_percentile: float = 25.0,
         ema_decay: float = 0.9,
         warmup_steps: int = 20,
         max_quiet_fraction: float = 0.9,
+        selection: str = "velocity",
+        seed: int = 0,
     ):
+        """`quiet_percentile`: each step, the bottom `quiet_percentile`% of
+        layers by EMA velocity go quiet -- relative to the *current* velocity
+        distribution, not a fixed absolute number. A fixed threshold (this
+        gate's original design) has to be recalibrated by hand any time the
+        training data changes, and silently produces zero quiet layers if the
+        real distribution shifts away from it without warning (measured: the
+        original 0.45 threshold, tuned on one dataset, produced 0% quiet
+        layers when the underlying data composition changed -- see
+        goal1-novel-adapter-results memory / this session's postgres run).
+        Percentile gating self-calibrates to whatever the real distribution
+        is, so it can't silently go inert this way.
+
+        `selection`:
+          "velocity" -- mask the bottom `quiet_percentile`% of layers by EMA
+                        velocity (the actual technique).
+          "random"   -- mask a uniformly random subset *of the same size*,
+                        redrawn every step, ignoring the measured velocities.
+                        This is the control arm: it isolates "does ranking by
+                        velocity carry signal" from "does masking N layers at
+                        all change anything". If random matches or beats
+                        velocity, the velocity ranking contributes nothing and
+                        the technique reduces to a capacity/regularization
+                        knob. Hooks stay installed in both modes so the
+                        measurement overhead and code path are identical.
+        """
+        if selection not in ("velocity", "random"):
+            raise ValueError(f"selection must be 'velocity' or 'random', got {selection!r}")
         super().__init__()
         self.ema_velocity: torch.Tensor
         self.register_buffer("ema_velocity", torch.full((num_layers,), float("nan")))
@@ -172,16 +203,27 @@ class VelocityGate(nn.Module):
         self.pending_velocity: torch.Tensor
         self.register_buffer("pending_velocity", torch.full((num_layers,), float("nan")))
         self.num_layers = num_layers
-        self.threshold = threshold
+        self.quiet_percentile = quiet_percentile
         self.ema_decay = ema_decay
         self.warmup_steps = warmup_steps
         # Safety valve: never mask every layer in the same step, or the loss tensor
         # loses requires_grad entirely (nothing trainable touches the graph) and
         # Trainer's loss.backward() raises. Keeps at least a floor of active layers.
         self.max_quiet_fraction = max_quiet_fraction
+        self.selection = selection
+        # Own Random instance, not the global `random` module, so drawing the
+        # control arm's masks can't perturb any other seeded stream.
+        self._rng = random.Random(seed)
         self.step_count = 0
         self.quiet_layers: set[int] = set()
         self.quiet_fraction_history: list[float] = []
+        # Layer-level churn: how much the quiet set changes step to step. The
+        # velocity arm is expected to be near-static (measured: per-layer
+        # velocity is nearly constant batch-to-batch, so the ranking barely
+        # moves); the random arm re-draws every step. Recorded so the two are
+        # distinguishable in the results rather than assumed.
+        self.quiet_churn_history: list[float] = []
+        self._warned_no_observations = False
 
     @torch.no_grad()
     def record(self, layer_idx: int, velocity: torch.Tensor) -> None:
@@ -216,13 +258,49 @@ class VelocityGate(nn.Module):
 
         if self.step_count > self.warmup_steps:
             vals = self.ema_velocity.tolist()  # the one intentional sync/step, not one per layer
-            candidates = [(v, i) for i, v in enumerate(vals) if not math.isnan(v) and v < self.threshold]
-            cap = int(self.num_layers * self.max_quiet_fraction)
-            if len(candidates) > cap:
-                # keep the `cap` quietest layers quiet; the rest stay active this step.
-                candidates.sort()
-                candidates = candidates[:cap]
-            self.quiet_layers = {i for _, i in candidates}
+            observed = sorted((v, i) for i, v in enumerate(vals) if not math.isnan(v))
+            if not observed and not self._warned_no_observations:
+                # Warmup has passed and not a single layer has ever recorded a
+                # velocity -- the gate is structurally inert (permanently 0%
+                # quiet, no regularization effect) with no other symptom: no
+                # crash, no exception, training proceeds normally. Measured
+                # real cause once already (skip_recompute=True's
+                # torch.is_grad_enabled() heuristic misfiring under
+                # non-reentrant gradient checkpointing, see
+                # install_velocity_hooks docstring) -- but *anything* that
+                # stops the hooks from firing looks identical from here, so
+                # this checks the symptom, not that one specific cause.
+                warnings.warn(
+                    "VelocityGate: warmup complete but zero layers have ever recorded a "
+                    "velocity -- quiet_layers will stay permanently empty. The gate is having "
+                    "no effect. Check that install_velocity_hooks' hooks are actually firing "
+                    "(a common cause: skip_recompute=True combined with non-reentrant gradient "
+                    "checkpointing, where torch.is_grad_enabled() never signals 'recompute' the "
+                    "way that flag assumes).",
+                    stacklevel=2,
+                )
+                self._warned_no_observations = True
+            # Bottom quiet_percentile% of currently-observed layers, capped by
+            # max_quiet_fraction (safety valve, see __init__). Relative to
+            # `len(observed)`, not `self.num_layers`, so an early step with
+            # only some layers having fired yet doesn't undercount the target.
+            target_n = min(
+                round(len(observed) * self.quiet_percentile / 100),
+                int(self.num_layers * self.max_quiet_fraction),
+            )
+            prev_quiet = self.quiet_layers
+            if target_n <= 0:
+                self.quiet_layers = set()
+            elif self.selection == "random":
+                # Control arm: same count, same pool of observed layers, but
+                # redrawn uniformly at random each step -- see __init__.
+                self.quiet_layers = set(self._rng.sample([i for _, i in observed], target_n))
+            else:
+                self.quiet_layers = {i for _, i in observed[:target_n]}
+            if prev_quiet or self.quiet_layers:
+                changed = len(prev_quiet.symmetric_difference(self.quiet_layers))
+                denom = max(len(prev_quiet), len(self.quiet_layers), 1)
+                self.quiet_churn_history.append(changed / (2 * denom))
         else:
             self.quiet_layers = set()
         self.quiet_fraction_history.append(len(self.quiet_layers) / self.num_layers)
@@ -238,14 +316,27 @@ def install_velocity_hooks(layers: Iterable[nn.Module], gate: VelocityGate, skip
     two norm reductions, ~7 kernel launches) measurement during gradient
     checkpointing's recompute pass, where it would otherwise fire a second,
     redundant time for the same step. Detected via `torch.is_grad_enabled()`:
-    `torch.utils.checkpoint` runs the original forward under `no_grad()` and
-    only re-enables grad for the recompute, so "grad enabled inside this
-    hook" reliably means "this is the recompute, not the original forward."
+    for *reentrant* `torch.utils.checkpoint` (the old default), the original
+    forward runs under `no_grad()` and only the recompute re-enables grad, so
+    "grad enabled inside this hook" reliably means "this is the recompute."
 
-    Only pass True when the caller *knows* gradient checkpointing is active
-    on this model -- otherwise, on an uncheckpointed forward (grad enabled,
-    no recompute at all), this would skip the layer's only hook firing that
-    step and the gate would never measure anything.
+    DO NOT pass True with *non-reentrant* checkpointing (`use_reentrant=False`,
+    the modern default `transformers`' `gradient_checkpointing_enable()` uses)
+    -- there, grad stays enabled throughout the original forward too, so
+    `torch.is_grad_enabled()` is always True and this unconditionally skips
+    *every* hook firing, on every layer, every step. Measured directly: this
+    silently produced zero recorded velocities and permanently empty
+    quiet_layers across full training runs (no crash, no warning at the time
+    -- see the warmup-complete-with-zero-observations check in
+    `VelocityGate.end_step`, added after finding this). Only pass True when
+    the caller has confirmed which checkpointing mode is actually active, not
+    just that checkpointing is "on" -- the two modes need opposite settings
+    here despite both being "gradient checkpointing enabled."
+
+    Only pass True at all when the caller *knows* gradient checkpointing is
+    active on this model -- on an uncheckpointed forward (grad enabled, no
+    recompute at all) it has the same failure mode as the non-reentrant case
+    above, for the same reason.
     """
 
     handles = []

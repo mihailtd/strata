@@ -26,12 +26,24 @@ Logs to MLflow experiment `astral_fine_tuning` (same DB as the baseline) and
 saves the adapter to `results/adapters/astral_qwen3.5_micro_<variant>/`
 (never touches the original baseline adapter directory).
 
-Velocity threshold default (0.45, not GOAL_1.md's 0.05): measured directly on
-this model (see scratchpad/diagnose_velocity.py) -- mean relative per-layer
-hidden-state velocity ranges ~0.28-4.3 (median ~0.48) on 8 real batches from
-this dataset, nowhere near 0.05. GOAL_1.md's "51.4% of layers are quiet at
-Δh_l < 0.05" figure does not hold for this model/dataset; 0.45 is the
-empirically measured threshold that puts ~40% of layers below it.
+Velocity gating uses a dynamic bottom-percentile cutoff (quiet_percentile,
+default 25%), not a fixed absolute threshold. A fixed threshold (this gate's
+original design, GOAL_1.md's 0.05 and this repo's later-recalibrated 0.45)
+has to be hand-retuned any time the training data changes, and silently goes
+inert -- zero quiet layers, zero effect -- if the real distribution drifts
+away from it without warning; that's exactly what was measured happening on
+this session's astral/postgres runs after the dataset composition changed
+(0.45 landed in a noisy middle zone nothing consistently cleared). A forward-
+only diagnostic across real batches from both current datasets (see
+scratchpad/diagnose_velocity_real.py) also found this model's per-layer
+velocity is NOT the monotonic "top-heavy" pattern often assumed for
+fine-tuning depth dynamics -- depth-vs-velocity correlation is slightly
+*negative* (-0.30), dominated by layer 0 (an outlier ~4.0, ~6-8x every other
+layer -- it's transforming raw embeddings, not "doing more domain logic")
+and a spike on the final layer, with a noisy, fairly flat 0.32-0.76 band in
+between. Percentile gating self-calibrates to whatever the real shape is
+rather than assuming one, which is why it replaces the threshold entirely
+here instead of sitting alongside it.
 """
 
 import argparse
@@ -72,6 +84,7 @@ _ATTN_IMPL = "sdpa" if _SDPA_AVAILABLE else "eager"
 class VariantConfig(NamedTuple):
     mode: str
     gated: bool
+    selection: str = "velocity"
 
 
 VARIANT_MODES: dict[str, VariantConfig] = {
@@ -79,6 +92,12 @@ VARIANT_MODES: dict[str, VariantConfig] = {
     "tucker": VariantConfig(mode="tucker", gated=False),
     "velocity": VariantConfig(mode="standard", gated=True),
     "combined": VariantConfig(mode="tucker", gated=True),
+    # Control arm for `velocity`: masks the same number of layers per step,
+    # chosen uniformly at random instead of by lowest EMA velocity. Isolates
+    # "does the velocity ranking carry signal" from "does masking N layers at
+    # all do something" -- if this matches or beats `velocity`, the ranking
+    # contributes nothing. See VelocityGate's `selection` docstring.
+    "random_mask": VariantConfig(mode="standard", gated=True, selection="random"),
 }
 
 
@@ -115,7 +134,7 @@ def finetune_novel(
     # Optimisation 1: default dropout=0.0 — removes stochastic noise, frees one
     # masked-dropout kernel per layer per step; zero quality loss at fine-tune scale.
     dropout: float = 0.0,
-    velocity_threshold: float = 0.45,
+    velocity_quiet_percentile: float = 25.0,
     velocity_ema_decay: float = 0.9,
     velocity_warmup_steps: int = 20,
     velocity_max_quiet_fraction: float = 0.9,
@@ -175,10 +194,11 @@ def finetune_novel(
         num_layers = len(get_decoder_layers(model))
         gate = VelocityGate(
             num_layers=num_layers,
-            threshold=velocity_threshold,
+            quiet_percentile=velocity_quiet_percentile,
             ema_decay=velocity_ema_decay,
             warmup_steps=velocity_warmup_steps,
             max_quiet_fraction=velocity_max_quiet_fraction,
+            selection=cfg.selection,
         )
         # Must live on the same device as the model: VelocityGate.record() writes
         # GPU-tensor velocities straight into its buffers with no host sync (that's
@@ -197,10 +217,19 @@ def finetune_novel(
         alpha=alpha,
         dropout=dropout,
         velocity_gate=gate,
-        # Safe to skip the recompute-pass measurement here specifically because
-        # prepare_model_for_kbit_training() above always enables gradient
-        # checkpointing in this script -- see install_velocity_hooks docstring.
-        velocity_skip_recompute=True,
+        # False, not True: skip_recompute's torch.is_grad_enabled() heuristic
+        # assumes *reentrant* checkpointing (no_grad during the original
+        # forward, grad enabled only on recompute). This script's checkpointing
+        # is non-reentrant (the modern transformers default), where grad stays
+        # enabled throughout -- so that heuristic misfires on every single
+        # hook call and silently records nothing, ever, with no error. Measured
+        # directly: with skip_recompute=True, gate.ema_velocity stayed 100% NaN
+        # and quiet_layers was permanently empty across full training runs on
+        # both domains (0.0% quiet, no crash, no warning -- see
+        # scratchpad/check_checkpointing_state.py). False costs the (real, but
+        # small at this model's scale) redundant recompute-pass measurement;
+        # True costs the entire technique silently doing nothing.
+        velocity_skip_recompute=False,
     )
     print(
         f"Wrapped {summary['wrapped_count']} Linear layers | "
@@ -287,7 +316,8 @@ def finetune_novel(
         "rank_out": rank_out,
         "alpha": alpha,
         "model_name": model_name,
-        "velocity_threshold": velocity_threshold if gate is not None else None,
+        "velocity_selection": cfg.selection if gate is not None else None,
+        "velocity_quiet_percentile": velocity_quiet_percentile if gate is not None else None,
         "velocity_ema_decay": velocity_ema_decay if gate is not None else None,
         "velocity_warmup_steps": velocity_warmup_steps if gate is not None else None,
         "velocity_max_quiet_fraction": velocity_max_quiet_fraction if gate is not None else None,
@@ -297,11 +327,18 @@ def finetune_novel(
 
     quiet_fraction_avg = None
     quiet_fraction_final = None
+    quiet_churn_avg = None
     if gate is not None and gate.quiet_fraction_history:
         post_warmup = gate.quiet_fraction_history[velocity_warmup_steps:]
         if post_warmup:
             quiet_fraction_avg = sum(post_warmup) / len(post_warmup)
             quiet_fraction_final = post_warmup[-1]
+    if gate is not None and gate.quiet_churn_history:
+        # How much the quiet set actually moves step to step: 0.0 = the same
+        # layers are masked every step (a static capacity cut, NOT stochastic
+        # depth), 1.0 = fully disjoint each step. The distinguishing metric
+        # between the velocity arm and the random control.
+        quiet_churn_avg = sum(gate.quiet_churn_history) / len(gate.quiet_churn_history)
 
     with mlflow.start_run(run_name=f"novel_{variant}_{model_name.replace('/', '_')}_{train_steps}steps"):
         mlflow.set_tags(
@@ -310,6 +347,7 @@ def finetune_novel(
                 "novel_architecture": "true",
                 "mode": cfg.mode,
                 "gated": str(cfg.gated),
+                "selection": cfg.selection if cfg.gated else "n/a",
             }
         )
         mlflow.log_params(
@@ -324,6 +362,7 @@ def finetune_novel(
                 "dataset_size": len(dataset),
                 "variant": variant,
                 "mode": cfg.mode,
+                "selection": cfg.selection if cfg.gated else "n/a",
                 "rank": rank,
                 "rank_in": rank_in,
                 "rank_out": rank_out,
@@ -331,7 +370,7 @@ def finetune_novel(
                 "dropout": dropout,
                 "attn_implementation": _ATTN_IMPL,
                 "wrapped_linear_count": summary["wrapped_count"],
-                "velocity_threshold": velocity_threshold if gate is not None else -1,
+                "velocity_quiet_percentile": velocity_quiet_percentile if gate is not None else -1,
                 "velocity_ema_decay": velocity_ema_decay if gate is not None else -1,
                 "velocity_warmup_steps": velocity_warmup_steps if gate is not None else -1,
                 "velocity_max_quiet_fraction": velocity_max_quiet_fraction if gate is not None else -1,
@@ -351,6 +390,8 @@ def finetune_novel(
             assert quiet_fraction_final is not None  # always set together, see above
             metrics["quiet_layer_fraction_avg"] = quiet_fraction_avg
             metrics["quiet_layer_fraction_final"] = quiet_fraction_final
+        if quiet_churn_avg is not None:
+            metrics["quiet_layer_churn_avg"] = quiet_churn_avg
         mlflow.log_metrics(metrics)
 
     print(f"\n=== [{variant}] Novel Adapter Fine-Tuning Results ===")
@@ -361,6 +402,10 @@ def finetune_novel(
     print(f"Optimizer state: {opt_state_mb:.3f} MB")
     if quiet_fraction_avg is not None:
         print(f"Avg quiet-layer fraction (post-warmup): {quiet_fraction_avg:.1%}")
+    if quiet_churn_avg is not None:
+        print(f"Avg quiet-set churn (0=static set, 1=fully disjoint): {quiet_churn_avg:.1%}")
+        if gate is not None:
+            print(f"Final quiet layers ({cfg.selection}): {sorted(gate.quiet_layers)}")
     print(f"Adapter saved to: {out_path}")
     print("Logged to MLflow successfully.")
 
@@ -396,7 +441,12 @@ if __name__ == "__main__":
         default=0.0,
         help="LoRA dropout. Default 0.0 (zero-loss opt: removes stochastic noise).",
     )
-    parser.add_argument("--velocity-threshold", type=float, default=0.45)
+    parser.add_argument(
+        "--velocity-quiet-percentile",
+        type=float,
+        default=25.0,
+        help="Bottom N%% of layers by EMA velocity go quiet each step (dynamic, self-calibrating).",
+    )
     parser.add_argument("--velocity-ema-decay", type=float, default=0.9)
     parser.add_argument("--velocity-warmup-steps", type=int, default=20)
     parser.add_argument("--velocity-max-quiet-fraction", type=float, default=0.9)
@@ -437,7 +487,7 @@ if __name__ == "__main__":
         rank_out=args.rank_out,
         alpha=args.alpha,
         dropout=args.dropout,
-        velocity_threshold=args.velocity_threshold,
+        velocity_quiet_percentile=args.velocity_quiet_percentile,
         velocity_ema_decay=args.velocity_ema_decay,
         velocity_warmup_steps=args.velocity_warmup_steps,
         velocity_max_quiet_fraction=args.velocity_max_quiet_fraction,

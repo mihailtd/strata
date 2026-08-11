@@ -26,6 +26,7 @@ from pathlib import Path
 
 import mlflow
 import torch
+from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 # Piped stdout (e.g. through `tail`, or a background-task capture) is fully
@@ -186,7 +187,14 @@ def evaluate_novel_variants(
     for variant in variants:
         adapter_dir = adapter_root_path / f"{adapter_dir_prefix}_{variant}"
         print(f"\n================== Evaluating variant '{variant}' ({adapter_dir}) ==================")
-        if not (adapter_dir / "novel_adapter_config.json").exists():
+        # Two adapter formats live side by side: this repo's custom
+        # NovelLoraLinear adapters (novel_adapter_config.json + novel_adapter.pt)
+        # and standard peft adapters (adapter_config.json + safetensors) from
+        # export_adapter.py's lora/dora/lokr variants. Detect by which config
+        # file is present rather than requiring the caller to declare it.
+        is_novel = (adapter_dir / "novel_adapter_config.json").exists()
+        is_peft = (adapter_dir / "adapter_config.json").exists()
+        if not (is_novel or is_peft):
             print(f"  SKIP: no adapter found at {adapter_dir}")
             continue
 
@@ -201,7 +209,10 @@ def evaluate_novel_variants(
         # every layer of every decode step -- for 256-token generation across
         # 32 layers that's ~8k pointless GPU stalls per question, observed
         # firsthand to blow past a 300s budget without finishing one question.
-        load_novel_adapter(model, adapter_dir, velocity_gate=None)
+        if is_novel:
+            load_novel_adapter(model, adapter_dir, velocity_gate=None)
+        else:
+            model = PeftModel.from_pretrained(model, str(adapter_dir))
         model.eval()
 
         ft_results = []
@@ -283,7 +294,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--variants",
         nargs="+",
-        choices=["custom_standard", "tucker", "velocity", "combined"],
+        choices=["custom_standard", "tucker", "velocity", "combined", "random_mask", "lora", "dora", "lokr"],
         help="Variant(s) to evaluate. Omit when using --base-only.",
     )
     parser.add_argument("--base-only", action="store_true", help="Score only the base model and cache the result.")

@@ -62,11 +62,20 @@ def evaluate_single_prompt(
 
     start_t = time.perf_counter()
     with torch.no_grad():
+        # Greedy, not sampled. This benchmark exists to A/B adapters against
+        # each other on 20 questions, and sampled decoding made that
+        # impossible: two *mechanically identical* configs (both provably
+        # ungated, 0% quiet layers) scored 76.96% and 63.05% on the postgres
+        # set -- a 13.9pp gap that was pure decoding noise, larger than any
+        # real effect measured this session. Greedy makes a run a fixed
+        # function of (model, adapter, prompt), so a difference between two
+        # variants is a difference between the variants. `temperature` is
+        # deliberately not passed at all: it's a sampling-only parameter and
+        # transformers warns when it's set alongside do_sample=False.
         outputs = model.generate(
             **inputs,
             max_new_tokens=max_new_tokens,
-            temperature=0.2,
-            do_sample=True,
+            do_sample=False,
             pad_token_id=tokenizer.pad_token_id or tokenizer.eos_token_id,
         )
     gen_time_s = time.perf_counter() - start_t
