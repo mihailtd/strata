@@ -85,6 +85,7 @@ class VariantConfig(NamedTuple):
     mode: str
     gated: bool
     selection: str = "velocity"
+    correct_fan_in_init: bool = False
 
 
 VARIANT_MODES: dict[str, VariantConfig] = {
@@ -92,12 +93,17 @@ VARIANT_MODES: dict[str, VariantConfig] = {
     "tucker": VariantConfig(mode="tucker", gated=False),
     "velocity": VariantConfig(mode="standard", gated=True),
     "combined": VariantConfig(mode="tucker", gated=True),
-    # Control arm for `velocity`: masks the same number of layers per step,
-    # chosen uniformly at random instead of by lowest EMA velocity. Isolates
-    # "does the velocity ranking carry signal" from "does masking N layers at
-    # all do something" -- if this matches or beats `velocity`, the ranking
-    # contributes nothing. See VelocityGate's `selection` docstring.
     "random_mask": VariantConfig(mode="standard", gated=True, selection="random"),
+    "krotucker": VariantConfig(mode="krotucker", gated=False),
+    "id_kron": VariantConfig(mode="id_kron", gated=False),
+    # Control for custom_standard: identical in every way EXCEPT the down-
+    # projection init uses the true fan_in. custom_standard's `lora_a` is
+    # stored (in, rank), so kaiming reads fan_in=rank and over-initialises it
+    # by sqrt(in/rank) ~= 17.9x; the trained delta comes out 18.29x larger
+    # than peft LoRA's for an otherwise identical config. This variant tests
+    # whether custom_standard's 17.7pp lead over peft LoRA (58.17% vs 40.47%)
+    # is caused by that inflated update rather than anything architectural.
+    "custom_standard_fixedinit": VariantConfig(mode="standard", gated=False, correct_fan_in_init=True),
 }
 
 
@@ -230,6 +236,7 @@ def finetune_novel(
         # small at this model's scale) redundant recompute-pass measurement;
         # True costs the entire technique silently doing nothing.
         velocity_skip_recompute=False,
+        correct_fan_in_init=cfg.correct_fan_in_init,
     )
     print(
         f"Wrapped {summary['wrapped_count']} Linear layers | "

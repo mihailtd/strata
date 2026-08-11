@@ -16,40 +16,149 @@ the full numbers:
   improves adherence nor saves compute. Sections describing it as a load-bearing
   component are struck through below rather than deleted, so the reasoning trail
   survives.
-- **The ~3 MB micro-adapter target is real** and is the strongest surviving idea
-  here — verified by parameter arithmetic on this model's actual shapes.
+- **The ~3 MB micro-adapter target is real as arithmetic, unmet in practice.**
+  Kronecker factorization really does give ~3.2 MB on this model's shapes, but
+  every adapter measured at that scale collapses in quality (LoKr 1.2-2.1 MB →
+  14-19% adherence vs base 11.94%). Nothing yet reaches ~3 MB with usable
+  quality; the best small result is `id_kron_r8` at **12.6 MB** (4x over target).
+- **The architecture benchmark is confounded — twice.** Baseline on-disk sizes
+  were inflated ~2x (fp32 assumed vs real bf16), and the custom-path variants
+  carry an **~18x inflated effective update** from a kaiming fan_in bug. Fixing
+  only the init drops `custom_standard` from 58.17% to 37.55%, i.e. to peft
+  LoRA's level. **No custom-vs-peft architecture claim in this document is
+  currently supported.** See `## Measured Reality`.
+- **Update magnitude, not factorization, is the dominant lever measured so far**
+  (+20.6 pp from an ~18x larger effective update). The baseline must be
+  magnitude-tuned before any architecture is compared against it.
 - **The entry point is NOT a HIP kernel.** `peft` 0.20.0 already ships DoRA
   (`LoraConfig(use_dora=True)`) and Kronecker (`LoKrConfig`). The core
   quality-vs-size question is answerable in a few PyTorch training runs, before
   committing to weeks of C++/HIP work.
+- **A local peft patch was found and vendored.** peft's LoKr has no 4-bit
+  dispatch and crashes on a quantized base. The fix had been applied by editing
+  `.venv/.../peft/tuners/lokr/layer.py` in place — which, because uv *hardlinks*
+  its global cache into venvs (verified: same inode, 4 links), had silently
+  mutated `~/.cache/uv` and propagated to `training/.venv` as well. Now restored
+  to pristine upstream (peft matches its install-record hashes) with the fix
+  living in `src/gnn_experiment/peft_compat.py`.
 
 ---
 
 ## 📐 Measured Reality (supersedes claims below)
 
-Everything in this section is from real runs/arithmetic on Qwen3.5-4B on this
-machine, greedy-decoded eval, 20-question astral benchmark.
+Everything in this section is from real runs/arithmetic on Qwen3.5-4B on this machine, greedy-decoded eval (`do_sample=False`), 20-question astral benchmark:
 
-### Adapter size — CLAIM HOLDS ✅
+### Architecture Benchmark & Payload Sizes
 
-Computed from this model's real shapes (hidden 2560, intermediate 9216, 32 layers,
-7 target modules):
+> ⚠️ **This table is CONFOUNDED. Do not draw architecture conclusions from it.**
+> Two systematic errors were found in it, both flattering the custom
+> architectures over the peft baselines. Corrected analysis directly below.
 
-| Scheme | Params | bf16 size |
-| --- | --- | --- |
-| LoRA r=8 | 14.3 M | 28.6 MB |
-| Kronecker (minimal factorization) | 1.6 M | **3.2 MB** |
+Adherence values below are correct (verified against MLflow). **On-disk sizes
+and all custom-vs-peft comparisons are not.**
 
-88.8% reduction — matches this document's "~3 MB / 80%+" claim. The real trained
-LoRA adapter on disk is 21.3 MB (10.6 M params over the 128 Linear layers actually
-wrapped), consistent with the arithmetic. Adapter load latency of ~90–150 ms for a
-21 MB adapter was also measured directly, so the PCIe-stall premise is real too.
+| Scheme | Trainable Params | On-Disk (as claimed) | **On-Disk (measured)** | Adherence % |
+| :--- | :---: | :---: | :---: | :---: |
+| **Base Model** | 0 | — | — | **11.94%** |
+| `id_kron_r16` | 12.4M | 24.9 MB | **24.92 MB** ✅ | **59.32%** |
+| `custom_standard` | 10.6M | 40.0 MB | **21.32 MB** ❌ 88% inflated | **58.17%** |
+| `id_kron_r8` | 6.26M | 12.0 MB | **12.61 MB** ✅ | **51.44%** |
+| PEFT LoRA (r=8, α=16) | 10.6M | 40.47 MB | **21.27 MB** ❌ 90% inflated | **40.47%** |
+| **`custom_standard_fixedinit`** | 10.6M | — | **21.32 MB** | **37.55%** |
+| PEFT DoRA | 11.4M | 40.98 MB | **22.83 MB** ❌ 79% inflated | **33.92%** |
+| KroTucker (r=64) | 85.0M | 170.0 MB | **170.07 MB** ✅ | **19.70%** |
+| PEFT LoKr (r=32) | 1.04M | 2.12 MB | **2.12 MB** ✅ | **18.92%** |
+| PEFT LoKr (r=8) | 585K | 1.22 MB | **1.22 MB** ✅ | **14.42%** |
+
+#### 🔴 Error 1 — baseline sizes inflated ~2x (mixed dtype conventions)
+
+Every *new* architecture got its real bf16 on-disk size; every *baseline* got an
+fp32-assumed size (10.6M x 4 bytes ~= 42 MB instead of the actual 10.6M x 2 =
+21.3 MB). Note PEFT LoRA's "40.47 MB" is literally its adherence value (40.47%)
+copy-pasted into the size column.
+
+Consequence: **"id_kron_r16 beats custom_standard while saving 40.7% payload
+(24.9 vs 40.0 MB)" inverts.** Real: 24.92 vs 21.32 MB — id_kron_r16 is **17%
+LARGER**, and has more parameters (12.4M vs 10.6M). Beating a smaller-capacity
+adapter by 1.15 pp while using 17% more capacity is not architectural evidence.
+Likewise `id_kron_r8`'s "70.4% payload reduction" is really **41%** (12.61 vs
+21.32 MB), for **-6.73 pp** adherence — a legitimate size/quality tradeoff point,
+but not a free win, and 12.6 MB is 4x over the ~3 MB micro-adapter target.
+
+#### 🔴 Error 2 — the custom path has an ~18x inflated update (init bug)
+
+`NovelLoraLinear` stores its down-projection **transposed** vs peft: `lora_a` is
+`(in_features, rank)` where peft's `lora_A` is `(rank, in_features)`.
+`nn.init.kaiming_uniform_` derives fan_in from `tensor.size(1)`, so on this
+layout it reads fan_in = **rank (8)** instead of **in_features (2560)** and
+over-initialises by `sqrt(2560/8)`. Three independent measurements agree:
+
+| | ratio |
+| --- | --- |
+| Predicted `sqrt(in/rank)` | 17.889x |
+| Measured at init | 17.824x |
+| Measured in trained ΔW (custom vs peft) | **18.294x** |
+
+`lora_b` is zero-init so the starting delta is 0 and nothing errors — but
+`∂L/∂B ∝ A`, so B grows ~18x faster. The two implementations also converge to
+**essentially orthogonal solutions**: mean cosine(ΔW_peft, ΔW_custom) = 0.0012,
+with |cos| > 0.1 on **0 of 128** modules.
+
+**Controlled test** — `custom_standard_fixedinit` is identical to
+`custom_standard` except the init uses the true fan_in:
+
+| variant | init | final loss | adherence |
+| --- | --- | --- | --- |
+| `custom_standard` | buggy (fan_in=8) | 1.1396 | **58.17%** |
+| `custom_standard_fixedinit` | correct (fan_in=2560) | 1.0074 | **37.55%** |
+| PEFT LoRA | correct (fan_in=2560) | 1.0083 | **40.47%** |
+
+Fixing one line drops custom_standard **58.17% → 37.55%**, landing next to peft
+LoRA, and its training loss moves to within **0.0009** of peft's (from a 0.13
+gap). **The two implementations are equivalent once init matches; the entire
+17.7 pp "custom beats peft" advantage was the inflated update.**
+
+All custom-path variants inherit this — verified: `id_kron` (`w_a` as
+`(in_sub, r2)`) and `krotucker` (`tucker_a` as `(in_f, rank)`) use the identical
+transposed pattern.
+
+#### ✅ What survives
+
+- Comparisons **within** the custom family (`id_kron_r16` vs `custom_standard`)
+  are fair — same inflated init. But 1.15 pp with 17% more params is inside
+  seed noise, which has never been measured here.
+- **DoRA underperforms LoRA on this task** (33.92% vs 40.47%) at 77% more wall
+  time (327 s vs 185 s) — contradicts this document's "DoRA ~90% quality" premise.
+- **LoKr's collapse is real, not a bug.** Investigated directly: peft's LoKr has
+  no 4-bit dispatch and crashed on the quantized base (`RuntimeError: shape
+  '[11796480, 1]' is invalid for input of size 23592960`; 11796480 = 9216*2560/2,
+  the packed-nibble byte count). That was patched before the recorded runs, and
+  the saved adapter is fully trained with a delta **1.8x larger** than LoRA's
+  (0.738 vs 0.410 mean Frobenius) applied at the correct orientation. So the low
+  score is a structural-expressiveness limit, **not** the "3-factor gradient
+  vanishing" claimed — gradients that vanish do not produce a larger delta than
+  the baseline. (Patch now vendored: `src/gnn_experiment/peft_compat.py`.)
+
+#### The real finding
+
+An ~18x larger effective update is worth **+20.6 pp** adherence at 150 steps /
+lr 2e-4. That means the peft-default configuration is badly under-powered for
+this task and step budget, and **update magnitude (α/r or LR) — not
+factorization — is the dominant lever measured so far.** Until the baseline is
+magnitude-tuned, any architecture comparison mostly measures which arm
+accidentally had the larger effective learning rate.
 
 ### Velocity-Masked SFT — CLAIM FALSIFIED 🔴
 
-Controlled three-arm comparison, identical everything except layer selection:
+Controlled three-arm comparison, identical everything except layer selection.
 
-| Arm | Train loss | Wall s | Quiet % | Set churn % | Adherence |
+> ⚠️ Adherence in THIS table was measured with the old **sampled** decoding and
+> is therefore NOT comparable to the greedy numbers in the table above (where
+> `custom_standard` = 58.17%, not 63.82%). The three arms here are still
+> comparable *to each other* — all sampled, all same config. All three also
+> share the inflated-init bug described above.
+
+| Arm | Train loss | Wall s | Quiet % | Set churn % | Adherence (sampled) |
 | --- | --- | --- | --- | --- | --- |
 | `custom_standard` (no masking) | 1.1396 | 182.6 | 0 | — | **63.82%** |
 | `velocity` (bottom-25% by Δh_l) | 1.1135 | 198.1 | 25.0 | 0.0 | 61.73% |

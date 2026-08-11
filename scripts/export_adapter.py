@@ -39,6 +39,13 @@ from transformers.utils import is_flash_attn_2_available
 from trl import SFTConfig, SFTTrainer
 
 from gnn_experiment.micro_probe.dataset import load_astral_micro_dataset, load_micro_dataset
+from gnn_experiment.peft_compat import patch_lokr_4bit_support
+
+# peft's LoKr cannot compute delta shapes against a 4-bit quantized base layer
+# (it reads the packed uint8 `.weight`); every adapter here trains on one. See
+# peft_compat for the full explanation -- without this, --peft-variant lokr
+# dies on the first forward pass with a shape error.
+patch_lokr_4bit_support()
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -112,6 +119,8 @@ def export_adapter(
     experiment_name: str = "astral_fine_tuning",
     peft_variant: str = "lora",
     sft_file: str | None = None,
+    r: int = 8,
+    alpha: int = 16,
 ):
     out_path = REPO_ROOT / out_dir
     out_path.mkdir(parents=True, exist_ok=True)
@@ -145,7 +154,7 @@ def export_adapter(
     )
     model = prepare_model_for_kbit_training(model)
 
-    peft_config = build_peft_config(peft_variant)
+    peft_config = build_peft_config(peft_variant, r=r, alpha=alpha)
     model = get_peft_model(model, peft_config)
     trainable, total = model.get_nb_trainable_parameters()
     print(f"  peft variant : {peft_variant}")
@@ -219,8 +228,11 @@ def export_adapter(
                 "grad_accum_steps": grad_accum_steps,
                 "effective_batch": batch_size * grad_accum_steps,
                 "learning_rate": 2e-4,
-                "r": 8,
-                "alpha": 16,
+                # Log the ACTUAL values, not the defaults -- these are the knob
+                # under test when sweeping effective update magnitude (alpha/r).
+                "r": r,
+                "alpha": alpha,
+                "scaling": alpha / r,
                 "lora_dropout": 0.0,
                 "attn_implementation": _ATTN_IMPL,
                 "dataset_size": len(dataset),
@@ -274,6 +286,8 @@ if __name__ == "__main__":
         default=None,
         help="Override the training jsonl (default: astral). E.g. data/postgresql/training_data.jsonl",
     )
+    parser.add_argument("--r", type=int, default=8, help="Rank value r for adapter.")
+    parser.add_argument("--alpha", type=int, default=16, help="Alpha value for adapter.")
     parser.add_argument("--experiment-name", default="astral_fine_tuning")
     args = parser.parse_args()
     export_adapter(
@@ -285,4 +299,6 @@ if __name__ == "__main__":
         experiment_name=args.experiment_name,
         peft_variant=args.peft_variant,
         sft_file=args.sft_file,
+        r=args.r,
+        alpha=args.alpha,
     )

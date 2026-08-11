@@ -403,9 +403,31 @@ class NovelLoraLinear(nn.Module):
         factor_lookup: Callable[[str], tuple[torch.Tensor, torch.Tensor]] | None = None,
         factor_key: str | None = None,
         is_quiet_fn: Callable[[int], bool] | None = None,
+        correct_fan_in_init: bool = False,
     ):
+        """`correct_fan_in_init`: opt-in fix for a real init bug, kept OFF by
+        default so every previously-measured variant reproduces exactly.
+
+        The down-projection matrices here (`lora_a`, `w_a`, `tucker_a`) are
+        stored TRANSPOSED relative to peft's convention -- `(in_features,
+        rank)` instead of peft's `(rank, in_features)`. `nn.init.
+        kaiming_uniform_` derives fan_in from `tensor.size(1)`, so on this
+        layout it reads fan_in = *rank* (8) rather than in_features (2560),
+        and initialises the matrix sqrt(in_features/rank) ~= 17.9x too large.
+
+        Measured consequence: because the up-projection is zero-init the
+        starting delta is 0 either way (nothing errors, nothing warns), but
+        dL/dB is proportional to A, so B grows ~18x faster and the trained
+        delta-W comes out 18.29x larger than peft's for an otherwise
+        identical config (same r, alpha, scaling, modules, data, steps).
+        That inflated update -- not the architecture -- is the leading
+        explanation for this repo's custom variants outscoring peft LoRA.
+
+        Setting this True computes the bound from the true fan_in
+        (in_features) so the init matches peft's magnitude.
+        """
         super().__init__()
-        assert mode in ("standard", "tucker")
+        assert mode in ("standard", "tucker", "krotucker", "id_kron")
         self.base_layer = base_layer
         for p in self.base_layer.parameters():
             p.requires_grad_(False)
@@ -418,6 +440,23 @@ class NovelLoraLinear(nn.Module):
         device = next(base_layer.parameters()).device
         compute_dtype = torch.bfloat16
 
+        def init_down_proj(t: torch.Tensor) -> None:
+            """kaiming_uniform on a down-projection stored as (in, rank).
+
+            Default reproduces the historical (buggy) behaviour exactly.
+            With correct_fan_in_init, the bound is computed from the real
+            fan_in (t.size(0), the input dim) instead of letting PyTorch
+            infer t.size(1) == rank. See the class docstring.
+            """
+            if not correct_fan_in_init:
+                nn.init.kaiming_uniform_(t, a=math.sqrt(5))
+                return
+            fan_in = t.size(0)
+            gain = math.sqrt(2.0 / (1 + 5.0))  # a = sqrt(5)
+            bound = gain * math.sqrt(3.0 / fan_in)
+            with torch.no_grad():
+                t.uniform_(-bound, bound)
+
         if mode == "tucker":
             assert factor_lookup is not None and factor_key is not None and rank_in and rank_out
             self.rank = rank_in  # scaling uses the input-side rank, matching LoRA convention
@@ -427,21 +466,50 @@ class NovelLoraLinear(nn.Module):
             core = torch.empty(rank_in, rank_out, device=device, dtype=compute_dtype)
             nn.init.normal_(core, std=0.01)
             self.core = nn.Parameter(core)
-            # Per-layer trainable magnitude vector over the shared r_out subspace.
-            # U_in/U_out and (with a shared shape group) the core's *rank* are the
-            # same for every layer in the group; this is the one piece of this
-            # layer's adapter that's entirely its own, letting it scale each shared
-            # output direction up or down independently instead of every layer in
-            # the group being forced through an identical relative mix. Ones-init:
-            # a no-op at start (also moot initially since U_out is zero-init).
             self.diag_scale = nn.Parameter(torch.ones(rank_out, device=device, dtype=compute_dtype))
+        elif mode == "krotucker":
+            assert rank is not None
+            self.rank = rank
+            self.scaling = alpha / rank
+            in_f, out_f = base_layer.in_features, base_layer.out_features
+            tucker_a = torch.empty(in_f, rank, device=device, dtype=compute_dtype)
+            init_down_proj(tucker_a)
+            self.tucker_a = nn.Parameter(tucker_a)
+            self.tucker_b = nn.Parameter(torch.zeros(rank, out_f, device=device, dtype=compute_dtype))
+
+            sqrt_r = int(math.isqrt(rank))
+            if sqrt_r * sqrt_r == rank:
+                kron_a = torch.empty(sqrt_r, sqrt_r, device=device, dtype=compute_dtype)
+                kron_b = torch.empty(sqrt_r, sqrt_r, device=device, dtype=compute_dtype)
+            else:
+                kron_a = torch.empty(rank, 1, device=device, dtype=compute_dtype)
+                kron_b = torch.empty(1, rank, device=device, dtype=compute_dtype)
+            nn.init.normal_(kron_a, std=0.02)
+            nn.init.normal_(kron_b, std=0.02)
+            self.kron_a = nn.Parameter(kron_a)
+            self.kron_b = nn.Parameter(kron_b)
+        elif mode == "id_kron":
+            r1 = rank_in if rank_in else 8
+            r2 = rank_out if rank_out else 1
+            rank_total = r1 * r2
+            self.rank = rank_total
+            self.scaling = alpha / rank_total
+            self.r1 = r1
+            self.r2 = r2
+            in_f, out_f = base_layer.in_features, base_layer.out_features
+            assert in_f % r1 == 0, f"in_features {in_f} must be divisible by r1 {r1}"
+            in_sub = in_f // r1
+            w_a = torch.empty(in_sub, r2, device=device, dtype=compute_dtype)
+            init_down_proj(w_a)
+            self.w_a = nn.Parameter(w_a)
+            self.b_lora = nn.Parameter(torch.zeros(rank_total, out_f, device=device, dtype=compute_dtype))
         else:
             assert rank is not None
             self.rank = rank
             self.scaling = alpha / rank
             in_f, out_f = base_layer.in_features, base_layer.out_features
             lora_a = torch.empty(in_f, rank, device=device, dtype=compute_dtype)
-            nn.init.kaiming_uniform_(lora_a, a=math.sqrt(5))
+            init_down_proj(lora_a)
             self.lora_a = nn.Parameter(lora_a)
             self.lora_b = nn.Parameter(torch.zeros(rank, out_f, device=device, dtype=compute_dtype))
 
@@ -450,12 +518,31 @@ class NovelLoraLinear(nn.Module):
         if self._is_quiet_fn(self.layer_idx):
             return result
 
-        h = self.dropout(x).to(self.core.dtype if self.mode == "tucker" else self.lora_a.dtype)
+        h_dtype = (
+            self.w_a.dtype
+            if self.mode == "id_kron"
+            else (
+                self.tucker_a.dtype
+                if self.mode == "krotucker"
+                else (self.core.dtype if self.mode == "tucker" else self.lora_a.dtype)
+            )
+        )
+        h = self.dropout(x).to(h_dtype)
         if self.mode == "tucker":
             u_in, u_out = self._factor_lookup(self.factor_key)
             delta = (h @ u_in) @ self.core
             delta = delta * self.diag_scale
             delta = delta @ u_out
+        elif self.mode == "krotucker":
+            h_proj = h @ self.tucker_a
+            kron_core = torch.kron(self.kron_a, self.kron_b)
+            h_core = h_proj @ kron_core
+            delta = h_core @ self.tucker_b
+        elif self.mode == "id_kron":
+            batch_size, seq_len, in_f = h.shape
+            h_reshaped = h.view(batch_size, seq_len, self.r1, in_f // self.r1)
+            h_proj = torch.matmul(h_reshaped, self.w_a).view(batch_size, seq_len, self.rank)
+            delta = h_proj @ self.b_lora
         else:
             delta = (h @ self.lora_a) @ self.lora_b
         delta = delta * self.scaling
@@ -500,6 +587,7 @@ def apply_novel_lora(
     dropout: float = 0.0,
     velocity_gate: VelocityGate | None = None,
     velocity_skip_recompute: bool = False,
+    correct_fan_in_init: bool = False,
 ) -> dict:
     """Freezes the whole model, then replaces every target Linear inside every
     decoder layer with a NovelLoraLinear. Returns a summary dict (wrapped
@@ -557,6 +645,31 @@ def apply_novel_lora(
                     factor_lookup=factor_lookup,
                     factor_key=key,
                     is_quiet_fn=is_quiet_fn,
+                    correct_fan_in_init=correct_fan_in_init,
+                )
+            elif mode == "krotucker":
+                wrapper = NovelLoraLinear(
+                    module,
+                    layer_idx,
+                    mode="krotucker",
+                    alpha=alpha,
+                    dropout=dropout,
+                    rank=rank,
+                    is_quiet_fn=is_quiet_fn,
+                    correct_fan_in_init=correct_fan_in_init,
+                )
+            elif mode == "id_kron":
+                wrapper = NovelLoraLinear(
+                    module,
+                    layer_idx,
+                    mode="id_kron",
+                    alpha=alpha,
+                    dropout=dropout,
+                    rank=rank,
+                    rank_in=rank_in,
+                    rank_out=rank_out,
+                    is_quiet_fn=is_quiet_fn,
+                    correct_fan_in_init=correct_fan_in_init,
                 )
             else:
                 wrapper = NovelLoraLinear(
@@ -567,6 +680,7 @@ def apply_novel_lora(
                     dropout=dropout,
                     rank=rank,
                     is_quiet_fn=is_quiet_fn,
+                    correct_fan_in_init=correct_fan_in_init,
                 )
             setattr(parent, child_attr, wrapper)
             wrapped += 1

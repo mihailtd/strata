@@ -45,6 +45,12 @@ from gnn_experiment.novel_peft import (  # noqa: E402
     load_novel_adapter,
     set_hard_vram_cap,
 )
+from gnn_experiment.peft_compat import patch_lokr_4bit_support  # noqa: E402
+
+# Needed on the eval side too: LoKr recomputes its delta from the Kronecker
+# factors on every forward, so an unpatched peft fails here exactly as it does
+# in training. See peft_compat.
+patch_lokr_4bit_support()
 
 
 def _load_base_model(model_name: str):
@@ -185,7 +191,13 @@ def evaluate_novel_variants(
 
     all_summaries = {}
     for variant in variants:
-        adapter_dir = adapter_root_path / f"{adapter_dir_prefix}_{variant}"
+        candidate_path = Path(variant)
+        if candidate_path.exists():
+            adapter_dir = candidate_path
+        elif (adapter_root_path / variant).exists():
+            adapter_dir = adapter_root_path / variant
+        else:
+            adapter_dir = adapter_root_path / f"{adapter_dir_prefix}_{variant}"
         print(f"\n================== Evaluating variant '{variant}' ({adapter_dir}) ==================")
         # Two adapter formats live side by side: this repo's custom
         # NovelLoraLinear adapters (novel_adapter_config.json + novel_adapter.pt)
@@ -277,14 +289,15 @@ def evaluate_novel_variants(
             mlflow.log_dict(summary, "evaluation_comparison.json")
 
         out_summary_dir_path.mkdir(parents=True, exist_ok=True)
-        with open(out_summary_dir_path / f"{output_prefix}_eval_summary_{variant}.json", "w") as f:
+        variant_tag = Path(variant).name
+        with open(out_summary_dir_path / f"{output_prefix}_eval_summary_{variant_tag}.json", "w") as f:
             json.dump(summary, f, indent=2)
 
         print(
-            f"[{variant}] modern adherence: {ft_avg_adherence:.2f}% "
+            f"[{variant_tag}] modern adherence: {ft_avg_adherence:.2f}% "
             f"(base {base_avg_adherence:.2f}%, gain {adherence_gain:+.2f}pp)"
         )
-        all_summaries[variant] = summary
+        all_summaries[variant_tag] = summary
 
     return {"base_avg_adherence_pct": base_avg_adherence, "variants": all_summaries}
 
@@ -294,7 +307,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--variants",
         nargs="+",
-        choices=["custom_standard", "tucker", "velocity", "combined", "random_mask", "lora", "dora", "lokr"],
         help="Variant(s) to evaluate. Omit when using --base-only.",
     )
     parser.add_argument("--base-only", action="store_true", help="Score only the base model and cache the result.")
