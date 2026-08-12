@@ -1277,46 +1277,49 @@ class WeightFoldingEngine:
         return max((self.slots[k] - self.pristine[k]).abs().max().item() for k in self.slots)
 
 
-class ZeroCopyBoundaryManager:
-    """Involution Half-Line Memory Boundary & Pointer Manager ((H, v, i, pi)).
+class VramChurnProbe:
+    """Context manager that measures TRANSIENT VRAM allocation across a block.
 
-    Implements structural distinction between:
-    1. Internal Pairs (i(h1) = h2 != h1): Zero-copy VRAM pointer handle passing via
-       direct data_ptr() mappings across execution steps without CPU memory copies
-       or transient VRAM allocations.
-    2. External Fixed Points (i(h) = h): Strict boundary serialization / HTTP JSON
-       deserialization and string SSE socket encoding.
+    Replaces `ZeroCopyBoundaryManager`, which framed itself around a
+    "half-line involution (H, v, i, pi)" memory contract. That formalism did no
+    work: `register_internal_pair` stored `tensor.data_ptr()` in a dict that was
+    never read by anything, and `external_serialize_fixed_point` was
+    `json.dumps`. Neither affected a single byte of execution.
+
+    What IS worth measuring is real, and the old probe measured it wrongly.
+    Comparing `torch.cuda.memory_allocated()` before and after a block returns
+    the NET change, so a block that allocates 5 GB and frees it reports 0 --
+    exactly the case the probe was meant to catch. Peak-vs-baseline is the
+    correct measurement.
+
+        with VramChurnProbe() as p:
+            engine.activate(expert)
+        p.transient_bytes   # 0 for a genuine in-place fold
     """
 
-    def __init__(self, device: torch.device | str = "cuda:0"):
-        self.device = torch.device(device) if isinstance(device, str) else device
-        self._handles: dict[str, tuple[int, tuple[int, ...], torch.dtype]] = {}
+    def __init__(self, device: int = 0):
+        self.device = device
+        self.baseline = 0
+        self.peak = 0
+        self.net = 0
 
-    def register_internal_pair(self, name: str, tensor: torch.Tensor) -> int:
-        """Registers a zero-copy internal Line handle i(h1) = h2 != h1 pointing to VRAM."""
-        ptr = tensor.data_ptr()
-        self._handles[name] = (ptr, tuple(tensor.shape), tensor.dtype)
-        return ptr
-
-    def get_pointer_handle(self, name: str) -> tuple[int, tuple[int, ...], torch.dtype]:
-        """Resolves zero-copy VRAM pointer metadata without memory allocation."""
-        if name not in self._handles:
-            raise KeyError(f"No zero-copy VRAM handle registered for '{name}'")
-        return self._handles[name]
-
-    @staticmethod
-    def measure_vram_allocation_bytes() -> int:
-        """Probes allocated VRAM bytes to verify zero transient allocation churn."""
+    def __enter__(self) -> VramChurnProbe:
         if torch.cuda.is_available():
-            return torch.cuda.memory_allocated()
-        return 0
+            torch.cuda.synchronize()
+            self.baseline = torch.cuda.memory_allocated(self.device)
+            torch.cuda.reset_peak_memory_stats(self.device)
+        return self
 
-    @staticmethod
-    def external_serialize_fixed_point(data: dict | str) -> str:
-        """Fixed-point boundary i(h) = h: External serialization across network API sockets."""
-        if isinstance(data, str):
-            return data
-        return json.dumps(data, ensure_ascii=False)
+    def __exit__(self, *exc) -> None:
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+            self.peak = torch.cuda.max_memory_allocated(self.device)
+            self.net = torch.cuda.memory_allocated(self.device) - self.baseline
+
+    @property
+    def transient_bytes(self) -> int:
+        """Peak above the entry baseline -- catches alloc-then-free churn."""
+        return max(0, self.peak - self.baseline)
 
 
 def route_expert_execution(
@@ -1324,16 +1327,30 @@ def route_expert_execution(
     expert: FoldableExpert,
     absorption_threshold: float = 1.0,
 ) -> str:
-    """Precision Absorption Threshold Router (if scaling >= threshold: fold() else: wrap()).
+    """Route an expert to the fold path, or refuse if folding would lose too much.
 
-    Selects between:
-    - Fold Path: In-place W_live = W0 + s * (U @ V) on-device GEMM mutation.
-    - Wrap Path: Routing execution through wrapped PEFT factor hooks.
+    The premise is sound and measured: merging into bf16 quantises the delta,
+    and the loss scales inversely with |dW|/|W|. At scaling 2.0 the merged
+    adapter keeps 99% of its delta (0.96% relative error); at scaling 0.25 it
+    loses 7.06%, with 7.7% of delta elements absorbed entirely. So a
+    low-scaling adapter genuinely should not be folded.
+
+    THERE IS NO WRAP PATH HERE. `WeightFoldingEngine` only folds; wrapping is
+    `load_novel_adapter`, which builds NovelLoraLinear modules and is a
+    different object graph entirely. The previous implementation "routed to
+    wrap" by calling `engine.restore()` -- which removes the adapter and runs
+    the plain base model, while returning "wrap" to the caller. With the
+    default threshold of 1.0 that silently un-adapted every expert with
+    scaling < 1.0 (e.g. financial_planning at 0.25). Refusing loudly is the
+    only honest option until a real wrap path exists.
     """
     if expert.scaling >= absorption_threshold:
         engine.activate(expert)
         return "fold"
-    else:
-        # Wrap path: preserve pristine weights without mutation
-        engine.restore()
-        return "wrap"
+    raise NotImplementedError(
+        f"Expert {expert.name!r} has scaling {expert.scaling} < absorption_threshold "
+        f"{absorption_threshold}, so folding it into bf16 would lose a significant "
+        "fraction of the delta. No wrap path exists on WeightFoldingEngine -- use "
+        "load_novel_adapter() for the wrapped path, or lower absorption_threshold "
+        "to fold anyway and accept the measured precision loss."
+    )

@@ -1,0 +1,43 @@
+nohup: ignoring input
+W20260813 00:47:54.981656 131423863115840 agent.cpp:608] sysfs nodes path '/sys/class/kfd/kfd/topology/nodes' does not exist
+INFO:     Started server process [316342]
+INFO:     Waiting for application startup.
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+Launching IMB Zero-Copy OpenAI API Server on http://127.0.0.1:8000...
+[safety] Hard VRAM cap: 22.0 GB (91.9% of 23.9 GB total) on device 0
+[IMB Server] Initializing Base Model (Qwen/Qwen3.5-4B)...
+Fetching 2 files:   0%|          | 0/2 [00:00<?, ?it/s]Fetching 2 files: 100%|██████████| 2/2 [00:00<00:00, 3021.83it/s]
+[transformers] The fast path is not available because one of the required library is not installed. Falling back to torch implementation. To install follow https://github.com/fla-org/flash-linear-attention#installation and https://github.com/Dao-AILab/causal-conv1d
+Loading weights:   0%|          | 0/426 [00:00<?, ?it/s]Loading weights:   0%|          | 1/426 [00:02<16:02,  2.27s/it]Loading weights:   2%|▏         | 9/426 [00:02<01:21,  5.12it/s]Loading weights:   3%|▎         | 14/426 [00:02<00:51,  7.94it/s]Loading weights:   5%|▌         | 23/426 [00:02<00:26, 15.45it/s]Loading weights:   7%|▋         | 29/426 [00:02<00:22, 18.03it/s]Loading weights:   9%|▊         | 37/426 [00:03<00:15, 24.53it/s]Loading weights:  10%|▉         | 42/426 [00:03<00:16, 23.33it/s]Loading weights:  11%|█         | 46/426 [00:03<00:16, 22.38it/s]Loading weights:  13%|█▎        | 56/426 [00:03<00:10, 34.23it/s]Loading weights:  15%|█▍        | 62/426 [00:03<00:10, 33.69it/s]Loading weights:  16%|█▌        | 67/426 [00:04<00:11, 30.08it/s]Loading weights:  19%|█▊        | 79/426 [00:04<00:07, 44.48it/s]Loading weights:  20%|█▉        | 85/426 [00:04<00:08, 39.73it/s]Loading weights:  21%|██        | 90/426 [00:04<00:08, 40.57it/s]Loading weights:  22%|██▏       | 95/426 [00:04<00:08, 40.34it/s]Loading weights:  23%|██▎       | 100/426 [00:04<00:09, 35.06it/s]Loading weights:  26%|██▌       | 109/426 [00:04<00:07, 41.08it/s]Loading weights:  27%|██▋       | 117/426 [00:05<00:07, 41.63it/s]Loading weights:  30%|██▉       | 126/426 [00:05<00:05, 51.30it/s]Loading weights:  31%|███       | 132/426 [00:05<00:05, 50.51it/s]Loading weights:  32%|███▏      | 138/426 [00:05<00:06, 46.66it/s]Loading weights:  34%|███▍      | 145/426 [00:05<00:05, 47.23it/s]Loading weights:  36%|███▌      | 153/426 [00:05<00:05, 50.82it/s]Loading weights:  39%|███▉      | 167/426 [00:05<00:04, 62.11it/s]Loading weights:  41%|████      | 174/426 [00:06<00:05, 49.94it/s]Loading weights:  43%|████▎     | 184/426 [00:06<00:05, 47.86it/s]Loading weights:  46%|████▌     | 195/426 [00:06<00:04, 52.60it/s]Loading weights:  47%|████▋     | 201/426 [00:06<00:05, 38.06it/s]Loading weights:  48%|████▊     | 206/426 [00:07<00:07, 30.71it/s]Loading weights:  50%|████▉     | 211/426 [00:07<00:06, 32.25it/s]Loading weights:  52%|█████▏    | 223/426 [00:07<00:04, 44.50it/s]Loading weights:  54%|█████▍    | 229/426 [00:07<00:06, 30.57it/s]Loading weights:  55%|█████▌    | 236/426 [00:08<00:08, 23.06it/s]Loading weights:  58%|█████▊    | 247/426 [00:08<00:05, 31.73it/s]Loading weights:  59%|█████▉    | 252/426 [00:08<00:06, 27.45it/s]Loading weights:  60%|██████    | 256/426 [00:08<00:06, 25.67it/s]Loading weights:  61%|██████    | 260/426 [00:09<00:08, 20.18it/s]Loading weights:  62%|██████▏   | 263/426 [00:09<00:08, 19.36it/s]Loading weights:  63%|██████▎   | 270/426 [00:09<00:05, 26.23it/s]Loading weights:  65%|██████▍   | 275/426 [00:09<00:05, 29.36it/s]Loading weights:  65%|██████▌   | 279/426 [00:10<00:06, 23.24it/s]Loading weights:  67%|██████▋   | 287/426 [00:10<00:04, 32.37it/s]Loading weights:  69%|██████▊   | 292/426 [00:10<00:05, 26.26it/s]Loading weights:  69%|██████▉   | 296/426 [00:10<00:06, 20.80it/s]Loading weights:  72%|███████▏  | 305/426 [00:10<00:03, 30.92it/s]Loading weights:  73%|███████▎  | 310/426 [00:11<00:04, 28.52it/s]Loading weights:  74%|███████▎  | 314/426 [00:11<00:06, 17.32it/s]Loading weights:  75%|███████▌  | 321/426 [00:11<00:05, 19.75it/s]Loading weights:  77%|███████▋  | 330/426 [00:11<00:03, 27.07it/s]Loading weights:  78%|███████▊  | 334/426 [00:12<00:03, 28.62it/s]Loading weights:  80%|████████  | 341/426 [00:12<00:02, 34.43it/s]Loading weights:  81%|████████  | 346/426 [00:12<00:03, 24.27it/s]Loading weights:  83%|████████▎ | 354/426 [00:12<00:02, 31.86it/s]Loading weights:  84%|████████▍ | 359/426 [00:12<00:02, 30.02it/s]Loading weights:  85%|████████▌ | 363/426 [00:13<00:02, 27.49it/s]Loading weights:  86%|████████▌ | 367/426 [00:13<00:02, 26.62it/s]Loading weights:  87%|████████▋ | 371/426 [00:13<00:01, 27.57it/s]Loading weights:  88%|████████▊ | 376/426 [00:13<00:01, 30.61it/s]Loading weights:  89%|████████▉ | 381/426 [00:13<00:01, 33.36it/s]Loading weights:  90%|█████████ | 385/426 [00:13<00:01, 27.43it/s]Loading weights:  92%|█████████▏| 393/426 [00:13<00:00, 37.20it/s]Loading weights:  93%|█████████▎| 398/426 [00:14<00:00, 36.31it/s]Loading weights:  95%|█████████▍| 403/426 [00:14<00:00, 32.06it/s]Loading weights:  96%|█████████▋| 411/426 [00:14<00:00, 39.35it/s]Loading weights:  98%|█████████▊| 416/426 [00:14<00:00, 29.24it/s]Loading weights:  99%|█████████▊| 420/426 [00:14<00:00, 25.59it/s]Loading weights: 100%|██████████| 426/426 [00:15<00:00, 28.34it/s]
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+[IMB Server] Injected 105 AITER FusedRMSNorm operators.
+[IMB Server] Capturing CUDA Graph ONCE (max_seq_len=8192)...
+[IMB Server] CUDA Graph captured successfully. Capture Count = 1
+INFO:     127.0.0.1:43144 - "GET /health HTTP/1.1" 200 OK
+[IMB Server] Request: model='astral', msgs=1, stream=False
+INFO:     127.0.0.1:43148 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[IMB Server] Request: model='astral', msgs=3, stream=True
+INFO:     127.0.0.1:46422 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[IMB Server] Request: model='astral', msgs=2, stream=True
+INFO:     127.0.0.1:46422 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[IMB Server] Request: model='astral', msgs=4, stream=True
+INFO:     127.0.0.1:53850 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[IMB Server] Request: model='astral', msgs=6, stream=True
+INFO:     127.0.0.1:41010 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[IMB Server] Request: model='astral', msgs=8, stream=True
+INFO:     127.0.0.1:41010 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[IMB Server] Request: model='financial_planning', msgs=10, stream=True
+INFO:     127.0.0.1:60706 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[IMB Server] Request: model='base', msgs=3, stream=True
+INFO:     127.0.0.1:38200 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[IMB Server] Request: model='base', msgs=2, stream=True
+INFO:     127.0.0.1:38208 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[IMB Server] Request: model='base', msgs=3, stream=True
+INFO:     127.0.0.1:48206 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[IMB Server] Request: model='base', msgs=2, stream=True
+INFO:     127.0.0.1:48206 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[IMB Server] Request: model='base', msgs=4, stream=True
+INFO:     127.0.0.1:60660 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+/home/mihai/.local/share/uv/python/cpython-3.14.7-linux-x86_64-gnu/lib/python3.14/multiprocessing/resource_tracker.py:475: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown: {'/mp-38d2i2tk'}
+  warnings.warn(

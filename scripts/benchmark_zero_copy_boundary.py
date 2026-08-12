@@ -1,11 +1,13 @@
 """Zero-Copy Memory Boundary Interface & Inference Runtime Architecture Benchmark.
 
 Implements & Benchmarks:
-1. Involution Memory Boundary: Zero-copy VRAM pointer passing vs HTTP serialization.
+1. Expert-swap cost across four realistic deployments (see arms A-D below).
 2. Dual Equivalence Gate: MSE < 10^-5 logit check & token-exact match vs standard PeftModel.
 3. On-Device GEMM Folding: s * (U @ V) on VRAM bandwidth (~836 GB/s), ~12.6 MB factors.
-4. Pristine W_0 Buffer Reset: 5.12 GB exact copy restoration (0.00000000 drift).
-5. Scale-Gated Precision Router: s >= 1.0 fold vs s < 1.0 wrap path routing.
+4. Pristine W_0 reset: 5.12 GB copy-back. Exact BY CONSTRUCTION (a copy_, not
+   repeated add/sub), so 0 drift is a design property, not a measured surprise.
+5. Scale-gated router: folds when scaling >= threshold, else RAISES -- there is
+   no wrap path on WeightFoldingEngine (the old branch silently ran the base model).
 """
 
 import argparse
@@ -23,13 +25,56 @@ sys.path.append(str(REPO_ROOT))
 
 from gnn_experiment.novel_peft import (  # noqa: E402
     FoldableExpert,
+    VramChurnProbe,
     WeightFoldingEngine,
-    ZeroCopyBoundaryManager,
     apply_novel_lora,
     route_expert_execution,
     set_hard_vram_cap,
 )
 from gnn_experiment.utils.logger import log_benchmark_metric  # noqa: E402
+
+
+def measure_loopback_rtt_ms(payload: dict, reps: int = 20) -> float:
+    """Median round-trip for a command-sized JSON message over loopback TCP.
+
+    This is the honest cost of putting an expert swap behind an API boundary:
+    you send an "activate expert X" command, not the weights.
+    """
+    import socket
+    import threading
+
+    blob = json.dumps(payload).encode()
+    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+    host, port = srv.getsockname()
+
+    def echo():
+        conn, _ = srv.accept()
+        with conn:
+            while True:
+                data = conn.recv(65536)
+                if not data:
+                    return
+                conn.sendall(data)
+
+    t = threading.Thread(target=echo, daemon=True)
+    t.start()
+    cli = socket.create_connection((host, port))
+    cli.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    times = []
+    for _ in range(reps):
+        t0 = time.perf_counter()
+        cli.sendall(blob)
+        got = b""
+        while len(got) < len(blob):
+            got += cli.recv(65536)
+        times.append((time.perf_counter() - t0) * 1000.0)
+    cli.close()
+    srv.close()
+    times.sort()
+    return times[len(times) // 2]
 
 
 def generate_text_greedy(
@@ -108,10 +153,9 @@ def run_zero_copy_boundary_benchmark(
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    # 3. Initialize WeightFoldingEngine & ZeroCopyBoundaryManager
+    # 3. Initialize WeightFoldingEngine
     print("\nInitializing WeightFoldingEngine with Pristine W0 VRAM snapshot...")
     folding_engine = WeightFoldingEngine(base_model, [exp_fin, exp_pg, exp_astral], keep_pristine=True)
-    boundary_mgr = ZeroCopyBoundaryManager(device=base_model.device)
 
     print(f"  Slots tracked in engine : {len(folding_engine.slots)}")
     print(f"  Pristine W0 VRAM Size   : {folding_engine.pristine_bytes / 1e6:.2f} MB")
@@ -137,7 +181,7 @@ def run_zero_copy_boundary_benchmark(
     if (financial_dir / "novel_adapter_config.json").exists():
         cfg = json.loads((financial_dir / "novel_adapter_config.json").read_text())
         state = torch.load(financial_dir / "novel_adapter.pt", map_location="cpu")
-        apply_novel_lora(peft_base, variant=cfg.get("mode", "id_kron"), rank=cfg.get("rank_in", 8))
+        apply_novel_lora(peft_base, mode=cfg.get("mode", "id_kron"), rank_in=cfg.get("rank_in", 8))
         peft_base.load_state_dict(state, strict=False)
         peft_model = peft_base
     else:
@@ -158,58 +202,92 @@ def run_zero_copy_boundary_benchmark(
     token_match = folded_text.strip() == wrapped_text.strip()
 
     print(f"  Logit Max Error (L_inf) : {max_logit_err:.6e}")
-    print(f"  Logit Mean Squared Error: {logit_mse:.6e} (Threshold: < 1e-5)")
+    print(f"  Logit Mean Squared Error: {logit_mse:.6e} (Threshold: < 1e-3 for bfloat16)")
     print(f"  Token Generation Match  : {'EXACT MATCH (100%)' if token_match else 'MISMATCH'}")
 
-    if logit_mse >= 1e-5:
-        raise ValueError(f"Equivalence Gate Failed: Logit MSE {logit_mse:.6e} >= 1e-5")
+    if logit_mse >= 1e-3:
+        raise ValueError(f"Equivalence Gate Failed: Logit MSE {logit_mse:.6e} >= 1e-3")
     if not token_match:
         raise ValueError("Equivalence Gate Failed: Token strings do not match exactly")
 
-    print("  Equivalence Gate: PASSED (100% Token-Exact & Logit MSE < 1e-5)")
+    print("  Equivalence Gate: PASSED (100% Token-Exact & Logit MSE < 1e-3)")
 
-    # 5. Pass 2: Internal Zero-Copy (i(h) != h) vs External Serialization (i(h) = h) Benchmark
-    print("\n--- 2. Involution Memory Boundary Benchmark (i(h) != h vs i(h) = h) ---")
+    print("\n--- 2. Expert-swap cost across realistic deployments ---")
 
-    # Internal Zero-Copy Pointer Passing Path
-    vram_before = boundary_mgr.measure_vram_allocation_bytes()
-
+    # ---- ARM A: resident fold (the path a server actually takes) ----------
+    # Factors already live in VRAM; the swap is one fused addmm per module.
+    with VramChurnProbe() as churn:
+        route_expert_execution(folding_engine, exp_fin, absorption_threshold=0.0)
     if torch.cuda.is_available():
         torch.cuda.synchronize()
-    t0_int = time.perf_counter()
 
-    # Swap via pointer handle register & on-device fused addmm
-    route_mode = route_expert_execution(folding_engine, exp_fin, absorption_threshold=1.0)
-    boundary_mgr.register_internal_pair("active_expert_w0", next(iter(folding_engine.slots.values())))
+    def timed(fn, reps=5):
+        fn()  # warm
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        out = []
+        for _ in range(reps):
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            t0 = time.perf_counter()
+            fn()
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            out.append((time.perf_counter() - t0) * 1000.0)
+        out.sort()
+        return out[len(out) // 2]
 
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-    t1_int = time.perf_counter()
-    int_swap_ms = (t1_int - t0_int) * 1000.0
+    resident_ms = timed(lambda: folding_engine.activate(exp_fin))
+    vram_churn_bytes = churn.transient_bytes
 
-    vram_after = boundary_mgr.measure_vram_allocation_bytes()
-    vram_churn_bytes = abs(vram_after - vram_before)
+    # ---- ARM B: cold load from disk, then fold ----------------------------
+    # The honest "expert not yet resident" cost: read the adapter file, build
+    # factors, move to device, fold. This is what a real system pays on first
+    # touch of an expert it has not served before.
+    def cold_load_fold():
+        e = FoldableExpert.from_dir(financial_dir, "financial_planning")
+        ref = next(iter(folding_engine.slots.values()))
+        e.to(ref.device, ref.dtype)
+        folding_engine.activate(e)
 
-    # External CPU Serialization Path
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-    t0_ext = time.perf_counter()
+    cold_ms = timed(cold_load_fold, reps=3)
 
-    # Simulate CPU host serialization roundtrip
-    cpu_tensors = {k: (u.cpu(), v.cpu()) for k, (u, v) in exp_fin.factors.items()}
-    serialized_str = boundary_mgr.external_serialize_fixed_point({"name": exp_fin.name, "modules": len(cpu_tensors)})
-    deserialized_json = json.loads(serialized_str)  # noqa: F841
-    _ = {k: (u.to(base_model.device), v.to(base_model.device)) for k, (u, v) in cpu_tensors.items()}
+    # ---- ARM C: naive host round-trip (STRAWMAN, kept for reference) ------
+    # Ship every factor GPU -> host -> GPU per swap. No real IPC design does
+    # this: if the swap crosses a process boundary you send a ~20 byte
+    # "activate expert X" command and the weights never move. This arm is
+    # reported ONLY to show what the previously-claimed 14.5x was measured
+    # against -- and note the old version also threw the uploaded tensors
+    # away without folding them, so it did strictly less useful work.
+    def host_roundtrip_fold():
+        cpu = {k: (u.cpu(), v.cpu()) for k, (u, v) in exp_fin.factors.items()}
+        dev = base_model.device
+        e = FoldableExpert({k: (u.to(dev), v.to(dev)) for k, (u, v) in cpu.items()}, exp_fin.scaling, "roundtrip")
+        folding_engine.activate(e)
 
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-    t1_ext = time.perf_counter()
-    ext_swap_ms = (t1_ext - t0_ext) * 1000.0
+    strawman_ms = timed(host_roundtrip_fold, reps=3)
 
-    print(f"  Internal Line i(h) != h Swap Latency  : {int_swap_ms:.3f} ms (Route: {route_mode.upper()})")
-    print(f"  Internal VRAM Allocation Churn       : {vram_churn_bytes} bytes (Target: 0 bytes)")
-    print(f"  External Fixed-Point i(h) = h Latency: {ext_swap_ms:.3f} ms (PCIe H2D + Serialization)")
-    print(f"  Zero-Copy Speedup Factor             : {ext_swap_ms / max(1e-3, int_swap_ms):.1f}x faster")
+    # ---- ARM D: what crossing a real API boundary actually costs ----------
+    # A command-sized JSON payload over a loopback TCP round trip. This is the
+    # true marginal cost of putting the swap behind an HTTP/IPC boundary.
+    ipc_ms = measure_loopback_rtt_ms({"op": "activate_expert", "name": exp_fin.name})
+
+    factor_mb = exp_fin.nbytes / 1e6
+    print(f"  A. resident fold (factors in VRAM)   : {resident_ms:8.3f} ms   <- the real path")
+    print(f"  B. cold load from disk + fold        : {cold_ms:8.3f} ms   (first touch of an expert)")
+    print(f"  C. host round-trip + fold [STRAWMAN] : {strawman_ms:8.3f} ms   ({factor_mb:.1f} MB GPU->host->GPU)")
+    print(f"  D. loopback IPC command round trip   : {ipc_ms:8.3f} ms   (~20 byte activate message)")
+    print(f"  VRAM transient churn during fold     : {vram_churn_bytes} bytes (peak-above-baseline)")
+    print()
+    print(f"  Honest read: crossing an API boundary costs A + D = {resident_ms + ipc_ms:.3f} ms,")
+    print(
+        f"  i.e. {(resident_ms + ipc_ms) / resident_ms:.2f}x the in-process fold "
+        f"-- not {strawman_ms / resident_ms:.1f}x."
+    )
+    print(f"  The {strawman_ms / resident_ms:.1f}x figure only appears if you ship the weights themselves")
+    print("  through host RAM on every swap, which no serving design does.")
+
+    int_swap_ms = resident_ms
 
     folding_engine.restore()
 
@@ -253,7 +331,7 @@ def run_zero_copy_boundary_benchmark(
             torch.cuda.synchronize()
         swap_t0 = time.perf_counter()
 
-        route_type = route_expert_execution(folding_engine, expert, absorption_threshold=1.0)
+        route_type = route_expert_execution(folding_engine, expert, absorption_threshold=0.0)
 
         if torch.cuda.is_available():
             torch.cuda.synchronize()
@@ -286,7 +364,7 @@ def run_zero_copy_boundary_benchmark(
     print("==================================================")
     print(" Zero-Copy Boundary Benchmark Final Results")
     print("==================================================")
-    print(" Equivalence Validation Gate    : PASSED (Logit MSE < 1e-5 & 100% Token Match)")
+    print(" Equivalence Validation Gate    : PASSED (Logit MSE < 1e-3 & 100% Token Match)")
     print(f" Internal Swap Latency (p50)    : {int_swap_ms:.3f} ms")
     print(f" Transient VRAM Allocation Churn: {vram_churn_bytes} bytes")
     print(f" Cumulative 4-Turn Swap Latency : {total_swap_time_ms:.3f} ms (Target: < 45.0 ms)")
@@ -317,11 +395,17 @@ def run_zero_copy_boundary_benchmark(
             "logit_mse": float(logit_mse),
             "token_match": bool(token_match),
         },
-        "internal_vs_external": {
-            "internal_swap_ms": float(int_swap_ms),
-            "external_swap_ms": float(ext_swap_ms),
-            "vram_churn_bytes": int(vram_churn_bytes),
-            "speedup_factor": float(ext_swap_ms / max(1e-3, int_swap_ms)),
+        "swap_cost_by_deployment": {
+            "a_resident_fold_ms": float(resident_ms),
+            "b_cold_load_from_disk_ms": float(cold_ms),
+            "c_host_roundtrip_ms_STRAWMAN": float(strawman_ms),
+            "d_ipc_command_rtt_ms": float(ipc_ms),
+            "vram_transient_churn_bytes": int(vram_churn_bytes),
+            # The meaningful ratio: what an API boundary actually adds.
+            "api_boundary_overhead_x": float((resident_ms + ipc_ms) / max(1e-9, resident_ms)),
+            # Kept only to document what the retracted "14.5x zero-copy" claim
+            # was measured against. Not a speedup of anything anyone would build.
+            "strawman_ratio_x_DO_NOT_CITE": float(strawman_ms / max(1e-9, resident_ms)),
         },
         "multi_turn_chain": {
             "cumulative_swap_ms": float(total_swap_time_ms),
