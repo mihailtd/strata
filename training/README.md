@@ -80,18 +80,8 @@ non-interactively).
 
 **Stop Studio**: Ctrl+C in its terminal, or `unsloth studio stop`.
 
-## MLflow (used by the root project's `scripts/run_datagen.py`)
+## Benchmark & Metric Logging
 
-MLflow itself lives in the root project (`../pyproject.toml` dev dependency), tracking to
-`../mlruns.db` (sqlite). To browse runs:
+All benchmark, datagen, and evaluation runs log structured metrics directly to zero-overhead JSON Lines (`.jsonl`) files in `results/` (e.g., `results/micro_probe_runs.jsonl`, `results/eval_runs.jsonl`).
 
-```bash
-cd ..
-uv run mlflow ui --backend-store-uri sqlite:////home/mihai/gnn-experiment/mlruns.db --host 127.0.0.1 --port 5000
-```
-
-Open **<http://127.0.0.1:5000>**.
-
-⚠️ **Do not delete `mlruns.db`** to "reset" — the UI holds an open file handle; deleting
-and recreating it orphans that handle and new runs silently stop showing up. If you need a
-clean slate, stop the UI first, then delete, then restart the UI.
+Historical MLflow runs have been exported to `results/mlflow_export/` (`runs_summary.jsonl`, `metrics_full.jsonl`, `experiments.json`), and the legacy `mlruns.db` database is preserved on disk as a fallback archive.

@@ -24,10 +24,11 @@ import json
 import sys
 from pathlib import Path
 
-import mlflow
 import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+from gnn_experiment.utils.logger import log_benchmark_metric
 
 # Piped stdout (e.g. through `tail`, or a background-task capture) is fully
 # block-buffered by default, so progress prints can sit invisible for minutes
@@ -161,10 +162,6 @@ def evaluate_novel_variants(
 
     questions = _load_questions(questions_file)
 
-    mlflow_db = REPO_ROOT / "mlruns.db"
-    mlflow.set_tracking_uri(f"sqlite:///{mlflow_db}")
-    mlflow.set_experiment(experiment_name)
-
     if not Path(base_cache_path).exists():
         raise FileNotFoundError(
             f"No base-model eval cache at {base_cache_path}. Run this script once with --base-only first "
@@ -245,48 +242,44 @@ def evaluate_novel_variants(
         ft_modern_total = sum(r["modern_hits"] for r in ft_results)
         ft_legacy_total = sum(r["legacy_hits"] for r in ft_results)
 
-        with mlflow.start_run(run_name=f"eval_novel_{variant}_{model_name.replace('/', '_')}"):
-            mlflow.set_tags({"variant": variant, "novel_architecture": "true"})
-            mlflow.log_params(
-                {
-                    "exact_model_name": model_name,
-                    "adapter_path": str(adapter_dir),
-                    "num_questions": len(questions),
-                    "variant": variant,
-                }
-            )
-            mlflow.log_metrics(
-                {
-                    "base_modern_adherence_pct": base_avg_adherence,
-                    "finetuned_modern_adherence_pct": ft_avg_adherence,
-                    "adherence_gain_pct": adherence_gain,
-                    "base_modern_hits_total": base_modern_total,
-                    "base_legacy_hits_total": base_legacy_total,
-                    "finetuned_modern_hits_total": ft_modern_total,
-                    "finetuned_legacy_hits_total": ft_legacy_total,
-                }
-            )
-            comparison_table = [
-                {
-                    "id": b["id"],
-                    "prompt": b["prompt"],
-                    "base_response": b["response"],
-                    "base_adherence_pct": b["adherence_pct"],
-                    "finetuned_response": f["response"],
-                    "finetuned_adherence_pct": f["adherence_pct"],
-                }
-                for b, f in zip(base_results, ft_results, strict=True)
-            ]
-            summary = {
+        comparison_table = [
+            {
+                "id": b["id"],
+                "prompt": b["prompt"],
+                "base_response": b["response"],
+                "base_adherence_pct": b["adherence_pct"],
+                "finetuned_response": f["response"],
+                "finetuned_adherence_pct": f["adherence_pct"],
+            }
+            for b, f in zip(base_results, ft_results, strict=True)
+        ]
+        summary = {
+            "variant": variant,
+            "exact_model_name": model_name,
+            "adapter_path": str(adapter_dir),
+            "base_avg_adherence_pct": base_avg_adherence,
+            "finetuned_avg_adherence_pct": ft_avg_adherence,
+            "adherence_gain_pct": adherence_gain,
+            "comparison": comparison_table,
+        }
+        log_benchmark_metric(
+            {
+                "experiment": experiment_name,
+                "run_name": f"eval_novel_{variant}_{model_name.replace('/', '_')}",
                 "variant": variant,
                 "exact_model_name": model_name,
                 "adapter_path": str(adapter_dir),
-                "base_avg_adherence_pct": base_avg_adherence,
-                "finetuned_avg_adherence_pct": ft_avg_adherence,
+                "num_questions": len(questions),
+                "base_modern_adherence_pct": base_avg_adherence,
+                "finetuned_modern_adherence_pct": ft_avg_adherence,
                 "adherence_gain_pct": adherence_gain,
-                "comparison": comparison_table,
-            }
-            mlflow.log_dict(summary, "evaluation_comparison.json")
+                "base_modern_hits_total": base_modern_total,
+                "base_legacy_hits_total": base_legacy_total,
+                "finetuned_modern_hits_total": ft_modern_total,
+                "finetuned_legacy_hits_total": ft_legacy_total,
+            },
+            filepath="results/eval_runs.jsonl",
+        )
 
         out_summary_dir_path.mkdir(parents=True, exist_ok=True)
         variant_tag = Path(variant).name

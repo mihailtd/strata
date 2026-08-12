@@ -5,7 +5,7 @@ Executes:
 2. Qwen3.5-2B QLoRA model loading & PEFT adapter setup.
 3. PyTorch forward hook registration & layer velocity (\\Delta h_l) diagnostic run.
 4. 500-step training loop with gradient stability measurement.
-5. MLflow tracking via Python `import mlflow` SDK.
+5. Zero-overhead metric logging to results/micro_probe_runs.jsonl.
 """
 
 import argparse
@@ -13,7 +13,6 @@ import json
 import time
 from pathlib import Path
 
-import mlflow
 import torch
 import yaml
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
@@ -31,6 +30,7 @@ from gnn_experiment.micro_probe.forward_hooks import (
     MicroProbeForwardHooks,
     compute_gradient_stability,
 )
+from gnn_experiment.utils.logger import log_benchmark_metric
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -57,11 +57,7 @@ def run_benchmark():
     max_length = cfg.get("training", {}).get("max_length", 512)
     epsilon = cfg.get("hooks", {}).get("velocity_epsilon", 0.05)
 
-    # 1. Setup MLflow Tracking
-    mlflow_db = REPO_ROOT / "mlruns.db"
-    mlflow.set_tracking_uri(f"sqlite:///{mlflow_db}")
-    exp_name = cfg.get("mlflow", {}).get("experiment_name", "micro_probe_benchmark")
-    mlflow.set_experiment(exp_name)
+    exp_name = cfg.get("logging", {}).get("experiment_name", "micro_probe_benchmark")
 
     print("==================================================")
     print(f" Running Goal 1 Micro-Probe Benchmark ({model_name})")
@@ -139,72 +135,67 @@ def run_benchmark():
     print(f"Starting {max_steps}-step micro-probe training pass...")
     start_time = time.perf_counter()
 
-    with mlflow.start_run(run_name=f"micro_probe_{model_name.replace('/', '_')}_{max_steps}s"):
-        mlflow.log_params(
-            {
-                "model_name": model_name,
-                "max_steps": max_steps,
-                "batch_size": batch_size,
-                "learning_rate": learning_rate,
-                "trainable_params": trainable_params,
-                "total_params": total_params,
-                "trainable_pct": 100 * trainable_params / total_params,
-                "velocity_epsilon": epsilon,
-                "dataset_size": len(dataset),
-            }
+    train_result = trainer.train()
+    elapsed_s = time.perf_counter() - start_time
+
+    # Compute gradient stability & forward hook metrics
+    grad_stats = compute_gradient_stability(model)
+    hook_summary = hook_mgr.get_summary()
+    hook_mgr.remove_hooks()
+
+    peak_vram_gb = torch.cuda.max_memory_allocated() / (1024**3) if torch.cuda.is_available() else 0.0
+    total_tokens = max_steps * batch_size * max_length
+    tok_per_sec = total_tokens / max(1e-5, elapsed_s)
+    steps_per_sec = max_steps / max(1e-5, elapsed_s)
+
+    metrics = {
+        "experiment": exp_name,
+        "run_name": f"micro_probe_{model_name.replace('/', '_')}_{max_steps}s",
+        "model_name": model_name,
+        "max_steps": max_steps,
+        "batch_size": batch_size,
+        "learning_rate": learning_rate,
+        "trainable_params": trainable_params,
+        "total_params": total_params,
+        "trainable_pct": 100 * trainable_params / total_params,
+        "velocity_epsilon": epsilon,
+        "dataset_size": len(dataset),
+        "wall_time_s": elapsed_s,
+        "steps_per_sec": steps_per_sec,
+        "throughput_tok_sec": tok_per_sec,
+        "peak_vram_gb": peak_vram_gb,
+        "final_loss": train_result.training_loss,
+        "overall_avg_velocity": hook_summary.get("overall_avg_velocity", 0.0),
+        "quiet_layer_ratio": hook_summary.get("quiet_layer_ratio", 0.0),
+        "total_grad_norm": grad_stats.get("total_grad_norm", 0.0),
+        "max_grad_norm": grad_stats.get("max_grad_norm", 0.0),
+    }
+
+    log_benchmark_metric(metrics, filepath="results/micro_probe_runs.jsonl")
+
+    # Save summary artifact
+    out_dir = REPO_ROOT / "results" / "micro_probe"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    summary_path = out_dir / "micro_probe_results.json"
+    with open(summary_path, "w") as f:
+        json.dump(
+            {**metrics, "grad_stats": grad_stats, "hook_summary": hook_summary},
+            f,
+            indent=2,
         )
 
-        train_result = trainer.train()
-        elapsed_s = time.perf_counter() - start_time
-
-        # Compute gradient stability & forward hook metrics
-        grad_stats = compute_gradient_stability(model)
-        hook_summary = hook_mgr.get_summary()
-        hook_mgr.remove_hooks()
-
-        peak_vram_gb = torch.cuda.max_memory_allocated() / (1024**3) if torch.cuda.is_available() else 0.0
-        total_tokens = max_steps * batch_size * max_length
-        tok_per_sec = total_tokens / max(1e-5, elapsed_s)
-        steps_per_sec = max_steps / max(1e-5, elapsed_s)
-
-        metrics = {
-            "wall_time_s": elapsed_s,
-            "steps_per_sec": steps_per_sec,
-            "throughput_tok_sec": tok_per_sec,
-            "peak_vram_gb": peak_vram_gb,
-            "final_loss": train_result.training_loss,
-            "overall_avg_velocity": hook_summary.get("overall_avg_velocity", 0.0),
-            "quiet_layer_ratio": hook_summary.get("quiet_layer_ratio", 0.0),
-            "total_grad_norm": grad_stats.get("total_grad_norm", 0.0),
-            "max_grad_norm": grad_stats.get("max_grad_norm", 0.0),
-        }
-        mlflow.log_metrics(metrics)
-
-        # Save summary artifact
-        out_dir = REPO_ROOT / "results" / "micro_probe"
-        out_dir.mkdir(parents=True, exist_ok=True)
-        summary_path = out_dir / "micro_probe_results.json"
-        with open(summary_path, "w") as f:
-            json.dump(
-                {**metrics, "grad_stats": grad_stats, "hook_summary": hook_summary},
-                f,
-                indent=2,
-            )
-
-        mlflow.log_artifact(str(summary_path))
-
-        print("\n==================================================")
-        print(" Micro-Probe Results Summary")
-        print("==================================================")
-        print(f" Model: {model_name}")
-        print(f" Wall Time: {elapsed_s:.2f} s ({steps_per_sec:.2f} steps/s)")
-        print(f" Throughput: {tok_per_sec:.2f} tokens/s")
-        print(f" Peak VRAM: {peak_vram_gb:.2f} GB")
-        print(f" Training Loss: {train_result.training_loss:.4f}")
-        print(f" Avg Layer Velocity (\\Delta h_l): {hook_summary.get('overall_avg_velocity', 0.0):.4f}")
-        print(f" Quiet Layer Ratio (<{epsilon}): {hook_summary.get('quiet_layer_ratio', 0.0) * 100:.1f}%")
-        print(f" Max Grad Norm: {grad_stats.get('max_grad_norm', 0.0):.4f}")
-        print(" MLflow Run Logged Successfully!")
+    print("\n==================================================")
+    print(" Micro-Probe Results Summary")
+    print("==================================================")
+    print(f" Model: {model_name}")
+    print(f" Wall Time: {elapsed_s:.2f} s ({steps_per_sec:.2f} steps/s)")
+    print(f" Throughput: {tok_per_sec:.2f} tokens/s")
+    print(f" Peak VRAM: {peak_vram_gb:.2f} GB")
+    print(f" Training Loss: {train_result.training_loss:.4f}")
+    print(f" Avg Layer Velocity (\\Delta h_l): {hook_summary.get('overall_avg_velocity', 0.0):.4f}")
+    print(f" Quiet Layer Ratio (<{epsilon}): {hook_summary.get('quiet_layer_ratio', 0.0) * 100:.1f}%")
+    print(f" Max Grad Norm: {grad_stats.get('max_grad_norm', 0.0):.4f}")
+    print(" Results Logged Successfully to 'results/micro_probe_runs.jsonl'!")
 
     return metrics
 

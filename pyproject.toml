@@ -63,7 +63,6 @@ flash-attn = { index = "vllm-rdna" }
 
 [dependency-groups]
 dev = [
-    "mlflow>=3.15.1",
     "ruff>=0.16.2",
     "ty>=0.0.69",
 ]

@@ -31,7 +31,6 @@ import argparse
 import time
 from pathlib import Path
 
-import mlflow
 import torch
 from peft import LoKrConfig, LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
@@ -40,6 +39,7 @@ from trl import SFTConfig, SFTTrainer
 
 from gnn_experiment.micro_probe.dataset import load_astral_micro_dataset, load_micro_dataset
 from gnn_experiment.peft_compat import patch_lokr_4bit_support
+from gnn_experiment.utils.logger import log_benchmark_metric
 
 # peft's LoKr cannot compute delta shapes against a 4-bit quantized base layer
 # (it reads the packed uint8 `.weight`); every adapter here trains on one. See
@@ -124,10 +124,6 @@ def export_adapter(
 ):
     out_path = REPO_ROOT / out_dir
     out_path.mkdir(parents=True, exist_ok=True)
-
-    mlflow_db = REPO_ROOT / "mlruns.db"
-    mlflow.set_tracking_uri(f"sqlite:///{mlflow_db}")
-    mlflow.set_experiment(experiment_name)
 
     print(f"Loading exact target model: {model_name} for adapter export...")
     print(f"  Attention implementation : {_ATTN_IMPL}")
@@ -217,39 +213,35 @@ def export_adapter(
     )
     adapter_mb = weight_bytes / 1e6
 
-    with mlflow.start_run(run_name=f"finetune_{peft_variant}_{model_name.replace('/', '_')}_{train_steps}steps"):
-        mlflow.set_tags({"peft_variant": peft_variant, "factorization_study": "true"})
-        mlflow.log_params(
-            {
-                "model_name": model_name,
-                "peft_variant": peft_variant,
-                "train_steps": train_steps,
-                "batch_size": batch_size,
-                "grad_accum_steps": grad_accum_steps,
-                "effective_batch": batch_size * grad_accum_steps,
-                "learning_rate": 2e-4,
-                # Log the ACTUAL values, not the defaults -- these are the knob
-                # under test when sweeping effective update magnitude (alpha/r).
-                "r": r,
-                "alpha": alpha,
-                "scaling": alpha / r,
-                "lora_dropout": 0.0,
-                "attn_implementation": _ATTN_IMPL,
-                "dataset_size": len(dataset),
-                "assistant_only_loss": True,
-            }
-        )
-        mlflow.log_metrics(
-            {
-                "wall_time_s": wall_time_s,
-                "peak_vram_gb": peak_vram_gb,
-                "final_loss": train_result.training_loss,
-                "steps_per_sec": train_steps / max(0.001, wall_time_s),
-                "trainable_params": trainable,
-                "trainable_pct": 100 * trainable / total,
-                "adapter_weight_mb": adapter_mb,
-            }
-        )
+    log_benchmark_metric(
+        {
+            "experiment": experiment_name,
+            "run_name": f"finetune_{peft_variant}_{model_name.replace('/', '_')}_{train_steps}steps",
+            "model_name": model_name,
+            "peft_variant": peft_variant,
+            "train_steps": train_steps,
+            "batch_size": batch_size,
+            "grad_accum_steps": grad_accum_steps,
+            "effective_batch": batch_size * grad_accum_steps,
+            "learning_rate": 2e-4,
+            "r": r,
+            "alpha": alpha,
+            "scaling": alpha / r,
+            "lora_dropout": 0.0,
+            "attn_implementation": _ATTN_IMPL,
+            "dataset_size": len(dataset),
+            "assistant_only_loss": True,
+            "wall_time_s": wall_time_s,
+            "peak_vram_gb": peak_vram_gb,
+            "final_loss": train_result.training_loss,
+            "steps_per_sec": train_steps / max(0.001, wall_time_s),
+            "trainable_params": trainable,
+            "total_params": total,
+            "trainable_pct": 100 * trainable / total,
+            "adapter_size_mb": adapter_mb,
+        },
+        filepath="results/export_adapter_runs.jsonl",
+    )
 
     loss_val = train_result.training_loss
     print(f"Fine-tuning completed in {wall_time_s:.2f}s (Peak VRAM: {peak_vram_gb:.2f} GB, Final Loss: {loss_val:.4f})")

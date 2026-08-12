@@ -11,7 +11,6 @@ dependencies = [
     "unsloth[amd,studio]",
     "gguf>=0.19.0",
     "av>=18.0.0",
-    "mlflow>=3.15.1",
 ]
 
 [build-system]

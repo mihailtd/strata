@@ -51,7 +51,6 @@ import time
 from pathlib import Path
 from typing import NamedTuple
 
-import mlflow
 import torch
 from peft import prepare_model_for_kbit_training
 from transformers import (
@@ -166,10 +165,6 @@ def finetune_novel(
     out_dir = out_dir or str(REPO_ROOT / "results" / "adapters" / f"astral_qwen3.5_micro_{variant}")
     out_path = Path(out_dir)
     out_path.mkdir(parents=True, exist_ok=True)
-
-    mlflow_db = REPO_ROOT / "mlruns.db"
-    mlflow.set_tracking_uri(f"sqlite:///{mlflow_db}")
-    mlflow.set_experiment(experiment_name)
 
     print(f"--- [{variant}] Loading {model_name} in 4-bit for novel-adapter fine-tuning ---")
     print(f"  Attention implementation : {_ATTN_IMPL}")
@@ -388,59 +383,49 @@ def finetune_novel(
         # between the velocity arm and the random control.
         quiet_churn_avg = sum(gate.quiet_churn_history) / len(gate.quiet_churn_history)
 
-    with mlflow.start_run(run_name=f"novel_{variant}_{model_name.replace('/', '_')}_{train_steps}steps"):
-        mlflow.set_tags(
-            {
-                "variant": variant,
-                "novel_architecture": "true",
-                "mode": cfg.mode,
-                "gated": str(cfg.gated),
-                "selection": cfg.selection if cfg.gated else "n/a",
-            }
-        )
-        mlflow.log_params(
-            {
-                "model_name": model_name,
-                "train_steps": train_steps,
-                "batch_size": batch_size,
-                "grad_accum_steps": grad_accum_steps,
-                "effective_batch": batch_size * grad_accum_steps,
-                "learning_rate": learning_rate,
-                "max_seq_length": max_seq_length,
-                "dataset_size": len(dataset),
-                "variant": variant,
-                "mode": cfg.mode,
-                "selection": cfg.selection if cfg.gated else "n/a",
-                "rank": rank,
-                "rank_in": rank_in,
-                "rank_out": rank_out,
-                "alpha": alpha,
-                "dropout": dropout,
-                "attn_implementation": _ATTN_IMPL,
-                "wrapped_linear_count": summary["wrapped_count"],
-                "velocity_quiet_percentile": velocity_quiet_percentile if gate is not None else -1,
-                "velocity_ema_decay": velocity_ema_decay if gate is not None else -1,
-                "velocity_warmup_steps": velocity_warmup_steps if gate is not None else -1,
-                "velocity_max_quiet_fraction": velocity_max_quiet_fraction if gate is not None else -1,
-            }
-        )
-        metrics = {
-            "wall_time_s": wall_time_s,
-            "peak_vram_gb": peak_vram_gb,
-            "final_loss": train_result.training_loss,
-            "steps_per_sec": train_steps / max(0.001, wall_time_s),
-            "trainable_params": summary["trainable_params"],
-            "total_params": summary["total_params"],
-            "trainable_pct": 100 * summary["trainable_params"] / summary["total_params"],
-            "optimizer_state_mb": opt_state_mb,
-        }
-        if quiet_fraction_avg is not None:
-            assert quiet_fraction_final is not None  # always set together, see above
-            metrics["quiet_layer_fraction_avg"] = quiet_fraction_avg
-            metrics["quiet_layer_fraction_final"] = quiet_fraction_final
-        if quiet_churn_avg is not None:
-            metrics["quiet_layer_churn_avg"] = quiet_churn_avg
-        mlflow.log_metrics(metrics)
+    metrics = {
+        "experiment": experiment_name,
+        "run_name": f"novel_{variant}_{model_name.replace('/', '_')}_{train_steps}steps",
+        "variant": variant,
+        "mode": cfg.mode,
+        "gated": cfg.gated,
+        "selection": cfg.selection if cfg.gated else "n/a",
+        "model_name": model_name,
+        "train_steps": train_steps,
+        "batch_size": batch_size,
+        "grad_accum_steps": grad_accum_steps,
+        "effective_batch": batch_size * grad_accum_steps,
+        "learning_rate": learning_rate,
+        "max_seq_length": max_seq_length,
+        "dataset_size": len(dataset),
+        "rank": rank,
+        "rank_in": rank_in,
+        "rank_out": rank_out,
+        "alpha": alpha,
+        "dropout": dropout,
+        "attn_implementation": _ATTN_IMPL,
+        "wrapped_linear_count": summary["wrapped_count"],
+        "velocity_quiet_percentile": velocity_quiet_percentile if gate is not None else -1,
+        "velocity_ema_decay": velocity_ema_decay if gate is not None else -1,
+        "velocity_warmup_steps": velocity_warmup_steps if gate is not None else -1,
+        "velocity_max_quiet_fraction": velocity_max_quiet_fraction if gate is not None else -1,
+        "wall_time_s": wall_time_s,
+        "peak_vram_gb": peak_vram_gb,
+        "final_loss": train_result.training_loss,
+        "steps_per_sec": train_steps / max(0.001, wall_time_s),
+        "trainable_params": summary["trainable_params"],
+        "total_params": summary["total_params"],
+        "trainable_pct": 100 * summary["trainable_params"] / summary["total_params"],
+        "optimizer_state_mb": opt_state_mb,
+    }
+    if quiet_fraction_avg is not None:
+        assert quiet_fraction_final is not None  # always set together, see above
+        metrics["quiet_layer_fraction_avg"] = quiet_fraction_avg
+        metrics["quiet_layer_fraction_final"] = quiet_fraction_final
+    if quiet_churn_avg is not None:
+        metrics["quiet_layer_churn_avg"] = quiet_churn_avg
+
+    log_benchmark_metric(metrics, filepath="results/novel_adapter_runs.jsonl")
 
     print(f"\n=== [{variant}] Novel Adapter Fine-Tuning Results ===")
     print(f"Wall time: {wall_time_s:.2f} s ({metrics['steps_per_sec']:.3f} steps/s)")

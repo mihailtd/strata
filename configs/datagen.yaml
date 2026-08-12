@@ -55,8 +55,6 @@ chunk_size_chars: 2000
 min_chunk_chars: 100
 questions_per_chunk: 1
 
-mlflow:
+logging:
   experiment_name: astral-expert-datagen
-  # MLflow 3.x deprecated the plain filesystem store (mlruns/) in favor of a
-  # DB backend; sqlite keeps this fully local with no server needed.
-  tracking_uri: sqlite:///mlruns.db
+  output_file: results/datagen_runs.jsonl

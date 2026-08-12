@@ -1,9 +1,4 @@
-"""Thin OpenAI-compatible client for the local llama-server instance.
-
-Every call is wrapped in an MLflow trace span (visible in the MLflow UI's
-Traces tab) so each individual LLM call — prompt, response, latency, token
-usage — is inspectable, not just the per-run aggregate metrics.
-"""
+"""Thin OpenAI-compatible client for the local llama-server instance."""
 
 import asyncio
 import json
@@ -14,7 +9,6 @@ import subprocess
 import time
 
 import httpx
-import mlflow
 
 from gnn_experiment.datagen.schema import ChatResult
 
@@ -120,53 +114,36 @@ class LocalLLMClient:
         max_tokens: int = 1024,
         span_name: str = "llm_chat",
     ) -> ChatResult:
-        with mlflow.start_span(name=span_name, span_type="LLM") as span:
-            span.set_inputs(
-                {"messages": messages, "model": self.model, "temperature": temperature, "max_tokens": max_tokens}
-            )
+        start = time.perf_counter()
+        ttft: float | None = None
+        text_parts: list[str] = []
+        usage: dict = {}
+        with self._client.stream(
+            "POST", "/v1/chat/completions", json=self._request_json(messages, temperature, max_tokens)
+        ) as response:
+            response.raise_for_status()
+            for line in response.iter_lines():
+                chunk = _sse_payload(line)
+                if chunk is None:
+                    continue
+                choices = chunk.get("choices") or []
+                if choices:
+                    piece = choices[0].get("delta", {}).get("content")
+                    if piece:
+                        if ttft is None:
+                            ttft = time.perf_counter() - start
+                        text_parts.append(piece)
+                if chunk.get("usage"):
+                    usage = chunk["usage"]
+        elapsed = time.perf_counter() - start
 
-            start = time.perf_counter()
-            ttft: float | None = None
-            text_parts: list[str] = []
-            usage: dict = {}
-            with self._client.stream(
-                "POST", "/v1/chat/completions", json=self._request_json(messages, temperature, max_tokens)
-            ) as response:
-                response.raise_for_status()
-                for line in response.iter_lines():
-                    chunk = _sse_payload(line)
-                    if chunk is None:
-                        continue
-                    choices = chunk.get("choices") or []
-                    if choices:
-                        piece = choices[0].get("delta", {}).get("content")
-                        if piece:
-                            if ttft is None:
-                                ttft = time.perf_counter() - start
-                            text_parts.append(piece)
-                    if chunk.get("usage"):
-                        usage = chunk["usage"]
-            elapsed = time.perf_counter() - start
-
-            result = ChatResult(
-                text="".join(text_parts),
-                prompt_tokens=usage.get("prompt_tokens", 0),
-                completion_tokens=usage.get("completion_tokens", 0),
-                latency_s=elapsed,
-                ttft_s=ttft if ttft is not None else elapsed,
-            )
-
-            span.set_outputs({"text": result.text})
-            span.set_attributes(
-                {
-                    "latency_s": elapsed,
-                    "ttft_s": result.ttft_s,
-                    "prompt_tokens": result.prompt_tokens,
-                    "completion_tokens": result.completion_tokens,
-                    "model": self.model,
-                }
-            )
-            return result
+        return ChatResult(
+            text="".join(text_parts),
+            prompt_tokens=usage.get("prompt_tokens", 0),
+            completion_tokens=usage.get("completion_tokens", 0),
+            latency_s=elapsed,
+            ttft_s=ttft if ttft is not None else elapsed,
+        )
 
     async def achat(
         self,
@@ -194,53 +171,36 @@ class LocalLLMClient:
         to line up mid-run, not just at startup.
         """
         await asyncio.sleep(random.uniform(0, 0.15))
-        with mlflow.start_span(name=span_name, span_type="LLM") as span:
-            span.set_inputs(
-                {"messages": messages, "model": self.model, "temperature": temperature, "max_tokens": max_tokens}
-            )
+        start = time.perf_counter()
+        ttft: float | None = None
+        text_parts: list[str] = []
+        usage: dict = {}
+        async with self._aclient.stream(
+            "POST", "/v1/chat/completions", json=self._request_json(messages, temperature, max_tokens)
+        ) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                chunk = _sse_payload(line)
+                if chunk is None:
+                    continue
+                choices = chunk.get("choices") or []
+                if choices:
+                    piece = choices[0].get("delta", {}).get("content")
+                    if piece:
+                        if ttft is None:
+                            ttft = time.perf_counter() - start
+                        text_parts.append(piece)
+                if chunk.get("usage"):
+                    usage = chunk["usage"]
+        elapsed = time.perf_counter() - start
 
-            start = time.perf_counter()
-            ttft: float | None = None
-            text_parts: list[str] = []
-            usage: dict = {}
-            async with self._aclient.stream(
-                "POST", "/v1/chat/completions", json=self._request_json(messages, temperature, max_tokens)
-            ) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    chunk = _sse_payload(line)
-                    if chunk is None:
-                        continue
-                    choices = chunk.get("choices") or []
-                    if choices:
-                        piece = choices[0].get("delta", {}).get("content")
-                        if piece:
-                            if ttft is None:
-                                ttft = time.perf_counter() - start
-                            text_parts.append(piece)
-                    if chunk.get("usage"):
-                        usage = chunk["usage"]
-            elapsed = time.perf_counter() - start
-
-            result = ChatResult(
-                text="".join(text_parts),
-                prompt_tokens=usage.get("prompt_tokens", 0),
-                completion_tokens=usage.get("completion_tokens", 0),
-                latency_s=elapsed,
-                ttft_s=ttft if ttft is not None else elapsed,
-            )
-
-            span.set_outputs({"text": result.text})
-            span.set_attributes(
-                {
-                    "latency_s": elapsed,
-                    "ttft_s": result.ttft_s,
-                    "prompt_tokens": result.prompt_tokens,
-                    "completion_tokens": result.completion_tokens,
-                    "model": self.model,
-                }
-            )
-            return result
+        return ChatResult(
+            text="".join(text_parts),
+            prompt_tokens=usage.get("prompt_tokens", 0),
+            completion_tokens=usage.get("completion_tokens", 0),
+            latency_s=elapsed,
+            ttft_s=ttft if ttft is not None else elapsed,
+        )
 
     def ping(self) -> bool:
         try:

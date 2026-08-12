@@ -25,9 +25,10 @@ import sys
 import time
 from pathlib import Path
 
-import mlflow
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, LogitsProcessorList
+
+from gnn_experiment.utils.logger import log_benchmark_metric
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(REPO_ROOT))
@@ -129,9 +130,6 @@ def run_benchmark(
     if max_questions:
         questions = questions[:max_questions]
 
-    mlflow.set_tracking_uri(f"sqlite:///{REPO_ROOT / 'mlruns.db'}")
-    mlflow.set_experiment(experiment_name)
-
     print(f"Loading {model_name} + velocity adapter from {adapter_dir} (single load)")
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
     assert tokenizer is not None
@@ -205,34 +203,27 @@ def run_benchmark(
 
     speedup = dynamic_agg["warm_tok_per_sec"] / max(1e-6, baseline_agg["warm_tok_per_sec"])
 
-    with mlflow.start_run(run_name=f"inference_velocity_{model_name.replace('/', '_')}"):
-        mlflow.set_tags({"variant": "velocity", "phase": "inference"})
-        mlflow.log_params(
-            {
-                "model_name": model_name,
-                "adapter_path": str(adapter_dir),
-                "num_questions": len(questions),
-                "max_new_tokens": max_new_tokens,
-                "velocity_quiet_percentile": velocity_quiet_percentile,
-                "velocity_warmup_tokens": velocity_warmup_tokens,
-            }
-        )
-        mlflow.log_metrics(
-            {
-                "baseline_tok_per_sec_all": baseline_agg["all_tok_per_sec"],
-                "baseline_tok_per_sec_warm": baseline_agg["warm_tok_per_sec"],
-                "baseline_adherence_pct": baseline_agg["avg_adherence_pct"],
-                "dynamic_tok_per_sec_all": dynamic_agg["all_tok_per_sec"],
-                "dynamic_tok_per_sec_warm": dynamic_agg["warm_tok_per_sec"],
-                "dynamic_adherence_pct": dynamic_agg["avg_adherence_pct"],
-                "dynamic_avg_quiet_fraction": avg_quiet,
-                "speedup_warm": speedup,
-            }
-        )
-        mlflow.log_dict(
-            {"baseline_results": baseline_results, "dynamic_results": dynamic_results},
-            "inference_benchmark_detail.json",
-        )
+    log_benchmark_metric(
+        {
+            "experiment": experiment_name,
+            "run_name": f"inference_velocity_{model_name.replace('/', '_')}",
+            "model_name": model_name,
+            "adapter_path": str(adapter_dir),
+            "num_questions": len(questions),
+            "max_new_tokens": max_new_tokens,
+            "velocity_quiet_percentile": velocity_quiet_percentile,
+            "velocity_warmup_tokens": velocity_warmup_tokens,
+            "baseline_tok_per_sec_all": baseline_agg["all_tok_per_sec"],
+            "baseline_tok_per_sec_warm": baseline_agg["warm_tok_per_sec"],
+            "baseline_adherence_pct": baseline_agg["avg_adherence_pct"],
+            "dynamic_tok_per_sec_all": dynamic_agg["all_tok_per_sec"],
+            "dynamic_tok_per_sec_warm": dynamic_agg["warm_tok_per_sec"],
+            "dynamic_adherence_pct": dynamic_agg["avg_adherence_pct"],
+            "dynamic_avg_quiet_fraction": avg_quiet,
+            "speedup_warm": speedup,
+        },
+        filepath="results/inference_velocity_runs.jsonl",
+    )
 
     out = {
         "baseline": baseline_agg,

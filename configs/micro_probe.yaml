@@ -21,5 +21,6 @@ peft:
 hooks:
   velocity_epsilon: 0.05
 
-mlflow:
+logging:
   experiment_name: "micro_probe_benchmark"
+  output_file: "results/micro_probe_runs.jsonl"

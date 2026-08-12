@@ -138,7 +138,7 @@ def main():
 
     output_path = run_pipeline(config, limit=limit, refresh_docs=args.refresh_docs, dry_run=args.dry_run)
     print(f"\nDone. Output: {output_path}")
-    print("Inspect with: mlflow ui --backend-store-uri sqlite:///mlruns.db")
+    print("Metrics logged to: results/datagen_runs.jsonl")
 
 
 if __name__ == "__main__":

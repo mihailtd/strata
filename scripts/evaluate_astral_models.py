@@ -1,15 +1,13 @@
 """CLI Runner for Astral Tooling Evaluation Framework.
 
 Compares Base Qwen3.5-4B vs Fine-Tuned Astral Qwen3.5-4B side-by-side.
-Logs output transcripts and adherence metrics to MLflow via Python `import mlflow` SDK.
+Logs output transcripts and adherence metrics to results/eval_runs.jsonl.
 """
 
 import argparse
 import json
 import sys
 from pathlib import Path
-
-import mlflow
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(REPO_ROOT))
@@ -28,10 +26,6 @@ def main():
     parser.add_argument("--questions", default=str(REPO_ROOT / "data" / "astral" / "evaluation_data.jsonl"))
     parser.add_argument("--export-if-missing", action="store_true", default=True)
     args = parser.parse_args()
-
-    # Configure MLflow tracking
-    mlflow_db = REPO_ROOT / "mlruns.db"
-    mlflow.set_tracking_uri(f"sqlite:///{mlflow_db}")
 
     adapter_path = Path(args.adapter)
     config_file = adapter_path / "adapter_config.json"

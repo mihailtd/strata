@@ -8,10 +8,11 @@ import re
 import time
 from typing import Any
 
-import mlflow
 import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+from gnn_experiment.utils.logger import log_benchmark_metric
 
 MODERN_TERMS = [
     r"\buv\b",
@@ -107,8 +108,6 @@ def run_astral_evaluation(
     with open(questions_file) as f:
         questions = [json.loads(line) for line in f if line.strip()]
 
-    mlflow.set_experiment(experiment_name)
-
     compute_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
@@ -180,49 +179,48 @@ def run_astral_evaluation(
     ft_modern_total = sum(r["modern_hits"] for r in ft_results)
     ft_legacy_total = sum(r["legacy_hits"] for r in ft_results)
 
-    with mlflow.start_run(run_name=f"eval_{model_name.replace('/', '_')}"):
-        mlflow.log_params(
+    comparison_table = []
+    for b, f in zip(base_results, ft_results, strict=True):
+        comparison_table.append(
             {
-                "exact_model_name": model_name,
-                "adapter_path": adapter_path,
-                "num_questions": len(questions),
+                "id": b["id"],
+                "prompt": b["prompt"],
+                "base_response": b["response"],
+                "base_adherence_pct": b["adherence_pct"],
+                "finetuned_response": f["response"],
+                "finetuned_adherence_pct": f["adherence_pct"],
             }
         )
 
-        mlflow.log_metrics(
-            {
-                "base_modern_adherence_pct": base_avg_adherence,
-                "finetuned_modern_adherence_pct": ft_avg_adherence,
-                "adherence_gain_pct": adherence_gain,
-                "base_modern_hits_total": base_modern_total,
-                "base_legacy_hits_total": base_legacy_total,
-                "finetuned_modern_hits_total": ft_modern_total,
-                "finetuned_legacy_hits_total": ft_legacy_total,
-            }
-        )
+    out_summary = {
+        "exact_model_name": model_name,
+        "adapter_path": adapter_path,
+        "base_avg_adherence_pct": base_avg_adherence,
+        "finetuned_avg_adherence_pct": ft_avg_adherence,
+        "adherence_gain_pct": adherence_gain,
+        "comparison": comparison_table,
+    }
 
-        comparison_table = []
-        for b, f in zip(base_results, ft_results, strict=True):
-            comparison_table.append(
-                {
-                    "id": b["id"],
-                    "prompt": b["prompt"],
-                    "base_response": b["response"],
-                    "base_adherence_pct": b["adherence_pct"],
-                    "finetuned_response": f["response"],
-                    "finetuned_adherence_pct": f["adherence_pct"],
-                }
-            )
-
-        out_summary = {
+    log_benchmark_metric(
+        {
+            "experiment": experiment_name,
+            "run_name": f"eval_{model_name.replace('/', '_')}",
             "exact_model_name": model_name,
             "adapter_path": adapter_path,
-            "base_avg_adherence_pct": base_avg_adherence,
-            "finetuned_avg_adherence_pct": ft_avg_adherence,
+            "num_questions": len(questions),
+            "base_modern_adherence_pct": base_avg_adherence,
+            "finetuned_modern_adherence_pct": ft_avg_adherence,
             "adherence_gain_pct": adherence_gain,
-            "comparison": comparison_table,
-        }
-        mlflow.log_dict(out_summary, "evaluation_comparison.json")
+            "base_modern_hits_total": base_modern_total,
+            "base_legacy_hits_total": base_legacy_total,
+            "finetuned_modern_hits_total": ft_modern_total,
+            "finetuned_legacy_hits_total": ft_legacy_total,
+        },
+        filepath="results/eval_runs.jsonl",
+    )
+
+    with open("results/eval_comparison.json", "w", encoding="utf-8") as f:
+        json.dump(out_summary, f, indent=2)
 
     print("\n==================================================")
     print(f" Evaluation Benchmark Results ({model_name})")
@@ -233,6 +231,6 @@ def run_astral_evaluation(
     print(f" Net Modern Stack Adherence Gain: +{adherence_gain:.1f}%")
     print(f" Base Legacy Hits Total (pip/black/mypy): {base_legacy_total}")
     print(f" Astral Legacy Hits Total (pip/black/mypy): {ft_legacy_total}")
-    print(f" MLflow Run Logged Successfully under '{experiment_name}'!")
+    print(f" Evaluation Results Logged Successfully to 'results/eval_runs.jsonl'!")
 
     return out_summary

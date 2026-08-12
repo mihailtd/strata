@@ -21,8 +21,9 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-import mlflow
 from datasets import Dataset
+
+from gnn_experiment.utils.logger import log_benchmark_metric
 
 from gnn_experiment.datagen import prompts
 from gnn_experiment.datagen.chunk import chunk_all
@@ -332,105 +333,89 @@ def run_pipeline(
         chunks = chunks[:limit]
         print(f"Limiting to first {limit} chunks.")
 
-    mlflow_cfg = config.get("mlflow", {})
-    mlflow.set_tracking_uri(mlflow_cfg.get("tracking_uri", "mlruns"))
-    mlflow.set_experiment(mlflow_cfg.get("experiment_name", "astral-expert-datagen"))
-
     run_type = "dry_run" if dry_run else ("partial" if limit else "full")
     model_short = Path(llm_cfg["model"]).stem  # "models/Qwen3.5-4B-Q8_0.gguf" -> "Qwen3.5-4B-Q8_0"
     run_name = f"astral-sft-{run_type}-{model_short}-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}"
     output_jsonl = output_dir / "training_data.jsonl"
 
-    with mlflow.start_run(run_name=run_name):
-        mlflow.set_tags(
-            {
-                "model": llm_cfg["model"],
-                "verifier_model": verify_model or llm_cfg["model"],
-                "self_verified": str(verify_client is client),
-                "run_type": run_type,  # "dry_run" | "partial" | "full" — filterable in the MLflow UI
-            }
+    result = asyncio.run(
+        _process_all_chunks(
+            chunks,
+            client,
+            verify_client,
+            llm_cfg["temperature"],
+            llm_cfg["max_tokens"],
+            nudge,
+            domain_description,
+            source_label,
+            output_jsonl,
+            max_concurrency,
         )
-        mlflow.log_params(
-            {
-                "model": llm_cfg["model"],
-                "verifier_model": verify_model or llm_cfg["model"],
-                "verifier_base_url": verify_base_url or llm_cfg["base_url"],
-                "extraction_nudge": nudge or "(none)",
-                "question_gen_version": prompts.QUESTION_GEN_VERSION,
-                "verify_version": prompts.VERIFY_VERSION,
-                "answer_gen_version": prompts.ANSWER_GEN_VERSION,
-                "chunk_size_chars": config["chunk_size_chars"],
-                "min_chunk_chars": config["min_chunk_chars"],
-                "repos": ",".join(repos) or "(none)",
-                "epub_sources": ",".join(epub_sources) or "(none)",
-                "domain_description": domain_description,
-                "source_label": source_label,
-                "limit": limit or "none",
-                "total_chunks": len(chunks),
-                "max_concurrency": max_concurrency,
-            }
-        )
+    )
+    records: list[QARecord] = result["records"]
+    stage_logs = result["stage_logs"]
+    verifier_pass = result["verifier_pass"]
+    verifier_fail = result["verifier_fail"]
+    chunk_wall_times = result["chunk_wall_times"]
 
-        result = asyncio.run(
-            _process_all_chunks(
-                chunks,
-                client,
-                verify_client,
-                llm_cfg["temperature"],
-                llm_cfg["max_tokens"],
-                nudge,
-                domain_description,
-                source_label,
-                output_jsonl,
-                max_concurrency,
+    summary_metrics: dict[str, float] = {
+        "chunks_processed": len(chunks),
+        "verifier_pass_count": verifier_pass,
+        "verifier_fail_count": verifier_fail,
+        "qa_pairs_written": len(records),
+        **result["latency_stats"],
+    }
+    if chunk_wall_times:
+        avg_chunk_s = sum(chunk_wall_times) / len(chunk_wall_times)
+        summary_metrics["avg_chunk_wall_s"] = avg_chunk_s
+        if limit and limit < total_available:
+            eta_s = avg_chunk_s * total_available
+            summary_metrics["estimated_full_run_s"] = eta_s
+            print(
+                f"\n=== ESTIMATE (based on {len(chunk_wall_times)} sampled chunks) ===\n"
+                f"Avg time per chunk: {avg_chunk_s:.2f}s\n"
+                f"Total chunks available: {total_available}\n"
+                f"Estimated time for full run: {eta_s / 60:.1f} min ({eta_s / 3600:.2f} hr)\n"
             )
-        )
-        records: list[QARecord] = result["records"]
-        stage_logs = result["stage_logs"]
-        verifier_pass = result["verifier_pass"]
-        verifier_fail = result["verifier_fail"]
-        chunk_wall_times = result["chunk_wall_times"]
 
-        summary_metrics: dict[str, float] = {
-            "chunks_processed": len(chunks),
-            "verifier_pass_count": verifier_pass,
-            "verifier_fail_count": verifier_fail,
-            "qa_pairs_written": len(records),
-            **result["latency_stats"],
-        }
-        if chunk_wall_times:
-            avg_chunk_s = sum(chunk_wall_times) / len(chunk_wall_times)
-            summary_metrics["avg_chunk_wall_s"] = avg_chunk_s
-            if limit and limit < total_available:
-                eta_s = avg_chunk_s * total_available
-                summary_metrics["estimated_full_run_s"] = eta_s
-                print(
-                    f"\n=== ESTIMATE (based on {len(chunk_wall_times)} sampled chunks) ===\n"
-                    f"Avg time per chunk: {avg_chunk_s:.2f}s\n"
-                    f"Total chunks available: {total_available}\n"
-                    f"Estimated time for full run: {eta_s / 60:.1f} min ({eta_s / 3600:.2f} hr)\n"
-                )
-        # Single end-of-run log instead of one call per chunk -- hundreds of
-        # small tracking-DB writes interleaved with concurrent requests is
-        # itself a bottleneck (and step-ordered per-chunk metrics don't mean
-        # much once chunks finish out of order under concurrency anyway).
-        mlflow.log_metrics(summary_metrics)
+    log_benchmark_metric(
+        {
+            "run_name": run_name,
+            "run_type": run_type,
+            "model": llm_cfg["model"],
+            "verifier_model": verify_model or llm_cfg["model"],
+            "verifier_base_url": verify_base_url or llm_cfg["base_url"],
+            "extraction_nudge": nudge or "(none)",
+            "question_gen_version": prompts.QUESTION_GEN_VERSION,
+            "verify_version": prompts.VERIFY_VERSION,
+            "answer_gen_version": prompts.ANSWER_GEN_VERSION,
+            "chunk_size_chars": config["chunk_size_chars"],
+            "min_chunk_chars": config["min_chunk_chars"],
+            "repos": ",".join(repos) or "(none)",
+            "epub_sources": ",".join(epub_sources) or "(none)",
+            "domain_description": domain_description,
+            "source_label": source_label,
+            "limit": limit or "none",
+            "total_chunks": len(chunks),
+            "max_concurrency": max_concurrency,
+            **summary_metrics,
+        },
+        filepath="results/datagen_runs.jsonl",
+    )
 
-        output_records = [r.to_dict(_render_text_fallback(r.question, r.answer)) for r in records]
-        print(f"Wrote {len(output_records)} records to {output_jsonl}")
+    output_records = [r.to_dict(_render_text_fallback(r.question, r.answer)) for r in records]
+    print(f"Wrote {len(output_records)} records to {output_jsonl}")
 
-        hf_dataset_dir = output_dir / "hf_dataset"
-        Dataset.from_list(output_records).save_to_disk(str(hf_dataset_dir))
+    hf_dataset_dir = output_dir / "hf_dataset"
+    Dataset.from_list(output_records).save_to_disk(str(hf_dataset_dir))
 
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp_path = Path(tmp)
-            for stage, entries in stage_logs.items():
-                stage_file = tmp_path / f"{stage}.jsonl"
-                with open(stage_file, "w") as f:
-                    for entry in entries:
-                        f.write(json.dumps(entry) + "\n")
-                mlflow.log_artifact(str(stage_file), "prompts_and_outputs")
-        mlflow.log_artifact(str(output_jsonl), "dataset")
+    prompts_dir = output_dir / "stage_logs"
+    prompts_dir.mkdir(parents=True, exist_ok=True)
+    for stage, entries in stage_logs.items():
+        stage_file = prompts_dir / f"{stage}.jsonl"
+        with open(stage_file, "w") as f:
+            for entry in entries:
+                f.write(json.dumps(entry) + "\n")
 
     if llm_cfg.get("unload_after_run", True):
         if client.shutdown_server():
