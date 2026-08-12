@@ -2,7 +2,7 @@
 LoRA adapter loaded on top.
 
     uv run --env-file .env scripts/chat.py
-    uv run --env-file .env scripts/chat.py --model Qwen/Qwen3.5-2B-Instruct
+    uv run --env-file .env scripts/chat.py --model Qwen/Qwen3.5-2B
     uv run --env-file .env scripts/chat.py --adapter results/adapters/lora-run1
 
 --env-file .env sets LD_PRELOAD (required for torch to see the GPU on WSL,
@@ -20,7 +20,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, TextStreamer
 
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--model", default="Qwen/Qwen3.5-0.8B-Instruct")
+    p.add_argument("--model", default="Qwen/Qwen3.5-0.8B")
     p.add_argument("--adapter", help="path to a trained LoRA adapter directory")
     p.add_argument("--max-new-tokens", type=int, default=512)
     p.add_argument("--temperature", type=float, default=0.7)

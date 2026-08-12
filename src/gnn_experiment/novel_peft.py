@@ -141,6 +141,77 @@ def _make_bank_lookup(
 
 
 # ---------------------------------------------------------------------------
+# Master Basis Set Reduction (MasterBasisBank)
+# ---------------------------------------------------------------------------
+
+
+class MasterBasisBank(nn.Module):
+    """Owns shared orthogonal Master Basis matrices (basis_u, basis_v), keyed by shape signature.
+
+    Registered once at top-level model as `novel_master_basis_bank` so basis
+    matrices reside in VRAM once per model. Task adapters store ONLY the small
+    scalar projection coefficients c (sub-kilobyte payloads).
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.basis_u: nn.ParameterDict = nn.ParameterDict()
+        self.basis_v: nn.ParameterDict = nn.ParameterDict()
+
+    def get_or_create(
+        self,
+        key: str,
+        in_features: int,
+        out_features: int,
+        num_basis: int,
+        rank_basis: int,
+        device,
+        dtype,
+        correct_fan_in_init: bool = False,
+        train_bank: bool = False,
+        preloaded: dict[str, dict[str, torch.Tensor]] | None = None,
+    ) -> tuple[nn.Parameter, nn.Parameter]:
+        """`preloaded` supplies a precomputed bank (see scripts/extract_svd_basis.py)
+        keyed the same way, i.e. {key: {"basis_u": (k,in,rb), "basis_v": (k,rb,out)}}.
+        A random bank spans nothing task-relevant (measured: 12.4-13.4% adherence,
+        flat across a 16x alpha sweep), so a preloaded basis is the only
+        configuration in which this mode has a chance."""
+        if key not in self.basis_u:
+            if preloaded is not None and key in preloaded:
+                u = preloaded[key]["basis_u"].to(device=device, dtype=dtype).clone()
+                v = preloaded[key]["basis_v"].to(device=device, dtype=dtype).clone()
+                if u.shape != (num_basis, in_features, rank_basis):
+                    raise ValueError(
+                        f"preloaded basis_u for {key!r} has shape {tuple(u.shape)}, expected "
+                        f"{(num_basis, in_features, rank_basis)} -- rerun extract_svd_basis.py with "
+                        f"--num-basis {num_basis} --rank-basis {rank_basis}"
+                    )
+            else:
+                u = torch.empty(num_basis, in_features, rank_basis, device=device, dtype=dtype)
+                v = torch.empty(num_basis, rank_basis, out_features, device=device, dtype=dtype)
+                if not correct_fan_in_init:
+                    nn.init.kaiming_uniform_(u, a=math.sqrt(5))
+                else:
+                    gain = math.sqrt(2.0 / (1 + 5.0))
+                    bound = gain * math.sqrt(3.0 / in_features)
+                    with torch.no_grad():
+                        u.uniform_(-bound, bound)
+                nn.init.normal_(v, std=0.01)
+            self.basis_u[key] = nn.Parameter(u, requires_grad=train_bank)
+            self.basis_v[key] = nn.Parameter(v, requires_grad=train_bank)
+        return self.basis_u[key], self.basis_v[key]
+
+
+def _make_master_basis_lookup(
+    bank: MasterBasisBank,
+) -> Callable[[str], tuple[torch.Tensor, torch.Tensor]]:
+    def lookup(key: str) -> tuple[torch.Tensor, torch.Tensor]:
+        return bank.basis_u[key], bank.basis_v[key]
+
+    return lookup
+
+
+# ---------------------------------------------------------------------------
 # Velocity-Masked SFT (Foveated Training)
 # ---------------------------------------------------------------------------
 
@@ -427,7 +498,7 @@ class NovelLoraLinear(nn.Module):
         (in_features) so the init matches peft's magnitude.
         """
         super().__init__()
-        assert mode in ("standard", "tucker", "krotucker", "id_kron")
+        assert mode in ("standard", "tucker", "krotucker", "id_kron", "master_basis")
         self.base_layer = base_layer
         for p in self.base_layer.parameters():
             p.requires_grad_(False)
@@ -467,6 +538,17 @@ class NovelLoraLinear(nn.Module):
             nn.init.normal_(core, std=0.01)
             self.core = nn.Parameter(core)
             self.diag_scale = nn.Parameter(torch.ones(rank_out, device=device, dtype=compute_dtype))
+        elif mode == "master_basis":
+            assert factor_lookup is not None and factor_key is not None and rank_in and rank_out
+            num_basis = rank_in
+            rank_basis = rank_out
+            self.num_basis = num_basis
+            self.rank_basis = rank_basis
+            self.scaling = alpha / num_basis
+            self._factor_lookup = factor_lookup
+            self.factor_key = factor_key
+            coefficients = torch.zeros(num_basis, device=device, dtype=compute_dtype)
+            self.coefficients = nn.Parameter(coefficients)
         elif mode == "krotucker":
             assert rank is not None
             self.rank = rank
@@ -519,12 +601,16 @@ class NovelLoraLinear(nn.Module):
             return result
 
         h_dtype = (
-            self.w_a.dtype
-            if self.mode == "id_kron"
+            self.coefficients.dtype
+            if self.mode == "master_basis"
             else (
-                self.tucker_a.dtype
-                if self.mode == "krotucker"
-                else (self.core.dtype if self.mode == "tucker" else self.lora_a.dtype)
+                self.w_a.dtype
+                if self.mode == "id_kron"
+                else (
+                    self.tucker_a.dtype
+                    if self.mode == "krotucker"
+                    else (self.core.dtype if self.mode == "tucker" else self.lora_a.dtype)
+                )
             )
         )
         h = self.dropout(x).to(h_dtype)
@@ -533,6 +619,14 @@ class NovelLoraLinear(nn.Module):
             delta = (h @ u_in) @ self.core
             delta = delta * self.diag_scale
             delta = delta @ u_out
+        elif self.mode == "master_basis":
+            basis_u, basis_v = self._factor_lookup(self.factor_key)
+            bu = basis_u.to(h_dtype)
+            bv = basis_v.to(h_dtype)
+            coefs = self.coefficients.to(h_dtype)
+            h_proj = torch.einsum("...i,kir->...kr", h, bu)
+            o_proj = torch.einsum("...kr,kro->...ko", h_proj, bv)
+            delta = torch.einsum("...ko,k->...o", o_proj, coefs)
         elif self.mode == "krotucker":
             h_proj = h @ self.tucker_a
             kron_core = torch.kron(self.kron_a, self.kron_b)
@@ -588,6 +682,7 @@ def apply_novel_lora(
     velocity_gate: VelocityGate | None = None,
     velocity_skip_recompute: bool = False,
     correct_fan_in_init: bool = False,
+    preloaded_basis: dict | None = None,
 ) -> dict:
     """Freezes the whole model, then replaces every target Linear inside every
     decoder layer with a NovelLoraLinear. Returns a summary dict (wrapped
@@ -603,8 +698,15 @@ def apply_novel_lora(
     layers = get_decoder_layers(model)
     is_quiet_fn = velocity_gate.is_quiet if velocity_gate is not None else None
 
-    bank = TuckerFactorBank() if mode == "tucker" else None
-    factor_lookup = _make_bank_lookup(bank) if bank is not None else None
+    if mode == "tucker":
+        bank = TuckerFactorBank()
+        factor_lookup = _make_bank_lookup(bank)
+    elif mode == "master_basis":
+        bank = MasterBasisBank()
+        factor_lookup = _make_master_basis_lookup(bank)
+    else:
+        bank = None
+        factor_lookup = None
 
     wrapped = 0
     for layer_idx, layer in enumerate(layers):
@@ -638,6 +740,36 @@ def apply_novel_lora(
                     module,
                     layer_idx,
                     mode="tucker",
+                    alpha=alpha,
+                    dropout=dropout,
+                    rank_in=rank_in,
+                    rank_out=rank_out,
+                    factor_lookup=factor_lookup,
+                    factor_key=key,
+                    is_quiet_fn=is_quiet_fn,
+                    correct_fan_in_init=correct_fan_in_init,
+                )
+            elif mode == "master_basis":
+                # isinstance (not just `is not None`) so the MasterBasisBank-only
+                # `preloaded` kwarg below type-checks -- `bank` is a union with
+                # TuckerFactorBank, whose get_or_create has a different signature.
+                assert isinstance(bank, MasterBasisBank) and factor_lookup is not None
+                key = f"{child_attr}_{module.in_features}x{module.out_features}"
+                bank.get_or_create(
+                    key,
+                    module.in_features,
+                    module.out_features,
+                    num_basis=rank_in,
+                    rank_basis=rank_out,
+                    device=next(module.parameters()).device,
+                    dtype=torch.bfloat16,
+                    correct_fan_in_init=correct_fan_in_init,
+                    preloaded=preloaded_basis,
+                )
+                wrapper = NovelLoraLinear(
+                    module,
+                    layer_idx,
+                    mode="master_basis",
                     alpha=alpha,
                     dropout=dropout,
                     rank_in=rank_in,
@@ -686,7 +818,8 @@ def apply_novel_lora(
             wrapped += 1
 
     if bank is not None:
-        model.add_module("novel_lora_bank", bank)
+        bank_attr = "novel_lora_bank" if mode == "tucker" else "novel_master_basis_bank"
+        model.add_module(bank_attr, bank)
 
     if velocity_gate is not None:
         install_velocity_hooks(layers, velocity_gate, skip_recompute=velocity_skip_recompute)
@@ -723,6 +856,9 @@ def save_novel_adapter(model, out_dir: str | Path, meta: dict) -> None:
     if isinstance(getattr(model, "novel_lora_bank", None), TuckerFactorBank):
         for k, v in model.novel_lora_bank.state_dict().items():
             state[f"novel_lora_bank.{k}"] = v.detach().cpu().clone()
+    if meta.get("save_bank", False) and isinstance(getattr(model, "novel_master_basis_bank", None), MasterBasisBank):
+        for k, v in model.novel_master_basis_bank.state_dict().items():
+            state[f"novel_master_basis_bank.{k}"] = v.detach().cpu().clone()
 
     torch.save(state, out_dir / "novel_adapter.pt")
     with open(out_dir / "novel_adapter_config.json", "w") as f:
@@ -732,6 +868,24 @@ def save_novel_adapter(model, out_dir: str | Path, meta: dict) -> None:
 def load_novel_adapter(model, adapter_dir: str | Path, velocity_gate: VelocityGate | None = None) -> dict:
     adapter_dir = Path(adapter_dir)
     meta = json.loads((adapter_dir / "novel_adapter_config.json").read_text())
+
+    # master_basis adapters store ONLY mixture coefficients; the basis bank they
+    # index into lives in a separate file and is meaningless to reload randomly
+    # (a random bank scores ~base, measured). Restore the exact bank recorded at
+    # save time, and fail loudly rather than silently evaluating against a
+    # different basis than the coefficients were fitted to.
+    preloaded_basis = None
+    bank_ref = meta.get("basis_bank")
+    if bank_ref:
+        bank_path = Path(bank_ref)
+        if not bank_path.is_absolute():
+            bank_path = Path(__file__).resolve().parent.parent.parent / bank_ref
+        if not bank_path.exists():
+            raise FileNotFoundError(
+                f"Adapter {adapter_dir} references basis bank {bank_ref!r}, which is missing. "
+                "The coefficients are unusable without the exact bank they were fitted to."
+            )
+        preloaded_basis = torch.load(bank_path, map_location="cpu", weights_only=False)["bank"]
 
     summary = apply_novel_lora(
         model,
@@ -743,6 +897,7 @@ def load_novel_adapter(model, adapter_dir: str | Path, velocity_gate: VelocityGa
         alpha=meta.get("alpha", 16),
         dropout=0.0,
         velocity_gate=velocity_gate,
+        preloaded_basis=preloaded_basis,
     )
 
     state = torch.load(adapter_dir / "novel_adapter.pt", map_location="cpu")
@@ -758,3 +913,117 @@ def load_novel_adapter(model, adapter_dir: str | Path, velocity_gate: VelocityGa
 
     summary["meta"] = meta
     return summary
+
+
+# ---------------------------------------------------------------------------
+# Hot-swap primitive
+# ---------------------------------------------------------------------------
+
+
+class AdapterPayload:
+    """An adapter's weights held in host memory, ready for repeated H2D copies.
+
+    Deliberately separate from `swap_adapter_weights` so the disk read and the
+    device transfer are never conflated -- benchmarking a "swap" that secretly
+    includes a `torch.load` measures the SSD, not the bus.
+
+    `pin_memory=True` page-locks the host buffers, which is what actually makes
+    `copy_(non_blocking=True)` asynchronous. From ordinary pageable memory the
+    driver must stage through an internal bounce buffer and the copy is
+    effectively synchronous regardless of the flag -- a common way to
+    accidentally measure nothing.
+    """
+
+    def __init__(self, state: dict[str, torch.Tensor], pin_memory: bool = True, name: str = ""):
+        self.name = name
+        self.pinned = pin_memory and torch.cuda.is_available()
+        self.state: dict[str, torch.Tensor] = {}
+        for k, v in state.items():
+            t = v.detach().contiguous()
+            self.state[k] = t.pin_memory() if self.pinned else t
+        self.nbytes = sum(t.numel() * t.element_size() for t in self.state.values())
+
+    @classmethod
+    def from_dir(cls, adapter_dir: str | Path, pin_memory: bool = True) -> AdapterPayload:
+        adapter_dir = Path(adapter_dir)
+        state = torch.load(adapter_dir / "novel_adapter.pt", map_location="cpu")
+        return cls(state, pin_memory=pin_memory, name=adapter_dir.name)
+
+    def __repr__(self) -> str:
+        return (
+            f"AdapterPayload({self.name!r}, {len(self.state)} tensors, "
+            f"{self.nbytes / 1e6:.3f} MB, pinned={self.pinned})"
+        )
+
+
+def prepare_swap_slots(model, payload: AdapterPayload) -> dict[str, torch.Tensor]:
+    """Resolve payload keys to the model's EXISTING parameter tensors once.
+
+    Doing this lookup up front means a swap is a pure sequence of `copy_`
+    calls with no dict traversal, no attribute walking, and no allocation.
+    Shapes/dtypes are validated here so a mismatched adapter fails loudly at
+    setup rather than silently corrupting weights mid-run.
+    """
+    msd = model.state_dict()
+    slots: dict[str, torch.Tensor] = {}
+    missing, mismatched = [], []
+    for k, v in payload.state.items():
+        if k not in msd:
+            missing.append(k)
+            continue
+        dst = msd[k]
+        if tuple(dst.shape) != tuple(v.shape):
+            mismatched.append(f"{k}: model {tuple(dst.shape)} vs payload {tuple(v.shape)}")
+            continue
+        slots[k] = dst
+    if missing:
+        raise KeyError(
+            f"{len(missing)} payload keys absent from the wrapped model (first 3: {missing[:3]}). "
+            "The model must already be wrapped with a compatible adapter architecture -- "
+            "swap_adapter_weights never re-wraps."
+        )
+    if mismatched:
+        raise ValueError(f"shape mismatch in {len(mismatched)} tensors (first 3: {mismatched[:3]})")
+    return slots
+
+
+@torch.no_grad()
+def swap_adapter_weights(
+    slots: dict[str, torch.Tensor],
+    payload: AdapterPayload,
+    non_blocking: bool = True,
+    batched: bool = True,
+) -> None:
+    """Overwrite an already-wrapped model's adapter weights in place.
+
+    This is the primitive `load_novel_adapter` is NOT: that function calls
+    `apply_novel_lora`, which walks the module tree and replaces every target
+    Linear with a fresh wrapper. Calling it twice on one model double-wraps and
+    corrupts the structure (confirmed by a real crash when loading a second
+    adapter onto an already-wrapped model). It also reallocates every adapter
+    tensor, so its cost is dominated by Python-side module surgery rather than
+    by the actual bytes moved.
+
+    Here the destination tensors are the ones already living in VRAM; a swap is
+    a fixed set of device writes into static addresses. No allocation, no graph
+    mutation, no autograd bookkeeping.
+
+    `batched=True` issues the whole swap through `torch._foreach_copy_` instead
+    of one `copy_` per tensor. These adapters are many small tensors (256 for a
+    rank-8 LoRA, 128 for a coefficient set), and measurement showed the swap was
+    latency-bound on per-call overhead rather than bandwidth: 21.2 MB moved in
+    31 ms is 0.68 GB/s, ~35x below what the bus can do, i.e. ~122 us of overhead
+    per tensor and almost no time actually transferring. Batching collapses that
+    into far fewer launches.
+
+    NOTE: with non_blocking=True the copies are queued, not completed, on
+    return. Call `torch.cuda.synchronize()` before timing or before relying on
+    the new weights from host code -- kernels queued afterwards on the same
+    stream will observe them correctly regardless.
+    """
+    if batched and hasattr(torch, "_foreach_copy_"):
+        keys = list(slots)
+        torch._foreach_copy_([slots[k] for k in keys], [payload.state[k] for k in keys], non_blocking=non_blocking)
+        return
+    for k, dst in slots.items():
+        dst.copy_(payload.state[k], non_blocking=non_blocking)

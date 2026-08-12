@@ -1,5 +1,5 @@
 # Configuration for Goal 1 Micro-Probe (Qwen3.5-2B) Benchmark & Diagnostics
-model_name: "Qwen/Qwen3.5-2B-Instruct"
+model_name: "Qwen/Qwen3.5-2B"
 dataset_raw_dir: "data/astral/raw"
 dataset_sft_file: "data/astral/training_data.jsonl"
 max_samples: 1041

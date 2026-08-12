@@ -50,7 +50,7 @@ def run_benchmark():
     with open(args.config) as f:
         cfg = yaml.safe_load(f)
 
-    model_name = args.model_name or cfg.get("model_name", "Qwen/Qwen3.5-2B-Instruct")
+    model_name = args.model_name or cfg.get("model_name", "Qwen/Qwen3.5-2B")
     max_steps = args.max_steps or cfg.get("training", {}).get("max_steps", 500)
     batch_size = args.batch_size or cfg.get("training", {}).get("batch_size", 2)
     learning_rate = args.lr or cfg.get("training", {}).get("learning_rate", 2e-4)

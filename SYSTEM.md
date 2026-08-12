@@ -83,7 +83,7 @@ Verified: `uv run --env-file .env scripts/check_gpu.py` → `torch.cuda.is_avail
 Project layout (all uv-managed):
 
 - `src/gnn_experiment/peft_methods.py` — registry of PEFT configs: lora, dora, pissa, qlora, adalora, vera, ia3, prefix_tuning
-- `src/gnn_experiment/bench.py` — loads a base model (default `Qwen/Qwen2.5-0.5B`), applies one PEFT method, runs a short training loop, reports wall time / peak VRAM / trainable-param % / final loss
+- `src/gnn_experiment/bench.py` — loads a base model (`model_name` is a required argument, no default; small-model runs use `Qwen/Qwen3.5-0.8B` per `configs/benchmark.yaml`), applies one PEFT method, runs a short training loop, reports wall time / peak VRAM / trainable-param % / final loss
 - `scripts/run_benchmark.py` — CLI that loops over methods from `configs/benchmark.yaml`, writes `results/benchmark_results.csv`
 - `scripts/check_gpu.py` — GPU smoke test (`uv run scripts/check_gpu.py`)
 - `scripts/install_rocm_wsl.sh` — the sudo-gated system install, see GPU section above

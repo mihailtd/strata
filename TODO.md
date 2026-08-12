@@ -21,15 +21,36 @@ the full numbers:
   every adapter measured at that scale collapses in quality (LoKr 1.2-2.1 MB →
   14-19% adherence vs base 11.94%). Nothing yet reaches ~3 MB with usable
   quality; the best small result is `id_kron_r8` at **12.6 MB** (4x over target).
+- **⭐ THE UNIFYING RESULT — why every compression scheme here has failed.**
+  Measured directly (CPU, no training): fine-tuning updates on this model are
+  **~one independent direction per layer, mutually near-orthogonal across layers
+  AND across tasks.** Projecting the 60.80% winner onto its own SVD basis
+  saturates at exactly k = layer count (k=32 → 98.23%, k=64 → no gain), and
+  projecting it onto a *different task's* basis retains **0.00%** — cosine
+  3.25e-4 vs 2.06e-4 expected for random directions. There is no shared
+  low-dimensional adaptation manifold to exploit, across depth or across tasks.
+  This single property predicted, in advance, the failure of Tucker (15.66%),
+  LoKr (14.42%) and master_basis (13.40%). **Measure subspace overlap before
+  building any further shared-basis scheme** — `scripts/extract_svd_basis.py`
+  plus the retention projection answers it on CPU in ~15 s.
 - **The architecture benchmark is confounded — twice.** Baseline on-disk sizes
   were inflated ~2x (fp32 assumed vs real bf16), and the custom-path variants
   carry an **~18x inflated effective update** from a kaiming fan_in bug. Fixing
   only the init drops `custom_standard` from 58.17% to 37.55%, i.e. to peft
   LoRA's level. **No custom-vs-peft architecture claim in this document is
   currently supported.** See `## Measured Reality`.
-- **Update magnitude, not factorization, is the dominant lever measured so far**
-  (+20.6 pp from an ~18x larger effective update). The baseline must be
-  magnitude-tuned before any architecture is compared against it.
+- **Update magnitude, not factorization, is the dominant lever measured so far.**
+  Sweeping only `lora_alpha` on stock peft LoRA: 40.47% (α=16) → 50.23% (α=128)
+  → **60.80% (α=256)**. Magnitude-tuned stock LoRA **beats every custom
+  architecture here**, including `id_kron_r16` (59.32%), at equal payload and
+  with no new code. **The bar for any new architecture is 60.80%, not 40.47%** —
+  and α is still climbing, so the real LoRA ceiling is higher and unmeasured.
+- **Training loss is anti-correlated with adherence on this benchmark** — the
+  best-scoring run has nearly the worst loss. Do not use loss as a quality proxy.
+  The same caution applies to *reconstruction energy*: a k=32 basis retaining
+  **98.23%** of the winner's energy delivered **54.70%** adherence, not the
+  **59.7%** that `energy x score` predicts — a 5.0 pp overestimate. **Never
+  convert a retention/loss figure into a quality claim without running the eval.**
 - **The entry point is NOT a HIP kernel.** `peft` 0.20.0 already ships DoRA
   (`LoraConfig(use_dora=True)`) and Kronecker (`LoKrConfig`). The core
   quality-vs-size question is answerable in a few PyTorch training runs, before
@@ -41,6 +62,34 @@ the full numbers:
   mutated `~/.cache/uv` and propagated to `training/.venv` as well. Now restored
   to pristine upstream (peft matches its install-record hashes) with the fix
   living in `src/gnn_experiment/peft_compat.py`.
+- **✅ A working hot-swap primitive now exists** (`swap_adapter_weights`), 3.7x
+  faster than the re-wrap it replaces and — unlike the incumbent — safe to call
+  repeatedly without corrupting the model. **This unblocks Step 3 (Billboard
+  Impostor).** But the measured agentic-loop payoff it was meant to justify is
+  **~2% of wall-clock**, not "stuttering → instantaneous": decode at ~31 tok/s
+  makes a 200-token step cost 6.4 s, dwarfing any swap. See `Hot-swap
+  primitive` below.
+- **🔴 Speculative decoding is architecturally unavailable here**, and so is the
+  linear-attention fast path. This model's `GatedDeltaNet` recurrent state
+  cannot be rolled back, so `transformers` refuses *all* assisted generation
+  (`ValueError: assisted generation is not supported with stateful models`) —
+  including prompt-lookup, which needs no draft model. Separately,
+  `causal-conv1d` cannot be built on this AMD rig (requires `nvcc`). **Decode
+  stays ~31 tok/s; any plan assuming a 2-3x decode speedup needs a different
+  base model, not a different adapter scheme.**
+- **⚠️ An earlier decode figure was contaminated and is now corrected.** The
+  17.77 tok/s used in prior analysis is not reproducible — the same config
+  re-measured on an idle machine gives 25.25 tok/s. The original was taken
+  while 8 stray MLflow workers and exhausted swap were starving the host.
+  Batch-1 decode is CPU-bound on kernel launches; **benchmark it only on an
+  idle machine.**
+- **⭐ The one result that got BETTER than its source.** An 8.00 KB coefficient
+  adapter — CPU least-squares projection of the 60.80% LoRA onto a k=32 SVD
+  basis, then 150 steps tuning only 4,096 scalars at lr=1e-2 — scores
+  **61.96%**, the highest in the project. Caveats: it *requires* that LoRA as
+  input (2x total training budget), +1.16pp is inside unmeasured seed noise, and
+  it still needs the 61.3 MB task-specific bank. Real single-task
+  distillation; not the multi-task architecture.
 
 ---
 
@@ -69,6 +118,8 @@ and all custom-vs-peft comparisons are not.**
 | KroTucker (r=64) | 85.0M | 170.0 MB | **170.07 MB** ✅ | **19.70%** |
 | PEFT LoKr (r=32) | 1.04M | 2.12 MB | **2.12 MB** ✅ | **18.92%** |
 | PEFT LoKr (r=8) | 585K | 1.22 MB | **1.22 MB** ✅ | **14.42%** |
+| `master_basis` (k=8, cold random basis, α=4096) | 1,024 (c_i) | 4.67 KB | **4.67 KB** ✅ | **13.40%** 🔴 |
+| **`mbproj_k32`** (k=32, SVD basis, projected — no training) | 4,096 (c_i) | — | **8.00 KB** + 61.3 MB bank | **54.70%** |
 
 #### 🔴 Error 1 — baseline sizes inflated ~2x (mixed dtype conventions)
 
@@ -148,6 +199,171 @@ factorization — is the dominant lever measured so far.** Until the baseline is
 magnitude-tuned, any architecture comparison mostly measures which arm
 accidentally had the larger effective learning rate.
 
+### 🏁 The honest baseline: magnitude-tuned peft LoRA wins outright
+
+Same peft LoRA, r=8, only `lora_alpha` swept (nothing else changed — no custom
+code, no init change, stock `peft`):
+
+| Variant | α | scaling | Train loss | **Adherence** |
+| :--- | ---: | ---: | ---: | ---: |
+| **PEFT LoRA** | **256** | **32x** | 1.0746 | **60.80%** 🥇 |
+| `id_kron_r16` (custom path, inflated init) | — | — | 1.1301 | 59.32% |
+| `custom_standard` (custom path, inflated init) | 16 | 2x | 1.1396 | 58.17% |
+| `id_kron_r8` (custom path, inflated init) | — | — | 1.1301 | 51.44% |
+| PEFT LoRA | 128 | 16x | 1.0187 | 50.23% |
+| PEFT LoRA | 16 | 2x | 1.0083 | 40.47% |
+| `custom_standard_fixedinit` | 16 | 2x | 1.0074 | 37.55% |
+| PEFT DoRA | 16 | 2x | 1.0065 | 33.92% |
+
+**Stock LoRA with one tuned hyperparameter (60.80%) beats every custom
+architecture in this project, including `id_kron_r16` (59.32%) — the variant
+previously crowned 👑 — at the same 21.27 MB payload and no new code.** The
+custom architectures were never beating LoRA; they were beating an
+*under-tuned* LoRA whose effective update was ~18x too small.
+
+Two consequences:
+
+1. **The bar for any new architecture is 60.80%, not 40.47%.** Anything claimed
+   to beat LoRA must beat magnitude-tuned LoRA at equal payload, with the init
+   scales matched.
+2. **α is not yet optimised** — 16 → 128 → 256 is still climbing (+9.8 pp then
+   +10.6 pp). The true LoRA ceiling on this benchmark is above 60.80% and
+   unmeasured. A proper sweep (α=512, 1024, and LR variation) should be run
+   before any factorization work continues.
+
+#### ⚠️ Training loss is anti-correlated with adherence here
+
+Note the loss column above: the **best** adherence (60.80%) has nearly the
+**worst** loss (1.0746), and the best loss (1.0065, DoRA) has the worst
+adherence (33.92%). Across the whole sweep, lower training loss tracks *worse*
+tool adherence. Fitting the SFT distribution more closely does not produce more
+uv/ruff/ty preference — so **training loss must not be used as a proxy for
+benchmark quality in this project**, and any "our loss is lower" claim says
+nothing about the metric that is actually being optimised for.
+
+### Master Basis Set Reduction — CLAIM FALSIFIED 🔴
+
+`master_basis` freezes a shared bank of `k` basis factors and trains only `k`
+scalar coefficients per wrapped Linear (1,024 total = **4.67 KB** payload). The
+pitch: keep one bank in VRAM, hot-swap tasks as sub-KB "mixture recipes",
+blend tasks by adding coefficient vectors.
+
+**Result: the architecture cannot work on this model, for a measured reason.**
+
+#### 1. Cold random basis fails, and it is NOT the alpha trap
+
+Calibrated *before* running (this is the mistake we made with peft LoRA and did
+not repeat): with 8 zero-init scalars per module and Adam moving each ~`lr`/step,
+`|c| <= lr*steps = 0.03` after 150 steps, capping reachable `||dW||_F` at
+**0.094** vs the 60.80% winner's **5.82** — a 62x shortfall. So alpha was swept:
+
+| α | scaling | loss | adherence |
+| ---: | ---: | ---: | ---: |
+| 256 | 32x | 1.3889 | 12.43% (+0.50 pp) |
+| 1024 | 128x | 1.3461 | 12.64% (+0.70 pp) |
+| 4096 | 512x | 1.2473 | 13.40% (+1.46 pp) |
+
+A **16x magnitude increase bought +0.97 pp.** Flat, not a scaling curve — unlike
+peft LoRA, where 16x alpha bought +20.3 pp. This is not an under-powered update;
+8 random directions in a 2560x9216 space span nothing task-relevant.
+
+#### 2. Adaptation does not compress across layers (~1 direction per layer)
+
+Projecting the 60.80% winner onto its OWN SVD basis, least-squares optimal
+coefficients, no training (this is the *ceiling* — training cannot beat it):
+
+| k | overall retained energy | median per-module | bank size |
+| ---: | ---: | ---: | ---: |
+| 8 | 43.07% | **0.0%** | 15.3 MB |
+| 16 | 60.81% | 99.7% | 30.7 MB |
+| **32** | **98.23%** | 100.0% | 61.3 MB |
+| 64 | 98.23% (**zero gain**) | 100.0% | 122.7 MB |
+
+Retention tracks **k / (layers in the shape group)**: the 8-layer attention
+groups hit ~100% at k=8, the 32-layer MLP groups hit ~25%. It saturates exactly
+at k = 32 = the layer count, and k=64 adds *nothing*. **Each layer contributes
+its own independent adaptation direction; they do not share a subspace.** The
+k=8 / 4.67 KB configuration was mathematically incapable of representing the
+task before a single training step ran.
+
+#### 3. The transfer claim: 0.00%, at random-chance level
+
+The systems story needs ONE bank serving MANY tasks. Projecting the astral
+winner onto a **postgres**-derived k=32 bank:
+
+| basis source | retained energy |
+| --- | ---: |
+| astral (in-task) | 98.23% |
+| **postgres (cross-task)** | **0.00%** (min = median = max = 0.0%, every group) |
+
+Verified not a bug: both banks are real and unit-normalised (655,360 nonzero
+elements each), and cosine between their leading basis elements is **3.25e-4**
+versus **2.06e-4** expected for *randomly oriented* directions in a
+23,592,960-dim space. **The two tasks' adaptation subspaces are statistically
+indistinguishable from random relative to each other.**
+
+#### The economics invert
+
+Each task needs its own **61 MB** bank to hold an **18.7 KB** coefficient
+vector. That bank is **~3x larger than the 21.3 MB LoRA it replaces** — worse
+for one task, and no better for many, because banks do not share. The sub-50 µs
+hot-swap and scalar-blending wins were downstream of "quality holds with a
+*shared* bank"; that premise is measured false, so they do not land.
+
+#### ✅ What survives from master_basis — MEASURED, not extrapolated
+
+**k=32 in-task compression is real: 54.70% adherence from 8.00 KB of
+coefficients** (`mbproj_k32`, built by least-squares projection of the
+`lora_a256` winner onto its own k=32 bank — *no training*, so this is the
+provable ceiling for that bank).
+
+| | value |
+| --- | ---: |
+| source (`lora_a256`, 21.3 MB) | 60.80% |
+| **projected k=32 (8.00 KB coefficients)** | **54.70%** |
+| base model | 11.94% |
+| adherence retained (raw ratio) | 90.0% |
+| adherence retained (gain-over-base) | 87.5% |
+
+At 8 KB this beats several fully-trained 21 MB adapters outright — peft LoRA
+α=16 (40.47%), DoRA (33.92%), `id_kron_r8` (51.44%).
+
+> ⚠️ **Energy retention overestimates behaviour retention.** The naive
+> extrapolation `98.23% energy x 60.80%` predicts **59.7%**; the measured value
+> is **54.70%**, i.e. **5.0 pp optimistic**. 98.23% of the Frobenius energy
+> survives but only 90% of the adherence does. This is the same lesson as the
+> loss/adherence anti-correlation above: **energy-style proxies must not be
+> converted into quality claims on this benchmark.** Any number of the form
+> "retention x score" is an estimate, not a measurement, and must be labelled
+> as such until an eval is run.
+
+#### 🔴 …but the storage accounting still does not work
+
+| | |
+| --- | ---: |
+| coefficients | 8.00 KB |
+| + basis bank (task-specific — cross-task retention **0.00%**) | 61.3 MB |
+| **total for one task** | **61.3 MB** |
+| vs the LoRA it replaces | 21.3 MB |
+| | **2.9x WORSE** |
+
+The "~1100x compression" framing compares the 8 KB coefficient payload against
+the 21.3 MB LoRA while omitting the bank those coefficients are meaningless
+without. The ratio only holds if one bank serves many tasks; cross-task
+retention is 0.00%, so it never does. **Single-task compression: real and
+measured. Multi-task deployment story: still dead.**
+
+#### The unifying explanation
+
+- **Why all three compression schemes failed.** Fine-tuning updates on this
+  model are ~one independent direction per layer, mutually near-orthogonal
+  across layers *and* across tasks. That single measured property predicts, in
+  advance, that **any** shared-subspace compression scheme will fail here —
+  which is exactly what Tucker (15.66%), LoKr (14.42%) and master_basis (13.40%)
+  all did. Do not build another one without first measuring subspace overlap;
+  `scripts/extract_svd_basis.py` + the retention projection does it on CPU in
+  ~15 s, with no training.
+
 ### Velocity-Masked SFT — CLAIM FALSIFIED 🔴
 
 Controlled three-arm comparison, identical everything except layer selection.
@@ -188,6 +404,137 @@ a 13.9 pp swing of pure decoding noise, larger than any real effect measured. Ev
 is now greedy (`do_sample=False`) everywhere. **All adherence numbers recorded
 before this change are not comparable to numbers after it.**
 
+### Hot-swap primitive — BUILT ✅ / agentic-loop claim — NOT SUPPORTED 🔴
+
+`swap_adapter_weights()` + `AdapterPayload` + `prepare_swap_slots()` in
+`novel_peft.py`; benchmarked by `scripts/benchmark_adapter_swap.py`.
+
+**What it replaces.** `load_novel_adapter` calls `apply_novel_lora`, which walks
+the module tree and replaces every target Linear with a fresh wrapper. Calling
+it twice on one model double-wraps and corrupts it (confirmed by a real crash
+earlier), and its cost is Python-side module surgery, not bytes moved. The new
+primitive resolves payload keys to the model's *existing* VRAM tensors once,
+then a swap is a fixed set of `copy_` calls into static addresses — no
+allocation, no graph mutation, and safe to call repeatedly. **This is what was
+blocking Billboard Impostors.**
+
+Measured, 50 trials, `torch.cuda.synchronize()` on both sides:
+
+| mechanism | p50 | vs incumbent |
+| --- | ---: | ---: |
+| `load_novel_adapter` (re-wrap, incumbent) | 117.1 ms | — |
+| LoRA in-place, blocking | 60.3 ms | 1.9x |
+| **LoRA in-place, non_blocking + pinned** | **32.1 ms** | **3.7x** |
+| coefficient in-place, blocking | 17.3 ms | |
+| **coefficient in-place, non_blocking + pinned** | **0.64 ms** | **183x** |
+
+`pin_memory=True` on the host payload is load-bearing: without page-locked
+memory `non_blocking=True` is silently synchronous (17.3 ms → 0.64 ms for the
+coefficient arm is almost entirely this).
+
+**A failed optimisation, recorded so it is not retried.** Effective bandwidth is
+0.66 GB/s against ~25 GB/s of PCIe, which looked launch-overhead-bound, so the
+swap was rewritten to issue through `torch._foreach_copy_`. It changed nothing:
+**32.08 ms vs 32.13 ms.** The cost is per-transfer DMA setup on this WSL2/ROCm
+paravirtualised path, which batching cannot fuse. The `batched=` flag is kept
+(correct, harmless) but is not a lever. Reaching the frequently-quoted "<30 µs"
+would need adapter parameters allocated as slices of one contiguous VRAM buffer
+so a swap is a *single* DMA rather than 128 — a real architectural change, not a
+flag. We measure **644 µs**, 21x above that figure.
+
+#### The agentic-loop payoff is ~1-2%, not "massive"
+
+> ⚠️ **Decode-rate correction.** Earlier analysis used **17.77 tok/s** from
+> `astral_inference_benchmark`. That figure is **not reproducible** and should
+> not be cited. Re-measuring the *identical* configuration (velocity adapter,
+> 256 tokens, sampled) now gives **25.25 tok/s**. The original was recorded
+> while the machine was under heavy contention — 8 stray MLflow `huey` workers
+> plus fully-exhausted swap, immediately before the OOM kills documented
+> elsewhere in this session. Batch-1 decode is CPU-bound on per-layer kernel
+> launches, so host contention degrades it directly. **Benchmark decode only on
+> an idle machine, and re-measure rather than reusing an old number.**
+
+Clean re-measurement (greedy, idle machine):
+
+| configuration | tok/s |
+| --- | ---: |
+| base model, 128 new tokens | 29.95 |
+| base model, 256 new tokens | 31.07 |
+| base model, 512 new tokens | 32.07 |
+| **base model + custom adapter** | **25.32** (**-18.7%**) |
+| sampling vs greedy | no measurable difference |
+
+**New finding: the custom adapter costs 18.7% of decode throughput.** At 0.437%
+of parameters that is not a FLOPs effect — it is 256 extra small matmuls per
+token (2 per wrapped Linear x 128) each paying kernel-launch overhead at batch 1.
+A merged adapter (`W + dW` folded into the base weights) would avoid it entirely
+for single-adapter serving.
+
+Swap overhead against the corrected rate (31.07 tok/s base):
+
+| swaps | tok/step | pure decode | rewrap | lora-fast | coef-fast |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 30 | 50 | 48.3 s | 7.27% | 1.99% | **0.04%** |
+| 30 | 200 | 193.1 s | 1.82% | 0.50% | **0.01%** |
+
+A 200-token agent step costs **6.4 s** of decode; even the slow 117 ms swap is
+~2% of one step. Going from the incumbent all the way to 8 KB coefficient swaps
+saves **~2% of wall-clock** at realistic step lengths. The "3-5 second spinner
+caused by adapter swapping" does not exist here — 30 swaps at the *claimed*
+10 ms is 0.3 s, and the bottleneck is token generation, not weight movement.
+
+#### Speculative decoding — ARCHITECTURALLY BLOCKED 🔴
+
+The standard way to break a batch-1 decode ceiling does not work on this model
+at all. Both variants fail immediately:
+
+```text
+ValueError: assisted generation is not supported with stateful models,
+such as Qwen3_5ForCausalLM
+```
+
+Cause: 24 of 32 layers are `Qwen3_5GatedDeltaNet` linear-attention layers
+carrying a fixed-size **recurrent state** instead of a growing KV cache.
+Speculative decoding must roll that state back whenever a drafted token is
+rejected — trivial for a KV cache (truncate), unimplemented for a recurrent
+one — so `transformers` refuses the entire family up front.
+
+This blocks **both**:
+
+- **prompt-lookup decoding** (`prompt_lookup_num_tokens`) — needs no draft model
+  and no extra VRAM, still refused;
+- **draft-model speculation** with `Qwen/Qwen3.5-0.8B`, even though that draft is
+  fully compatible on every other axis (tokenizer verified identical: 248,077
+  vocab, same EOS, byte-identical encodings; 1.7 GB downloaded and cached).
+
+The same hybrid architecture also blocks the *other* obvious decode fix: the
+`fla`/`causal_conv1d` fast path for those layers is missing (`linear_attn` is
+32.9% of decode time in the profile) and **cannot be installed on this rig** —
+`causal-conv1d`'s build requires `nvcc`, which is CUDA-only.
+
+**Net: on this model + hardware, neither speculative decoding nor the linear-
+attention fast path is available.** Decode stays ~31 tok/s. Any plan that
+assumes 2-3x decode speedup needs a different base model, not a different
+adapter scheme. `scripts/benchmark_speculative_decode.py` re-checks this in one
+run if the situation changes (e.g. a transformers release adds stateful-model
+support).
+
+Also note p99 >> p50 throughout (32 ms → 109 ms): the WSL2 GPU path is jittery,
+and **that jitter alone is larger than the entire coefficient-swap saving**.
+
+#### Multi-tenant VRAM: the argument inverts on measured data
+
+| 100 tasks pinned in VRAM | |
+| --- | ---: |
+| standard LoRA | 2.13 GB |
+| coefficients *if one bank were shared* | 62 MB (34x better) |
+| **coefficients as measured** (cross-task retention 0.00% → one bank per task) | **6.13 GB — 2.9x worse** |
+
+The density win requires bank sharing, which is exactly what the 0.00%
+cross-task retention rules out. **Verdict: the primitive is a genuine
+engineering win worth keeping; the latency and density stories it was meant to
+justify are not supported on this hardware.**
+
 ---
 
 ## ✅ Execution Plan (gated, cheapest-decisive-first)
@@ -205,7 +552,7 @@ if the gate fails, the steps after it are not worth doing.
 | **C. LoKr baseline** ⭐ | `LoKrConfig`, no new code; **measure real saved adapter size** | ~10 min | **decisive**: does Kronecker hold adherence at ~3 MB, or collapse the way Tucker did? |
 | **D. KronA + DoRA** | `LoKrConfig` has no `use_dora` field — add a magnitude vector to LoKr in PyTorch | ~1 day | only if C holds quality but loses some to plain LoRA/DoRA |
 | **E. Fused HIP kernel** | `krona_dora_fused.hip` (Step 1 below) | 2–3 weeks | only if C/D prove quality at ~3 MB. Reframed honestly as a **speed/VRAM optimization**, not a capability unlock — C/D already deliver the small adapters |
-| **F. Billboard Impostor** | Step 3 below; **blocked** on a hot-swap primitive rewrite (`load_novel_adapter` re-wraps the module tree and corrupts on a second call — confirmed by a real crash) | — | only after E, and after the fleet of distinct domain adapters exists |
+| **F. Billboard Impostor** | Step 3 below. ✅ **Unblocked** — `swap_adapter_weights()` built and benchmarked (3.7x faster than re-wrap, repeat-safe) | done | ⚠️ **Gate now fails on value, not feasibility**: the latency it removes is worth ~1% of loop wall-clock, and the VRAM-density win needs bank sharing that cross-task retention (0.00%) rules out. Build only if a use case survives those two numbers |
 
 **A + C together cost ~20 minutes of GPU time and test the premise that the entire
 2–3 week kernel effort rests on.** If LoKr's adherence collapses at 3 MB, the

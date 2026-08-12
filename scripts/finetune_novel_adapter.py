@@ -96,6 +96,7 @@ VARIANT_MODES: dict[str, VariantConfig] = {
     "random_mask": VariantConfig(mode="standard", gated=True, selection="random"),
     "krotucker": VariantConfig(mode="krotucker", gated=False),
     "id_kron": VariantConfig(mode="id_kron", gated=False),
+    "master_basis": VariantConfig(mode="master_basis", gated=False),
     # Control for custom_standard: identical in every way EXCEPT the down-
     # projection init uses the true fan_in. custom_standard's `lora_a` is
     # stored (in, rank), so kaiming reads fan_in=rank and over-initialises it
@@ -149,6 +150,8 @@ def finetune_novel(
     raw_docs_dir: str | None = None,
     sft_file: str | None = None,
     dataset_fingerprint: str | None = None,
+    basis_bank: str | None = None,
+    init_coefficients_from: str | None = None,
 ):
     if variant not in VARIANT_MODES:
         raise ValueError(f"Unknown variant '{variant}'. Options: {sorted(VARIANT_MODES)}")
@@ -213,6 +216,17 @@ def finetune_novel(
         # there), that same write would silently force a device transfer per call.
         gate = gate.to(next(model.parameters()).device)
 
+    # A random basis bank spans nothing task-relevant (measured: 12.4-13.4%
+    # adherence, flat across a 16x alpha sweep), so master_basis is only
+    # meaningful with a bank extracted from real adapters.
+    preloaded_basis = None
+    if basis_bank:
+        bank_path = Path(basis_bank)
+        if not bank_path.is_absolute():
+            bank_path = REPO_ROOT / bank_path
+        preloaded_basis = torch.load(bank_path, map_location="cpu", weights_only=False)["bank"]
+        print(f"Loaded basis bank: {bank_path.name} ({len(preloaded_basis)} shape-groups)")
+
     summary = apply_novel_lora(
         model,
         mode=cfg.mode,
@@ -237,12 +251,34 @@ def finetune_novel(
         # True costs the entire technique silently doing nothing.
         velocity_skip_recompute=False,
         correct_fan_in_init=cfg.correct_fan_in_init,
+        preloaded_basis=preloaded_basis,
     )
     print(
         f"Wrapped {summary['wrapped_count']} Linear layers | "
         f"trainable={summary['trainable_params']:,} / total={summary['total_params']:,} "
         f"({100 * summary['trainable_params'] / summary['total_params']:.3f}%)"
     )
+
+    if init_coefficients_from:
+        # Warm start: begin from the least-squares projection instead of zeros.
+        # Zero-init + Adam is hopeless here -- Adam moves each scalar by ~lr per
+        # step, so from 0 the coefficients cannot reach the O(1-8) magnitudes the
+        # projection shows are needed (measured: dominant |c| median 7.25).
+        init_path = Path(init_coefficients_from)
+        if not init_path.is_absolute():
+            init_path = REPO_ROOT / init_path
+        init_state = torch.load(init_path / "novel_adapter.pt", map_location="cpu")
+        msd = model.state_dict()
+        loaded, missing = 0, []
+        for k, v in init_state.items():
+            if k in msd:
+                msd[k].data.copy_(v.to(msd[k].dtype).to(msd[k].device))
+                loaded += 1
+            else:
+                missing.append(k)
+        if missing:
+            raise RuntimeError(f"warm-start keys not present in wrapped model: {missing[:5]} ({len(missing)} total)")
+        print(f"Warm-started {loaded} coefficient tensors from {init_path.name}")
     # transformers' Trainer.__init__ -> validate_quantization_for_training() blocks
     # fine-tuning a quantized model unless `_hf_peft_config_loaded` is set (normally
     # done by peft.get_peft_model()). We legitimately do have trainable adapters
@@ -317,6 +353,11 @@ def finetune_novel(
         "variant": variant,
         "mode": cfg.mode,
         "gated": cfg.gated,
+        # Recorded so load_novel_adapter restores the EXACT bank the coefficients
+        # were fitted against -- evaluating them over a different (or random)
+        # basis silently produces a meaningless adapter rather than an error.
+        "basis_bank": basis_bank,
+        "init_coefficients_from": init_coefficients_from,
         "target_modules": TARGET_MODULES,
         "rank": rank,
         "rank_in": rank_in,
@@ -479,6 +520,18 @@ if __name__ == "__main__":
         default=None,
         help="Explicit datasets-cache fingerprint; default derives one from the resolved paths.",
     )
+    parser.add_argument(
+        "--basis-bank",
+        default=None,
+        help="master_basis only: path to a bank from scripts/extract_svd_basis.py. "
+        "Without this the bank is random, which scores ~base (measured).",
+    )
+    parser.add_argument(
+        "--init-coefficients-from",
+        default=None,
+        help="master_basis only: warm-start coefficients from a projected adapter "
+        "(scripts/project_adapter_to_basis.py) instead of zeros.",
+    )
     args = parser.parse_args()
 
     finetune_novel(
@@ -503,4 +556,6 @@ if __name__ == "__main__":
         raw_docs_dir=args.raw_docs_dir,
         sft_file=args.sft_file,
         dataset_fingerprint=args.dataset_fingerprint,
+        basis_bank=args.basis_bank,
+        init_coefficients_from=args.init_coefficients_from,
     )
