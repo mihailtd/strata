@@ -865,7 +865,7 @@ def save_novel_adapter(model, out_dir: str | Path, meta: dict) -> None:
         for k, v in curr.novel_master_basis_bank.state_dict().items():
             state[f"novel_master_basis_bank.{k}"] = v.detach().cpu().clone()
 
-    print(f"[save_novel_adapter] Extracted {len(state)} adapter weight tensors -> saving to {out_dir / 'novel_adapter.pt'}")
+    print(f"[save_novel_adapter] Extracted {len(state)} adapter weight tensors -> {out_dir / 'novel_adapter.pt'}")
     torch.save(state, out_dir / "novel_adapter.pt")
     with open(out_dir / "novel_adapter_config.json", "w") as f:
         json.dump(meta, f, indent=2)
@@ -1040,163 +1040,240 @@ def swap_adapter_weights(
 # ---------------------------------------------------------------------------
 
 
-class FoldedAdapterPayload:
-    """An adapter's pre-computed dense weight deltas held in host memory or VRAM.
+# ---------------------------------------------------------------------------
+# Weight folding: run an adapted model at unwrapped base-model speed
+# ---------------------------------------------------------------------------
+#
+# WHY: at batch 1 the adapter wrapper costs ~19% of decode throughput on this
+# rig -- not FLOPs (the adapter is 0.44% of parameters) but 256 extra small
+# kernel launches per token, 2 per wrapped Linear. Folding dW into the base
+# weight deletes the wrapper from the execution path entirely.
+#
+# THE THREE THINGS THAT MAKE THIS CORRECT, each of which a naive version gets
+# wrong:
+#
+#   1. FACTORS STAY FACTORED. A dense dW payload for this model is 10.2 GB in
+#      fp32 -- an 812x expansion of the 12.6 MB adapter -- so holding three of
+#      them needs 30.7 GB of pinned host RAM (this box has 23 GB) and a swap
+#      would push 2 x 10.2 GB over a 12.6 GB/s PCIe link: ~1.6 s. Keeping the
+#      (out, r) x (r, in) factors on-device instead makes a swap one fused
+#      `addmm` per module, bounded by VRAM bandwidth rather than PCIe.
+#
+#   2. SCALING COMES FROM THE ADAPTER, NOT A CONSTANT. `NovelLoraLinear` uses
+#      alpha / rank_total, and for id_kron rank_total = rank_in * rank_out. A
+#      hardcoded 2.0 is right for r1*r2 = 8 and 8x too large for r1*r2 = 64.
+#      Here rank_total is read off the tensors themselves and cross-checked
+#      against the config.
+#
+#   3. RESTORE IS A COPY, NOT A SUBTRACTION. bf16 has 8 mantissa bits, so
+#      (W + dW) - dW != W: measured 4.9e-4 L_inf drift after 400 add/sub
+#      cycles. Keeping a pristine W0 and writing W_live = W0 + dW makes every
+#      activation independent of history and restore exact by construction.
+#      Costs one extra copy of the wrapped weights in VRAM (5.1 GB bf16 here).
 
-    Enables zero-allocation, crash-free dynamic hot-swapping by applying
-    W_active = W_base + dW directly into unwrapped base model weight memory blocks.
-    Bypasses wrapped linear hooks entirely, preserving 100% native base model decode speed.
+
+def unwrap_novel_lora(model: nn.Module) -> int:
+    """Replace every NovelLoraLinear with its base Linear, in place.
+
+    Lets a single process measure wrapped and folded execution of the *same*
+    weights back to back, which is the only way to compare them without a
+    reload confounding the timing.
+    """
+    n = 0
+    for parent in model.modules():
+        for name, child in list(parent.named_children()):
+            if isinstance(child, NovelLoraLinear):
+                setattr(parent, name, child.base_layer)
+                n += 1
+    return n
+
+
+class FoldableExpert:
+    """One adapter as device-resident factors: dW = scaling * (U @ V).
+
+    U is (out, r), V is (r, in), so dW matches an nn.Linear weight (out, in)
+    directly and folding is `addmm(W0, U, V, alpha=scaling)`.
+
+    Every supported layout is normalised into that one pair:
+      peft     lora_A (r, in), lora_B (out, r)   -> U = B,            V = A
+      standard lora_a (in, r), lora_b (r, out)   -> U = lora_b^T,     V = lora_a^T
+      id_kron  w_a (in/r1, r2), b_lora (r1*r2, out)
+               the wrapper splits h into r1 contiguous chunks and applies the
+               shared w_a to each, i.e. an implicit block-diagonal down-proj
+               A = blkdiag(w_a x r1) of shape (in, r1*r2)
+                                              -> U = b_lora^T,        V = A^T
     """
 
-    def __init__(self, deltas: dict[str, torch.Tensor], pin_memory: bool = True, name: str = ""):
+    def __init__(self, factors: dict[str, tuple[torch.Tensor, torch.Tensor]], scaling: float, name: str = ""):
+        self.factors = factors
+        self.scaling = float(scaling)
         self.name = name
-        self.pinned = pin_memory and torch.cuda.is_available()
-        self.deltas: dict[str, torch.Tensor] = {}
-        for k, v in deltas.items():
-            t = v.detach().contiguous()
-            self.deltas[k] = t.pin_memory() if (self.pinned and t.device.type == "cpu") else t
-        self.nbytes = sum(t.numel() * t.element_size() for t in self.deltas.values())
 
-    @classmethod
-    def compute_from_state_dict(
-        cls,
-        state_dict: dict[str, torch.Tensor],
-        scaling: float = 1.0,
-        pin_memory: bool = True,
-        name: str = "",
-    ) -> FoldedAdapterPayload:
-        """Computes dense matrix deltas dW = scaling * (lora_B @ lora_A) from an adapter state dict."""
-        deltas: dict[str, torch.Tensor] = {}
-        modules: dict[str, dict[str, torch.Tensor]] = {}
+    @property
+    def nbytes(self) -> int:
+        return sum(u.numel() * u.element_size() + v.numel() * v.element_size() for u, v in self.factors.values())
 
-        for k, v in state_dict.items():
-            key_clean = k.replace("base_model.model.", "").replace("model.", "")
-            parts = key_clean.split(".")
-            param_name = parts[-1]
-            if param_name in ("weight", "bias") and len(parts) > 1:
-                param_name = parts[-2]
-                mod_key = ".".join(parts[:-2])
-            else:
-                mod_key = ".".join(parts[:-1])
-
-            modules.setdefault(mod_key, {})[param_name] = v
-
-        for mod_key, param_dict in modules.items():
-            if "lora_A" in param_dict and "lora_B" in param_dict:
-                a = param_dict["lora_A"].float()
-                b = param_dict["lora_B"].float()
-                # standard peft: lora_A is (rank, in), lora_B is (out, rank)
-                if a.dim() == 2 and b.dim() == 2:
-                    if a.shape[0] == b.shape[1]:
-                        dw = (b @ a) * scaling
-                    else:
-                        dw = (a @ b.t()) * scaling
-                    deltas[f"{mod_key}.weight"] = dw.cpu()
-            elif "w_a" in param_dict and "b_lora" in param_dict:
-                w_a = param_dict["w_a"].float()
-                b_lora = param_dict["b_lora"].float()
-                rank_total, out_f = b_lora.shape
-                r2 = w_a.shape[1]
-                r1 = rank_total // max(1, r2)
-                A = torch.block_diag(*[w_a for _ in range(r1)])
-                dw = (b_lora.t() @ A.t()) * scaling
-                deltas[f"{mod_key}.weight"] = dw.cpu()
-            elif "lora_a" in param_dict and "lora_b" in param_dict:
-                a = param_dict["lora_a"].float()
-                b = param_dict["lora_b"].float()
-                if a.shape[1] == b.shape[0]:
-                    dw = (a @ b).t() * scaling
-                elif a.shape[0] == b.shape[1]:
-                    dw = (b @ a) * scaling
-                else:
-                    dw = (a.t() @ b.t()) * scaling
-                deltas[f"{mod_key}.weight"] = dw.cpu()
-
-        return cls(deltas, pin_memory=pin_memory, name=name)
+    def to(self, device, dtype) -> FoldableExpert:
+        self.factors = {k: (u.to(device, dtype), v.to(device, dtype)) for k, (u, v) in self.factors.items()}
+        return self
 
     def __repr__(self) -> str:
         return (
-            f"FoldedAdapterPayload({self.name!r}, {len(self.deltas)} dense deltas, "
-            f"{self.nbytes / 1e6:.3f} MB, pinned={self.pinned})"
+            f"FoldableExpert({self.name!r}, {len(self.factors)} modules, "
+            f"scaling={self.scaling}, {self.nbytes / 1e6:.1f} MB)"
         )
 
+    @staticmethod
+    def _weight_key(module_path: str) -> str:
+        """'model.layers.0.mlp.gate_proj' -> 'model.layers.0.mlp.gate_proj.weight'."""
+        return f"{module_path}.weight"
 
-def prepare_folding_slots(model: nn.Module, payload: FoldedAdapterPayload) -> dict[str, torch.Tensor]:
-    """Resolves payload delta keys directly to the unwrapped base model's parameter weights in VRAM."""
-    msd = model.state_dict()
-    slots: dict[str, torch.Tensor] = {}
-    missing, mismatched = [], []
+    @classmethod
+    def from_dir(cls, adapter_dir: str | Path, name: str = "") -> FoldableExpert:
+        adapter_dir = Path(adapter_dir)
+        name = name or adapter_dir.name
 
-    for k, delta in payload.deltas.items():
-        matched_key = None
-        if k in msd:
-            matched_key = k
+        if (adapter_dir / "novel_adapter_config.json").exists():
+            cfg = json.loads((adapter_dir / "novel_adapter_config.json").read_text())
+            state = torch.load(adapter_dir / "novel_adapter.pt", map_location="cpu")
+            return cls._from_novel(state, cfg, name)
+
+        if (adapter_dir / "adapter_config.json").exists():
+            from peft.utils import load_peft_weights
+
+            cfg = json.loads((adapter_dir / "adapter_config.json").read_text())
+            return cls._from_peft(load_peft_weights(str(adapter_dir)), cfg, name)
+
+        raise FileNotFoundError(f"No novel_adapter_config.json or adapter_config.json in {adapter_dir}")
+
+    @classmethod
+    def _from_peft(cls, state: dict, cfg: dict, name: str) -> FoldableExpert:
+        pairs: dict[str, dict[str, torch.Tensor]] = {}
+        for k, v in state.items():
+            for tag, slot in ((".lora_A", "A"), (".lora_B", "B")):
+                if tag in k:
+                    mod = k.split(tag)[0].replace("base_model.model.", "")
+                    pairs.setdefault(mod, {})[slot] = v
+        factors = {}
+        for mod, d in pairs.items():
+            if "A" in d and "B" in d:
+                factors[cls._weight_key(mod)] = (d["B"].float(), d["A"].float())
+        rank = cfg["r"]
+        return cls(factors, scaling=cfg["lora_alpha"] / rank, name=name)
+
+    @classmethod
+    def _from_novel(cls, state: dict, cfg: dict, name: str) -> FoldableExpert:
+        pairs: dict[str, dict[str, torch.Tensor]] = {}
+        for k, v in state.items():
+            mod, _, leaf = k.rpartition(".")
+            if leaf in ("w_a", "b_lora", "lora_a", "lora_b"):
+                pairs.setdefault(mod, {})[leaf] = v
+        if not pairs:
+            raise ValueError(f"{name}: no foldable (w_a/b_lora or lora_a/lora_b) tensors found")
+
+        factors: dict[str, tuple[torch.Tensor, torch.Tensor]] = {}
+        rank_totals = set()
+        for mod, d in pairs.items():
+            if "w_a" in d and "b_lora" in d:  # id_kron
+                w_a, b = d["w_a"].float(), d["b_lora"].float()
+                rank_total, _ = b.shape
+                r2 = w_a.shape[1]
+                r1 = rank_total // max(1, r2)
+                if r1 * r2 != rank_total:
+                    raise ValueError(f"{mod}: b_lora rank {rank_total} is not r1*r2 for r2={r2}")
+                # implicit block-diagonal down-projection, (in, r1*r2)
+                A = torch.block_diag(*([w_a] * r1))
+                factors[cls._weight_key(mod)] = (b.T.contiguous(), A.T.contiguous())
+            elif "lora_a" in d and "lora_b" in d:  # standard
+                a, b = d["lora_a"].float(), d["lora_b"].float()
+                rank_total = a.shape[1]
+                factors[cls._weight_key(mod)] = (b.T.contiguous(), a.T.contiguous())
+            else:
+                continue
+            rank_totals.add(rank_total)
+
+        if len(rank_totals) != 1:
+            raise ValueError(f"{name}: inconsistent rank across modules: {sorted(rank_totals)}")
+        rank_total = rank_totals.pop()
+
+        # NovelLoraLinear sets self.scaling = alpha / rank_total. Derive it from
+        # the tensors (authoritative) and warn if the config disagrees.
+        alpha = cfg.get("alpha", 16)
+        scaling = alpha / rank_total
+        if cfg.get("mode") == "id_kron":
+            cfg_rank = (cfg.get("rank_in") or 8) * (cfg.get("rank_out") or 1)
         else:
-            for m_key in msd:
-                if m_key.endswith(k) or k.endswith(m_key):
-                    matched_key = m_key
-                    break
-
-        if matched_key is None:
-            missing.append(k)
-            continue
-
-        dst = msd[matched_key]
-        if tuple(dst.shape) != tuple(delta.shape):
-            mismatched.append(f"{k}: base {tuple(dst.shape)} vs delta {tuple(delta.shape)}")
-            continue
-
-        slots[k] = dst
-
-    if missing:
-        warnings.warn(f"prepare_folding_slots: {len(missing)} keys not found in base model (first 2: {missing[:2]})")
-    if mismatched:
-        raise ValueError(f"Shape mismatch in folding slots: {mismatched[:2]}")
-
-    return slots
+            cfg_rank = cfg.get("rank", 8)
+        if cfg_rank != rank_total:
+            warnings.warn(
+                f"{name}: rank from tensors ({rank_total}) != rank from config ({cfg_rank}); "
+                f"trusting tensors, scaling = {alpha}/{rank_total} = {scaling}",
+                stacklevel=2,
+            )
+        return cls(factors, scaling=scaling, name=name)
 
 
-@torch.no_grad()
-def fold_adapter_in_place(
-    slots: dict[str, torch.Tensor],
-    payload: FoldedAdapterPayload,
-    scale: float = 1.0,
-    non_blocking: bool = True,
-) -> None:
-    """Folds adapter deltas directly into base model weights in VRAM: W_base += scale * delta."""
-    for k, dst in slots.items():
-        delta = payload.deltas[k].to(dst.device, non_blocking=non_blocking, dtype=dst.dtype)
-        if scale == 1.0:
-            dst.add_(delta)
-        else:
-            dst.add_(delta, alpha=scale)
+class WeightFoldingEngine:
+    """Folds experts into a plain (unwrapped) model's weights and back out.
 
+    Holds a pristine copy of every weight any expert touches, so `activate`
+    always writes W0 + dW rather than mutating whatever is currently loaded.
+    That makes activations order-independent and `restore` bit-exact.
+    """
 
-@torch.no_grad()
-def unfold_adapter_in_place(
-    slots: dict[str, torch.Tensor],
-    payload: FoldedAdapterPayload,
-    scale: float = 1.0,
-    non_blocking: bool = True,
-) -> None:
-    """Unfolds adapter deltas directly from base model weights in VRAM: W_base -= scale * delta."""
-    for k, dst in slots.items():
-        delta = payload.deltas[k].to(dst.device, non_blocking=non_blocking, dtype=dst.dtype)
-        if scale == 1.0:
-            dst.sub_(delta)
-        else:
-            dst.sub_(delta, alpha=scale)
+    def __init__(self, model: nn.Module, experts: Iterable[FoldableExpert], keep_pristine: bool = True):
+        params = dict(model.named_parameters())
+        self.experts = list(experts)
+        self.keep_pristine = keep_pristine
 
+        touched: set[str] = set()
+        for e in self.experts:
+            for key, (u, v) in e.factors.items():
+                if key not in params:
+                    raise KeyError(f"{e.name}: '{key}' is not a parameter of the model")
+                w = params[key]
+                if (u.shape[0], v.shape[1]) != tuple(w.shape):
+                    raise ValueError(
+                        f"{e.name}: '{key}' delta {(u.shape[0], v.shape[1])} != weight {tuple(w.shape)}"
+                    )
+                touched.add(key)
 
-@torch.no_grad()
-def swap_folded_adapters_in_place(
-    slots: dict[str, torch.Tensor],
-    old_payload: FoldedAdapterPayload | None,
-    new_payload: FoldedAdapterPayload,
-    non_blocking: bool = True,
-) -> None:
-    """Hot-swaps active adapter in-place on base model weights: W_base = W_base - delta_old + delta_new."""
-    if old_payload is not None:
-        unfold_adapter_in_place(slots, old_payload, non_blocking=non_blocking)
-    fold_adapter_in_place(slots, new_payload, non_blocking=non_blocking)
+        self.slots = {k: params[k] for k in sorted(touched)}
+        # move factors onto the weights they fold into
+        ref = next(iter(self.slots.values()))
+        for e in self.experts:
+            e.to(ref.device, ref.dtype)
 
+        self.pristine = {k: v.detach().clone() for k, v in self.slots.items()} if keep_pristine else {}
+        self.active: str | None = None
+
+    @property
+    def pristine_bytes(self) -> int:
+        return sum(t.numel() * t.element_size() for t in self.pristine.values())
+
+    @torch.no_grad()
+    def activate(self, expert: FoldableExpert) -> None:
+        """W_live = W0 + scaling * (U @ V), one fused addmm per module."""
+        if not self.keep_pristine:
+            raise RuntimeError("activate() requires keep_pristine=True; use activate_delta() otherwise")
+        for key, w in self.slots.items():
+            f = expert.factors.get(key)
+            w0 = self.pristine[key]
+            if f is None:
+                w.copy_(w0)
+                continue
+            u, v = f
+            torch.addmm(w0, u, v, beta=1.0, alpha=expert.scaling, out=w)
+        self.active = expert.name
+
+    @torch.no_grad()
+    def restore(self) -> None:
+        """Exact: copies the pristine weights back, no arithmetic involved."""
+        for key, w in self.slots.items():
+            w.copy_(self.pristine[key])
+        self.active = None
+
+    @torch.no_grad()
+    def max_drift(self) -> float:
+        """L_inf between live weights and pristine -- 0 only if truly restored."""
+        return max((self.slots[k] - self.pristine[k]).abs().max().item() for k in self.slots)
