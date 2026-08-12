@@ -122,7 +122,9 @@ def export_adapter(
     r: int = 8,
     alpha: int = 16,
 ):
-    out_path = REPO_ROOT / out_dir
+    out_path = Path(out_dir)
+    if not out_path.is_absolute():
+        out_path = REPO_ROOT / out_path
     out_path.mkdir(parents=True, exist_ok=True)
 
     print(f"Loading exact target model: {model_name} for adapter export...")
@@ -164,7 +166,7 @@ def export_adapter(
     )
 
     sft_config = SFTConfig(
-        output_dir=str(REPO_ROOT / "results" / "tmp_export"),
+        output_dir="/tmp/export_trainer_scratch",
         # Optimisation 2: larger batch, gradient-accumulation scaled proportionally
         # so the effective batch size (batch_size * grad_accum) stays ≥ original.
         per_device_train_batch_size=batch_size,
@@ -201,7 +203,7 @@ def export_adapter(
     peak_vram_gb = torch.cuda.max_memory_allocated() / (1024**3) if torch.cuda.is_available() else 0.0
 
     print(f"Saving trained {peft_variant} adapter to {out_path}...")
-    model.save_pretrained(str(out_path))
+    trainer.save_model(str(out_path))
     tokenizer.save_pretrained(str(out_path))
 
     # The whole point of the KronA line of work is payload size, so measure the

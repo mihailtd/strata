@@ -63,6 +63,7 @@ from transformers.utils import is_flash_attn_2_available
 from trl import SFTConfig, SFTTrainer
 
 from gnn_experiment.micro_probe.dataset import load_astral_micro_dataset, load_micro_dataset
+from gnn_experiment.utils.logger import log_benchmark_metric
 from gnn_experiment.novel_peft import (
     TARGET_MODULES,
     VelocityGate,
@@ -164,6 +165,8 @@ def finetune_novel(
 
     out_dir = out_dir or str(REPO_ROOT / "results" / "adapters" / f"astral_qwen3.5_micro_{variant}")
     out_path = Path(out_dir)
+    if not out_path.is_absolute():
+        out_path = REPO_ROOT / out_path
     out_path.mkdir(parents=True, exist_ok=True)
 
     print(f"--- [{variant}] Loading {model_name} in 4-bit for novel-adapter fine-tuning ---")
@@ -299,7 +302,7 @@ def finetune_novel(
     # `trl.DataCollatorForCompletionOnlyLM`, which does not exist in this trl version).
     # pad_to_multiple_of=8 keeps sequence lengths aligned to tensor-core boundaries.
     sft_config = SFTConfig(
-        output_dir=str(REPO_ROOT / "results" / "tmp_export" / variant),
+        output_dir="/tmp/sft_trainer_scratch",
         # Optimisation 2: larger default batch + grad accumulation scaling.
         per_device_train_batch_size=batch_size,
         gradient_accumulation_steps=grad_accum_steps,
@@ -366,7 +369,7 @@ def finetune_novel(
         "velocity_max_quiet_fraction": velocity_max_quiet_fraction if gate is not None else None,
     }
     save_novel_adapter(model, out_path, meta)
-    tokenizer.save_pretrained(out_path)
+    tokenizer.save_pretrained(str(out_path))
 
     quiet_fraction_avg = None
     quiet_fraction_final = None

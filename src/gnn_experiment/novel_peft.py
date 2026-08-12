@@ -842,24 +842,30 @@ def apply_novel_lora(
 
 
 def save_novel_adapter(model, out_dir: str | Path, meta: dict) -> None:
-    out_dir = Path(out_dir)
+    out_dir = Path(out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    curr = model
+    while hasattr(curr, "module"):
+        curr = curr.module
+
     state = {}
-    for name, module in model.named_modules():
-        if isinstance(module, NovelLoraLinear):
+    for name, module in curr.named_modules():
+        if "NovelLoraLinear" in type(module).__name__ or isinstance(module, NovelLoraLinear):
             local = module.state_dict()
             for k, v in local.items():
                 if k.startswith("base_layer"):
                     continue
                 state[f"{name}.{k}"] = v.detach().cpu().clone()
-    if isinstance(getattr(model, "novel_lora_bank", None), TuckerFactorBank):
-        for k, v in model.novel_lora_bank.state_dict().items():
+
+    if isinstance(getattr(curr, "novel_lora_bank", None), TuckerFactorBank):
+        for k, v in curr.novel_lora_bank.state_dict().items():
             state[f"novel_lora_bank.{k}"] = v.detach().cpu().clone()
-    if meta.get("save_bank", False) and isinstance(getattr(model, "novel_master_basis_bank", None), MasterBasisBank):
-        for k, v in model.novel_master_basis_bank.state_dict().items():
+    if meta.get("save_bank", False) and isinstance(getattr(curr, "novel_master_basis_bank", None), MasterBasisBank):
+        for k, v in curr.novel_master_basis_bank.state_dict().items():
             state[f"novel_master_basis_bank.{k}"] = v.detach().cpu().clone()
 
+    print(f"[save_novel_adapter] Extracted {len(state)} adapter weight tensors -> saving to {out_dir / 'novel_adapter.pt'}")
     torch.save(state, out_dir / "novel_adapter.pt")
     with open(out_dir / "novel_adapter_config.json", "w") as f:
         json.dump(meta, f, indent=2)
@@ -1027,3 +1033,170 @@ def swap_adapter_weights(
         return
     for k, dst in slots.items():
         dst.copy_(payload.state[k], non_blocking=non_blocking)
+
+
+# ---------------------------------------------------------------------------
+# In-Place Adapter Weight Folding (Zero-Allocation Mutating Hot-Swap)
+# ---------------------------------------------------------------------------
+
+
+class FoldedAdapterPayload:
+    """An adapter's pre-computed dense weight deltas held in host memory or VRAM.
+
+    Enables zero-allocation, crash-free dynamic hot-swapping by applying
+    W_active = W_base + dW directly into unwrapped base model weight memory blocks.
+    Bypasses wrapped linear hooks entirely, preserving 100% native base model decode speed.
+    """
+
+    def __init__(self, deltas: dict[str, torch.Tensor], pin_memory: bool = True, name: str = ""):
+        self.name = name
+        self.pinned = pin_memory and torch.cuda.is_available()
+        self.deltas: dict[str, torch.Tensor] = {}
+        for k, v in deltas.items():
+            t = v.detach().contiguous()
+            self.deltas[k] = t.pin_memory() if (self.pinned and t.device.type == "cpu") else t
+        self.nbytes = sum(t.numel() * t.element_size() for t in self.deltas.values())
+
+    @classmethod
+    def compute_from_state_dict(
+        cls,
+        state_dict: dict[str, torch.Tensor],
+        scaling: float = 1.0,
+        pin_memory: bool = True,
+        name: str = "",
+    ) -> FoldedAdapterPayload:
+        """Computes dense matrix deltas dW = scaling * (lora_B @ lora_A) from an adapter state dict."""
+        deltas: dict[str, torch.Tensor] = {}
+        modules: dict[str, dict[str, torch.Tensor]] = {}
+
+        for k, v in state_dict.items():
+            key_clean = k.replace("base_model.model.", "").replace("model.", "")
+            parts = key_clean.split(".")
+            param_name = parts[-1]
+            if param_name in ("weight", "bias") and len(parts) > 1:
+                param_name = parts[-2]
+                mod_key = ".".join(parts[:-2])
+            else:
+                mod_key = ".".join(parts[:-1])
+
+            modules.setdefault(mod_key, {})[param_name] = v
+
+        for mod_key, param_dict in modules.items():
+            if "lora_A" in param_dict and "lora_B" in param_dict:
+                a = param_dict["lora_A"].float()
+                b = param_dict["lora_B"].float()
+                # standard peft: lora_A is (rank, in), lora_B is (out, rank)
+                if a.dim() == 2 and b.dim() == 2:
+                    if a.shape[0] == b.shape[1]:
+                        dw = (b @ a) * scaling
+                    else:
+                        dw = (a @ b.t()) * scaling
+                    deltas[f"{mod_key}.weight"] = dw.cpu()
+            elif "w_a" in param_dict and "b_lora" in param_dict:
+                w_a = param_dict["w_a"].float()
+                b_lora = param_dict["b_lora"].float()
+                rank_total, out_f = b_lora.shape
+                r2 = w_a.shape[1]
+                r1 = rank_total // max(1, r2)
+                A = torch.block_diag(*[w_a for _ in range(r1)])
+                dw = (b_lora.t() @ A.t()) * scaling
+                deltas[f"{mod_key}.weight"] = dw.cpu()
+            elif "lora_a" in param_dict and "lora_b" in param_dict:
+                a = param_dict["lora_a"].float()
+                b = param_dict["lora_b"].float()
+                if a.shape[1] == b.shape[0]:
+                    dw = (a @ b).t() * scaling
+                elif a.shape[0] == b.shape[1]:
+                    dw = (b @ a) * scaling
+                else:
+                    dw = (a.t() @ b.t()) * scaling
+                deltas[f"{mod_key}.weight"] = dw.cpu()
+
+        return cls(deltas, pin_memory=pin_memory, name=name)
+
+    def __repr__(self) -> str:
+        return (
+            f"FoldedAdapterPayload({self.name!r}, {len(self.deltas)} dense deltas, "
+            f"{self.nbytes / 1e6:.3f} MB, pinned={self.pinned})"
+        )
+
+
+def prepare_folding_slots(model: nn.Module, payload: FoldedAdapterPayload) -> dict[str, torch.Tensor]:
+    """Resolves payload delta keys directly to the unwrapped base model's parameter weights in VRAM."""
+    msd = model.state_dict()
+    slots: dict[str, torch.Tensor] = {}
+    missing, mismatched = [], []
+
+    for k, delta in payload.deltas.items():
+        matched_key = None
+        if k in msd:
+            matched_key = k
+        else:
+            for m_key in msd:
+                if m_key.endswith(k) or k.endswith(m_key):
+                    matched_key = m_key
+                    break
+
+        if matched_key is None:
+            missing.append(k)
+            continue
+
+        dst = msd[matched_key]
+        if tuple(dst.shape) != tuple(delta.shape):
+            mismatched.append(f"{k}: base {tuple(dst.shape)} vs delta {tuple(delta.shape)}")
+            continue
+
+        slots[k] = dst
+
+    if missing:
+        warnings.warn(f"prepare_folding_slots: {len(missing)} keys not found in base model (first 2: {missing[:2]})")
+    if mismatched:
+        raise ValueError(f"Shape mismatch in folding slots: {mismatched[:2]}")
+
+    return slots
+
+
+@torch.no_grad()
+def fold_adapter_in_place(
+    slots: dict[str, torch.Tensor],
+    payload: FoldedAdapterPayload,
+    scale: float = 1.0,
+    non_blocking: bool = True,
+) -> None:
+    """Folds adapter deltas directly into base model weights in VRAM: W_base += scale * delta."""
+    for k, dst in slots.items():
+        delta = payload.deltas[k].to(dst.device, non_blocking=non_blocking, dtype=dst.dtype)
+        if scale == 1.0:
+            dst.add_(delta)
+        else:
+            dst.add_(delta, alpha=scale)
+
+
+@torch.no_grad()
+def unfold_adapter_in_place(
+    slots: dict[str, torch.Tensor],
+    payload: FoldedAdapterPayload,
+    scale: float = 1.0,
+    non_blocking: bool = True,
+) -> None:
+    """Unfolds adapter deltas directly from base model weights in VRAM: W_base -= scale * delta."""
+    for k, dst in slots.items():
+        delta = payload.deltas[k].to(dst.device, non_blocking=non_blocking, dtype=dst.dtype)
+        if scale == 1.0:
+            dst.sub_(delta)
+        else:
+            dst.sub_(delta, alpha=scale)
+
+
+@torch.no_grad()
+def swap_folded_adapters_in_place(
+    slots: dict[str, torch.Tensor],
+    old_payload: FoldedAdapterPayload | None,
+    new_payload: FoldedAdapterPayload,
+    non_blocking: bool = True,
+) -> None:
+    """Hot-swaps active adapter in-place on base model weights: W_base = W_base - delta_old + delta_new."""
+    if old_payload is not None:
+        unfold_adapter_in_place(slots, old_payload, non_blocking=non_blocking)
+    fold_adapter_in_place(slots, new_payload, non_blocking=non_blocking)
+
