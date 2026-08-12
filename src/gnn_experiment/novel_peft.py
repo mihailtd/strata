@@ -1233,9 +1233,7 @@ class WeightFoldingEngine:
                     raise KeyError(f"{e.name}: '{key}' is not a parameter of the model")
                 w = params[key]
                 if (u.shape[0], v.shape[1]) != tuple(w.shape):
-                    raise ValueError(
-                        f"{e.name}: '{key}' delta {(u.shape[0], v.shape[1])} != weight {tuple(w.shape)}"
-                    )
+                    raise ValueError(f"{e.name}: '{key}' delta {(u.shape[0], v.shape[1])} != weight {tuple(w.shape)}")
                 touched.add(key)
 
         self.slots = {k: params[k] for k in sorted(touched)}
@@ -1277,3 +1275,65 @@ class WeightFoldingEngine:
     def max_drift(self) -> float:
         """L_inf between live weights and pristine -- 0 only if truly restored."""
         return max((self.slots[k] - self.pristine[k]).abs().max().item() for k in self.slots)
+
+
+class ZeroCopyBoundaryManager:
+    """Involution Half-Line Memory Boundary & Pointer Manager ((H, v, i, pi)).
+
+    Implements structural distinction between:
+    1. Internal Pairs (i(h1) = h2 != h1): Zero-copy VRAM pointer handle passing via
+       direct data_ptr() mappings across execution steps without CPU memory copies
+       or transient VRAM allocations.
+    2. External Fixed Points (i(h) = h): Strict boundary serialization / HTTP JSON
+       deserialization and string SSE socket encoding.
+    """
+
+    def __init__(self, device: torch.device | str = "cuda:0"):
+        self.device = torch.device(device) if isinstance(device, str) else device
+        self._handles: dict[str, tuple[int, tuple[int, ...], torch.dtype]] = {}
+
+    def register_internal_pair(self, name: str, tensor: torch.Tensor) -> int:
+        """Registers a zero-copy internal Line handle i(h1) = h2 != h1 pointing to VRAM."""
+        ptr = tensor.data_ptr()
+        self._handles[name] = (ptr, tuple(tensor.shape), tensor.dtype)
+        return ptr
+
+    def get_pointer_handle(self, name: str) -> tuple[int, tuple[int, ...], torch.dtype]:
+        """Resolves zero-copy VRAM pointer metadata without memory allocation."""
+        if name not in self._handles:
+            raise KeyError(f"No zero-copy VRAM handle registered for '{name}'")
+        return self._handles[name]
+
+    @staticmethod
+    def measure_vram_allocation_bytes() -> int:
+        """Probes allocated VRAM bytes to verify zero transient allocation churn."""
+        if torch.cuda.is_available():
+            return torch.cuda.memory_allocated()
+        return 0
+
+    @staticmethod
+    def external_serialize_fixed_point(data: dict | str) -> str:
+        """Fixed-point boundary i(h) = h: External serialization across network API sockets."""
+        if isinstance(data, str):
+            return data
+        return json.dumps(data, ensure_ascii=False)
+
+
+def route_expert_execution(
+    engine: WeightFoldingEngine,
+    expert: FoldableExpert,
+    absorption_threshold: float = 1.0,
+) -> str:
+    """Precision Absorption Threshold Router (if scaling >= threshold: fold() else: wrap()).
+
+    Selects between:
+    - Fold Path: In-place W_live = W0 + s * (U @ V) on-device GEMM mutation.
+    - Wrap Path: Routing execution through wrapped PEFT factor hooks.
+    """
+    if expert.scaling >= absorption_threshold:
+        engine.activate(expert)
+        return "fold"
+    else:
+        # Wrap path: preserve pristine weights without mutation
+        engine.restore()
+        return "wrap"

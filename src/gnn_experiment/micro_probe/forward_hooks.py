@@ -54,10 +54,7 @@ class MicroProbeForwardHooks:
             def make_hook(layer_idx: int):
                 def hook(module: nn.Module, input_args, output_tensor):
                     # Output can be tensor or tuple (hidden_states, ...)
-                    if isinstance(output_tensor, tuple):
-                        h = output_tensor[0]
-                    else:
-                        h = output_tensor
+                    h = output_tensor[0] if isinstance(output_tensor, tuple) else output_tensor
 
                     if isinstance(h, torch.Tensor):
                         # Detach to save memory

@@ -1,6 +1,7 @@
 """Thin OpenAI-compatible client for the local llama-server instance."""
 
 import asyncio
+import contextlib
 import json
 import os
 import random
@@ -31,10 +32,8 @@ def stop_llama_server(port: int, grace_s: float = 5.0) -> bool:
         return False
 
     for pid in pids:
-        try:
+        with contextlib.suppress(ProcessLookupError):
             os.kill(pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
 
     deadline = time.time() + grace_s
     while time.time() < deadline:
@@ -43,10 +42,8 @@ def stop_llama_server(port: int, grace_s: float = 5.0) -> bool:
         time.sleep(0.5)
 
     for pid in _find_pids():
-        try:
+        with contextlib.suppress(ProcessLookupError):
             os.kill(pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
     return True
 
 

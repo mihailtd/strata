@@ -5,15 +5,19 @@ merged weight W0 + dW is rounded to bf16, whereas the wrapper keeps dW in its
 own tensor and adds the delta after the base matmul. Measured on last-position
 logits that shows up as max|dlogit| = 0.156 against an adapter effect of 6.0 --
 small, but not zero, and logit fingerprints on four prompts are far too coarse
-to conclude it doesn't matter. This runs the project's real adherence eval
-over all 20 questions per domain and reports whether the folded model actually
-answers differently.
+to conclude it doesn't matter. This runs the project's real eval over all 20
+questions per domain and reports whether the folded model actually answers
+differently.
 
 The headline number here is EXACT STRING MATCH between the wrapped and folded
-arms, not adherence. Decoding is greedy, so both arms are a deterministic
-function of (weights, prompt): if the strings match, adherence is identical by
-construction and folding is behaviourally free. Any gap in adherence is only
+arms, not the score. Decoding is greedy, so both arms are a deterministic
+function of (weights, prompt): if the strings match, the score is identical by
+construction and folding is behaviourally free. Any gap in score is only
 meaningful once the strings are known to have diverged.
+
+Scoring is per-question rubric coverage where the eval data supplies an
+`expects` list (financial_planning), else the good/bad term ratio (astral,
+postgresql).
 
 Three arms per domain, one model load, same weights throughout:
     base      engine restored to pristine W0
@@ -126,8 +130,26 @@ def count_matches(text: str, patterns: list[str]) -> int:
     return sum(len(re.findall(p, low)) for p in patterns)
 
 
+def score_question(q: dict, text: str, good: list[str], bad: list[str]) -> dict:
+    """Rubric coverage when the question carries one, else the good/bad ratio.
+
+    A question with an `expects` list is scored on how many of ITS OWN required
+    concepts the answer names. That is immune to the two ways the ratio metric
+    was gameable -- verbosity (more text, more hits) and repetition (the same
+    term counted N times) -- and it is the only option for a domain with no
+    genuine opposing set. See scripts/build_financial_planning_dataset.py.
+    """
+    low = text.lower()
+    if q.get("expects"):
+        pats = q["expects"]
+        hit = sum(1 for p in pats if re.search(p, low))
+        return {"score_pct": 100.0 * hit / len(pats), "covered": hit, "expected": len(pats)}
+    g, b = count_matches(text, good), count_matches(text, bad)
+    return {"score_pct": (g / max(1, g + b)) * 100.0 if (g + b) else 0.0, "good_hits": g, "bad_hits": b}
+
+
 def run_arm(model, tokenizer, questions, good, bad, max_new_tokens):
-    """Greedy generation + adherence scoring, identical to the project's eval suite."""
+    """Greedy generation + scoring, matching the project's eval suite."""
     out = []
     for q in questions:
         ids = tokenizer(f"### Question:\n{q['prompt']}\n\n### Answer:\n", return_tensors="pt").to(model.device)
@@ -138,29 +160,26 @@ def run_arm(model, tokenizer, questions, good, bad, max_new_tokens):
                 max_new_tokens=max_new_tokens,
                 do_sample=False,
                 pad_token_id=tokenizer.pad_token_id or tokenizer.eos_token_id,
+                # Without this the base model runs past its answer and invents a
+                # new "### Question:" block, which then gets scored: 13-18/20 base
+                # answers did so, supplying 57% of base's financial term hits.
+                # Adapters learned to stop, so they were losing to an artifact.
+                stop_strings=["### Question"],
+                tokenizer=tokenizer,
             )
         dt = time.perf_counter() - t0
         text = tokenizer.decode(gen[0][ids["input_ids"].shape[1] :], skip_special_tokens=True).strip()
-        g, b = count_matches(text, good), count_matches(text, bad)
-        out.append(
-            {
-                "id": q.get("id"),
-                "response": text,
-                "good_hits": g,
-                "bad_hits": b,
-                "adherence_pct": (g / max(1, g + b)) * 100.0 if (g + b) else 0.0,
-                "gen_time_s": dt,
-            }
-        )
+        text = re.split(r"#+\s*Question", text)[0].strip()
+        out.append({"id": q.get("id"), "response": text, "gen_time_s": dt, **score_question(q, text, good, bad)})
     return out
 
 
 def summarise(rows):
-    return {
-        "adherence_pct": sum(r["adherence_pct"] for r in rows) / len(rows),
-        "good_hits": sum(r["good_hits"] for r in rows),
-        "bad_hits": sum(r["bad_hits"] for r in rows),
-    }
+    s = {"score_pct": sum(r["score_pct"] for r in rows) / len(rows)}
+    for k in ("good_hits", "bad_hits", "covered", "expected"):
+        if k in rows[0]:
+            s[k] = sum(r[k] for r in rows)
+    return s
 
 
 def main():
@@ -169,8 +188,19 @@ def main():
     ap.add_argument("--max-new-tokens", type=int, default=256)
     ap.add_argument("--domains", nargs="+", default=list(DOMAINS))
     ap.add_argument("--vram-cap-gb", type=float, default=22.0)
+    ap.add_argument(
+        "--adapter",
+        default=None,
+        help="Override the adapter dir for the single domain under test (A/B two adapters "
+        "on the same harness). Only valid with exactly one --domains entry.",
+    )
     ap.add_argument("--out", default="results/folded_vs_wrapped_eval.json")
     args = ap.parse_args()
+
+    if args.adapter:
+        if len(args.domains) != 1:
+            ap.error("--adapter requires exactly one --domains entry")
+        DOMAINS[args.domains[0]] = {**DOMAINS[args.domains[0]], "adapter": args.adapter}
 
     set_hard_vram_cap(args.vram_cap_gb)
     dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
@@ -207,18 +237,18 @@ def main():
         engine.restore()
         print("  base    ...", end="", flush=True)
         base = run_arm(model, tokenizer, questions, cfg["good"], cfg["bad"], args.max_new_tokens)
-        print(f" {summarise(base)['adherence_pct']:.2f}%")
+        print(f" {summarise(base)['score_pct']:.2f}%")
 
         load_novel_adapter(model, REPO_ROOT / cfg["adapter"])
         print("  wrapped ...", end="", flush=True)
         wrapped = run_arm(model, tokenizer, questions, cfg["good"], cfg["bad"], args.max_new_tokens)
-        print(f" {summarise(wrapped)['adherence_pct']:.2f}%")
+        print(f" {summarise(wrapped)['score_pct']:.2f}%")
         unwrap_novel_lora(model)
 
         engine.activate(experts[dom])
         print("  folded  ...", end="", flush=True)
         folded = run_arm(model, tokenizer, questions, cfg["good"], cfg["bad"], args.max_new_tokens)
-        print(f" {summarise(folded)['adherence_pct']:.2f}%")
+        print(f" {summarise(folded)['score_pct']:.2f}%")
         engine.restore()
 
         exact = sum(1 for a, b in zip(wrapped, folded, strict=True) if a["response"] == b["response"])
@@ -231,10 +261,10 @@ def main():
 
         s_base, s_wrap, s_fold = summarise(base), summarise(wrapped), summarise(folded)
         print(
-            f"\n  adherence   base {s_base['adherence_pct']:6.2f}%   "
-            f"wrapped {s_wrap['adherence_pct']:6.2f}%   folded {s_fold['adherence_pct']:6.2f}%"
+            f"\n  score       base {s_base['score_pct']:6.2f}%   "
+            f"wrapped {s_wrap['score_pct']:6.2f}%   folded {s_fold['score_pct']:6.2f}%"
         )
-        print(f"  folded - wrapped: {s_fold['adherence_pct'] - s_wrap['adherence_pct']:+.2f} pp")
+        print(f"  folded - wrapped: {s_fold['score_pct'] - s_wrap['score_pct']:+.2f} pp")
         print(f"  exact string match wrapped vs folded: {exact}/{len(questions)}")
         if prefixes:
             print(
@@ -248,7 +278,7 @@ def main():
             "base": s_base,
             "wrapped": s_wrap,
             "folded": s_fold,
-            "delta_folded_minus_wrapped_pp": s_fold["adherence_pct"] - s_wrap["adherence_pct"],
+            "delta_folded_minus_wrapped_pp": s_fold["score_pct"] - s_wrap["score_pct"],
             "exact_match": exact,
             "divergence_first_char": prefixes,
             "rows": {"base": base, "wrapped": wrapped, "folded": folded},
@@ -260,8 +290,8 @@ def main():
     print(f" {'domain':20s} {'base':>8s} {'wrapped':>9s} {'folded':>8s} {'delta':>8s} {'exact':>8s}")
     for dom, r in results["domains"].items():
         print(
-            f" {dom:20s} {r['base']['adherence_pct']:7.2f}% {r['wrapped']['adherence_pct']:8.2f}% "
-            f"{r['folded']['adherence_pct']:7.2f}% {r['delta_folded_minus_wrapped_pp']:+7.2f}pp "
+            f" {dom:20s} {r['base']['score_pct']:7.2f}% {r['wrapped']['score_pct']:8.2f}% "
+            f"{r['folded']['score_pct']:7.2f}% {r['delta_folded_minus_wrapped_pp']:+7.2f}pp "
             f"{r['exact_match']:4d}/{r['questions']:<3d}"
         )
 

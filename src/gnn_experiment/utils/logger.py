@@ -5,7 +5,7 @@ without background threads, HTTP requests, or database overhead.
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +19,7 @@ def log_benchmark_metric(
     path.parent.mkdir(parents=True, exist_ok=True)
 
     payload = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         **data,
     }
 

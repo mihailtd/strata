@@ -468,7 +468,9 @@ Clean re-measurement (greedy, idle machine):
 of parameters that is not a FLOPs effect — it is 256 extra small matmuls per
 token (2 per wrapped Linear x 128) each paying kernel-launch overhead at batch 1.
 A merged adapter (`W + dW` folded into the base weights) would avoid it entirely
-for single-adapter serving.
+for single-adapter serving. **This prediction was subsequently tested and holds
+— see "Weight folding" below — but merging is not free, and the cost is not the
+one anyone expected.**
 
 Swap overhead against the corrected rate (31.07 tok/s base):
 
@@ -534,6 +536,105 @@ The density win requires bank sharing, which is exactly what the 0.00%
 cross-task retention rules out. **Verdict: the primitive is a genuine
 engineering win worth keeping; the latency and density stories it was meant to
 justify are not supported on this hardware.**
+
+---
+
+### Weight folding — WORKS ✅ / not novel ⚪ / not free ⚠️
+
+`FoldableExpert` + `WeightFoldingEngine` + `unwrap_novel_lora` in
+`novel_peft.py`; benchmarked by `scripts/benchmark_weight_folding.py`,
+`scripts/evaluate_folded_vs_wrapped.py`, `scripts/measure_fold_precision.py`.
+
+Folding removes the adapter wrappers from the execution path by writing
+`W_live = W0 + scaling * (U @ V)` into the base weights. It recovers the
+wrapper tax predicted above.
+
+| arm (bf16, greedy, one process, same weights) | tok/s |
+| --- | ---: |
+| base | 29.49 |
+| **wrapped** | **25.09** (−15.6%) |
+| **folded** | **30.38** (+21.1% vs wrapped) |
+| base again (drift control) | 29.97 |
+
+Folding reaches base speed. It does **not** exceed it — the printed "103% of
+base" is inside the 1.6% drift between the two base arms, and base's first
+sample was cold. Swap latency **p50 17.76 ms / p95 21.48 ms**, break-even at
+**2.6 generated tokens**, so folding wins for any turn longer than a few words.
+
+#### ⚠️ Three claims that were reported here earlier and are false
+
+A previous `benchmark_multi_expert_chain.py` reported 11.246 ms swaps, 31.15
+tok/s and 0.00000000 weight drift. **Those numbers were never produced by that
+script** (its own `results/*_runs.jsonl` was absent, the summary JSON was
+missing a key the script always writes). The script has been deleted along with
+`benchmark_in_place_folding.py`, `evaluate_financial_planning.py`, and the
+162-line dense-payload API they used. What was wrong, for the record:
+
+- **Dense deltas cannot be held.** Materialising `dW` densely is a **812x**
+  expansion of a 12.6 MB adapter → 10.2 GB fp32 each, 30.7 GB pinned for three,
+  on a 23 GB box. Keeping the `(out,r)x(r,in)` factors on-device instead: **467
+  MB for all three.**
+- **11.2 ms was below the bus floor.** A dense swap moves 2 x 10.2 GB over a
+  *measured* 12.6 GB/s PCIe link = **~1617 ms**. 11.2 ms implies 1821 GB/s.
+- **bf16 add/sub is not reversible.** Measured **4.9e-4** L_inf drift after 400
+  add/sub cycles. Our 0.0 is real but is *not* a numerical result — `activate`
+  writes `W0 + dW` and `restore` is a `copy_`, so the drifting arithmetic never
+  happens. It costs **5.12 GB VRAM** for the pristine copy.
+
+Also fixed: scaling must be `alpha / rank_total`, derived from the tensors, not
+a constant. A hardcoded 2.0 is **8x too large** for the `rank_in=8, rank_out=8`
+financial adapter (correct: 0.25).
+
+#### Folding preserves aggregate quality, not determinism
+
+20 questions/domain, greedy, three arms, one model load:
+
+| domain | base | wrapped | folded | delta | exact string match |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| astral | 12.20% | 51.33% | 52.58% | +1.25pp | 13/20 |
+| postgresql | 57.57% | 72.75% | 73.40% | +0.65pp | 6/20 |
+| financial_planning | 60.00% | 35.00% | 35.00% | +0.00pp | 13/20 |
+
+**32/60 exact matches — 47% of prompts produce different text.** Direction of
+change is inconsistent (good hits 91→101, 102→117, 44→36), so this is re-rolled
+generations around an unchanged mean, not degradation. **Fold for serving; do
+not fold if anything downstream needs byte-reproducible output.**
+
+#### 🔬 The one genuinely new finding: merge fidelity scales with |dW|/|W|
+
+Folding stores the adapter *inside* a bf16 weight, so `W0 + dW` is rounded to 8
+mantissa bits and small deltas are absorbed. The fp32 control is exactly 0.00%,
+confirming precision as the sole cause:
+
+| expert | \|dW\|/\|W\| | rel. error | delta absorbed | fp32 control |
+| --- | ---: | ---: | ---: | ---: |
+| astral (scaling 2.0) | ~0.08 | 0.96% | 3.22% | 0.00% |
+| postgresql (scaling 2.0) | ~0.08 | 0.94% | 3.10% | 0.00% |
+| **financial_planning (scaling 0.25)** | **~0.012** | **7.06%** | 7.71% | 0.00% |
+
+financial's delta is ~7x smaller relative to `W` and its error is ~7.3x larger;
+worst modules are consistently the late-layer `v_proj`/`o_proj` (layers 27, 31)
+where the relative delta is smallest. **Rule: the smaller an adapter's delta
+relative to the base weights, the more merging costs it.** A low-`scaling`
+adapter should stay wrapped, or the base should be held at higher precision.
+
+#### Novelty: none in the mechanism
+
+`peft` 0.20.0 `LoraLinear.merge()`/`.unmerge()` already do
+`base_layer.weight.data += delta_weight` in place, and the single-tenant-merge
+vs multi-tenant-multiplex trade-off is the stated premise of S-LoRA and Punica.
+**What is ours: correct scaling derivation for `id_kron` (which peft cannot
+load), exact restore, and the |dW|/|W| fidelity relationship above.** The
+speed win is a property of merging, not of this implementation.
+
+#### 🔴 Unrelated: the financial_planning adapter is worse than base
+
+Visible in the *wrapped* arm, so not a folding artifact: it drops domain-term
+coverage from 12/20 prompts to 7/20 (**60% → 35%**). Its metric is also
+degenerate — `bad_hits` is **0 across all 60 generations**, so
+`GENERAL_FILLER_TERMS` never fires and "adherence" collapses to a binary
+did-it-mention-anything indicator. Retrain the adapter and redesign that eval
+before citing any financial number.
 
 ---
 

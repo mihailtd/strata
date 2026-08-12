@@ -113,4 +113,4 @@ if __name__ == "__main__":
     print(f"Metrics records: {counts['metrics']}")
     print(f"Parameters: {counts['params']}")
     print(f"Tags: {counts['tags']}")
-    print(f"Saved exported datasets to: results/mlflow_export/")
+    print("Saved exported datasets to: results/mlflow_export/")

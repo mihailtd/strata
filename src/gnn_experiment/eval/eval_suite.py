@@ -73,16 +73,30 @@ def evaluate_single_prompt(
         # variants is a difference between the variants. `temperature` is
         # deliberately not passed at all: it's a sampling-only parameter and
         # transformers warns when it's set alongside do_sample=False.
+        # `stop_strings` is load-bearing, not tidiness. The prompt format is
+        # "### Question:\n...\n\n### Answer:\n", and an un-fine-tuned model
+        # happily keeps going past its answer and invents a *new* "### Question:"
+        # block, which then gets scored. Measured across 60 generations: 18/20
+        # astral, 16/20 postgres and 13/20 financial BASE answers contained a
+        # fabricated question, and for financial that hallucinated tail supplied
+        # 57% of the base model's term hits (49 raw -> 21 truncated).
+        # Fine-tuned adapters learned to stop (0-4/20), so leaving this off
+        # penalised every adapter against an artifact of the base model.
         outputs = model.generate(
             **inputs,
             max_new_tokens=max_new_tokens,
             do_sample=False,
             pad_token_id=tokenizer.pad_token_id or tokenizer.eos_token_id,
+            stop_strings=["### Question"],
+            tokenizer=tokenizer,
         )
     gen_time_s = time.perf_counter() - start_t
 
     new_tokens = outputs[0][inputs.input_ids.shape[1] :]
     response_text = tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
+    # stop_strings still emits the matched text; drop it, and belt-and-braces
+    # for any model that emits a variant spelling the stop string missed.
+    response_text = re.split(r"#+\s*Question", response_text)[0].strip()
 
     modern_hits = count_matches(response_text, modern_terms)
     legacy_hits = count_matches(response_text, legacy_terms)
@@ -231,6 +245,6 @@ def run_astral_evaluation(
     print(f" Net Modern Stack Adherence Gain: +{adherence_gain:.1f}%")
     print(f" Base Legacy Hits Total (pip/black/mypy): {base_legacy_total}")
     print(f" Astral Legacy Hits Total (pip/black/mypy): {ft_legacy_total}")
-    print(f" Evaluation Results Logged Successfully to 'results/eval_runs.jsonl'!")
+    print(" Evaluation Results Logged Successfully to 'results/eval_runs.jsonl'!")
 
     return out_summary

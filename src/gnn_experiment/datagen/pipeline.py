@@ -16,14 +16,11 @@ requests is itself a bottleneck.
 import asyncio
 import json
 import statistics
-import tempfile
 import time
 from datetime import UTC, datetime
 from pathlib import Path
 
 from datasets import Dataset
-
-from gnn_experiment.utils.logger import log_benchmark_metric
 
 from gnn_experiment.datagen import prompts
 from gnn_experiment.datagen.chunk import chunk_all
@@ -31,6 +28,7 @@ from gnn_experiment.datagen.epub import chunk_all_epubs
 from gnn_experiment.datagen.fetch import fetch_all
 from gnn_experiment.datagen.llm_client import LocalLLMClient
 from gnn_experiment.datagen.schema import Chunk, QARecord
+from gnn_experiment.utils.logger import log_benchmark_metric
 
 REFUSAL_PATTERNS = ("i cannot", "i can't", "as an ai", "i'm not able to")
 
