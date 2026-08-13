@@ -162,7 +162,82 @@ across these tasks — corroborating the 0.00% cross-task retention recorded
 independently in `TODO.md`. The same-task pair at 7.15× shows the probe *can*
 detect real structure, so the null is informative rather than a broken metric.
 
-### 5. Eval-harness bug that inflated earlier base numbers
+### 5. Speculative decoding — UNBLOCKED by `fla` on gfx1100 🟢
+
+This was recorded in `TODO.md` as **architecturally blocked**. That was wrong,
+and the error is worth naming precisely because it cost real speedup.
+
+**The mistake:** treating `fla`/`causal_conv1d` as one dependency. They are two,
+with *independent* fallbacks in the modeling code:
+
+```python
+self.chunk_gated_delta_rule = chunk_gated_delta_rule or torch_chunk_gated_delta_rule  # from fla
+self.causal_conv1d_fn       = causal_conv1d_fn                                        # from causal_conv1d
+```
+
+`causal_conv1d` genuinely cannot build here (needs `nvcc`). **`fla` is
+Triton-based and runs natively on gfx1100.** `is_fast_path_available` reports
+`False` because `causal_conv1d` is absent — but that flag only gates a *warning*,
+while `chunk_gated_delta_rule` is wired in separately and does the work.
+
+**Gotcha:** fla's device probe is `@cache`d and runs at import. Import it before
+a GPU context exists and it latches to CPU for the whole process, warning
+"Triton is not supported on current platform". Touch CUDA first, then import.
+
+#### The multi-token wall collapsed
+
+Cost of one forward over K tokens (the quantity that decides whether
+speculation can pay):
+
+| K | torch fallback | with `fla` |
+| ---: | ---: | ---: |
+| 1 | 33.56 ms (1.00x) | 29.27 ms (1.00x) |
+| 2 | 95.44 ms (**2.84x**) | 37.18 ms (**1.27x**) |
+| 4 | 94.33 ms (2.81x) | 34.33 ms (**1.17x**) |
+| 8 | 91.25 ms (2.72x) | 40.18 ms (1.37x) |
+
+Break-even for speculation drops from **~2.8 to ~1.2 accepted tokens**. Plain
+greedy decode also gains **1.073x** (29.39 -> 31.54 tok/s) for free.
+
+#### Measured speculative decode, K=4
+
+Using the checkpoint's own shipped MTP head (`mtp.*`, 15 tensors, EAGLE-style),
+which `transformers` never loads — see `src/gnn_experiment/mtp_draft.py`.
+
+| backbone | base | speculative | speedup | accept% | gate |
+| --- | ---: | ---: | ---: | ---: | :---: |
+| un-adapted | 32.43 | 42.66 | **1.32x** | 56.7% | 4/4 ✅ |
+| astral folded | 32.02 | 44.64 | **1.39x** | 60.8% | 4/4 ✅ |
+| postgres folded | 31.68 | 37.02 | 1.17x | 48.1% | 3/4 ⚠️ |
+| financial folded | 32.78 | 33.81 | **1.03x** | 44.9% | 3/4 ⚠️ |
+
+**The yield is workload-dependent, not a fixed number.** An adapter degrades
+drafting most on *its own* domain (financial-folded: 2.08 -> 1.58 accepted on
+financial prompts), so a prompt mix weighted toward the active expert's domain
+loses most of the win. These four prompts are financial-heavy, which is why
+financial-folded collapses to 1.03x while astral-folded reaches 1.39x.
+
+#### Exactness is not achievable against plain decode, and that is not a bug
+
+The chunked kernel (used by verification) and the single-token recurrent kernel
+(used by plain decode) **disagree numerically**: 1 of 3 prompts diverges at
+token 9/32 with no speculation involved at all. So the honest reference for a
+speculative decoder is the path its verifier actually computes. Both are
+reported: `vs 1tok` and `vs chunk`. Un-adapted and astral pass 4/4 against the
+chunked reference; with postgres or financial folded it drops to 3/4.
+
+#### Rollback on a recurrent model
+
+`transformers` refuses assisted generation for this family outright
+("assisted generation is not supported with stateful models") because a
+GatedDeltaNet's recurrent state after K tokens is not recoverable from the
+state after M<K. The state is **fixed size** (52.5 MB here), so snapshot and
+restore is a cheap copy — verified to round-trip exactly. That is what makes
+speculation possible at all here.
+
+---
+
+### 6. Eval-harness bug that inflated earlier base numbers
 
 An un-fine-tuned model runs past its answer and fabricates a new
 `### Question:` block, which then gets scored. Affected **18/20 astral, 16/20
@@ -190,6 +265,17 @@ uv run --env-file .env python scripts/benchmark_alpha_absorption_sweep.py --doma
 
 # cross-task subspace orthogonality map (CPU, seconds)
 uv run scripts/build_orthogonality_map.py
+
+# speculative decoding needs fla (Triton-based, runs on gfx1100):
+#   uv pip install flash-linear-attention
+# NOTE: touch CUDA before importing it -- its device probe is @cache'd at import
+# and latches to CPU if no GPU context exists yet.
+
+# speculative decoding (K=4) with the shipped MTP head, optional folded expert
+uv run --env-file .env python scripts/benchmark_mtp_speculative.py --k 4 --adapter astral
+
+# does a domain-adapted backbone hurt MTP draft acceptance?
+uv run --env-file .env python scripts/benchmark_mtp_acceptance_vs_adapter.py
 
 # single pairwise subspace probe
 uv run scripts/probe_subspace_overlap.py \

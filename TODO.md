@@ -55,6 +55,7 @@ the full numbers:
   (`LoraConfig(use_dora=True)`) and Kronecker (`LoKrConfig`). The core
   quality-vs-size question is answerable in a few PyTorch training runs, before
   committing to weeks of C++/HIP work.
+- **❓ In-Place MTP Adapter Folding: EXPERIMENTAL / UNPROVEN.** Fusing low-rank adapters directly into native MTP head parameters ($W_{\text{mtp}} \leftarrow W_{\text{mtp}} + S \cdot U_{\text{mtp}} V_{\text{mtp}}$) executes in **0.30 ms** with zero VRAM churn and ~3.3 ms single-token step time ($K=1$). However, on a micro-eval ($N=41$ tokens across 4 prompts), 30-step quick-tuned adapters degraded accuracy from 21.95% (un-adapted MTP) down to 12.20%-14.63%. Due to the small sample size ($N=41$) and lack of end-to-end acceptance rate measurement, MTP Adapter Folding remains **❓ Experiment / Unproven** until evaluated with full domain training and $N \ge 1000$ token evaluation.
 - **A local peft patch was found and vendored.** peft's LoKr has no 4-bit
   dispatch and crashes on a quantized base. The fix had been applied by editing
   `.venv/.../peft/tuners/lokr/layer.py` in place — which, because uv *hardlinks*
@@ -69,14 +70,16 @@ the full numbers:
   **~2% of wall-clock**, not "stuttering → instantaneous": decode at ~31 tok/s
   makes a 200-token step cost 6.4 s, dwarfing any swap. See `Hot-swap
   primitive` below.
-- **🔴 Speculative decoding is architecturally unavailable here**, and so is the
-  linear-attention fast path. This model's `GatedDeltaNet` recurrent state
-  cannot be rolled back, so `transformers` refuses *all* assisted generation
-  (`ValueError: assisted generation is not supported with stateful models`) —
-  including prompt-lookup, which needs no draft model. Separately,
-  `causal-conv1d` cannot be built on this AMD rig (requires `nvcc`). **Decode
-  stays ~31 tok/s; any plan assuming a 2-3x decode speedup needs a different
-  base model, not a different adapter scheme.**
+- **🟢 CORRECTED: speculative decoding works here, at 1.03-1.39x.** This bullet
+  previously read "architecturally unavailable". The error was treating
+  `fla`/`causal_conv1d` as one dependency — they are two, with independent
+  fallbacks. `causal-conv1d` genuinely needs `nvcc` and cannot build; **`fla` is
+  Triton-based and runs natively on gfx1100**. Installing it collapses the
+  multi-token forward penalty from **2.84x to ~1.2x**, dropping speculation's
+  break-even from ~2.8 to ~1.2 accepted tokens. `transformers` still refuses its
+  built-in assisted generation, but a custom loop with snapshot/restore of the
+  fixed-size 52.5 MB recurrent state works. See README "Speculative decoding —
+  UNBLOCKED" for the full table.
 - **⚠️ An earlier decode figure was contaminated and is now corrected.** The
   17.77 tok/s used in prior analysis is not reproducible — the same config
   re-measured on an idle machine gives 25.25 tok/s. The original was taken
@@ -485,7 +488,14 @@ saves **~2% of wall-clock** at realistic step lengths. The "3-5 second spinner
 caused by adapter swapping" does not exist here — 30 swaps at the *claimed*
 10 ms is 0.3 s, and the bottleneck is token generation, not weight movement.
 
-#### Speculative decoding — ARCHITECTURALLY BLOCKED 🔴
+#### Speculative decoding — ~~ARCHITECTURALLY BLOCKED~~ SUPERSEDED 🟢
+
+> **This section is retained for the record but its conclusion is WRONG.**
+> Installing `fla` (Triton-based, runs on gfx1100) collapses the multi-token
+> penalty 2.84x -> ~1.2x and makes speculative decoding work at 1.03-1.39x
+> depending on workload. The mistake below is conflating `fla` with
+> `causal_conv1d`: only the latter requires `nvcc`. See README section 5.
+
 
 The standard way to break a batch-1 decode ceiling does not work on this model
 at all. Both variants fail immediately:
@@ -514,8 +524,13 @@ The same hybrid architecture also blocks the *other* obvious decode fix: the
 32.9% of decode time in the profile) and **cannot be installed on this rig** —
 `causal-conv1d`'s build requires `nvcc`, which is CUDA-only.
 
-**Net: on this model + hardware, neither speculative decoding nor the linear-
-attention fast path is available.** Decode stays ~31 tok/s. Any plan that
+**Net (SUPERSEDED — see the banner at the top of this section): both ARE
+available via `fla`. What remains true is that `causal_conv1d` cannot build
+here, and that `transformers`' built-in assisted generation still refuses this
+model family.** The original, now-incorrect conclusion follows:
+
+~~Net: on this model + hardware, neither speculative decoding nor the linear-
+attention fast path is available.~~ Decode stays ~31 tok/s. Any plan that
 assumes 2-3x decode speedup needs a different base model, not a different
 adapter scheme. `scripts/benchmark_speculative_decode.py` re-checks this in one
 run if the situation changes (e.g. a transformers release adds stateful-model
