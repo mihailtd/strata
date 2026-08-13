@@ -60,7 +60,7 @@ from gnn_experiment.novel_peft import (  # noqa: E402
     unwrap_novel_lora,
 )
 
-ADAPTER = "results/adapters/astral_sweep_a64"
+ADAPTER = "results/adapters/astral_sweep_a64"  # id_kron rank_total=64, scaling 1.0
 
 
 @torch.no_grad()
@@ -90,6 +90,7 @@ def main():
     ap.add_argument("--batches", type=int, nargs="+", default=[1, 2, 4, 8])
     ap.add_argument("--prompt-len", type=int, default=128)
     ap.add_argument("--vram-cap-gb", type=float, default=22.0)
+    ap.add_argument("--adapter", default=ADAPTER, help="adapter for the wrapped-vs-folded arm")
     ap.add_argument("--out", default="results/batch_scaling.json")
     args = ap.parse_args()
 
@@ -131,15 +132,28 @@ def main():
 
     # ---- 3. wrapper tax vs batch (does folding still pay?) -----------------
     print("\n3. WRAPPED vs FOLDED decode: does the +21% folding win survive batching?")
-    expert = FoldableExpert.from_dir(REPO_ROOT / ADAPTER, "astral")
+    expert = FoldableExpert.from_dir(REPO_ROOT / args.adapter, "astral")
     engine = WeightFoldingEngine(model, [expert], keep_pristine=True)
     engine.activate(expert)
     folded = {B: decode_step_ms(model, B, args.prompt_len, k=1) for B in args.batches}
     engine.restore()
 
-    load_novel_adapter(model, REPO_ROOT / ADAPTER)
-    wrapped = {B: decode_step_ms(model, B, args.prompt_len, k=1) for B in args.batches}
-    unwrap_novel_lora(model)
+    # Stock LoRA ships adapter_model.safetensors and no novel_adapter.pt, so the
+    # novel wrapper cannot load it. Use peft's own wrapper -- which is also the
+    # baseline that matters for LoRA, since that is how LoRA is actually served.
+    # NOTE: the two wrapped arms are therefore DIFFERENT wrappers (NovelLoraLinear
+    # vs peft.LoraLayer); the folding win is only comparable within an architecture.
+    if (REPO_ROOT / args.adapter / "adapter_model.safetensors").exists():
+        from peft import PeftModel
+
+        pm = PeftModel.from_pretrained(model, str(REPO_ROOT / args.adapter))
+        pm.eval()
+        wrapped = {B: decode_step_ms(pm, B, args.prompt_len, k=1) for B in args.batches}
+        pm.unload()
+    else:
+        load_novel_adapter(model, REPO_ROOT / args.adapter)
+        wrapped = {B: decode_step_ms(model, B, args.prompt_len, k=1) for B in args.batches}
+        unwrap_novel_lora(model)
 
     print(f"   {'B':>3s} {'wrapped ms':>11s} {'folded ms':>10s} {'folding win':>12s}")
     tax = {}

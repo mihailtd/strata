@@ -63,11 +63,20 @@ from gnn_experiment.novel_peft import (  # noqa: E402
     set_hard_vram_cap,
 )
 
-EXPERTS = {
+# Default set is id_kron (the *_sweep_* adapters). --experts stock switches to the
+# controlled stock-LoRA experts (r=8, alpha=128, scaling 16) so the stacking result
+# can be checked for architecture-dependence.
+EXPERTS_IDKRON = {
     "fin": "results/adapters/fin_sweep_a32",
     "ast": "results/adapters/astral_sweep_a64",
     "pg": "results/adapters/pg_sweep_a64",
 }
+EXPERTS_STOCK = {
+    "fin": "results/adapters/ctl_lora_fin_a128",
+    "ast": "results/adapters/ctl_lora_r8_a128",
+    "pg": "results/adapters/ctl_lora_pg_a128",
+}
+EXPERTS = EXPERTS_IDKRON
 # which expert "owns" each domain, for the retention comparison
 OWNER = {"financial_planning": "fin", "astral": "ast", "postgresql": "pg"}
 
@@ -122,6 +131,7 @@ def main():
     ap.add_argument("--model-name", default="Qwen/Qwen3.5-4B")
     ap.add_argument("--max-new-tokens", type=int, default=192)
     ap.add_argument("--vram-cap-gb", type=float, default=22.0)
+    ap.add_argument("--experts", choices=["idkron","stock"], default="idkron")
     ap.add_argument("--out", default="results/stacked_experts.json")
     args = ap.parse_args()
 
@@ -134,14 +144,16 @@ def main():
     )
     model.eval()
 
-    experts = {n: FoldableExpert.from_dir(REPO_ROOT / p, n) for n, p in EXPERTS.items()}
+    expert_set = EXPERTS_STOCK if args.experts == "stock" else EXPERTS_IDKRON
+    print(f"expert set: {args.experts}")
+    experts = {n: FoldableExpert.from_dir(REPO_ROOT / p, n) for n, p in expert_set.items()}
     engine = WeightFoldingEngine(model, experts.values(), keep_pristine=True)
     qs = {
         d: [json.loads(x) for x in (REPO_ROOT / f).read_text().splitlines() if x.strip()]
         for d, (f, _) in DOMAINS.items()
     }
 
-    names = list(EXPERTS)
+    names = list(expert_set)
     combos = [()]
     for r in (1, 2, 3):
         combos += list(itertools.combinations(names, r))
