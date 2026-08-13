@@ -258,23 +258,39 @@ So the conv fallback is **small but not zero**. The old conclusion was
 directionally lucky and evidentially void; the ceiling from installing
 `causal_conv1d` is about **3.8%**.
 
-#### Measured speculative decode, K=4
+#### In-Domain Speculative Decoding Audit ($3 \times 3$ Grid, $N=20$ Prompts/Cell)
 
-Using the checkpoint's own shipped MTP head (`mtp.*`, 15 tensors, EAGLE-style),
-which `transformers` never loads — see `src/gnn_experiment/mtp_draft.py`.
+Direct 9-cell empirical audit ([`scripts/benchmark_mtp_indomain_speculation_matrix.py`](file:///home/mihai/gnn-experiment/scripts/benchmark_mtp_indomain_speculation_matrix.py)) measuring EAGLE-style MTP speculative decoding ($K=4$) vs $K=1$ autoregressive baseline across 3 folded Stock LoRA experts and 3 domain prompt sets (20 prompts/cell, **3 interleaved repeats**, median reported).
 
-| backbone | base | speculative | speedup | accept% | gate |
-| --- | ---: | ---: | ---: | ---: | :---: |
-| un-adapted | 32.43 | 42.66 | **1.32x** | 56.7% | 4/4 ✅ |
-| astral folded | 32.02 | 44.64 | **1.39x** | 60.8% | 4/4 ✅ |
-| postgres folded | 31.68 | 37.02 | 1.17x | 48.1% | 3/4 ⚠️ |
-| financial folded | 32.78 | 33.81 | **1.03x** | 44.9% | 3/4 ⚠️ |
+**This REPLACES an earlier version of this table whose headline finding did not survive re-measurement.** That version reported an in-domain penalty severe enough to disable speculation for `astral` ($0.96\times$). It had four defects: (1) all three "Stock LoRA $r=8,\alpha=128$" adapters were in fact `id_kron` (rank_total 64, scaling 2.0) -- violating the audit's own pre-flight rule; (2) no correctness gate; (3) one measurement per cell, so a routing decision rested on a 3.9% effect; (4) it disabled `astral` despite $\tau=1.79$ sitting above its own stated break-even of $\tau \ge 1.39$, a contradiction it never reconciled. Re-run with genuine stock LoRA ($r=8$, $\alpha=128$, scaling 16, trained fresh per domain):
 
-**The yield is workload-dependent, not a fixed number.** An adapter degrades
-drafting most on *its own* domain (financial-folded: 2.08 -> 1.58 accepted on
-financial prompts), so a prompt mix weighted toward the active expert's domain
-loses most of the win. These four prompts are financial-heavy, which is why
-financial-folded collapses to 1.03x while astral-folded reaches 1.39x.
+| Folded Expert | Prompt Set | $\tau$ | Speedup (median) | 3-repeat range | Predicted from $\tau$ | Exact vs chunked | Gate |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **astral** | **astral (DIAG)** | 2.02 | **1.13x** | 1.113-1.130 | 1.136 | 90% | ENABLED |
+| astral | postgresql | 2.06 | 1.12x | 1.105-1.131 | 1.149 | 70% | — |
+| astral | financial_planning | 1.89 | 1.06x | 1.056-1.090 | 1.085 | 85% | — |
+| postgresql | astral | 2.21 | 1.19x | 1.151-1.208 | 1.207 | 85% | — |
+| **postgresql** | **postgresql (DIAG)** | 2.00 | **1.17x** | 1.124-1.177 | 1.126 | 80% | ENABLED |
+| postgresql | financial_planning | 2.08 | 1.09x | 1.091-1.132 | 1.156 | 70% | — |
+| financial_planning | astral | 2.19 | 1.21x | 1.207-1.209 | 1.200 | 95% | — |
+| financial_planning | postgresql | 2.05 | 1.17x | 1.163-1.181 | 1.147 | 80% | — |
+| **financial_planning** | **financial (DIAG)** | 2.04 | **1.11x** | 1.103-1.141 | 1.142 | 80% | ENABLED |
+
+**The in-domain penalty is not real.** Diagonal $\tau = 2.019$ vs off-diagonal $2.079$ -- a gap of 0.06, not the 0.21 previously reported. Diagonal speedup $1.138\times$ vs off-diagonal $1.140\times$: a 0.2% difference. **All 9 cells win, none straddle $1.0$, and the slowest single repeat anywhere is $1.056\times$.** The router should be all-`True`; there is nothing to gate.
+
+**What is real is a prompt-domain effect, independent of which expert is folded:**
+
+| Prompt set | Mean speedup | | Folded expert | Mean speedup |
+| :--- | :---: | :-- | :--- | :---: |
+| astral | **1.176x** | | financial_planning | 1.164x |
+| postgresql | 1.155x | | postgresql | 1.153x |
+| financial_planning | **1.087x** | | astral | 1.101x |
+
+The column spread (8.2%) is **40x** the diagonal effect (0.2%). Financial-planning *prose* is simply harder to draft than Astral CLI text, whichever expert is loaded. Speculation gating, if ever worth doing, should key on the prompt -- not on which adapter is folded.
+
+**The break-even model now reconciles with measurement.** Predicted $\mathbb{E}[M] = d/t_1 + r(1+P_\text{partial}) - 1$ tracks measured speedup with mean residual $-0.010$ and max $|{\cdot}| = 0.064$, residuals on both signs. The earlier version's model-vs-measurement contradiction was an artifact of the `id_kron` adapters, not a flaw in the formula.
+
+**Caveat that limits all of the above: exact-vs-chunked is 70-95% (mean 81.7%), never 100%.** The speculative loop diverges from the path its own verifier computes on 1-6 of every 20 prompts, in every condition. This is a property of the decoder, not of any cell. It correlates positively with measured speedup ($r = +0.44$, $n=9$), which is the wrong direction for comfort: the cells that look fastest are also the ones that most often stopped agreeing with the reference. These speedups should be read as an upper bound until that divergence is fixed.
 
 #### Exactness is not achievable against plain decode, and that is not a bug
 

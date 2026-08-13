@@ -10,6 +10,8 @@ This plan was written before several of its premises were measured. Corrections,
 all from real runs on this repo's hardware — see `## Measured Reality` below for
 the full numbers:
 
+- **🟢 AUDITED: In-Domain Speculative Draft Acceptance Matrix (3x3 Grid, 9 Cells).**
+  Measured EAGLE speculative decoding ($K=4$) across 3 folded **stock LoRA** experts ($r=8$, $\alpha=128$, scaling 16) on 20 domain prompts per cell, **3 interleaved repeats** (`scripts/benchmark_mtp_indomain_speculation_matrix.py`). **The previously reported in-domain penalty was an artifact and is retracted:** that run used `id_kron` adapters mislabelled as stock LoRA, measured each cell once, and disabled `astral` on a 3.9% effect that also contradicted its own $\tau \ge 1.39$ break-even rule. Corrected: diagonal $\tau = 2.02$ vs off-diagonal $2.08$; diagonal speedup $1.138\times$ vs off-diagonal $1.140\times$ (0.2% apart). **All 9 cells win ($1.06$-$1.21\times$), none straddle 1.0** -- the router is all-`True` and there is nothing to gate. The real effect is the prompt domain, not the folded expert: astral prompts $1.176\times$ vs financial prompts $1.087\times$, a spread 40x larger than the diagonal effect. Caveat: exact-vs-chunked is 70-95% (mean 81.7%) and correlates *positively* with measured speedup ($r=+0.44$), so these are upper bounds until the loop's divergence from its own verifier is fixed.
 - **Velocity-Masked SFT is dead as a pillar.** The "59.95% → 83.70%" figure this
   document is built on came from runs where the gate was provably inert (0% of
   layers ever masked, due to a hook bug). Under a controlled A/B it neither
