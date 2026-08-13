@@ -3,17 +3,40 @@
 Honest tiering of what this repo contributes. Companion to `CURRENT.md` (what is
 live) and `SYSTEM.md` (hardware/software).
 
-**Tag by what was invented, not by how hard it was to build or how large the
-number is.** Difficult engineering on a known technique is ⭐ or 🔥. A big
-speedup does not raise the tier — it means the baseline was worse than people
-assumed, which is worth publishing, tagged accurately.
+## THE GOVERNING RULE — read before tagging anything
 
-Overclaiming novelty fails the same way overclaiming a benchmark does.
+**Novelty of APPLICATION counts. You do not have to invent the concept.**
+
+🔥 Applied Practice is earned by either of:
+
+1. **First application of an established concept to THIS class of system** —
+   e.g. borrowing a technique from optimizers, HPC, databases or classical
+   numerics and using it for LLM runtime expert swapping, where it has not been
+   used before. The concept being old is irrelevant; the *pairing* is the work.
+2. **A non-obvious use of a known technique** — something a competent engineer
+   would not reach for by default, where the reason it works is the insight.
+
+What does NOT earn a tier:
+
+* Size of the speedup. A big number means the baseline was weak, not that the
+  method is novel. Tag the method; report the number separately.
+* Difficulty. Hard debugging on a standard technique is still ⭐.
+* Re-using a library exactly as its authors intended for the purpose they
+  intended (`peft.merge_and_unload` for merging LoRA → ⭐, not 🔥).
+
+**Honesty guard on "first".** "Nobody has done this before" is a claim about the
+literature and ecosystem that this repo cannot verify. Write **"first known
+application in this stack — not verified against published work"** rather than
+"novel". The claim stays defensible and still gets the credit.
+
+Overclaiming novelty fails the same way overclaiming a benchmark does — and this
+project has already paid that cost. But *under*-claiming a genuine first
+application is also a failure. Both are errors.
 
 | tag | meaning |
 | :--- | :--- |
 | 🚀 **Genuine Discovery** | New knowledge, not derivable from existing theory before running the experiment |
-| 🔥 **Applied Practice** | Established concept adapted to an unsolved problem in this stack |
+| 🔥 **Applied Practice** | Established concept applied to this class of system for the first known time, OR used in a non-obvious way. **Inventing it is not required.** |
 | ⭐ **Industry Standard** | Standard pattern, used correctly |
 | ❌ **Closed** | Falsified. **Not a contribution at any tier** — the *measurement* may be, the hypothesis is not |
 
@@ -36,7 +59,7 @@ techniques, and that is not a criticism.
 | item | what was adapted | evidence / caveat |
 | :--- | :--- | :--- |
 | **`activate_many()`** — multi-expert additive folding with restore | Additive delta composition applied to runtime expert stacking. `peft.merge_and_unload` does not do multi-adapter additive folding *with* restore. Fold cost stays flat in N. | Mechanism verified (Pythagorean norm to 4 s.f., additive to 7.3e-3 in bf16). **Tag the capability, not a benefit** — stacking showed resolved interference (`ast+fin` −10.96pp). |
-| **Pristine-buffer restore via bit-exact `copy_`** | Standard backup-before-mutate, but the *reason* is non-obvious: subtract-the-delta accumulates bf16 drift across swaps and silently corrupts a long-running expert-swapping server. | `max_drift()` verification; the buffer alone is ⭐, the discipline is 🔥 |
+| **Pristine State Buffer + bit-exact `copy_` restore** | Master-weights discipline (keep an unmutated reference copy, never reconstruct by inverse arithmetic) carried from classical mixed-precision optimizers into **runtime LLM expert swapping** — **first known application in this stack -- not verified against published work**. Non-obvious in the criterion-2 sense too: the default engineering reflex is subtract-the-delta, which silently accumulates bf16 drift and corrupts a long-running swapping server. | `max_drift() = 0.00e+00` verified in situ across both domains. Caveat: drift 0 is expected *by construction* (`copy_` does no arithmetic) and would also read 0 if `pristine` aliased the live tensor — it is a clone (`detach().clone()`), and the functional proof is that scores return to base (astral 56.91% folded → 6.04% restored). |
 | **bf16 merge-absorption calibration** | The 1/x *form* is elementary floating point (rounding perturbs by ≈ε·‖W‖ regardless of dW, so relative to ‖dW‖ it is ε/(‖dW‖/‖W‖)) — derivable in one line before running anything. What is ours is the measured constant and its validation. | Product constant to **2.3% across a 16× range**; fitted k = 0.22 × bf16 eps, within ~1.5× of the uniform-rounding prediction. **Not** a discovered law. |
 | **`fla` (Triton) unblocking speculation on gfx1100** | Known library, undocumented platform. The `fla` / `causal_conv1d` conflation blocked this for a long time — they are two deps with independent fallbacks. | 2.84× penalty → 1.17–1.40×; nobody documents ROCm speculative decoding on consumer AMD |
 | **Loading the shipped `mtp.*` tensors** | The checkpoint ships a 15-tensor MTP head that `transformers` never loads. Reading it directly, with the correct `[embedding; hidden]` fuse order, makes speculation possible with no draft model. | Wrong concat order gave 0% accuracy; correct order 70% |
@@ -73,8 +96,18 @@ baselines, not novelty.
 
 ## Rule of thumb
 
-Ask: *could someone have written this down before running the experiment?*
+Two questions, in order:
 
-- **Yes, from theory** → ⭐ (or 🔥 if adapted to a genuinely new problem)
-- **No, and it changes what we believe** → 🚀
+1. *Could someone have written this down from theory before running it?*
+   - **No, and it changes what we believe** → 🚀
+   - **No, and it changes what we believe is FALSE** → ❌ for the hypothesis, 🔥 for the measurement
+
+2. If yes from theory — *has this concept been used for THIS class of system before?*
+   - **No, or only in a non-obvious form** → 🔥 (say "first known application in
+     this stack -- not verified against published work")
+   - **Yes, and a library does exactly this for exactly this purpose** → ⭐
+
+The second question is the one that is easy to get wrong in BOTH directions.
+Under-claiming a genuine first application is as much an error as overclaiming a
+discovery.
 - **No, and it changes what we believe *is false*** → ❌ for the hypothesis, 🔥 for the measurement
