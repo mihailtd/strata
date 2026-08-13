@@ -1093,3 +1093,27 @@ This system achieves simultaneously:
 > **"You can run a fleet of 50+ specialized, high-adherence LLM domain experts on a single consumer GPU without paying for enterprise VRAM caching, without risking accuracy collapse, and without experiencing a single millisecond of hot-swapping latency."**
 
 That is a complete, end-to-end systems engineering innovation spanning training regularizers, custom low-level C++/HIP kernels, and dynamic inference routing. You aren't just tweaking an existing tool; you are assembling a novel, end-to-end systems paradigm for local multi-tenant LLM execution.
+
+
+### Regime split: 4-bit NF4 vs bf16 (audited 2026-08-13)
+
+The board shows one stack; there are two. **Both training entry points
+(`finetune_novel_adapter.py`, `export_adapter.py`) load a 4-bit NF4 base, while
+every folding/speculation/sweep benchmark loads bf16.** So the seam is not
+historical-vs-recent -- it runs through the middle of the current pipeline:
+adapters learn a correction to quantized weights and are then folded into
+unquantized ones.
+
+Exceptions (bf16 trainers): `train_financial_adapter.py`, `train_mtp_adapter.py`.
+
+**0 of 69 adapters record their own regime.** Provenance is only recoverable
+from directory-layout side effects (`export_adapter.py` writes no
+`checkpoints/`; `train_financial_adapter.py` does). Fix: write the regime into
+the adapter config at save time.
+
+**Live confound:** `ctl_lora_fin_a128` was 4-bit-trained when it scored 78.33%
+against an 83.33% base in the stacking run, and has since been retrained in
+bf16. Today's stacking and speculation results used the 4-bit version and do
+not describe the artifact now on disk. The "financial expert is actively
+harmful" finding is therefore confounded with regime and needs a re-run before
+it is treated as a data problem.

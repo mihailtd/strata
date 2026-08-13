@@ -258,6 +258,61 @@ So the conv fallback is **small but not zero**. The old conclusion was
 directionally lucky and evidentially void; the ceiling from installing
 `causal_conv1d` is about **3.8%**.
 
+## Two Execution Regimes: 4-bit NF4 vs bf16
+
+**The repo is not one stack. It is two, and the seam runs through the middle of
+a single pipeline rather than between "old" and "new" work.**
+
+Every adapter in `results/adapters/` was trained against a **4-bit NF4** base;
+every folding, speculation, and sweep benchmark loads a **bf16** base and folds
+those deltas in. A bf16 delta cannot be folded into packed 4-bit weights, so the
+two regimes cannot be mixed at inference -- but the training->folding handoff
+mixes them *by construction*, because the adapter learned a correction to
+quantized weights and is then applied to unquantized ones.
+
+### Regime by script (audited, not assumed)
+
+| 4-bit NF4 (`load_in_4bit=True`) | bf16 |
+| :--- | :--- |
+| `finetune_novel_adapter.py` **(trainer)** | `train_financial_adapter.py` **(trainer)** |
+| `export_adapter.py` **(trainer)** | `train_mtp_adapter.py` **(trainer)** |
+| `evaluate_novel_adapter.py` | `benchmark_weight_folding.py` |
+| `benchmark_adapter_swap.py` | `benchmark_mtp_*.py` (all 4) |
+| `benchmark_inference_velocity.py` | `benchmark_batch_scaling.py` |
+| `benchmark_speculative_decode.py` | `benchmark_stacked_experts.py` |
+| `run_micro_probe_benchmark.py` | `evaluate_folded_vs_wrapped.py`, `eval_controlled_headtohead.py` |
+| | `measure_fold_precision.py`, `benchmark_alpha_absorption_sweep.py`, + 12 more |
+
+**No adapter records its own regime.** 0 of 69 adapter directories carry a
+quantization marker in `adapter_config.json`, `novel_adapter_config.json`, or
+`training_args.bin`. Provenance is currently recoverable only from which script
+wrote the directory -- `export_adapter.py` leaves no `checkpoints/` subdir,
+`train_financial_adapter.py` does. That is a fragile way to track a variable this
+consequential and should be fixed by writing the regime into the adapter config
+at save time.
+
+### Consequences that are already visible
+
+* **Every "folded" result in this README rests on a 4-bit-trained delta applied
+  to a bf16 base.** That includes the corrected in-domain speculation matrix,
+  the folding win, and the alpha/absorption sweeps. The measurements are
+  internally consistent -- both arms of each comparison share the mismatch -- but
+  the absolute quality numbers are not what a bf16-trained adapter would give.
+* **The `bf16` absorption law is a bf16-only statement.** `merge_rel_err ~
+  0.167/(|dW|/|W|)` was derived from bf16 rounding behaviour and does not
+  describe NF4 at all.
+* **The financial expert's harmfulness is confounded with regime.**
+  `ctl_lora_fin_a128` was 4-bit-trained when it measured 78.33% against an
+  83.33% base (i.e. worse than no adapter). It has since been retrained in bf16
+  by `train_financial_adapter.py`. The stacking and speculation results in this
+  README used the **4-bit** version; the adapter now on disk is a **different
+  artifact** and those results do not describe it.
+
+### Rule going forward
+
+Tag every experiment with its regime, never compare a 4-bit number to a bf16
+number, and re-run rather than port any result across the seam.
+
 #### In-Domain Speculative Decoding Audit ($3 \times 3$ Grid, $N=20$ Prompts/Cell)
 
 Direct 9-cell empirical audit ([`scripts/benchmark_mtp_indomain_speculation_matrix.py`](file:///home/mihai/gnn-experiment/scripts/benchmark_mtp_indomain_speculation_matrix.py)) measuring EAGLE-style MTP speculative decoding ($K=4$) vs $K=1$ autoregressive baseline across 3 folded Stock LoRA experts and 3 domain prompt sets (20 prompts/cell, **3 interleaved repeats**, median reported).
