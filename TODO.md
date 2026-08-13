@@ -39,12 +39,19 @@ the full numbers:
   only the init drops `custom_standard` from 58.17% to 37.55%, i.e. to peft
   LoRA's level. **No custom-vs-peft architecture claim in this document is
   currently supported.** See `## Measured Reality`.
-- **Update magnitude, not factorization, is the dominant lever measured so far.**
-  Sweeping only `lora_alpha` on stock peft LoRA: 40.47% (α=16) → 50.23% (α=128)
-  → **60.80% (α=256)**. Magnitude-tuned stock LoRA **beats every custom
-  architecture here**, including `id_kron_r16` (59.32%), at equal payload and
-  with no new code. **The bar for any new architecture is 60.80%, not 40.47%** —
-  and α is still climbing, so the real LoRA ceiling is higher and unmeasured.
+- **id_kron vs Stock LoRA: PARITY (controlled, 21 fresh adapters).** Peaks
+  57.83% (id_kron rt8, 6.26M) / 56.24% (rt16, 12.42M) / 56.03% (LoRA, 10.62M) --
+  a 1.80pp spread = 0.4 questions at n=20. Architecture is not the lever; tuning
+  is. Optimal scaling varies 16x by architecture (LoRA 16, rt8 2, rt16 1), which
+  is why the earlier single-point audit could reach any verdict. That audit is
+  **retracted**: it used pre-existing adapters with no training records, reported
+  id_kron at 49.8M params when the loaded adapter had 6.26M (inverting its own
+  headline), and left scaling uncontrolled at 32.0 vs 2.0. Its 72.44% does not
+  reproduce (best of 15 controlled adapters: 57.83%). id_kron's 41% parameter
+  saving is real on DISK but vanishes when folded (block-diagonal expansion makes
+  V dense) and is irrelevant to swap latency anyway (payload is 0.2% of the
+  10.24 GB a swap moves). LoRA is the safer default: id_kron diverges above
+  scaling 2 at both ranks. See README section 8.
 - **Training loss is anti-correlated with adherence on this benchmark** — the
   best-scoring run has nearly the worst loss. Do not use loss as a quality proxy.
   The same caution applies to *reconstruction energy*: a k=32 basis retaining
@@ -75,8 +82,14 @@ the full numbers:
   `fla`/`causal_conv1d` as one dependency — they are two, with independent
   fallbacks. `causal-conv1d` genuinely needs `nvcc` and cannot build; **`fla` is
   Triton-based and runs natively on gfx1100**. Installing it collapses the
-  multi-token forward penalty from **2.84x to ~1.2x**, dropping speculation's
-  break-even from ~2.8 to ~1.2 accepted tokens. `transformers` still refuses its
+  multi-token forward penalty from **2.84x to ~1.2-1.5x**, dropping speculation's
+  break-even from ~2.8 to **~1.4 accepted tokens** at K=4 (measured on a warm
+  cache: 33.27 ms vs 27.87 ms at K=1, a 1.19x ratio; break-even also accounts for
+  draft cost and the state re-advance, so it exceeds the raw ratio).
+  ⚠️ An earlier entry here claimed a **0.94x ratio / 0.94-token break-even** from
+  a script that used `use_cache=False` — a context-free forward whose cost is
+  flat in K by construction. That is retracted; see README "Residual overhead
+  audit". `transformers` still refuses its
   built-in assisted generation, but a custom loop with snapshot/restore of the
   fixed-size 52.5 MB recurrent state works. See README "Speculative decoding —
   UNBLOCKED" for the full table.

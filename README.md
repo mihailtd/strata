@@ -196,8 +196,67 @@ speculation can pay):
 | 4 | 94.33 ms (2.81x) | 34.33 ms (**1.17x**) |
 | 8 | 91.25 ms (2.72x) | 40.18 ms (1.37x) |
 
-Break-even for speculation drops from **~2.8 to ~1.2 accepted tokens**. Plain
-greedy decode also gains **1.073x** (29.39 -> 31.54 tok/s) for free.
+Plain greedy decode also gains **1.073x** (29.39 -> 31.54 tok/s) for free.
+
+#### Residual overhead audit (K=4 verification path)
+
+⚠️ **An earlier version of this section reported a 0.94x ratio and a break-even
+of ~0.94 accepted tokens, i.e. that multi-token verification is CHEAPER than
+single-token decode. That was a measurement error and is retracted.** The script
+called `model(tokens[:, :k], use_cache=False)` -- a standalone K-token forward
+with no KV cache and no context. Real verification appends K tokens to a warm
+cache. Without a cache the cost is dominated by the fixed ~8 GB weight read and
+is flat in K *by construction*. Measured side by side:
+
+| method | K=1 | K=2 | K=4 | K=8 |
+| --- | ---: | ---: | ---: | ---: |
+| `use_cache=False` (wrong) | 1.00x | 1.03x | 0.99x | 0.96x |
+| warm cache (correct) | 1.00x | 1.53x | 1.52x | 1.46x |
+
+Corrected profile, appending K tokens to a warm 128-token cache
+([`scripts/profile_mtp_verification_path.py`](scripts/profile_mtp_verification_path.py)):
+
+| K | latency | vs K=1 | required accepted tokens to break even |
+| ---: | ---: | ---: | ---: |
+| 1 | 27.87 ms | 1.00x | 1.02 |
+| 2 | 38.06 ms | 1.37x | 1.71 |
+| **4** | **33.27 ms** | **1.19x** | **1.39** |
+| 8 | 34.23 ms | 1.23x | 1.45 |
+
+**Break-even is not the cost ratio.** Accepting M drafts yields M+1 tokens, and a
+partial acceptance costs a further state re-advance on the same chunked path:
+
+```
+required E[M]  =  draft_ms/t1 + ratio * (1 + P_partial) - 1
+```
+
+At K=4 that is **1.39 accepted tokens**; measured acceptance is **2.27**, which
+is why the end-to-end result below is a win. Quoting tau = ratio understates the
+requirement by roughly 40%.
+
+**Run-to-run variance is real:** the K=4/K=1 ratio has measured 1.17x, 1.19x,
+1.31x and 1.52x across separate runs on this box. Treat it as **~1.2-1.5**, not
+a pinned constant, and re-measure on an idle machine before quoting it.
+
+#### Short-conv cost, actually measured
+
+`causal_conv1d` is not installed (it needs `nvcc`), so `conv1d` runs the torch
+fallback. The previous audit claimed "zero residual short-conv bottleneck" from a
+profiler table that was **entirely zeros** -- on this torch/ROCm build
+`evt.device_time_total` exists but is always 0, so `getattr(evt,
+"device_time_total", <fallback>)` reads the zero and never falls back.
+`torch.profiler` cannot attribute GPU kernel time here at all. Using CUDA events
+on module hooks instead:
+
+| component (K=4) | time | share |
+| --- | ---: | ---: |
+| wall | 30.90 ms | 100% |
+| `linear_attn` total | 12.49 ms | 40.4% |
+| of which `conv1d` | **1.18 ms** | **3.8%** of wall, 9.5% of `linear_attn` |
+
+So the conv fallback is **small but not zero**. The old conclusion was
+directionally lucky and evidentially void; the ceiling from installing
+`causal_conv1d` is about **3.8%**.
 
 #### Measured speculative decode, K=4
 
@@ -255,35 +314,150 @@ by *bad* hits and the tail carried a similar mix; postgresql's is dominated by
 *good* hits and the tail skewed further that way. Treat any pre-fix adherence
 figure as suspect until re-measured.
 
-### Reproducing these
+### 7. Multi-Expert Simultaneous Weight Folding & The Three-Ceiling Architectural Model
 
-```bash
-# alpha sweep (merge fidelity + wrapped vs folded) for any domain
-uv run --env-file .env python scripts/benchmark_alpha_absorption_sweep.py --domain astral
-uv run --env-file .env python scripts/benchmark_alpha_absorption_sweep.py --domain postgresql
-uv run --env-file .env python scripts/benchmark_alpha_absorption_sweep.py --domain financial_planning
+Simultaneously folding multiple domain adapters into base weights ($W_{\text{live}} \leftarrow W_0 + \sum_{i=1}^N S_i \cdot U_i V_i$) eliminates runtime expert-swapping overhead entirely.
 
-# cross-task subspace orthogonality map (CPU, seconds)
-uv run scripts/build_orthogonality_map.py
+#### The Practical Win
+Dual-folding `astral` + `postgresql` delivers a zero-latency, **0-byte marginal VRAM** multi-expert model maintaining **+45.06pp** Astral gain ($12.08\% \to 57.14\%$) and **+18.47pp** PostgreSQL gain ($51.33\% \to 69.80\%$).
 
-# speculative decoding needs fla (Triton-based, runs on gfx1100):
-#   uv pip install flash-linear-attention
-# NOTE: touch CUDA before importing it -- its device probe is @cache'd at import
-# and latches to CPU if no GPU context exists yet.
+#### Relative Delta Norms & True Mechanism
+$\|\Delta W_{\text{ast}}\| / \|W_0\| = 0.0902$ vs. $\|\Delta W_{\text{pg}}\| / \|W_0\| = 0.0898$ — they are virtually identical in relative norm size. The "larger delta dominates" hypothesis is disproved. Astral's resilience ($101.4\% \to 92.8\%$ retention) stems from its large headroom above base ($12.08\% \to 56.52\%$, $+44.44\text{pp}$), whereas PostgreSQL ($51.33\% \to 75.42\%$, $+24.09\text{pp}$) sits closer to the base model's ceiling, making its marginal gain far more sensitive to non-linear feature shifts.
 
-# speculative decoding (K=4) with the shipped MTP head, optional folded expert
-uv run --env-file .env python scripts/benchmark_mtp_speculative.py --k 4 --adapter astral
+#### VRAM Accounting
+- **Zero Marginal VRAM**: Stacking $N$ experts into a single static fold costs $0\text{ MB}$ extra VRAM per added expert.
+- **Fixed Memory Footprint**: Static resident factors ($\sim 467\text{ MB}$ for 3 experts) and pristine buffer ($5.12\text{ GB}$) remain constant regardless of $N$.
 
-# does a domain-adapted backbone hurt MTP draft acceptance?
-uv run --env-file .env python scripts/benchmark_mtp_acceptance_vs_adapter.py
+#### The Architectural Rule: Geometric Orthogonality $\neq$ Functional Independence
+Pairwise cosines across all 128 module layers range from $+0.0003$ to $+0.0004$ (max $|\cos| = 0.0026$) — orthogonal to four decimal places.
+> **Architectural Rule:** Geometric orthogonality in weight space ($\cos \approx +0.0002$) does **not** grant non-linear functional independence in activation space. Expect monotonic decay ($\sim 20\text{pp}$ retention loss per added expert for fragile/low-headroom tasks, $\sim 8\text{pp}$ for resilient high-headroom tasks). Stack high-gain experts only ($N \le 2$ or $N \le 3$).
 
-# single pairwise subspace probe
-uv run scripts/probe_subspace_overlap.py \
-    --adapter-a results/adapters/astral_qwen3.5_micro_lora_a256 \
-    --adapter-b results/adapters/financial_planning_standard_lora --k 32
-```
+#### The Three-Ceiling Architectural Model
 
----
+| Ceiling Type | Theoretical Limit | Physical Mechanism | Binds First? |
+| :--- | :---: | :--- | :---: |
+| **1. Empirical Interference** | **$N \approx 4 - 6$** | **Non-linear activation cross-talk** ($\sim 20\text{pp}$ decay/expert) | **YES (Primary Ceiling)** |
+| 2. Perturbation Size | $N \approx 10 - 20$ | Quadratic norm accumulation ($\|\Delta W_{\text{total}}\| \to 0.3 \cdot \|W_0\|$) | No (Secondary) |
+| 3. Rank Saturation | $N \approx 40$ (at $r=64$) | Pigeonhole overlap in rank-2560 parameter space | No (Theoretical Floor) |
+
+#### Status of In-Place MTP Adapter Folding: ❓ EXPERIMENTAL / UNPROVEN
+Fusing low-rank adapters directly into native MTP head parameters ($W_{\text{mtp}} \leftarrow W_{\text{mtp}} + S \cdot U_{\text{mtp}} V_{\text{mtp}}$) executes in **$0.30\text{ ms}$** with zero VRAM churn and $\approx 3.3\text{ ms}$ single-token step time ($K=1$). However, on a micro-eval ($N=41$ tokens across 4 prompts), 30-step quick-tuned adapters degraded accuracy from 21.95% (un-adapted MTP) down to 12.20%–14.63%. MTP Adapter Folding remains **❓ Experiment / Unproven** until evaluated with full domain training ($N \ge 1000$ tokens) and end-to-end acceptance benchmarks.
+
+### 8. id_kron vs Stock LoRA — controlled head-to-head: PARITY
+
+An earlier "strict 1-to-1 head-to-head" concluded that default `id_kron` loses to
+Stock LoRA and that Kronecker's win is rank compression at `r=16`. **Both claims
+are refuted, in opposite directions.** That audit compared four PRE-EXISTING
+adapters of unknown provenance; it reported `id_kron` at `r=64, 49.8M` when the
+adapter it loaded was `rank_total=8 / 6.26M` (inverting its own headline -- that
+adapter used 41% FEWER params than the LoRA that beat it), had no training
+records for any arm, and left effective scaling uncontrolled at 32.0 vs 2.0.
+
+#### The controlled version
+
+All 21 adapters trained fresh: astral (815 records), 150 steps, batch 2, lr 2e-4,
+bf16. **Effective scaling (`alpha/rank_total`) is matched across architectures,
+not alpha** -- comparing `alpha=256 @ r=8` against `alpha=32 @ rank_total=16`
+compares scaling 32 against scaling 2, which is what the retracted audit did.
+Each architecture is then compared at its own peak.
+
+| scaling | LoRA 10.62M | id_kron rt8 6.26M | id_kron rt16 12.42M |
+| ---: | ---: | ---: | ---: |
+| 0.25 | 25.00% | 30.42% | 42.92% |
+| 0.50 | 26.25% | 34.86% | 37.08% |
+| 1.00 | 26.25% | 49.75% | **56.24%** |
+| 2.00 | 42.75% | **57.83%** | 50.83% |
+| 8.00 | 47.08% | *diverged* | *diverged* |
+| 16.00 | **56.03%** | *diverged* | *diverged* |
+| 32.00 | 40.31% | *diverged* | *diverged* |
+
+Base is 12.20%. **Peaks: 57.83% / 56.24% / 56.03% -- a 1.80pp spread, which is
+0.4 questions on a 20-question rubric. This is parity.** Architecture is not the
+lever; tuning is.
+
+* The `72.44%` the retracted audit reported does **not reproduce** -- the best of
+  15 controlled adapters is 57.83%, and `rt16` specifically peaks at 56.24%.
+* "Kronecker's win is rank compression at r=16" is **backwards**: `rt16`
+  (12.42M) does not beat `rt8` (6.26M), 56.24% vs 57.83%.
+* **Optimal scaling varies 16x by architecture** (LoRA 16, rt8 2, rt16 1). That
+  alone explains how a single-point comparison could produce any verdict: at
+  scaling 1.0 id_kron leads by 23.5pp; at scaling 16 LoRA wins outright because
+  id_kron has already diverged.
+
+#### The parameter-count advantage does NOT reach swap latency
+
+`id_kron` genuinely stores 41% fewer parameters. That saving **disappears when
+folded**, because `V` must be the block-diagonal expansion `blkdiag(w_a x r1)`,
+a dense `(2560, 8)` -- exactly the size of LoRA's `A`:
+
+| | stored (on disk) | folded (VRAM factors, what a swap uses) |
+| --- | ---: | ---: |
+| LoRA r=8 | 21.2 MB | **21.2 MB** |
+| id_kron rt8 | **12.5 MB** | **21.2 MB** (identical) |
+| id_kron rt16 | 24.8 MB | 42.5 MB (2x worse) |
+
+And even a real payload saving would not move swap latency. A swap moves
+**10.24 GB** (read `W0` 5.12 + write `W_live` 5.12); the adapter factors are
+**0.021 GB = 0.2%** of that. Swap cost is set by MODEL size, not adapter size --
+inherent to folding. Zeroing the payload entirely would save ~38 us of a ~19 ms
+swap.
+
+The 41% saving is real for **disk and distribution**, not for swap throughput.
+To make it real in VRAM you would have to fold the Kronecker structure without
+materialising the block-diagonal (apply `w_a` per chunk), which would halve
+resident factors -- 2.1 GB vs 4.25 GB at 100 experts -- but still not speed up
+swaps.
+
+#### Stability: LoRA is the safer default
+
+`id_kron` diverges between scaling 2 and 8 at **both** ranks (loss ~7.7 vs ~1.03),
+so the threshold tracks effective scaling, not rank. LoRA is stable across the
+whole 128x range swept. `rt8`'s optimum sits at **exactly the last stable point**
+-- tuned to the edge of a cliff -- while LoRA has a broad plateau (47-56% across
+scaling 8-16). The optimum also moved with rank (rt8 at 2.0, rt16 at 1.0), so it
+is not a constant that can be pinned once.
+
+**Caveats.** 1.80pp is inside noise at n=20; treat the three as tied on quality.
+`id_kron` peaks are *cut off by divergence, not turned over*, so 57.83% is its
+ceiling at lr 2e-4 and possibly not its ceiling. `rt16`'s curve is jagged
+(42.92 -> 37.08 -> 56.24 -> 50.83), evidence of real per-point variance. Single
+seed per point. And matching *scaling* may still not be the right control -- if
+id_kron's effective `|dW|/|W|` per unit alpha is larger, matched `|dW|/|W|` would
+be, which would explain both its low-scaling efficiency and its divergence.
+
+### 9. Batching is nearly free — the largest unclaimed win
+
+Every performance result in this repo was measured at batch 1. At batch >= 2 the
+arithmetic changes qualitatively, and nobody had measured it.
+
+| B | ms/step | aggregate tok/s | per-request tok/s | latency vs B=1 |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 32.82 | 30.47 | 30.47 | 1.00x |
+| 2 | 32.29 | **61.94** | 30.97 | **0.98x** |
+| 4 | 32.28 | **123.90** | 30.97 | **0.98x** |
+| 8 | 38.42 | **208.23** | 26.03 | 1.17x |
+
+**At B=4 four concurrent users each get the same speed as a solo user** (30.97 vs
+30.47 tok/s). Step latency is flat because it is dominated by reading ~8 GB of
+weights, and that read produces 4 tokens instead of 1 -- the signature of being
+memory-bandwidth bound. Aggregate scales **6.83x from B=1 to B=8** (85% of
+perfect); B=8 is where it bends (+17% latency), so the sweet spot is **B~4**.
+
+*(The common intuition is inverted here: latency DOUBLING at B=2 would mean
+compute-bound and batching buying nothing. Flat latency means batching is free.)*
+
+Two knock-on results:
+
+* **Speculation's break-even improves with batch** -- the K=4/K=1 ratio falls
+  from 1.31 to ~1.15, so speculation and batching compose. But they are
+  substitutes under load: batching gives 4x, speculation 1.38x.
+* **The folding win survives batching** (1.10x / 1.11x / 1.16x / 1.04x at
+  B=1/2/4/8), so the wrapper tax does not amortise away.
+
+**The REST gateway serves batch-1**, leaving up to **6.8x aggregate throughput**
+unclaimed -- more than folding and speculation combined, and requiring no new
+math, only continuous batching. Caveat: these are synthetic uniform-length
+sequences, so real serving loses some of it to padding waste.
 
 ## 💻 Quick Start: Launching the REST Server
 

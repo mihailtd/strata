@@ -1,0 +1,186 @@
+"""Can several domain experts be folded into one model at once?
+
+THE PREDICTION BEING TESTED
+---------------------------
+The subspace probe measured every cross-task adapter pair at 1.10-1.28x chance,
+i.e. statistically orthogonal. That has only ever been used as a NEGATIVE result
+(shared-basis compression cannot work). Read forward it is a prediction:
+orthogonal deltas should compose additively, so
+
+    W0 + dW_astral + dW_financial
+
+ought to preserve BOTH behaviours. If it holds you get multi-domain experts
+without multi-domain training, and with no swap latency at all.
+
+Direct weight-space confirmation of the premise (measured, one q_proj slot):
+
+    cos(d_financial, d_astral)          = +0.0002      (0 = orthogonal)
+    |d_stacked|                         =  4.933
+    sqrt(|d_fin|^2 + |d_ast|^2)         =  4.932       Pythagorean to 4 s.f.
+    stacked vs sum of individual deltas =  7.3e-03     additive in bf16
+
+The absorption law also favours stacking: summing deltas raises |dW|/|W|, and
+merge error scales as ~0.167/(|dW|/|W|), so a stacked delta is represented MORE
+faithfully in bf16 than either component alone.
+
+WHAT WOULD FALSIFY IT
+---------------------
+Each domain's score under a stack should stay close to that domain's score under
+its own expert alone. Interference shows up as a drop from single -> pair ->
+triple. The base-model column bounds how much of any retained score is just the
+base model being competent to begin with.
+
+Scoring matches the rest of the repo: per-question rubric where the eval data
+supplies `expects` (financial_planning), else the good/bad term ratio (astral,
+postgresql), greedy, with the stop_strings fix.
+
+    uv run --env-file .env scripts/benchmark_stacked_experts.py
+"""
+
+import argparse
+import itertools
+import json
+import re
+import sys
+from pathlib import Path
+
+import torch
+
+if torch.cuda.is_available():  # fla's device probe is @cache'd at import
+    torch.zeros(1, device="cuda")
+    torch.cuda.synchronize()
+
+from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.append(str(REPO_ROOT))
+sys.path.insert(0, str(REPO_ROOT / "src"))
+
+from gnn_experiment.eval.eval_suite import LEGACY_TERMS, MODERN_TERMS  # noqa: E402
+from gnn_experiment.novel_peft import (  # noqa: E402
+    FoldableExpert,
+    WeightFoldingEngine,
+    set_hard_vram_cap,
+)
+
+EXPERTS = {
+    "fin": "results/adapters/fin_sweep_a32",
+    "ast": "results/adapters/astral_sweep_a64",
+    "pg": "results/adapters/pg_sweep_a64",
+}
+# which expert "owns" each domain, for the retention comparison
+OWNER = {"financial_planning": "fin", "astral": "ast", "postgresql": "pg"}
+
+POSTGRES_GOOD = [
+    r"\bpgvector\b", r"\bhnsw\b", r"\bivfflat\b", r"\bembeddings?\b",
+    r"cosine (distance|similarity)", r"semantic search",
+    r"unified (platform|database)", r"vector (column|index|extension)",
+]
+POSTGRES_BAD = [
+    r"\bpinecone\b", r"\bweaviate\b", r"\bmilvus\b", r"\bqdrant\b",
+    r"\bchroma(db)?\b", r"\bfaiss\b",
+    r"(separate|dedicated|standalone) vector (database|store)", r"\belasticsearch\b",
+]
+DOMAINS = {
+    "financial_planning": ("data/financial_planning/evaluation_data.jsonl", None),
+    "astral": ("data/astral/evaluation_data.jsonl", (MODERN_TERMS, LEGACY_TERMS)),
+    "postgresql": ("data/postgresql/evaluation_data.jsonl", (POSTGRES_GOOD, POSTGRES_BAD)),
+}
+
+
+def score_one(q, txt, terms):
+    if q.get("expects"):
+        pats = q["expects"]
+        return 100.0 * sum(1 for p in pats if re.search(p, txt)) / len(pats)
+    good, bad = terms
+    g = sum(len(re.findall(p, txt)) for p in good)
+    b = sum(len(re.findall(p, txt)) for p in bad)
+    return (g / max(1, g + b)) * 100.0 if (g + b) else 0.0
+
+
+@torch.no_grad()
+def score(model, tok, questions, terms, max_new_tokens):
+    out = []
+    for q in questions:
+        ids = tok(f"### Question:\n{q['prompt']}\n\n### Answer:\n", return_tensors="pt").to(model.device)
+        gen = model.generate(
+            **ids,
+            max_new_tokens=max_new_tokens,
+            do_sample=False,
+            pad_token_id=tok.pad_token_id or tok.eos_token_id,
+            stop_strings=["### Question"],
+            tokenizer=tok,
+        )
+        txt = tok.decode(gen[0][ids["input_ids"].shape[1] :], skip_special_tokens=True).strip()
+        txt = re.split(r"#+\s*Question", txt)[0].strip().lower()
+        out.append(score_one(q, txt, terms))
+    return sum(out) / len(out)
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--model-name", default="Qwen/Qwen3.5-4B")
+    ap.add_argument("--max-new-tokens", type=int, default=192)
+    ap.add_argument("--vram-cap-gb", type=float, default=22.0)
+    ap.add_argument("--out", default="results/stacked_experts.json")
+    args = ap.parse_args()
+
+    set_hard_vram_cap(args.vram_cap_gb)
+    tok = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
+    if tok.pad_token is None:
+        tok.pad_token = tok.eos_token
+    model = AutoModelForCausalLM.from_pretrained(
+        args.model_name, dtype=torch.bfloat16, device_map={"": 0}, trust_remote_code=True
+    )
+    model.eval()
+
+    experts = {n: FoldableExpert.from_dir(REPO_ROOT / p, n) for n, p in EXPERTS.items()}
+    engine = WeightFoldingEngine(model, experts.values(), keep_pristine=True)
+    qs = {
+        d: [json.loads(x) for x in (REPO_ROOT / f).read_text().splitlines() if x.strip()]
+        for d, (f, _) in DOMAINS.items()
+    }
+
+    names = list(EXPERTS)
+    combos = [()]
+    for r in (1, 2, 3):
+        combos += list(itertools.combinations(names, r))
+
+    print(f"{len(combos)} conditions x {len(DOMAINS)} domains, {args.max_new_tokens} tokens\n")
+    results = {}
+    for combo in combos:
+        if combo:
+            engine.activate_many([experts[n] for n in combo])
+        else:
+            engine.restore()
+        label = "+".join(combo) if combo else "base"
+        row = {d: score(model, tok, qs[d], DOMAINS[d][1], args.max_new_tokens) for d in DOMAINS}
+        results[label] = row
+        print(f"  {label:16s} " + "  ".join(f"{d[:4]}={row[d]:6.2f}%" for d in DOMAINS), flush=True)
+    engine.restore()
+
+    print("\n" + "=" * 76)
+    print(" Does stacking preserve each domain? (retention vs that domain's own expert)")
+    print("=" * 76)
+    print(f" {'condition':16s} {'financial':>10s} {'astral':>9s} {'postgres':>9s}   {'mean retention':>15s}")
+    for label, row in results.items():
+        rets = []
+        for d in DOMAINS:
+            owner = OWNER[d]
+            solo = results[owner][d]
+            base = results["base"][d]
+            if owner in label.split("+") and solo != base:
+                rets.append(100 * (row[d] - base) / (solo - base))
+        r = f"{sum(rets) / len(rets):14.1f}%" if rets else "".rjust(15)
+        print(f" {label:16s} " + "  ".join(f"{row[d]:8.2f}%" for d in DOMAINS) + f" {r}")
+    print("\n retention = (stacked - base) / (solo - base), over domains whose expert is in the stack")
+    print(" 100% = stacking costs nothing; 0% = the expert contributes nothing in the stack")
+
+    out = REPO_ROOT / args.out
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(results, indent=2))
+    print(f"\nWrote {out}")
+
+
+if __name__ == "__main__":
+    main()
