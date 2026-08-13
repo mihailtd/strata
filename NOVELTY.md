@@ -51,6 +51,7 @@ application is also a failure. Both are errors.
 | tag | meaning |
 | :--- | :--- |
 | 🚀 **Genuine Discovery** | New knowledge, not derivable from existing theory before running the experiment |
+| ❓ **Unverified / unbuilt** | Not tested, or does not exist yet. **No tier.** Distinct from ❌ (tested and falsified). |
 | 🔥 **Applied Practice** | Established concept applied to this class of system for the first known time, OR used in a non-obvious way. **Inventing it is not required.** |
 | ⭐ **Industry Standard** | Standard pattern, used correctly |
 | ❌ **Closed** | Falsified. **Not a contribution at any tier** — the *measurement* may be, the hypothesis is not |
@@ -83,7 +84,7 @@ of it has been, from this repo.**
 | **`activate_many()`** — multi-expert additive folding with restore | N experts folded into one set of weights, cost flat in N, restorable. `peft.add_weighted_adapter` combines adapters *offline into a new adapter*; this is a runtime fold with a restore path. | Partial — offline multi-adapter merging is standard. The runtime fold+restore framing is the delta. **UNCHECKED** |
 | **`fla` (Triton) unblocking speculation on gfx1100** | Platform enablement: `fla` and `causal_conv1d` are two independent deps with separate fallbacks, and conflating them blocked this for a long time. Flattened verification 2.84× → 1.19×. | Consumer-AMD ROCm speculative decoding is poorly covered, but this is using `fla` **as intended**. Closer to ⭐ + platform work than a missed idea. |
 | **Measurement discipline** | Re-measure baselines in-process; paired bootstrap CIs with the decision rule fixed *in advance*; adapter content-hashing to detect an adapter mutating under a published result. Caught four false results in one day. | Not a competitor comparison — internal methodology. Arguably the most transferable output regardless. |
-| **bf16 merge-absorption calibration** | The 1/x form is elementary floating point, derivable in one line beforehand. What is ours is the measured constant (0.22 × bf16 eps) and validating it holds to 2.3% across a 16× range. | Not a missed idea. Kept at 🔥 for the calibration, **not** as a discovered law. |
+| **Precision absorption calibration** (board: "Precision Absorption Law" — drop "Universal", it is 0.22 x bf16 eps on THIS stack) | The 1/x form is elementary floating point, derivable in one line beforehand. What is ours is the measured constant (0.22 × bf16 eps) and validating it holds to 2.3% across a 16× range. | Not a missed idea. Kept at 🔥 for the calibration, **not** as a discovered law. |
 
 ## ⭐ Industry Standard
 
@@ -92,10 +93,28 @@ baselines, not novelty.
 
 | item | note |
 | :--- | :--- |
-| **In-place weight folding** (backbone) | `peft` ships `merge_and_unload`. The **1.83×** is real but it measures peft's *wrapper* costing 1.87× bare — folded decode is 29.2 ms against a 28.7 ms bare model, i.e. folding itself is free. |
-| Batching | **~6–7×** at B=8, the largest lever measured. Standard practice. |
+| **In-place low-rank weight folding** (the `addmm`) | `peft` ships `merge_and_unload`. The **1.83×** is real but it measures peft's *wrapper* costing 1.87× bare — folded decode is 29.2 ms against a 28.7 ms bare model, i.e. folding itself is free. |
+| **Continuous batching** | **215.67 tok/s aggregate at B=8** (~6–7× over B=1), the largest lever measured. Untested above B=8. vLLM's core feature — ⭐, not 🚀. Note: B=4 is *not* the sweet spot (121.12 tok/s); B=4 only wins on per-request latency (30.28 vs 26.96). |
+| **Unwrapped execution** | `unwrap_novel_lora()` — removes PEFT wrapper modules so no adapter hooks land in a captured graph. |
+| **Pointer-stable weight slots** | `addmm(..., out=w)` and `copy_` never reallocate, so `data_ptr()` is constant across fold *and* restore. Verified directly. Emergent property, not a designed feature. |
+| **Factor-based VRAM residency** | `FoldableExpert` keeps (U,V) resident unexpanded (~21 MB) and normalises peft / standard / id_kron into one contract. |
+| **In-place adapter swap** (wrapped path) | `torch._foreach_copy_` over adapter tensors, base untouched — 17.76 ms for a 21 MB payload. The *alternative* to folding, not part of it. |
 | Liger fused kernels | Third-party library, applied correctly (patch before `from_pretrained`; `rope=False` is a blanket opt-out, **not** hybrid-architecture detection). |
-| CUDA graph replay, FastAPI REST, LoRA/DoRA/LoKr/id_kron | Standard. id_kron ≈ stock LoRA at matched scaling. |
+| **Multi-token speculative verify loop** (K≥2) | Standard speculative-decoding structure. |
+| FastAPI REST, LoRA/DoRA/LoKr/id_kron | Standard. id_kron ≈ stock LoRA at matched scaling. |
+
+---
+
+## ❓ Unverified or unbuilt — no tier yet
+
+**Not the same as ❌.** ❌ means measured and falsified. ❓ means the claim has not
+been tested, or the thing does not exist yet. Neither earns a tier, and neither
+should be drawn on a board as if it ships.
+
+| item | state | what would settle it |
+| :--- | :--- | :--- |
+| **Graph replay survives expert swaps** | BUILT, UNVERIFIED. Its own stored run shows graph and eager emitting different text ("Psychology of Financial Planning" vs "Psychology of Money"), and the 1.89× headline compares graph+folded against a 16.18 tok/s base_eager — half the ~32 tok/s baseline everywhere else, so it conflates folding, graphing and probably regime. | `FoldedCudaGraphDecoder.verify_against_eager()` **already exists** (`cuda_graph.py:229`) and is **never called** by `benchmark_folded_cuda_graph.py`. Wire it in and run: ~10 min. |
+| **APSP VRAM State Router** | **NOT BUILT.** Zero references anywhere in the codebase. | Implement it, or drop it from the board. |
 
 ---
 
