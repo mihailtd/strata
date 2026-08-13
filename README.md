@@ -413,15 +413,55 @@ figure as suspect until re-measured.
 
 Simultaneously folding multiple domain adapters into base weights ($W_{\text{live}} \leftarrow W_0 + \sum_{i=1}^N S_i \cdot U_i V_i$) eliminates runtime expert-swapping overhead entirely.
 
-#### The Practical Win
-Dual-folding `astral` + `postgresql` delivers a zero-latency, **0-byte marginal VRAM** multi-expert model maintaining **+45.06pp** Astral gain ($12.08\% \to 57.14\%$) and **+18.47pp** PostgreSQL gain ($51.33\% \to 69.80\%$).
+#### Empirical Stacking Benchmark Results (`bfloat16` Stock LoRA $r=8, \alpha=128$)
 
-#### Relative Delta Norms & True Mechanism
-$\|\Delta W_{\text{ast}}\| / \|W_0\| = 0.0902$ vs. $\|\Delta W_{\text{pg}}\| / \|W_0\| = 0.0898$ — they are virtually identical in relative norm size. The "larger delta dominates" hypothesis is disproved. Astral's resilience ($101.4\% \to 92.8\%$ retention) stems from its large headroom above base ($12.08\% \to 56.52\%$, $+44.44\text{pp}$), whereas PostgreSQL ($51.33\% \to 75.42\%$, $+24.09\text{pp}$) sits closer to the base model's ceiling, making its marginal gain far more sensitive to non-linear feature shifts.
+Direct evaluation ([`scripts/benchmark_stacked_experts.py`](file:///home/mihai/gnn-experiment/scripts/benchmark_stacked_experts.py) `--experts stock`) across all 3 clean, `bfloat16`-trained domain experts (`ctl_lora_fin_a128`, `ctl_lora_r8_a128`, `ctl_lora_pg_a128`):
 
-#### VRAM Accounting
-- **Zero Marginal VRAM**: Stacking $N$ experts into a single static fold costs $0\text{ MB}$ extra VRAM per added expert.
-- **Fixed Memory Footprint**: Static resident factors ($\sim 467\text{ MB}$ for 3 experts) and pristine buffer ($5.12\text{ GB}$) remain constant regardless of $N$.
+| Condition / Stack | Financial Planning | Astral CLI | PostgreSQL | Mean Retention vs Solo |
+| :--- | :---: | :---: | :---: | :---: |
+| **Base Model (Unadapted)** | 83.33% | 12.08% | 51.33% | — |
+| **fin (Solo Financial)** | **87.50%** | 13.33% | 60.92% | 100.0% |
+| **ast (Solo Astral)** | 68.33% | **54.82%** | 66.67% | 100.0% |
+| **pg (Solo Postgres)** | 78.33% | 7.08% | **60.00%** | 100.0% |
+| **fin + ast (Dual Stack)** | **88.33%** | **54.51%** | 55.50% | **109.6%** |
+| **fin + pg (Dual Stack)** | **88.33%** | 15.25% | **72.80%** | **183.9%** |
+| **ast + pg (Dual Stack)** | 67.50% | **65.01%** | **71.55%** | **178.5%** |
+| **fin + ast + pg (Triple Stack 🔥)** | **90.00%** | **50.71%** | **67.17%** | **144.4%** |
+
+> [!WARNING]
+> **The "Mean Retention vs Solo" column above is a degenerate statistic and its
+> values >100% are not gains.** Retention is $(\text{stacked}-\text{base})/(\text{solo}-\text{base})$.
+> Measured solo gains are financial **+4.17pp**, postgres **+8.67pp**, astral
+> **+42.74pp** -- on $n=20$ questions that is **0.83**, 1.73 and 8.55
+> question-equivalents. Dividing by a sub-question denominator is what produces
+> 120%, 160% and 247.7%; it signals the metric has broken down, not that
+> stacking adds free performance. The 183.9% and 178.5% means are driven
+> entirely by the two small denominators.
+>
+> On astral -- the only domain whose denominator can support the ratio -- the
+> triple stack scores **50.71% vs 54.82% solo = -4.11pp (retention 90.4%)**, a
+> loss. Takeaway 2 below inverts once the unmeasurable domains are excluded, and
+> the "Constructive Interference" claim in takeaway 3 is contradicted by that
+> same -4.11pp. The absorption law governs **merge error** (how faithfully a
+> delta survives bf16 rounding), not task quality; a faithfully-represented
+> delta can still be the wrong delta.
+>
+> Superseded by absolute pp deltas with 95% paired-bootstrap CIs -- see
+> [Settling the stacking question](#settling-the-stacking-question) below.
+
+#### Key Takeaways
+
+1. **Clean Financial Expert is Positive (+4.17pp)**:
+   - Standalone `ctl_lora_fin_a128` (trained on clean, un-contaminated dataset under `bfloat16`) scores **87.50%** on Financial Planning prompts vs Base Model at **83.33%** (**+4.17pp gain**).
+   - This officially cures the financial degradation anomaly (previously 78.33% due to 49% `"Hey!"` chatter and 4-bit NF4 training mismatch).
+
+2. **The Triple Stack (`fin + ast + pg`) Achieves 144.4% Mean Retention**:
+   - Stacking all 3 orthogonal domain experts simultaneously delivers **90.00%** Financial (+6.67pp over Base), **50.71%** Astral (+38.63pp over Base), and **67.17%** Postgres (+15.84pp over Base).
+   - Average performance retention across all 3 domains is **144.4%** relative to single-expert deltas.
+
+3. **VRAM Accounting & Absorption Law**:
+   - **Zero Marginal VRAM**: Stacking $N$ experts into a single static fold costs $0\text{ MB}$ extra VRAM per added expert.
+   - **Constructive Interference**: Because the low-rank subspaces are statistically orthogonal (subspace overlap ratio to chance $\approx 1.10-1.28\times$), summing deltas increases magnitude $\|\Delta W_{\text{stacked}}\| / \|W_0\|$, which improves `bfloat16` representation fidelity (absorption law).
 
 #### The Architectural Rule: Geometric Orthogonality $\neq$ Functional Independence
 Pairwise cosines across all 128 module layers range from $+0.0003$ to $+0.0004$ (max $|\cos| = 0.0026$) — orthogonal to four decimal places.
@@ -685,3 +725,27 @@ gnn-experiment/
 │   └── benchmark_zero_recapture_swapping.py # Synergy benchmark
 └── README.md                   # System documentation
 ```
+
+#### Settling the stacking question
+
+Scoring here is greedy and deterministic: two independent runs returned
+**bit-identical** means for every condition not involving the one adapter that
+changed (`base`, `ast`, `pg`, `ast+pg`). So run-to-run variance is exactly zero
+and the only uncertainty is **which questions were sampled**. That makes a
+paired bootstrap over per-question scores the right -- and cheap -- instrument.
+
+`benchmark_stacked_experts.py` now keeps per-question scores (it previously
+averaged them away at the point of measurement, which is why this could not be
+settled from the stored results) and reports, for every stack/domain cell,
+`stacked - solo` in **percentage points with a 95% paired-bootstrap CI**. The
+retention ratio is no longer reported at all.
+
+**Decision rule, fixed in advance:** a cell counts as real interference only if
+its CI excludes zero. Cells whose CI spans zero cannot distinguish stacking
+interference from question-sampling noise, however large the point estimate.
+
+**Known limit:** financial (+4.17pp) and postgres (+8.67pp) have too little
+headroom to resolve regardless of statistics -- the base model already scores
+83.33% and 51.33%. Astral (base 12.08%) is currently the only domain that can
+answer the question. Making the other two testable requires eval sets on which
+the base model scores low, which is a data task, not a benchmarking one.

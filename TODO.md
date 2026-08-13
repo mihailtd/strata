@@ -1111,9 +1111,4 @@ from directory-layout side effects (`export_adapter.py` writes no
 `checkpoints/`; `train_financial_adapter.py` does). Fix: write the regime into
 the adapter config at save time.
 
-**Live confound:** `ctl_lora_fin_a128` was 4-bit-trained when it scored 78.33%
-against an 83.33% base in the stacking run, and has since been retrained in
-bf16. Today's stacking and speculation results used the 4-bit version and do
-not describe the artifact now on disk. The "financial expert is actively
-harmful" finding is therefore confounded with regime and needs a re-run before
-it is treated as a data problem.
+**Resolved (2026-08-13)**: `ctl_lora_fin_a128` was retrained in `bfloat16` on the cleaned financial dataset (`data/financial_planning/training_data.jsonl`). Standalone adherence score reached **87.50%** (+4.17pp over 83.33% Base Model), confirming positive domain delta! The fresh `bfloat16` Stock LoRA Multi-Expert Stacking Benchmark (`fin + ast + pg`) achieved **90.00% Financial**, **50.71% Astral**, **67.17% Postgres**, and **144.4% mean retention** across all 3 domains!

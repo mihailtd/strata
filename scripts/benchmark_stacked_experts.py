@@ -40,6 +40,7 @@ postgresql), greedy, with the stop_strings fix.
 import argparse
 import itertools
 import json
+import random
 import re
 import sys
 from pathlib import Path
@@ -123,7 +124,11 @@ def score(model, tok, questions, terms, max_new_tokens):
         txt = tok.decode(gen[0][ids["input_ids"].shape[1] :], skip_special_tokens=True).strip()
         txt = re.split(r"#+\s*Question", txt)[0].strip().lower()
         out.append(score_one(q, txt, terms))
-    return sum(out) / len(out)
+    return out  # per-question scores; callers average. Needed for bootstrap CIs:
+    # scoring is greedy and deterministic (two independent runs returned
+    # bit-identical means for every condition not involving the changed adapter),
+    # so run-to-run variance is exactly zero and the ONLY uncertainty is which
+    # questions were sampled. That is what bootstrapping over these resamples.
 
 
 def main():
@@ -160,37 +165,65 @@ def main():
 
     print(f"{len(combos)} conditions x {len(DOMAINS)} domains, {args.max_new_tokens} tokens\n")
     results = {}
+    per_question = {}
     for combo in combos:
         if combo:
             engine.activate_many([experts[n] for n in combo])
         else:
             engine.restore()
         label = "+".join(combo) if combo else "base"
-        row = {d: score(model, tok, qs[d], DOMAINS[d][1], args.max_new_tokens) for d in DOMAINS}
+        per_q = {d: score(model, tok, qs[d], DOMAINS[d][1], args.max_new_tokens) for d in DOMAINS}
+        row = {d: sum(v) / len(v) for d, v in per_q.items()}
         results[label] = row
+        per_question[label] = per_q
         print(f"  {label:16s} " + "  ".join(f"{d[:4]}={row[d]:6.2f}%" for d in DOMAINS), flush=True)
     engine.restore()
 
-    print("\n" + "=" * 76)
-    print(" Does stacking preserve each domain? (retention vs that domain's own expert)")
-    print("=" * 76)
-    print(f" {'condition':16s} {'financial':>10s} {'astral':>9s} {'postgres':>9s}   {'mean retention':>15s}")
-    for label, row in results.items():
-        rets = []
+    # ---- bootstrap CIs on ABSOLUTE pp deltas -------------------------------
+    # The retention ratio (stacked-base)/(solo-base) is NOT reported: with a
+    # small solo gain the denominator approaches zero and the ratio explodes
+    # (measured: 247.7% on postgres off a +8.67pp gain, 160.0% on financial off
+    # +4.17pp). Absolute pp deltas have no such failure mode.
+    rng = random.Random(0)
+    B = 10000
+    print("\n" + "=" * 84)
+    print(" Does stacking preserve each domain?  (stacked - solo, in pp, 95% bootstrap CI)")
+    print("=" * 84)
+    print(f" {'condition':14s} {'domain':<20s} {'solo':>8s} {'stacked':>9s} {'delta':>9s} {'95% CI':>18s}  verdict")
+    boot = {}
+    for label in results:
+        if label == "base":
+            continue
         for d in DOMAINS:
             owner = OWNER[d]
-            solo = results[owner][d]
-            base = results["base"][d]
-            if owner in label.split("+") and solo != base:
-                rets.append(100 * (row[d] - base) / (solo - base))
-        r = f"{sum(rets) / len(rets):14.1f}%" if rets else "".rjust(15)
-        print(f" {label:16s} " + "  ".join(f"{row[d]:8.2f}%" for d in DOMAINS) + f" {r}")
-    print("\n retention = (stacked - base) / (solo - base), over domains whose expert is in the stack")
-    print(" 100% = stacking costs nothing; 0% = the expert contributes nothing in the stack")
+            if owner not in label.split("+"):
+                continue
+            a = per_question[owner][d]     # solo, per question
+            b = per_question[label][d]     # stacked, per question
+            n = len(a)
+            diffs = []
+            for _ in range(B):
+                idx = [rng.randrange(n) for _ in range(n)]
+                diffs.append(sum(b[i] - a[i] for i in idx) / n)
+            diffs.sort()
+            lo, hi = diffs[int(0.025 * B)], diffs[int(0.975 * B)]
+            delta = sum(b) - sum(a)
+            delta /= n
+            sig = "RESOLVED" if (lo > 0 or hi < 0) else "not resolvable"
+            boot[f"{label}|{d}"] = {
+                "solo": sum(a) / n, "stacked": sum(b) / n, "delta_pp": delta,
+                "ci95_lo": lo, "ci95_hi": hi, "resolved": bool(lo > 0 or hi < 0), "n": n,
+            }
+            print(f" {label:14s} {d:<20s} {sum(a) / n:7.2f}% {sum(b) / n:8.2f}% "
+                  f"{delta:+8.2f}pp  [{lo:+6.2f},{hi:+6.2f}]  {sig}")
+    nres = sum(1 for v in boot.values() if v["resolved"])
+    print(f"\n {nres} of {len(boot)} stack/domain cells have a CI excluding zero.")
+    print(" Cells whose CI spans 0 cannot distinguish stacking interference from")
+    print(" question-sampling noise, regardless of how large the point estimate looks.")
 
     out = REPO_ROOT / args.out
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(results, indent=2))
+    out.write_text(json.dumps({"means": results, "per_question": per_question, "bootstrap": boot}, indent=2))
     print(f"\nWrote {out}")
 
 
