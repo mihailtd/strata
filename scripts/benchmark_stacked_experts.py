@@ -82,9 +82,9 @@ EXPERTS_STOCK = {
 # ctl_lora_fin_a128 is bf16, so stacking them sums a bf16-trained delta with two
 # 4-bit-trained ones into a bf16 base.
 EXPERTS_BF16 = {
-    "fin": "results/adapters/ctl_lora_fin_a128",
-    "ast": "results/adapters/ctl_lora_bf16_ast_a128",
-    "pg": "results/adapters/ctl_lora_bf16_pg_a128",
+    "fin": "results/adapters/m2_financial_r8a128",
+    "ast": "results/adapters/m2_astral_r8a128",
+    "pg": "results/adapters/m2_postgresql_r8a128",
 }
 EXPERTS = EXPERTS_IDKRON
 # which expert "owns" each domain, for the retention comparison
