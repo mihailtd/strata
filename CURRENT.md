@@ -114,10 +114,24 @@ model — folding itself is free. Never quote them as one number.
 
 ## Open questions
 
-1. **Does stacking degrade experts?** Unresolved. Only astral has enough headroom
-   (+42.74pp); financial (+4.17pp) and postgres (+8.67pp) cannot resolve at any
-   n. Harness is ready — per-question scores, paired bootstrap CIs, decision rule
-   fixed in advance (a cell counts only if its CI excludes zero).
+1. **Does stacking degrade experts?** PARTIALLY ANSWERED (m2 matched set,
+   astral, n=40, paired bootstrap; base 6.04% -> solo 56.91%, a +50.87pp gain =
+   20.3 question-equivalents, the best-powered stacking run made here).
+
+   | stack | astral | vs solo | 95% CI | verdict |
+   | :--- | :---: | :---: | :---: | :--- |
+   | `ast` | 56.91% | — | — | baseline |
+   | `ast+fin` | 45.95% | **-10.96pp** | [-21.50, -1.62] | **RESOLVED loss** |
+   | `ast+fin+pg` | 62.66% | +5.74pp | [-6.63, +18.26] | not resolvable |
+
+   A specific pair interferes. It does **not** decay monotonically — adding a
+   third expert moves the score back *above* solo. Any "stack at most N" rule is
+   unsupported; generalising from one resolved cell would repeat the error that
+   produced the retracted 144.4% retention claim.
+
+   Wide CIs are the metric's shape, not sample size: only 15-18 of 40 questions
+   change at all, but those that do swing the full [-100, +100] (sd 32-40pp),
+   because the good/bad term ratio is bimodal per question.
 2. **Is the m1→m2 seam large elsewhere?** Financial moved +9.17pp. Astral and
    postgres now retrained under m2; comparing them against their m1 versions
    measures it.

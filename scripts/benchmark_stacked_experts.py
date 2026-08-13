@@ -192,7 +192,9 @@ def main():
         for r in (1, 2, 3):
             combos += list(itertools.combinations(names, r))
 
-    print(f"{len(combos)} conditions x {len(DOMAINS)} domains, {args.max_new_tokens} tokens\n")
+    nq = sum(len(v) for v in qs.values())
+    print(f"{len(combos)} conditions x {len(scored)} domain(s) "
+          f"({', '.join(scored)}), {nq} questions/condition, {args.max_new_tokens} tokens\n")
     results = {}
     per_question = {}
     for combo in combos:

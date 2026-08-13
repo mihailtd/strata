@@ -465,7 +465,12 @@ Direct evaluation ([`scripts/benchmark_stacked_experts.py`](file:///home/mihai/g
 
 #### The Architectural Rule: Geometric Orthogonality $\neq$ Functional Independence
 Pairwise cosines across all 128 module layers range from $+0.0003$ to $+0.0004$ (max $|\cos| = 0.0026$) — orthogonal to four decimal places.
-> **Architectural Rule:** Geometric orthogonality in weight space ($\cos \approx +0.0002$) does **not** grant non-linear functional independence in activation space. Expect monotonic decay ($\sim 20\text{pp}$ retention loss per added expert for fragile/low-headroom tasks, $\sim 8\text{pp}$ for resilient high-headroom tasks). Stack high-gain experts only ($N \le 2$ or $N \le 3$).
+> **Architectural Rule:** Geometric orthogonality in weight space ($\cos \approx +0.0002$) does **not** grant
+> non-linear functional independence in activation space -- that part holds. But the **monotonic-decay claim
+> and the $N \le 2$/$N \le 3$ rule are RETRACTED.** Measured on the methodology-matched m2 set (astral,
+> $n=40$, paired bootstrap): `ast+fin` loses $-10.96$pp (CI $[-21.50,-1.62]$, resolved) but `ast+fin+pg`
+> gains $+5.74$pp (CI $[-6.63,+18.26]$, not resolvable) -- **adding a third expert moves the score back
+> above solo.** Decay is not monotonic and no stack-size rule is supported by the data.
 
 #### The Three-Ceiling Architectural Model
 
