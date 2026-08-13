@@ -12,7 +12,13 @@ Three arms:
           tree and replaces every target Linear, so cost is Python-side module
           surgery, not bytes. Also cannot be called twice on one model without
           corrupting it, which is why it is measured on a fresh wrap each time.
-  lora    swap_adapter_weights() on a rank-8 LoRA payload (~21 MB).
+  lora    swap_adapter_weights() on a 21.23 MB payload. NOTE: despite the arm
+          name and the `--lora-a/-b` flags, the default adapters are
+          `*_custom_standard` (variant custom_standard, rank_total=64), NOT a
+          rank-8 LoRA. The payload SIZE is as stated and swap cost is
+          bandwidth-bound on payload bytes, so the timings stand -- but a peft
+          LoRA cannot be substituted here at all: it has no novel_adapter.pt
+          and AdapterPayload.from_dir() raises on it.
   coef    swap_adapter_weights() on a k=32 master_basis coefficient payload
           (~8 KB), with the basis bank already resident.
 
