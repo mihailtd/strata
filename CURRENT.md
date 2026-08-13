@@ -1,7 +1,8 @@
 # CURRENT
 
 What is live right now: which trainer, which adapters, which findings hold, and
-what has been retracted. Companion to `SYSTEM.md` (hardware/software snapshot).
+what has been retracted. Companion to `SYSTEM.md` (hardware/software snapshot) and `NOVELTY.md`
+(honest tiering of what is actually novel here).
 
 **Read this before citing any number or running any benchmark.** Several results
 in this repo were invalidated by using an adapter that was not what its script

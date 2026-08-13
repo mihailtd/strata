@@ -731,7 +731,7 @@ anything: `mtp_draft.py` reads bare `mtp.*` tensors from the checkpoint. The
 open question was whether domain-adapted drafting raises acceptance ($\tau$),
 which drives net speculative speedup far harder than draft latency does.
 
-Measured directly ([`scripts/benchmark_mtp_head_adapter_acceptance.py`](file:///home/mihai/gnn-experiment/scripts/benchmark_mtp_head_adapter_acceptance.py)):
+Measured directly ([`scripts/runtime/speculative/mtp_head_folding/benchmark_mtp_head_adapter_acceptance.py`](file:///home/mihai/gnn-experiment/scripts/runtime/speculative/mtp_head_folding/benchmark_mtp_head_adapter_acceptance.py)):
 40 astral prompts x 4 offsets = **160 draft events per condition**, $K=6$,
 accepted-prefix scoring, un-adapted baseline re-measured in the same process.
 
