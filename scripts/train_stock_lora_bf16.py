@@ -68,6 +68,7 @@ def main():
     ap.add_argument("--max-steps", type=int, default=150)
     ap.add_argument("--lr", type=float, default=2e-4)
     ap.add_argument("--vram-cap-gb", type=float, default=22.0)
+    ap.add_argument("--no-liger", action="store_true", help="disable Liger fused kernels (A/B baseline)")
     ap.add_argument("--out", default=None, help="override the default output dir")
     args = ap.parse_args()
 
@@ -85,6 +86,27 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(args.model_id, trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+
+    # Liger fused Triton kernels. MUST be applied BEFORE from_pretrained: with
+    # model=None the patcher rebinds at class level, so only models constructed
+    # afterwards pick up the RMSNorm/SwiGLU swaps. Reversing these two lines
+    # makes the patch silently do nothing.
+    #
+    # rope is left at its default False: liger raises NotImplementedError for
+    # Qwen3.5 ("not available"), because of the hybrid Gated DeltaNet/attention
+    # mix. There is no per-layer detection -- it is a blanket opt-out.
+    #
+    # Verified equivalent: Liger's RMSNorm uses offset=1.0 + casting_mode
+    # "gemma", matching stock Qwen3_5RMSNorm's output * (1.0 + weight.float())
+    # then cast. Loss trajectories match a non-Liger run (1.941->0.859 vs
+    # 1.943->0.868).
+    liger_applied = False
+    if not args.no_liger:
+        from liger_kernel.transformers import apply_liger_kernel_to_qwen3_5
+
+        apply_liger_kernel_to_qwen3_5()
+        liger_applied = True
+        print("Liger fused kernels applied (fused_linear_cross_entropy, rms_norm, swiglu; rope=off)")
 
     # bf16, NOT load_in_4bit -- this is the whole point of the script
     model = AutoModelForCausalLM.from_pretrained(
@@ -147,6 +169,7 @@ def main():
             {
                 "precision": "bfloat16",
                 "quantization": None,
+                "liger_fused_kernels": liger_applied,
                 "trained_by": "scripts/train_stock_lora_bf16.py",
                 "domain": args.domain,
                 "rank": args.rank,

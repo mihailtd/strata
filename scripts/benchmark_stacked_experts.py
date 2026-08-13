@@ -77,6 +77,15 @@ EXPERTS_STOCK = {
     "ast": "results/adapters/ctl_lora_r8_a128",
     "pg": "results/adapters/ctl_lora_pg_a128",
 }
+# All-bf16 set. EXPERTS_STOCK is mixed-regime: ctl_lora_r8_a128 and
+# ctl_lora_pg_a128 came from export_adapter.py (load_in_4bit=True) while
+# ctl_lora_fin_a128 is bf16, so stacking them sums a bf16-trained delta with two
+# 4-bit-trained ones into a bf16 base.
+EXPERTS_BF16 = {
+    "fin": "results/adapters/ctl_lora_fin_a128",
+    "ast": "results/adapters/ctl_lora_bf16_ast_a128",
+    "pg": "results/adapters/ctl_lora_bf16_pg_a128",
+}
 EXPERTS = EXPERTS_IDKRON
 # which expert "owns" each domain, for the retention comparison
 OWNER = {"financial_planning": "fin", "astral": "ast", "postgresql": "pg"}
@@ -136,7 +145,17 @@ def main():
     ap.add_argument("--model-name", default="Qwen/Qwen3.5-4B")
     ap.add_argument("--max-new-tokens", type=int, default=192)
     ap.add_argument("--vram-cap-gb", type=float, default=22.0)
-    ap.add_argument("--experts", choices=["idkron","stock"], default="idkron")
+    ap.add_argument("--experts", choices=["idkron", "stock", "bf16"], default="idkron")
+    # The full power set is 2^N conditions and scores every domain in each. That
+    # is mostly wasted: financial (+4.17pp solo) and postgres (+8.67pp) lack the
+    # headroom to resolve a stacking effect at any n, while astral (+42.74pp) is
+    # the only domain that can carry the question. --nested runs a single chain
+    # of growing stack size scored on one domain, which is what the decay
+    # question actually needs, at a fraction of the cost.
+    ap.add_argument("--nested", action="store_true",
+                    help="run base + a nested chain of growing stacks instead of the power set")
+    ap.add_argument("--only-domain", default=None,
+                    help="score only this domain (e.g. astral); implies its expert leads the chain")
     ap.add_argument("--out", default="results/stacked_experts.json")
     args = ap.parse_args()
 
@@ -149,19 +168,29 @@ def main():
     )
     model.eval()
 
-    expert_set = EXPERTS_STOCK if args.experts == "stock" else EXPERTS_IDKRON
+    expert_set = {"stock": EXPERTS_STOCK, "bf16": EXPERTS_BF16}.get(args.experts, EXPERTS_IDKRON)
     print(f"expert set: {args.experts}")
     experts = {n: FoldableExpert.from_dir(REPO_ROOT / p, n) for n, p in expert_set.items()}
     engine = WeightFoldingEngine(model, experts.values(), keep_pristine=True)
+    scored = {args.only_domain: DOMAINS[args.only_domain]} if args.only_domain else DOMAINS
+    if args.only_domain and args.only_domain not in DOMAINS:
+        raise SystemExit(f"unknown domain {args.only_domain}")
     qs = {
         d: [json.loads(x) for x in (REPO_ROOT / f).read_text().splitlines() if x.strip()]
-        for d, (f, _) in DOMAINS.items()
+        for d, (f, _) in scored.items()
     }
 
     names = list(expert_set)
-    combos = [()]
-    for r in (1, 2, 3):
-        combos += list(itertools.combinations(names, r))
+    if args.nested:
+        lead = OWNER.get(args.only_domain) if args.only_domain else names[0]
+        if lead not in names:
+            raise SystemExit(f"--only-domain {args.only_domain} has no expert in this set")
+        rest = [n for n in names if n != lead]
+        combos = [()] + [tuple([lead] + rest[:i]) for i in range(len(rest) + 1)]
+    else:
+        combos = [()]
+        for r in (1, 2, 3):
+            combos += list(itertools.combinations(names, r))
 
     print(f"{len(combos)} conditions x {len(DOMAINS)} domains, {args.max_new_tokens} tokens\n")
     results = {}
@@ -172,11 +201,11 @@ def main():
         else:
             engine.restore()
         label = "+".join(combo) if combo else "base"
-        per_q = {d: score(model, tok, qs[d], DOMAINS[d][1], args.max_new_tokens) for d in DOMAINS}
+        per_q = {d: score(model, tok, qs[d], DOMAINS[d][1], args.max_new_tokens) for d in scored}
         row = {d: sum(v) / len(v) for d, v in per_q.items()}
         results[label] = row
         per_question[label] = per_q
-        print(f"  {label:16s} " + "  ".join(f"{d[:4]}={row[d]:6.2f}%" for d in DOMAINS), flush=True)
+        print(f"  {label:16s} " + "  ".join(f"{d[:4]}={row[d]:6.2f}%" for d in scored), flush=True)
     engine.restore()
 
     # ---- bootstrap CIs on ABSOLUTE pp deltas -------------------------------
@@ -194,7 +223,7 @@ def main():
     for label in results:
         if label == "base":
             continue
-        for d in DOMAINS:
+        for d in scored:
             owner = OWNER[d]
             if owner not in label.split("+"):
                 continue

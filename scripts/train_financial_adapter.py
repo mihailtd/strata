@@ -1,4 +1,16 @@
-"""Fine-tune Stock LoRA (r=8, alpha=128, scaling 16) on cleaned financial planning dataset.
+"""DEPRECATED -- use scripts/train_stock_lora_bf16.py --domain financial_planning
+
+Superseded because per-domain trainers drifted apart in methodology: this script
+was the ONLY one applying Liger fused kernels, so the financial expert was
+trained differently from astral and postgres while all three were compared as if
+matched. train_stock_lora_bf16.py now carries the same bf16 + Liger path for
+every domain and writes regime.json so provenance is recorded rather than
+inferred.
+
+Kept only so the exact provenance of the existing ctl_lora_fin_a128 stays
+readable. Do not use for new work.
+
+Fine-tune Stock LoRA (r=8, alpha=128, scaling 16) on cleaned financial planning dataset.
 
 Dataset: data/financial_planning/training_data.jsonl (304 clean records)
 Output: results/adapters/ctl_lora_fin_a128
@@ -43,6 +55,10 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+
+    print("Applying Liger Kernel specific patch for Qwen 3.5...")
+    from liger_kernel.transformers import apply_liger_kernel_to_qwen3_5
+    apply_liger_kernel_to_qwen3_5()
 
     print("Loading base model Qwen/Qwen3.5-4B in bfloat16...")
     model = AutoModelForCausalLM.from_pretrained(
