@@ -1,10 +1,9 @@
 """Does EAGLE-style speculation with Qwen3.5's shipped MTP head beat plain decode?
 
-CORRECTNESS IS THE GATE. Greedy speculative decoding is *exact*: verification
-accepts a drafted token only when it equals what the target model would have
-produced, so the output must be token-identical to plain greedy. Any speed
-number reported without that holding is measuring a broken decoder, which is
-the easiest way to look fast.
+STATUS: SUPERSEDED for headline numbers -- cite
+scripts/benchmark_mtp_indomain_speculation_matrix.py instead (9 cells, 3
+interleaved repeats, correctness gate). This file is kept because it is the
+only place the snapshot/restore mechanism is exercised end to end.
 
 WHAT MAKES THIS WORK ON A HYBRID MODEL
 --------------------------------------
@@ -15,42 +14,55 @@ from the state after M<K. A KV cache truncates; a recurrent state does not.
 
 The state is fixed-size though, so we snapshot it before verification and
 restore on partial acceptance. That converts an impossible rollback into a
-cheap copy.
+cheap copy. Verified: the 52.5 MB snapshot round-trips exactly -- replay after
+restore reproduces the identical token.
 
-WHAT THE NUMBERS SAY GOING IN
------------------------------
-Measured on this rig, cost of one forward over K tokens:
-    K=1 33.56ms (1.00x) | K=2 95.44ms (2.84x) | K=4 94.33ms (2.81x) | K=8 91.25ms (2.72x)
-The 2.84x jump from 1 to 2 tokens is GatedDeltaNet leaving its fast recurrent
-single-token path for a chunked path that, without `fla`/`causal_conv1d` (not
-buildable on this AMD rig), is slow PyTorch. So a verification step costs ~2.8
-single-token steps, and a *partial* acceptance costs another ~2.8 to re-advance
-the state. Break-even needs a lot of accepted tokens.
+VERIFICATION COST -- CURRENT, NOT THE ORIGINAL ESTIMATE
+-------------------------------------------------------
+An earlier version of this docstring stated `fla`/`causal_conv1d` were "not
+buildable on this AMD rig" and built a cost model on it:
 
-Measured acceptance of the shipped head, in isolation: 66.7% (4.0 of 6 drafts).
+    SUPERSEDED:  K=1 33.56ms (1.00x) | K=2 95.44ms (2.84x) | K=4 94.33ms (2.81x)
 
-STATUS: NOT CORRECT YET -- DO NOT CITE THESE NUMBERS
-----------------------------------------------------
-The verified pieces work:
-  * the MTP head drafts well (70.0% teacher-forced next-next-token accuracy vs
-    the base model's own 76.2% next-token ceiling; 66.7% accepted in isolation)
-  * snapshot/restore of the 52.5 MB recurrent state round-trips exactly
-    (replay after restore reproduces the identical token)
+That is wrong twice over. `fla` and `causal_conv1d` are two INDEPENDENT
+dependencies with separate fallbacks -- conflating them is what kept this
+blocked. `fla` (flash-linear-attention 0.5.2, triton-rocm 3.7.1) binds and runs
+on gfx1100; `causal_conv1d` is still absent and its torch fallback costs only
+3.8% of wall time. Measured with `fla` active (results/fla_verification_profile.json,
+`fla_active: true`):
 
-But the end-to-end loop DIVERGES from plain greedy (2-3 of 4 prompts differ),
-so the acceptance/throughput numbers it prints are not meaningful. Greedy
-speculation must be token-exact; it is not, so there is a bug in the loop
-(prime suspects: the draft head's KV cache is thrown away and rebuilt each
-round with non-zero start positions, and acceptance drops from 66.7% isolated
-to 24-48% here, which points at the head losing its context).
+    CURRENT:     K=1 27.87ms (1.00x) | K=2 38.06ms (1.37x) | K=4 33.27ms (1.19x)
 
-Even once fixed, the cost model says this cannot win on THIS hardware:
-    verify K tokens        ~2.8x a single-token step
-    partial acceptance     + another ~2.8x to re-advance the recurrent state
-    P(all K accepted)      0.667^6 = 0.09 at K=6
-  => expected ~5.5x cost for ~5 tokens = ~0.9x, before draft cost.
-Measured: 0.50x. The blocker is the missing fast linear-attention kernels
-(`fla`/`causal_conv1d`, unbuildable on this AMD rig), not the draft head.
+So verification costs ~1.19 single-token steps, not ~2.8, putting break-even at
+tau ~ 1.39 against a measured tau of ~2.3-2.4.
+
+NOTE: `fla`'s device probe is @cache'd at import. Touch CUDA BEFORE importing
+transformers or the process latches to a fallback for its whole lifetime.
+
+ON EXACTNESS -- THE OLD "DO NOT CITE" RATIONALE IS RETRACTED
+------------------------------------------------------------
+This file previously carried "STATUS: NOT CORRECT YET -- DO NOT CITE", because
+the loop diverged from plain greedy on 2-3 of 4 prompts. Two things changed:
+
+  * The suspected bug was real and is FIXED: the draft head's KV cache was
+    discarded and rebuilt each round, which is why acceptance fell from 66.7%
+    isolated to 24-48% in the loop. Accumulating hidden states restored it to
+    44-69%.
+  * The remaining divergence is NOT a loop defect. Measured at n=60 (20 prompts
+    x 3 domains): speculative-vs-greedy 80.0%, against a *non-speculative*
+    control (plain greedy vs teacher-forced) of 83.3%, with a determinism
+    control at 100.0%. Speculation adds ~3pp of divergence over paths that
+    involve no speculation at all.
+
+The cause is bf16 kernel path-dependence: the chunked multi-token kernel and
+the single-token recurrent kernel genuinely disagree (divergence at tokens 2-4
+of 32 on 3/3 prompts with zero speculation involved). Verification is
+inherently multi-token, so it cannot use the single-token kernel.
+
+**Token-exactness against plain greedy is therefore UNREACHABLE on this stack**
+-- for this loop and for plain chunked decode alike. Do not treat a mismatch
+here as proof of a bug, and do not report these speedups as exact-output
+speedups. That is a real limitation, not a clean bill of health.
 
     uv run --env-file .env scripts/benchmark_mtp_speculative.py
 """

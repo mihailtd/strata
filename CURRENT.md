@@ -133,9 +133,29 @@ model — folding itself is free. Never quote them as one number.
    Wide CIs are the metric's shape, not sample size: only 15-18 of 40 questions
    change at all, but those that do swing the full [-100, +100] (sd 32-40pp),
    because the good/bad term ratio is bimodal per question.
-2. **Is the m1→m2 seam large elsewhere?** Financial moved +9.17pp. Astral and
-   postgres now retrained under m2; comparing them against their m1 versions
-   measures it.
+2. **Is the m1→m2 seam large elsewhere?** MEASURED, INCONCLUSIVE
+   (`benchmark_m1_vs_m2_regime.py`, matched hyperparameters/data/eval, paired
+   bootstrap, n=40):
+
+   | domain | base | m1 | m2 | m2-m1 | 95% CI | verdict |
+   | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
+   | astral | 6.04% | 53.24% | 56.91% | +3.67pp | [-7.86, +15.59] | not resolvable |
+   | postgresql | 43.38% | 47.50% | 61.40% | **+13.90pp** | [-1.17, +29.57] | not resolvable |
+
+   **0 of 2 resolved.** Both favour m2 and postgres nearly resolves (lower bound
+   -1.17), which is suggestive, not evidence -- two same-sign results is p=0.25
+   under a sign test. Financial is excluded: its m1 adapter was overwritten by a
+   bf16 retrain, so no true counterpart survives.
+
+   Caveat: m1->m2 bundles 4-bit->bf16 AND no-Liger->Liger. Liger was verified
+   numerically equivalent to stock, so quantization is the likely driver, but
+   this measures the methodology change as a whole.
+
+   **Practical call:** do not bulk-retrain the 56 remaining m1 adapters. Retrain
+   those backing live findings (~2 min each under m2); retire the rest.
+
+   Restore integrity confirmed as a side effect: `max_drift = 0.00e+00` on both
+   domains, i.e. the pristine-buffer `copy_` is bit-exact in situ.
 3. **Liger speedup, unverified.** ~130 s/run is plausible but has no measured
    non-Liger baseline. `--no-liger` exists for the A/B.
 

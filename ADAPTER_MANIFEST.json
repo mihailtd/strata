@@ -1,5 +1,5 @@
 {
-  "recorded": "2026-08-13T23:47:55",
+  "recorded": "2026-08-14T00:32:32",
   "adapters": {
     "astral_qwen3.5_micro": {
       "name": "astral_qwen3.5_micro",
@@ -16,21 +16,6 @@
       "weight_hash": "9fd623709b61cd02",
       "modified": "2026-08-10T22:51:05"
     },
-    "astral_qwen3.5_micro_combined": {
-      "name": "astral_qwen3.5_micro_combined",
-      "architecture": "combined",
-      "rank_total": 64,
-      "alpha": 16,
-      "scaling": 0.25,
-      "regime": "4bit-nf4",
-      "quantization": "nf4",
-      "liger": null,
-      "trained_by": null,
-      "methodology": null,
-      "regime_source": "inferred",
-      "weight_hash": "691664ae20e63d40",
-      "modified": "2026-08-11T01:24:16"
-    },
     "astral_qwen3.5_micro_custom_standard": {
       "name": "astral_qwen3.5_micro_custom_standard",
       "architecture": "custom_standard",
@@ -45,36 +30,6 @@
       "regime_source": "inferred",
       "weight_hash": "1ff764b067c38c5d",
       "modified": "2026-08-11T12:21:07"
-    },
-    "astral_qwen3.5_micro_custom_standard_fixedinit": {
-      "name": "astral_qwen3.5_micro_custom_standard_fixedinit",
-      "architecture": "custom_standard_fixedinit",
-      "rank_total": 64,
-      "alpha": 16,
-      "scaling": 0.25,
-      "regime": "4bit-nf4",
-      "quantization": "nf4",
-      "liger": null,
-      "trained_by": null,
-      "methodology": null,
-      "regime_source": "inferred",
-      "weight_hash": "4c862b3927eaa10f",
-      "modified": "2026-08-12T01:16:36"
-    },
-    "astral_qwen3.5_micro_dora": {
-      "name": "astral_qwen3.5_micro_dora",
-      "architecture": "lora",
-      "rank_total": 8,
-      "alpha": 16,
-      "scaling": 2.0,
-      "regime": "4bit-nf4",
-      "quantization": "nf4",
-      "liger": null,
-      "trained_by": null,
-      "methodology": null,
-      "regime_source": "inferred",
-      "weight_hash": "5af4932918b694e9",
-      "modified": "2026-08-11T21:25:40"
     },
     "astral_qwen3.5_micro_id_kron": {
       "name": "astral_qwen3.5_micro_id_kron",
@@ -105,51 +60,6 @@
       "regime_source": "inferred",
       "weight_hash": "4a3349d818901957",
       "modified": "2026-08-12T00:13:46"
-    },
-    "astral_qwen3.5_micro_krotucker": {
-      "name": "astral_qwen3.5_micro_krotucker",
-      "architecture": "krotucker",
-      "rank_total": 64,
-      "alpha": 128,
-      "scaling": 2.0,
-      "regime": "4bit-nf4",
-      "quantization": "nf4",
-      "liger": null,
-      "trained_by": null,
-      "methodology": null,
-      "regime_source": "inferred",
-      "weight_hash": "4bc47f821f3deb84",
-      "modified": "2026-08-11T23:07:14"
-    },
-    "astral_qwen3.5_micro_lokr": {
-      "name": "astral_qwen3.5_micro_lokr",
-      "architecture": "unknown",
-      "rank_total": 8,
-      "alpha": 16,
-      "scaling": 2.0,
-      "regime": "4bit-nf4",
-      "quantization": "nf4",
-      "liger": null,
-      "trained_by": null,
-      "methodology": null,
-      "regime_source": "inferred",
-      "weight_hash": "c7e1352850c8fb4a",
-      "modified": "2026-08-11T22:17:00"
-    },
-    "astral_qwen3.5_micro_lokr_r32": {
-      "name": "astral_qwen3.5_micro_lokr_r32",
-      "architecture": "unknown",
-      "rank_total": 32,
-      "alpha": 64,
-      "scaling": 2.0,
-      "regime": "4bit-nf4",
-      "quantization": "nf4",
-      "liger": null,
-      "trained_by": null,
-      "methodology": null,
-      "regime_source": "inferred",
-      "weight_hash": "2fef448241900908",
-      "modified": "2026-08-11T22:42:34"
     },
     "astral_qwen3.5_micro_lora": {
       "name": "astral_qwen3.5_micro_lora",
@@ -196,51 +106,6 @@
       "weight_hash": "34ee73d40037a3f8",
       "modified": "2026-08-12T01:44:54"
     },
-    "astral_qwen3.5_micro_mbasis_a1024": {
-      "name": "astral_qwen3.5_micro_mbasis_a1024",
-      "architecture": "master_basis",
-      "rank_total": 64,
-      "alpha": 1024,
-      "scaling": 16.0,
-      "regime": "4bit-nf4",
-      "quantization": "nf4",
-      "liger": null,
-      "trained_by": null,
-      "methodology": null,
-      "regime_source": "inferred",
-      "weight_hash": "3802f58c929dd194",
-      "modified": "2026-08-12T02:13:14"
-    },
-    "astral_qwen3.5_micro_mbasis_a256": {
-      "name": "astral_qwen3.5_micro_mbasis_a256",
-      "architecture": "master_basis",
-      "rank_total": 64,
-      "alpha": 256,
-      "scaling": 4.0,
-      "regime": "4bit-nf4",
-      "quantization": "nf4",
-      "liger": null,
-      "trained_by": null,
-      "methodology": null,
-      "regime_source": "inferred",
-      "weight_hash": "df39877f2537c2ce",
-      "modified": "2026-08-12T02:01:15"
-    },
-    "astral_qwen3.5_micro_mbasis_a4096": {
-      "name": "astral_qwen3.5_micro_mbasis_a4096",
-      "architecture": "master_basis",
-      "rank_total": 64,
-      "alpha": 4096,
-      "scaling": 64.0,
-      "regime": "4bit-nf4",
-      "quantization": "nf4",
-      "liger": null,
-      "trained_by": null,
-      "methodology": null,
-      "regime_source": "inferred",
-      "weight_hash": "d457fb0d5d14380f",
-      "modified": "2026-08-12T02:25:09"
-    },
     "astral_qwen3.5_micro_mbproj_k32": {
       "name": "astral_qwen3.5_micro_mbproj_k32",
       "architecture": "master_basis_projected",
@@ -270,36 +135,6 @@
       "regime_source": "inferred",
       "weight_hash": "7d53fffe8b2c28b2",
       "modified": "2026-08-12T09:54:25"
-    },
-    "astral_qwen3.5_micro_random_mask": {
-      "name": "astral_qwen3.5_micro_random_mask",
-      "architecture": "random_mask",
-      "rank_total": 64,
-      "alpha": 16,
-      "scaling": 0.25,
-      "regime": "4bit-nf4",
-      "quantization": "nf4",
-      "liger": null,
-      "trained_by": null,
-      "methodology": null,
-      "regime_source": "inferred",
-      "weight_hash": "3ecb4a638510b934",
-      "modified": "2026-08-11T20:39:54"
-    },
-    "astral_qwen3.5_micro_tucker": {
-      "name": "astral_qwen3.5_micro_tucker",
-      "architecture": "tucker",
-      "rank_total": 1024,
-      "alpha": 64,
-      "scaling": 0.0625,
-      "regime": "4bit-nf4",
-      "quantization": "nf4",
-      "liger": null,
-      "trained_by": null,
-      "methodology": null,
-      "regime_source": "inferred",
-      "weight_hash": "4c6b275e7cec94bc",
-      "modified": "2026-08-11T01:42:21"
     },
     "astral_qwen3.5_micro_velocity": {
       "name": "astral_qwen3.5_micro_velocity",
