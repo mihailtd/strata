@@ -1112,3 +1112,25 @@ from directory-layout side effects (`export_adapter.py` writes no
 the adapter config at save time.
 
 **Resolved (2026-08-13)**: `ctl_lora_fin_a128` was retrained in `bfloat16` on the cleaned financial dataset (`data/financial_planning/training_data.jsonl`). Standalone adherence score reached **87.50%** (+4.17pp over 83.33% Base Model), confirming positive domain delta! The fresh `bfloat16` Stock LoRA Multi-Expert Stacking Benchmark (`fin + ast + pg`) achieved **90.00% Financial**, **50.71% Astral**, **67.17% Postgres**, and **144.4% mean retention** across all 3 domains!
+
+### CLOSED: MTP head adaptation (do not retry as-is)
+
+Loading the unused `mtp_astral_*` adapters into the draft head **lowers**
+acceptance. n=160 draft events/condition, K=6, paired bootstrap:
+un-adapted tau=2.456; all five adapters 1.531-1.988, every CI excluding zero.
+Bare checkpoint head drafts best.
+
+No scaling trend is readable: two independently-trained adapters at identical
+scaling 1.0 differ by 0.456, swamping between-scaling differences.
+
+All conditions stay above the tau>=1.39 break-even, so speculation itself is
+unaffected -- this was an upside test that came back empty.
+
+Mechanism: a draft head must AGREE with its backbone, not be domain-fluent.
+`train_mtp_adapter.py` optimises next-token loss on domain text, pulling the
+head off-target. Revisiting requires changing the objective to distil backbone
+outputs; rank/alpha tuning will not help.
+
+Also closed: folding the MTP head for latency. Drafting is ~27% of a round, so
+the Amdahl ceiling is ~1.14x, and nothing is wrapped to fold anyway (the head
+loads bare checkpoint tensors, no peft layer).

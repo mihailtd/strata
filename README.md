@@ -726,6 +726,61 @@ gnn-experiment/
 └── README.md                   # System documentation
 ```
 
+#### MTP head adaptation does not improve draft acceptance -- CLOSED, do not retry
+
+`train_mtp_adapter.py` produces LoRA adapters for the draft head itself
+(`mtp.fc`, `mtp.layer.self_attn.*`, `mtp.layer.mlp.*`). They were never loaded by
+anything: `mtp_draft.py` reads bare `mtp.*` tensors from the checkpoint. The
+open question was whether domain-adapted drafting raises acceptance ($\tau$),
+which drives net speculative speedup far harder than draft latency does.
+
+Measured directly ([`scripts/benchmark_mtp_head_adapter_acceptance.py`](file:///home/mihai/gnn-experiment/scripts/benchmark_mtp_head_adapter_acceptance.py)):
+40 astral prompts x 4 offsets = **160 draft events per condition**, $K=6$,
+accepted-prefix scoring, un-adapted baseline re-measured in the same process.
+
+| Condition | Scaling | $\tau$ | $\Delta$ vs bare | 95% CI (paired bootstrap) |
+| :--- | :---: | :---: | :---: | :---: |
+| **un-adapted (bare checkpoint head)** | — | **2.456** | — | baseline |
+| `mtp_astral_sweep_r64_a16` | 0.25 | 1.875 | $-0.581$ | $[-0.819, -0.344]$ |
+| `mtp_astral_sweep_r64_a32` | 0.50 | 1.931 | $-0.525$ | $[-0.794, -0.263]$ |
+| `mtp_astral_sweep_r64_a64` | 1.00 | 1.531 | $-0.925$ | $[-1.194, -0.650]$ |
+| `mtp_astral_sweep_r64_a128` | 2.00 | 1.819 | $-0.637$ | $[-0.912, -0.362]$ |
+| `mtp_astral_lora_r64_a64` | 1.00 | 1.988 | $-0.469$ | $[-0.688, -0.263]$ |
+
+**Every adapted variant is worse, and every CI excludes zero.** The bare
+checkpoint head drafts best. Do not wire the MTP adapters into the speculative
+path.
+
+**No scaling trend is readable.** The two independently-trained adapters at
+*identical* scaling 1.0 differ by **0.456** ($1.531$ vs $1.988$) -- as large as
+most between-scaling differences. Training-run variance swamps any dose-response
+curve, so the $\tau$ ordering across alphas above must not be interpreted. The
+headline survives this because even the *best* adapted variant has a CI clear of
+zero.
+
+**Speculation is not at risk.** Every condition, including the worst at $1.531$,
+stays above the $\tau \ge 1.39$ break-even. This was an upside test that came
+back empty, not a regression.
+
+**Why, mechanistically.** A draft head's job is not to be domain-fluent -- it is
+to *agree with the backbone it speculates against*. `train_mtp_adapter.py`
+optimises next-token loss on domain text, which pulls the head away from the
+target it must match. That predicts the same outcome for any domain, not just
+astral. Revisiting this means changing the trainer's objective to distil the
+backbone's outputs; re-tuning rank or alpha will not help.
+
+**This also retires the earlier `benchmark_mtp_folding_sweep.py` result** (21.95%
+-> 12.20-14.63% top-1), which reached the same conclusion but could not support
+it: it trained throwaway adapters inline at **30 steps** and never loaded the
+150-step adapters on disk, used $n=41$ tokens over 4 prompts, and scored
+single-token top-1 rather than accepted prefix. Same answer, now properly earned.
+
+**Related dead end:** folding the MTP head to reduce draft *latency* is also not
+worth building. Drafting is only ~27% of a speculative round (4 x 3.3 ms against
+a 35.6 ms verify), so eliminating it entirely is bounded at ~$1.14\times$ by
+Amdahl -- and there is nothing wrapped to fold in any case, since the head loads
+bare checkpoint tensors and uses no `peft` layer.
+
 #### Settling the stacking question
 
 Scoring here is greedy and deterministic: two independent runs returned
