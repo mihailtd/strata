@@ -69,6 +69,13 @@ uv run python scripts/audit_adapters.py          # drift check + current roles
 uv run python scripts/audit_adapters.py --write  # re-record after training
 ```
 
+**Every benchmark now DEFAULTS to the m2 set.** m1 adapters remain reachable as
+explicit options (`--experts idkron`, `--target-4bit`) for reproducing older
+runs, but nothing loads them unless asked. Scripts whose m1 adapters are the
+*subject* of study keep them by design: `benchmark_m1_vs_m2_regime.py`,
+`benchmark_mtp_head_adapter_acceptance.py`, `benchmark_alpha_absorption_sweep.py`,
+`benchmark_adapter_swap.py`, `build_orthogonality_map.py`.
+
 `ADAPTER_MANIFEST.json` (repo root, tracked) records a content hash per adapter.
 If an adapter changed under a published result, the drift check says so — this is
 the mechanism that was missing when `ctl_lora_fin_a128` was overwritten three
@@ -96,6 +103,31 @@ in one comparison.
 **Two folding numbers, two questions.** 1.83× is escaping peft's wrapper; 1.21×
 is escaping `NovelLoraLinear`. Folded decode is ~29.2 ms against a 28.7 ms bare
 model — folding itself is free. Never quote them as one number.
+
+
+### Speculation alternatives: there are none
+
+`transformers` refuses **all** built-in speculation on this architecture, not
+just the draft-model path. Measured in bf16 (`benchmark_speculative_decode.py`,
+8 questions, 256 tokens):
+
+| arm | tok/s | speedup |
+| :--- | :---: | :---: |
+| baseline (plain greedy) | **32.83** | 1.00x |
+| prompt-lookup (n-gram, no draft model) | **FAILED** | — |
+| draft model (Qwen3.5-0.8B, bf16, loaded fine) | **FAILED** | — |
+
+Both raise `ValueError: assisted generation is not supported with stateful
+models, such as Qwen3_5ForCausalLM` — the 24 GatedDeltaNet layers carry a
+recurrent state that cannot be rolled back by truncation, so the library
+declines rather than emitting wrong output. Not a resource limit: both models
+fit in 9.95 GB.
+
+**So the shipped MTP head is not the best speculative option here, it is the
+only one.** The 1.32-1.39x it delivers is measured against a field of zero
+alternatives, and the 52.5 MB snapshot/restore in `mtp_draft.py` is what makes
+it possible at all. That makes the MTP head work an enabling mechanism rather
+than an optimisation.
 
 ---
 

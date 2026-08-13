@@ -60,7 +60,11 @@ from gnn_experiment.novel_peft import (  # noqa: E402
     unwrap_novel_lora,
 )
 
-ADAPTER = "results/adapters/astral_sweep_a64"  # id_kron rank_total=64, scaling 1.0
+# DEFAULTS: the m2 expert set (bf16 + Liger, methodology-matched). Verify with
+# `uv run python scripts/audit_adapters.py`. Do NOT default to m1 (4-bit NF4)
+# adapters -- every benchmark here loads a bf16 base, so an m1 adapter folds a
+# correction-to-quantized-weights into unquantized ones.
+ADAPTER = "results/adapters/m2_astral_r8a128"
 
 
 @torch.no_grad()

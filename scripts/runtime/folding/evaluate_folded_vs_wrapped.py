@@ -43,7 +43,7 @@ from pathlib import Path
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.append(str(REPO_ROOT))
 
 from gnn_experiment.eval.eval_suite import LEGACY_TERMS, MODERN_TERMS  # noqa: E402
@@ -105,19 +105,19 @@ POSTGRES_LEGACY_TERMS = [
 
 DOMAINS = {
     "astral": {
-        "adapter": "results/adapters/astral_qwen3.5_micro_id_kron",
+        "adapter": "results/adapters/m2_astral_r8a128",
         "questions": "data/astral/evaluation_data.jsonl",
         "good": MODERN_TERMS,
         "bad": LEGACY_TERMS,
     },
     "postgresql": {
-        "adapter": "results/adapters/postgres_qwen3.5_micro_id_kron_r16",
+        "adapter": "results/adapters/m2_postgresql_r8a128",
         "questions": "data/postgresql/evaluation_data.jsonl",
         "good": POSTGRES_MODERN_TERMS,
         "bad": POSTGRES_LEGACY_TERMS,
     },
     "financial_planning": {
-        "adapter": "results/adapters/financial_planning_krona_dora",
+        "adapter": "results/adapters/m2_financial_r8a128",
         "questions": "data/financial_planning/evaluation_data.jsonl",
         "good": FINANCIAL_TERMS,
         "bad": GENERAL_FILLER_TERMS,

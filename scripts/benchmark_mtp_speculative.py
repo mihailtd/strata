@@ -96,9 +96,9 @@ from gnn_experiment.novel_peft import (  # noqa: E402
 # speculative win. Acceptance measurements say astral is the one that hurts
 # drafting (-0.86 accepted tokens vs un-adapted), so it is the real stress case.
 ADAPTERS = {
-    "financial": "results/adapters/fin_sweep_a32",
-    "astral": "results/adapters/astral_sweep_a64",
-    "postgres": "results/adapters/pg_sweep_a64",
+    "financial": "results/adapters/m2_financial_r8a128",
+    "astral": "results/adapters/m2_astral_r8a128",
+    "postgres": "results/adapters/m2_postgresql_r8a128",
 }
 
 PROMPTS = [

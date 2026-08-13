@@ -2,20 +2,25 @@ import argparse
 import json
 import sys
 import time
-import numpy as np
 from pathlib import Path
 
-# 1. CUDA Touch BEFORE transformers import
+import numpy as np
 import torch
+
+# fla's device probe is @cache'd at import. This CUDA touch MUST stay ABOVE the
+# transformers import -- if an import sorter hoists transformers above it, the
+# process latches to the slow fallback and the chunked-kernel cost silently
+# returns to ~2.8x. The noqa: E402 markers below exist to keep that ordering.
 torch.zeros(1, device="cuda")
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from gnn_experiment.novel_peft import set_hard_vram_cap
+from gnn_experiment.novel_peft import set_hard_vram_cap  # noqa: E402
+
 
 def measure_prefill_decode(model, input_ids, max_new_tokens=1024):
     # 1. Isolate Prefill

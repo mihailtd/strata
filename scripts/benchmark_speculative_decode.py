@@ -23,10 +23,25 @@ rolling that state back, which is trivial for a KV cache (truncate) and not
 trivial for a recurrent one. If that rollback is unimplemented the outputs will
 silently diverge -- which is exactly what the comparison catches.
 
-Caveat on expectations: the 0.8B draft shares the same hybrid layout
-(full_attention_interval=4) and therefore the same missing fast path
-(`fla`/`causal_conv1d` are not installed and cannot be on this AMD rig), so it
-is not as cheap relative to the target as the 3.1x parameter ratio suggests.
+WHAT THIS ANSWERS THAT NOTHING ELSE DOES
+----------------------------------------
+The shipped MTP head reaches tau ~ 2.3-2.4 and 1.32-1.39x end to end. Whether a
+real 0.8B draft model does better or worse is UNMEASURED. This is that
+comparison. The 0.8B shares the hybrid layout (full_attention_interval=4).
+
+Runs in bf16 by default. It previously hardcoded a 4-bit target, which made its
+numbers an m1-regime measurement not comparable to the MTP head results; pass
+--target-4bit to reproduce the old behaviour.
+
+`fla` (flash-linear-attention 0.5.2, triton-rocm 3.7.1) is bound and active on
+gfx1100, which flattened verification from ~2.84x to ~1.19x per K=4 step.
+`causal_conv1d` is a SEPARATE dependency, still absent, costing ~3.8% of wall.
+
+EXPECT THE DRAFT ARM TO FAIL. `transformers` refuses assisted generation for
+stateful models ("not supported with stateful models, such as
+Qwen3_5ForCausalLM") because 24 of 32 layers carry a recurrent state that
+cannot be rolled back by truncation. That refusal is caught and reported as a
+result, not a crash -- and it is exactly why the MTP head path exists.
 
     uv run --env-file .env scripts/benchmark_speculative_decode.py
 """
@@ -38,7 +53,19 @@ import time
 from pathlib import Path
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+# fla's device probe is @cache'd at import; touch CUDA before transformers pulls
+# it in or the process latches to a fallback for its whole lifetime and the
+# chunked-kernel cost stays at ~2.8x instead of ~1.19x.
+if torch.cuda.is_available():
+    torch.zeros(1, device="cuda")
+    torch.cuda.synchronize()
+
+from transformers import (  # noqa: E402
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BitsAndBytesConfig,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(REPO_ROOT))
@@ -114,6 +141,9 @@ def main():
     ap.add_argument("--lookup-ngram", type=int, default=3)
     ap.add_argument("--assistant-tokens", type=int, default=5)
     ap.add_argument("--draft-4bit", action="store_true", help="load draft in 4-bit instead of bf16")
+    ap.add_argument("--target-4bit", action="store_true",
+                    help="load target in 4-bit (m1 regime). Default bf16, matching every other "
+                         "current benchmark -- 4-bit numbers are not comparable to them.")
     ap.add_argument("--vram-cap-gb", type=float, default=20.0)
     args = ap.parse_args()
 
@@ -131,12 +161,13 @@ def main():
         tokenizer.pad_token = tokenizer.eos_token
 
     bnb = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=dt, bnb_4bit_quant_type="nf4")
-    print(f"loading target {args.model_name} (4-bit)")
+    tgt_kwargs = {"quantization_config": bnb} if args.target_4bit else {"dtype": dt}
+    print(f"loading target {args.model_name} ({'4-bit' if args.target_4bit else 'bf16'})")
     target = AutoModelForCausalLM.from_pretrained(
         args.model_name,
-        quantization_config=bnb,
         device_map={"": 0} if torch.cuda.is_available() else "auto",
         trust_remote_code=True,
+        **tgt_kwargs,
     )
     target.eval()
 

@@ -37,7 +37,7 @@ from pathlib import Path
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.append(str(REPO_ROOT))
 
 from gnn_experiment.novel_peft import (  # noqa: E402
@@ -49,9 +49,9 @@ from gnn_experiment.novel_peft import (  # noqa: E402
 )
 
 DEFAULT_EXPERTS = {
-    "financial_planning": "results/adapters/financial_planning_krona_dora",
-    "postgresql": "results/adapters/postgres_qwen3.5_micro_id_kron_r16",
-    "astral": "results/adapters/astral_qwen3.5_micro_id_kron",
+    "financial_planning": "results/adapters/m2_financial_r8a128",
+    "postgresql": "results/adapters/m2_postgresql_r8a128",
+    "astral": "results/adapters/m2_astral_r8a128",
 }
 
 PROMPTS = [

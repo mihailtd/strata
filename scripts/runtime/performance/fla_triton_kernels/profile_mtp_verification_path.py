@@ -47,7 +47,7 @@ if torch.cuda.is_available():  # fla's device probe is @cache'd at import
 
 from transformers import AutoModelForCausalLM  # noqa: E402
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
 sys.path.append(str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 

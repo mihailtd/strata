@@ -42,9 +42,9 @@ from gnn_experiment.novel_peft import (  # noqa: E402
 # id_kron (rank_in=8, rank_out=8 -> rank_total=64, scaling 2.0), which violated
 # this audit's own pre-flight rule ("do not use raw id_kron adapters").
 EXPERT_ADAPTERS = {
-    "astral": "results/adapters/ctl_lora_r8_a128",
-    "postgresql": "results/adapters/ctl_lora_pg_a128",
-    "financial_planning": "results/adapters/ctl_lora_fin_a128",
+    "astral": "results/adapters/m2_astral_r8a128",
+    "postgresql": "results/adapters/m2_postgresql_r8a128",
+    "financial_planning": "results/adapters/m2_financial_r8a128",
 }
 
 # Domain prompt datasets (20 prompts each)

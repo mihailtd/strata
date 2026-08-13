@@ -34,9 +34,9 @@ sys.path.append(str(REPO_ROOT))
 from gnn_experiment.novel_peft import FoldableExpert, set_hard_vram_cap  # noqa: E402
 
 EXPERTS = {
-    "astral": "results/adapters/astral_qwen3.5_micro_id_kron",
-    "postgresql": "results/adapters/postgres_qwen3.5_micro_id_kron_r16",
-    "financial_planning": "results/adapters/financial_planning_krona_dora",
+    "astral": "results/adapters/m2_astral_r8a128",
+    "postgresql": "results/adapters/m2_postgresql_r8a128",
+    "financial_planning": "results/adapters/m2_financial_r8a128",
 }
 
 

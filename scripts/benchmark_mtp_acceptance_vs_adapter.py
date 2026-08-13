@@ -64,10 +64,14 @@ from gnn_experiment.novel_peft import (  # noqa: E402
     set_hard_vram_cap,
 )
 
+# DEFAULTS: the m2 expert set (bf16 + Liger, methodology-matched). Verify with
+# `uv run python scripts/audit_adapters.py`. Do NOT default to m1 (4-bit NF4)
+# adapters -- every benchmark here loads a bf16 base, so an m1 adapter folds a
+# correction-to-quantized-weights into unquantized ones.
 ADAPTERS = {
-    "financial": "results/adapters/fin_sweep_a32",
-    "astral": "results/adapters/astral_sweep_a64",
-    "postgres": "results/adapters/pg_sweep_a64",
+    "financial": "results/adapters/m2_financial_r8a128",
+    "astral": "results/adapters/m2_astral_r8a128",
+    "postgres": "results/adapters/m2_postgresql_r8a128",
 }
 
 PROMPTS = {

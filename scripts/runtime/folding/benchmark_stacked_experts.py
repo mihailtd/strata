@@ -53,7 +53,7 @@ if torch.cuda.is_available():  # fla's device probe is @cache'd at import
 
 from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.append(str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
@@ -86,7 +86,7 @@ EXPERTS_BF16 = {
     "ast": "results/adapters/m2_astral_r8a128",
     "pg": "results/adapters/m2_postgresql_r8a128",
 }
-EXPERTS = EXPERTS_IDKRON
+EXPERTS = EXPERTS_BF16  # default: the m2 matched set
 # which expert "owns" each domain, for the retention comparison
 OWNER = {"financial_planning": "fin", "astral": "ast", "postgresql": "pg"}
 
@@ -145,7 +145,9 @@ def main():
     ap.add_argument("--model-name", default="Qwen/Qwen3.5-4B")
     ap.add_argument("--max-new-tokens", type=int, default=192)
     ap.add_argument("--vram-cap-gb", type=float, default=22.0)
-    ap.add_argument("--experts", choices=["idkron", "stock", "bf16"], default="idkron")
+    ap.add_argument("--experts", choices=["idkron", "stock", "bf16"], default="bf16",
+                    help="bf16 = the m2 matched set (DEFAULT). idkron/stock are m1 "
+                         "(4-bit NF4) and are kept only for reproducing older runs.")
     # The full power set is 2^N conditions and scores every domain in each. That
     # is mostly wasted: financial (+4.17pp solo) and postgres (+8.67pp) lack the
     # headroom to resolve a stacking effect at any n, while astral (+42.74pp) is
