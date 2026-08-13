@@ -215,9 +215,17 @@ async def lifespan(app: FastAPI):
     print(f"[IMB Server] Injected {injected_count} ExactRMSNorm modules.")
 
     # Load factor experts into host memory
-    financial_dir = REPO_ROOT / "results" / "adapters" / "financial_planning_krona_dora"
-    postgres_dir = REPO_ROOT / "results" / "adapters" / "postgres_qwen3.5_micro_id_kron_r16"
-    astral_dir = REPO_ROOT / "results" / "adapters" / "astral_qwen3.5_micro_id_kron"
+    # Alpha-sweep winners. Each is the best of five alphas measured against base
+    # under the corrected (stop_strings) harness -- see README "Measured Findings".
+    # The peak is domain-specific, so these are NOT all the same alpha:
+    #     astral      a64  60.20% vs base 12.20%  (+47.99pp)
+    #     postgresql  a64  74.67% vs base 49.67%  (+25.00pp)
+    #     financial   a32  83.33% vs base 78.33%   (+5.00pp)
+    # The previous financial adapter (financial_planning_krona_dora) was trained on
+    # a dataset of 940 copies of ONE templated prompt and scored 33.3% -- below base.
+    financial_dir = REPO_ROOT / "results" / "adapters" / "fin_sweep_a32"
+    postgres_dir = REPO_ROOT / "results" / "adapters" / "pg_sweep_a64"
+    astral_dir = REPO_ROOT / "results" / "adapters" / "astral_sweep_a64"
 
     exp_fin = FoldableExpert.from_dir(financial_dir, "financial_planning")
     exp_pg = FoldableExpert.from_dir(postgres_dir, "postgresql")

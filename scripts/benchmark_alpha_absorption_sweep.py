@@ -49,6 +49,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(REPO_ROOT))
 
+from gnn_experiment.eval.eval_suite import LEGACY_TERMS, MODERN_TERMS  # noqa: E402
 from gnn_experiment.novel_peft import (  # noqa: E402
     FoldableExpert,
     WeightFoldingEngine,
@@ -57,15 +58,48 @@ from gnn_experiment.novel_peft import (  # noqa: E402
     unwrap_novel_lora,
 )
 
-# alpha -> adapter dir. rank_total is 64 for all of them, so scaling = alpha/64.
-SWEEP = {
-    16: "results/adapters/financial_planning_id_kron_v2",
-    32: "results/adapters/fin_sweep_a32",
-    64: "results/adapters/financial_planning_id_kron_v3_a64",
-    128: "results/adapters/fin_sweep_a128",
-    256: "results/adapters/fin_sweep_a256",
+# rank_total is 64 for every adapter here, so scaling = alpha/64 throughout.
+#
+# Scoring differs by domain and that is deliberate. astral and postgresql have a
+# genuine opposing set (uv vs pip, pgvector vs pinecone), so a good/(good+bad)
+# ratio is meaningful. financial_planning does not -- its anti-pattern list fired
+# ZERO times across 60 measured generations -- so it carries a per-question
+# rubric in its eval data instead. `score_one` picks whichever the data supplies.
+DOMAINS = {
+    "financial_planning": {
+        "questions": "data/financial_planning/evaluation_data.jsonl",
+        "alphas": {
+            16: "results/adapters/financial_planning_id_kron_v2",
+            32: "results/adapters/fin_sweep_a32",
+            64: "results/adapters/financial_planning_id_kron_v3_a64",
+            128: "results/adapters/fin_sweep_a128",
+            256: "results/adapters/fin_sweep_a256",
+        },
+    },
+    "astral": {
+        "questions": "data/astral/evaluation_data.jsonl",
+        "alphas": {a: f"results/adapters/astral_sweep_a{a}" for a in (16, 32, 64, 128, 256)},
+    },
+    "postgresql": {
+        "questions": "data/postgresql/evaluation_data.jsonl",
+        "alphas": {a: f"results/adapters/pg_sweep_a{a}" for a in (16, 32, 64, 128, 256)},
+    },
 }
-QUESTIONS = "data/financial_planning/evaluation_data.jsonl"
+
+POSTGRES_GOOD = [
+    r"\bpgvector\b", r"\bhnsw\b", r"\bivfflat\b", r"\bembeddings?\b",
+    r"cosine (distance|similarity)", r"semantic search", r"unified (platform|database)",
+    r"vector (column|index|extension)",
+]
+POSTGRES_BAD = [
+    r"\bpinecone\b", r"\bweaviate\b", r"\bmilvus\b", r"\bqdrant\b",
+    r"\bchroma(db)?\b", r"\bfaiss\b",
+    r"(separate|dedicated|standalone) vector (database|store)", r"\belasticsearch\b",
+]
+TERMS = {
+    "astral": (MODERN_TERMS, LEGACY_TERMS),
+    "postgresql": (POSTGRES_GOOD, POSTGRES_BAD),
+}
 
 
 @torch.no_grad()
@@ -90,8 +124,19 @@ def merge_fidelity(expert: FoldableExpert, params: dict) -> dict:
     }
 
 
-def score(model, tokenizer, questions, max_new_tokens):
-    """Rubric coverage, greedy, with the stop-string fix."""
+def score_one(q: dict, txt: str, terms) -> float:
+    """Per-question rubric coverage if the data supplies one, else term ratio."""
+    if q.get("expects"):
+        pats = q["expects"]
+        return 100.0 * sum(1 for p in pats if re.search(p, txt)) / len(pats)
+    good, bad = terms
+    g = sum(len(re.findall(p, txt)) for p in good)
+    b = sum(len(re.findall(p, txt)) for p in bad)
+    return (g / max(1, g + b)) * 100.0 if (g + b) else 0.0
+
+
+def score(model, tokenizer, questions, max_new_tokens, terms=None):
+    """Greedy decode with the stop-string fix, then domain-appropriate scoring."""
     out = []
     for q in questions:
         ids = tokenizer(f"### Question:\n{q['prompt']}\n\n### Answer:\n", return_tensors="pt").to(model.device)
@@ -106,8 +151,7 @@ def score(model, tokenizer, questions, max_new_tokens):
             )
         txt = tokenizer.decode(gen[0][ids["input_ids"].shape[1] :], skip_special_tokens=True).strip()
         txt = re.split(r"#+\s*Question", txt)[0].strip().lower()
-        pats = q["expects"]
-        out.append(100.0 * sum(1 for p in pats if re.search(p, txt)) / len(pats))
+        out.append(score_one(q, txt, terms))
     return sum(out) / len(out)
 
 
@@ -116,12 +160,19 @@ def main():
     ap.add_argument("--model-name", default="Qwen/Qwen3.5-4B")
     ap.add_argument("--max-new-tokens", type=int, default=256)
     ap.add_argument("--vram-cap-gb", type=float, default=22.0)
-    ap.add_argument("--out", default="results/alpha_absorption_sweep.json")
+    ap.add_argument("--domain", default="financial_planning", choices=sorted(DOMAINS))
+    ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
+    cfg = DOMAINS[args.domain]
+    sweep, questions_file = cfg["alphas"], cfg["questions"]
+    terms = TERMS.get(args.domain)
+    out_path = args.out or f"results/alpha_sweep_{args.domain}.json"
+    print(f"=== alpha sweep: {args.domain} ===")
+
     set_hard_vram_cap(args.vram_cap_gb)
-    present = {a: d for a, d in SWEEP.items() if (REPO_ROOT / d).exists()}
-    missing = sorted(set(SWEEP) - set(present))
+    present = {a: d for a, d in sweep.items() if (REPO_ROOT / d).exists()}
+    missing = sorted(set(sweep) - set(present))
     if missing:
         print(f"[warn] missing adapters for alpha={missing}; continuing with {sorted(present)}")
 
@@ -132,7 +183,7 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-    questions = [json.loads(x) for x in (REPO_ROOT / QUESTIONS).read_text().splitlines() if x.strip()]
+    questions = [json.loads(x) for x in (REPO_ROOT / questions_file).read_text().splitlines() if x.strip()]
 
     print(f"\nLoading {args.model_name} (bf16) ...")
     model = AutoModelForCausalLM.from_pretrained(
@@ -143,7 +194,7 @@ def main():
     params = dict(model.named_parameters())
 
     engine.restore()
-    base_score = score(model, tokenizer, questions, args.max_new_tokens)
+    base_score = score(model, tokenizer, questions, args.max_new_tokens, terms)
     print(f"base (no adapter): {base_score:.2f}%\n")
 
     rows = []
@@ -153,11 +204,11 @@ def main():
 
         engine.restore()
         load_novel_adapter(model, REPO_ROOT / present[a])
-        wrapped = score(model, tokenizer, questions, args.max_new_tokens)
+        wrapped = score(model, tokenizer, questions, args.max_new_tokens, terms)
         unwrap_novel_lora(model)
 
         engine.activate(e)
-        folded = score(model, tokenizer, questions, args.max_new_tokens)
+        folded = score(model, tokenizer, questions, args.max_new_tokens, terms)
         engine.restore()
 
         row = {
@@ -205,9 +256,9 @@ def main():
         print(" strongly NEGATIVE (more merge error -> worse folded score).")
         print(f" |max delta| across the whole sweep: {max(abs(r['delta_pp']) for r in rows):.2f}pp")
 
-    out = REPO_ROOT / args.out
+    out = REPO_ROOT / out_path
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps({"base_pct": base_score, "rows": rows}, indent=2))
+    out.write_text(json.dumps({"domain": args.domain, "base_pct": base_score, "rows": rows}, indent=2))
     print(f"\nWrote {out}")
 
 
