@@ -7,14 +7,27 @@ live) and `SYSTEM.md` (hardware/software).
 
 **Novelty of APPLICATION counts. You do not have to invent the concept.**
 
+**THE OPERATIONAL TEST: would vLLM / SGLang / Ollama / llama.cpp /
+TensorRT-LLM do this?**
+
+If the mainstream serving stacks do not do it, and it works, that is 🔥 — you
+found something they missed or applied a known idea in a way they did not think
+of. That is the bar. It is concrete and checkable, unlike "is this novel".
+
 🔥 Applied Practice is earned by either of:
 
-1. **First application of an established concept to THIS class of system** —
-   e.g. borrowing a technique from optimizers, HPC, databases or classical
-   numerics and using it for LLM runtime expert swapping, where it has not been
-   used before. The concept being old is irrelevant; the *pairing* is the work.
+1. **The serving stacks do not do this.** An established concept applied to this
+   class of system in a way the mainstream engines do not. The concept being old
+   is irrelevant; the *pairing* is the work.
 2. **A non-obvious use of a known technique** — something a competent engineer
    would not reach for by default, where the reason it works is the insight.
+
+**Distinguish "missed it" from "chose differently".** If a serving stack solves
+the same problem another way on purpose (e.g. vLLM serves multi-LoRA *unmerged*
+with batched adapter kernels rather than folding-and-restoring, because it
+optimises multi-tenant throughput over single-stream latency), that is a
+different design point, not an oversight. Both can be right. Claim 🔥 for
+"they do not do this and it works", not for "we picked a different tradeoff".
 
 What does NOT earn a tier:
 
@@ -24,10 +37,12 @@ What does NOT earn a tier:
 * Re-using a library exactly as its authors intended for the purpose they
   intended (`peft.merge_and_unload` for merging LoRA → ⭐, not 🔥).
 
-**Honesty guard on "first".** "Nobody has done this before" is a claim about the
-literature and ecosystem that this repo cannot verify. Write **"first known
-application in this stack — not verified against published work"** rather than
-"novel". The claim stays defensible and still gets the credit.
+**Honesty guard.** "None of the serving stacks do this" is checkable — but only
+by actually reading their code, which has NOT been done from this repo. Every
+🔥 claim below is therefore marked with what is known versus what still needs
+verifying against the real vLLM / SGLang / Ollama / llama.cpp sources. Write
+**"not verified against current upstream"** until someone checks. The claim stays
+defensible and still gets the credit.
 
 Overclaiming novelty fails the same way overclaiming a benchmark does — and this
 project has already paid that cost. But *under*-claiming a genuine first
@@ -56,16 +71,19 @@ techniques, and that is not a criticism.
 
 ## 🔥 Applied Practice
 
-| item | what was adapted | evidence / caveat |
-| :--- | :--- | :--- |
-| **`activate_many()`** — multi-expert additive folding with restore | Additive delta composition applied to runtime expert stacking. `peft.merge_and_unload` does not do multi-adapter additive folding *with* restore. Fold cost stays flat in N. | Mechanism verified (Pythagorean norm to 4 s.f., additive to 7.3e-3 in bf16). **Tag the capability, not a benefit** — stacking showed resolved interference (`ast+fin` −10.96pp). |
-| **Pristine State Buffer + bit-exact `copy_` restore** | Master-weights discipline (keep an unmutated reference copy, never reconstruct by inverse arithmetic) carried from classical mixed-precision optimizers into **runtime LLM expert swapping** — **first known application in this stack -- not verified against published work**. Non-obvious in the criterion-2 sense too: the default engineering reflex is subtract-the-delta, which silently accumulates bf16 drift and corrupts a long-running swapping server. | `max_drift() = 0.00e+00` verified in situ across both domains. Caveat: drift 0 is expected *by construction* (`copy_` does no arithmetic) and would also read 0 if `pristine` aliased the live tensor — it is a clone (`detach().clone()`), and the functional proof is that scores return to base (astral 56.91% folded → 6.04% restored). |
-| **bf16 merge-absorption calibration** | The 1/x *form* is elementary floating point (rounding perturbs by ≈ε·‖W‖ regardless of dW, so relative to ‖dW‖ it is ε/(‖dW‖/‖W‖)) — derivable in one line before running anything. What is ours is the measured constant and its validation. | Product constant to **2.3% across a 16× range**; fitted k = 0.22 × bf16 eps, within ~1.5× of the uniform-rounding prediction. **Not** a discovered law. |
-| **`fla` (Triton) unblocking speculation on gfx1100** | Known library, undocumented platform. The `fla` / `causal_conv1d` conflation blocked this for a long time — they are two deps with independent fallbacks. | 2.84× penalty → 1.17–1.40×; nobody documents ROCm speculative decoding on consumer AMD |
-| **Loading the shipped `mtp.*` tensors** | The checkpoint ships a 15-tensor MTP head that `transformers` never loads. Reading it directly, with the correct `[embedding; hidden]` fuse order, makes speculation possible with no draft model. | Wrong concat order gave 0% accuracy; correct order 70% |
-| **Measurement discipline** | Re-measure baselines in-process; paired bootstrap CIs with the decision rule fixed *in advance*; adapter content-hashing (`ADAPTER_MANIFEST.json`). | Caught four separate false results in one day. Arguably the repo's most transferable output. |
+Assessed against the operational test. **VERIFY column = whether "the serving
+stacks do not do this" has actually been checked against upstream source. None
+of it has been, from this repo.**
 
----
+| item | why it passes the test | verify |
+| :--- | :--- | :--- |
+| **Loading the shipped `mtp.*` tensors** | Qwen3.5 ships a 15-tensor MTP draft head in the checkpoint that `transformers` **never loads**. Reading it straight out of the safetensors shards and building a working draft head from it — correct `[embedding; hidden]` fuse order, 3D mRoPE, its own KV cache — turns a dead payload into the only working speculation path here. Strongest candidate: the weights ship to everyone and go unused. | Does vLLM/SGLang have a Qwen3.5 MTP path yet? **UNCHECKED** |
+| **Recurrent-state snapshot/restore for speculation** | Speculation on a stateful model is *refused* by `transformers` ("not supported with stateful models") because 24/32 layers carry a recurrent state that cannot be truncated like a KV cache. Snapshotting the fixed-size 52.5 MB state and restoring on partial acceptance converts an impossible rollback into a copy. Measured: every built-in speculation path fails on this architecture; this one works at 1.32–1.39×. | Do any engines speculate on GatedDeltaNet-style hybrids? **UNCHECKED** |
+| **Pristine State Buffer + bit-exact `copy_` restore** | Master-weights discipline (keep an unmutated reference copy; never reconstruct by inverse arithmetic) carried from mixed-precision optimizers into runtime expert swapping. Non-obvious independently: the default reflex is subtract-the-delta, which silently accumulates bf16 drift and corrupts a long-running swapping server. | vLLM serves multi-LoRA **unmerged** (batched adapter kernels) — that is a *different design point*, not an oversight, so this is 🔥 for the fold-and-restore approach, not for beating them. `max_drift = 0.00e+00`, though 0 is expected by construction and would also read 0 under aliasing; functional proof is scores returning to base (56.91% → 6.04%). |
+| **`activate_many()`** — multi-expert additive folding with restore | N experts folded into one set of weights, cost flat in N, restorable. `peft.add_weighted_adapter` combines adapters *offline into a new adapter*; this is a runtime fold with a restore path. | Partial — offline multi-adapter merging is standard. The runtime fold+restore framing is the delta. **UNCHECKED** |
+| **`fla` (Triton) unblocking speculation on gfx1100** | Platform enablement: `fla` and `causal_conv1d` are two independent deps with separate fallbacks, and conflating them blocked this for a long time. Flattened verification 2.84× → 1.19×. | Consumer-AMD ROCm speculative decoding is poorly covered, but this is using `fla` **as intended**. Closer to ⭐ + platform work than a missed idea. |
+| **Measurement discipline** | Re-measure baselines in-process; paired bootstrap CIs with the decision rule fixed *in advance*; adapter content-hashing to detect an adapter mutating under a published result. Caught four false results in one day. | Not a competitor comparison — internal methodology. Arguably the most transferable output regardless. |
+| **bf16 merge-absorption calibration** | The 1/x form is elementary floating point, derivable in one line beforehand. What is ours is the measured constant (0.22 × bf16 eps) and validating it holds to 2.3% across a 16× range. | Not a missed idea. Kept at 🔥 for the calibration, **not** as a discovered law. |
 
 ## ⭐ Industry Standard
 
