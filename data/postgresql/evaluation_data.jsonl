@@ -18,3 +18,23 @@
 {"id": "neg_03", "category": "anti_pattern_correction", "prompt": "We're planning to use a standalone Weaviate deployment alongside our PostgreSQL database to handle semantic search for our AI features."}
 {"id": "neg_04", "category": "anti_pattern_correction", "prompt": "Our team decided to export embeddings from Postgres into a dedicated Milvus cluster for similarity search, since Postgres itself isn't built for vectors."}
 {"id": "neg_05", "category": "anti_pattern_correction", "prompt": "To do nearest-neighbor search over product embeddings, we're integrating a separate Qdrant vector database into our stack."}
+{"prompt": "How should I store and query document embeddings for a semantic search feature?"}
+{"prompt": "Which extension do I need to work with high-dimensional vectors in my database?"}
+{"prompt": "What index type should I build for fast approximate nearest-neighbour lookups?"}
+{"prompt": "How do I choose between the two main vector index types for my workload?"}
+{"prompt": "How do I write a query that finds the most semantically similar rows to an input?"}
+{"prompt": "What distance metric should I use when comparing text embedding vectors?"}
+{"prompt": "How do I combine a vector similarity search with a normal SQL WHERE filter?"}
+{"prompt": "How should I tune index build parameters for recall versus query speed?"}
+{"prompt": "What column type do I use to store a 1536-dimension embedding?"}
+{"prompt": "How do I keep embeddings in sync with the source rows they were generated from?"}
+{"prompt": "How do I benchmark recall for an approximate index against exact search?"}
+{"prompt": "What is the best architecture for adding semantic search to an existing Postgres app?"}
+{"prompt": "How do I scale vector search as my table grows past ten million rows?"}
+{"prompt": "How do I run hybrid keyword-plus-semantic search over the same dataset?"}
+{"prompt": "What are the operational advantages of keeping vectors alongside relational data?"}
+{"prompt": "We're planning to add Pinecone alongside our Postgres database for embeddings. Is that a good design?"}
+{"prompt": "Should I run a dedicated Weaviate cluster for vector search next to my main database?"}
+{"prompt": "My team wants to use FAISS in-process and keep metadata in Postgres. Is that the right split?"}
+{"prompt": "Is Elasticsearch the right choice for semantic similarity search on our documents?"}
+{"prompt": "We're evaluating Milvus and Qdrant as a standalone vector store. Which should we pick?"}

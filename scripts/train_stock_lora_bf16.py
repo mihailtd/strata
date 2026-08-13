@@ -1,0 +1,167 @@
+"""Train a stock LoRA expert in bf16 for any domain.
+
+WHY THIS EXISTS
+---------------
+`export_adapter.py` trains against a **4-bit NF4** base (`load_in_4bit=True`),
+but every folding/speculation/stacking benchmark loads a **bf16** base. Adapters
+produced there learn a correction to quantized weights and are then folded into
+unquantized ones. That seam is measurable: the financial expert moved from
+-5.00pp (4-bit-trained) to +4.17pp (bf16-trained) on its own domain, with a data
+change that altered zero rubric terms.
+
+`train_financial_adapter.py` trains in bf16 but is hardcoded to the financial
+dataset. This is that script generalised, so astral and postgres can be brought
+into the same regime instead of being silently mixed into a bf16 stack.
+
+Hyperparameters are held identical to the controlled experts so results stay
+comparable: r=8, alpha=128 (scaling 16), 7 projections, 150 steps, batch 2,
+grad-accum 2, lr 2e-4, cosine schedule, max_length 512.
+
+    uv run --env-file .env scripts/train_stock_lora_bf16.py --domain astral
+    uv run --env-file .env scripts/train_stock_lora_bf16.py --domain postgresql
+"""
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+import torch
+from peft import LoraConfig, get_peft_model
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from trl import SFTConfig, SFTTrainer
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.append(str(REPO_ROOT))
+sys.path.insert(0, str(REPO_ROOT / "src"))
+
+from gnn_experiment.novel_peft import set_hard_vram_cap  # noqa: E402
+
+# domain -> (training data, output adapter dir)
+DOMAINS = {
+    "astral": ("data/astral/training_data.jsonl", "results/adapters/ctl_lora_bf16_ast_a128"),
+    "postgresql": ("data/postgresql/training_data.jsonl", "results/adapters/ctl_lora_bf16_pg_a128"),
+    "financial_planning": (
+        "data/financial_planning/training_data.jsonl",
+        "results/adapters/ctl_lora_bf16_fin_a128",
+    ),
+}
+
+
+def load_dataset_records(path: Path):
+    records = []
+    with open(path) as f:
+        for line in f:
+            if line.strip():
+                records.append({"text": json.loads(line)["text"]})
+    return records
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    ap.add_argument("--domain", choices=sorted(DOMAINS), required=True)
+    ap.add_argument("--model-id", default="Qwen/Qwen3.5-4B")
+    ap.add_argument("--rank", type=int, default=8)
+    ap.add_argument("--alpha", type=int, default=128)
+    ap.add_argument("--max-steps", type=int, default=150)
+    ap.add_argument("--lr", type=float, default=2e-4)
+    ap.add_argument("--vram-cap-gb", type=float, default=22.0)
+    ap.add_argument("--out", default=None, help="override the default output dir")
+    args = ap.parse_args()
+
+    data_rel, out_rel = DOMAINS[args.domain]
+    dataset_path = REPO_ROOT / data_rel
+    out_dir = Path(args.out) if args.out else REPO_ROOT / out_rel
+
+    set_hard_vram_cap(args.vram_cap_gb)
+    dev = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
+    print(f"TRAINING bf16 STOCK LORA [{args.domain}] r={args.rank} alpha={args.alpha} on {dev}")
+    print(f"  data: {dataset_path}")
+    print(f"  out:  {out_dir}")
+    print("=" * 88)
+
+    tokenizer = AutoTokenizer.from_pretrained(args.model_id, trust_remote_code=True)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
+    # bf16, NOT load_in_4bit -- this is the whole point of the script
+    model = AutoModelForCausalLM.from_pretrained(
+        args.model_id,
+        dtype=torch.bfloat16,
+        device_map="cuda:0",
+        trust_remote_code=True,
+    )
+
+    lora_config = LoraConfig(
+        r=args.rank,
+        lora_alpha=args.alpha,
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+        lora_dropout=0.0,
+        bias="none",
+        task_type="CAUSAL_LM",
+    )
+    model = get_peft_model(model, lora_config)
+    model.print_trainable_parameters()
+
+    from datasets import Dataset
+
+    records = load_dataset_records(dataset_path)
+    print(f"Loaded {len(records)} records from {dataset_path}")
+    train_dataset = Dataset.from_list(records)
+
+    sft_config = SFTConfig(
+        output_dir=str(out_dir / "checkpoints"),
+        dataset_text_field="text",
+        max_length=512,
+        per_device_train_batch_size=2,
+        gradient_accumulation_steps=2,
+        learning_rate=args.lr,
+        max_steps=args.max_steps,
+        logging_steps=10,
+        lr_scheduler_type="cosine",
+        warmup_ratio=0.03,
+        bf16=True,
+        save_strategy="no",
+        report_to="none",
+    )
+    trainer = SFTTrainer(
+        model=model,
+        args=sft_config,
+        train_dataset=train_dataset,
+        processing_class=tokenizer,
+    )
+
+    print(f"Starting SFT training ({args.max_steps} steps)...")
+    trainer.train()
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    model.save_pretrained(str(out_dir))
+    tokenizer.save_pretrained(str(out_dir))
+    # Record the regime in the adapter itself. 0 of 69 existing adapters do this,
+    # so provenance was previously recoverable only from directory-layout side
+    # effects (export_adapter.py leaves no checkpoints/ subdir; this one does).
+    (out_dir / "regime.json").write_text(
+        json.dumps(
+            {
+                "precision": "bfloat16",
+                "quantization": None,
+                "trained_by": "scripts/train_stock_lora_bf16.py",
+                "domain": args.domain,
+                "rank": args.rank,
+                "alpha": args.alpha,
+                "scaling": args.alpha / args.rank,
+                "max_steps": args.max_steps,
+                "lr": args.lr,
+                "dataset": data_rel,
+                "n_records": len(records),
+            },
+            indent=2,
+        )
+    )
+    print(f"Saved adapter + regime.json to {out_dir}")
+
+
+if __name__ == "__main__":
+    main()

@@ -18,3 +18,23 @@
 {"id": "neg_03", "category": "anti_pattern_correction", "prompt": "Before every commit, I run `black .` followed by `flake8 .` to keep the codebase clean and catch style issues."}
 {"id": "neg_04", "category": "anti_pattern_correction", "prompt": "We're planning to add `mypy` to our CI pipeline for static type checking on this project."}
 {"id": "neg_05", "category": "anti_pattern_correction", "prompt": "To isolate my project's dependencies, I create a `virtualenv`, activate it, and then run `pip install -r requirements.txt`."}
+{"prompt": "How do I create and activate an isolated environment for a new Python project?"}
+{"prompt": "How can I install and pin a specific Python interpreter version for a project?"}
+{"prompt": "What is the recommended way to run a command-line tool without adding it to my project dependencies?"}
+{"prompt": "How do I upgrade all of my project's dependencies to their latest compatible versions?"}
+{"prompt": "How do I add a package as a development-only dependency, separate from runtime deps?"}
+{"prompt": "How should I install my own package in editable mode while developing it?"}
+{"prompt": "What is the recommended way to produce a fully reproducible dependency lockfile?"}
+{"prompt": "How do I set up dependency installation inside a Dockerfile for a Python service?"}
+{"prompt": "What should my CI pipeline run to install dependencies and check code quality?"}
+{"prompt": "How do I sort and organise imports automatically across a Python codebase?"}
+{"prompt": "How can I suppress a specific lint rule on a single line of Python code?"}
+{"prompt": "How do I select which lint rule sets are enabled for my repository?"}
+{"prompt": "What is the fastest way to check a large Python monorepo for type errors?"}
+{"prompt": "How do I migrate an existing project from its current dependency manager to modern tooling?"}
+{"prompt": "How do I publish a Python package to an index from my project directory?"}
+{"prompt": "I manage my project with `poetry add` and a poetry.lock file. Is that the current best practice?"}
+{"prompt": "I keep my dependencies in requirements.txt and run `pip freeze > requirements.txt` to update it. Is that right?"}
+{"prompt": "Our team runs `isort .` and then `black .` before committing. Should we keep doing that?"}
+{"prompt": "I use `python -m venv .venv` and then `pip install -r requirements.txt`. Is this the modern workflow?"}
+{"prompt": "We run `flake8` in CI for linting and `mypy` for types. Is this still the recommended stack?"}
