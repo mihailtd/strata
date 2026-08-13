@@ -1,0 +1,22 @@
+{
+  "baseline": {
+    "all_tok_per_sec": 17.779015572927882,
+    "warm_tok_per_sec": 17.769691291046172,
+    "avg_adherence_pct": 74.81481481481481,
+    "modern_hits_total": 167,
+    "legacy_hits_total": 22,
+    "total_tokens": 3840,
+    "total_time_s": 215.98496183597308
+  },
+  "dynamic": {
+    "all_tok_per_sec": 18.238071898293793,
+    "warm_tok_per_sec": 18.255365631885883,
+    "avg_adherence_pct": 51.6835996802041,
+    "modern_hits_total": 94,
+    "legacy_hits_total": 55,
+    "total_tokens": 3840,
+    "total_time_s": 210.5485723169695
+  },
+  "dynamic_avg_quiet_fraction": 0.5528491436100131,
+  "speedup_warm": 1.0273316138634572
+}

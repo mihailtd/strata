@@ -1,0 +1,33 @@
+{
+  "model_name": "Qwen/Qwen3.5-4B",
+  "synergy_test": {
+    "capture_count": 1,
+    "recapture_overhead_ms": 0.0,
+    "vram_churn_bytes": 0,
+    "pristine_restore_drift": 0.0,
+    "mean_tok_s": 31.522685659318995
+  },
+  "turns": [
+    {
+      "turn": 1,
+      "expert": "financial_planning",
+      "swap_ms": 0.0,
+      "tok_s": 31.410078645793856,
+      "snippet": "assistant\n<think>\n\n</think>\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nA. Avoidance of"
+    },
+    {
+      "turn": 2,
+      "expert": "postgresql",
+      "swap_ms": 26.291634996596258,
+      "tok_s": 30.84949118604373,
+      "snippet": "</think>\n\nHere is the schema design for storing transaction history and vector embeddings for client profiles using Post"
+    },
+    {
+      "turn": 3,
+      "expert": "astral",
+      "swap_ms": 19.290132004243787,
+      "tok_s": 32.3084871461194,
+      "snippet": "```python\nfrom fastapi import APIResponse, FastAPI, Response, ResponseModel\nfrom typing import List, List, ListDict, Uni"
+    }
+  ]
+}

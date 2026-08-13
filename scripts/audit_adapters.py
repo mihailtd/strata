@@ -30,7 +30,7 @@ WHAT IT DOES
 
 REGIME INFERENCE
 ----------------
-Only adapters written by train_stock_lora_bf16.py carry regime.json. For the
+Only adapters written by train_expert_CURRENT_m2.py carry regime.json. For the
 rest the regime is inferred and labelled as such:
 
     checkpoints/ subdir present -> bf16 trainer (train_financial_adapter.py /
@@ -62,9 +62,9 @@ MANIFEST = REPO_ROOT / "ADAPTER_MANIFEST.json"
 # Adapters each benchmark currently depends on. Keeps "which one is current for
 # this role" answerable without grepping every script.
 ROLES = {
-    "stacking/folding: astral": "ctl_lora_bf16_ast_a128",
-    "stacking/folding: postgresql": "ctl_lora_bf16_pg_a128",
-    "stacking/folding: financial": "ctl_lora_fin_a128",
+    "stacking/folding: astral": "m2_astral_r8a128",
+    "stacking/folding: postgresql": "m2_postgresql_r8a128",
+    "stacking/folding: financial": "m2_financial_r8a128",
     "speculation matrix: astral": "ctl_lora_r8_a128",
     "speculation matrix: postgresql": "ctl_lora_pg_a128",
     "speculation matrix: financial": "ctl_lora_fin_a128",
@@ -109,6 +109,7 @@ def describe(d: Path) -> dict:
         info["quantization"] = r.get("quantization")
         info["liger"] = r.get("liger_fused_kernels")
         info["trained_by"] = r.get("trained_by")
+        info["methodology"] = r.get("methodology")
         info["regime_source"] = "recorded"
     else:
         bf16 = (d / "checkpoints").exists()
@@ -116,6 +117,7 @@ def describe(d: Path) -> dict:
         info["quantization"] = None if bf16 else "nf4"
         info["liger"] = None
         info["trained_by"] = None
+        info["methodology"] = None
         info["regime_source"] = "inferred"
 
     info["weight_hash"] = weight_hash(d)

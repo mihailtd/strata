@@ -9,7 +9,7 @@ This document serves as a living tracker for experimental implementations, perfo
 
 - **Target Model:** `Qwen/Qwen3.5-0.8B` (text stack via `AutoModelForCausalLM`, 752M params)
 - **Precision:** FP16
-- **Hardware:** AMD RX 7900 XTX (gfx1100, 24 GB), ROCm PyTorch 2.9.1 on Windows — **no CUDA, no Triton**
+- **Hardware:** AMD RX 7900 XTX (gfx1100, 24 GB), WSL2 Linux with ROCm 7.2
 - **Baseline Generation Speed:** **45.9 tokens/sec** (batch 1, 32 new tokens, greedy)
 - **Baseline Peak VRAM:** **3961 MiB** (dominated by the prefill logits tensor, not weights — vocab is 248320)
 - **Baseline Perplexity (PPL):** **19.0448** (wikitext-2 test, 4 windows x 1024 tokens, non-overlapping)
@@ -56,15 +56,15 @@ three digits. Four things got it there, in order of contribution:
    1x4096 @ 4096x248320 GEMV, where 63 of every 64 tile rows are empty: measured
    **9 GiB/s** against the **527 GiB/s** the same shape reaches with a kernel that
    treats it as a vector-matrix product. This was never a quantization problem.
-2. **A fused W4A16 HIP kernel** (`src/ftq/csrc/w4a16.hip`), compiled natively on
-   Windows. Dequantizes in registers so the fp16 weight never exists: 2.75x over
+2. **A fused W4A16 HIP kernel** (`src/ftq/csrc/w4a16.hip`), compiled natively.
+   Dequantizes in registers so the fp16 weight never exists: 2.75x over
    fp16 across the model's shapes, 4.6x on the head, 20-26x over the Python
    unpack path.
 3. **A streaming loader** (`src/ftq/streaming.py`) that never materializes the
    fp16 model on the host. This was a correctness fix, not a speed one -- the
-   old path's 16.68 GiB host allocation drove Windows to grow `pagefile.sys` by
+   old path's 16.68 GiB host allocation drove the host OS to aggressively swap
    50-90 GB on the system drive and repeatedly crashed safetensors with
-   `0xC0000005`.
+   OOM/access violations.
 4. **Bounding the quantizer's working set**, which turned out to be a speed fix
    too. `quantize()` peaked at **25.3x** the weight it was quantizing -- 47.9 GiB
    for the 1.89 GiB lm_head, twice this card. HIP does not fail that allocation;
@@ -82,12 +82,12 @@ Reproduce: `scripts/29_head_quant.py --model Qwen/Qwen3.5-9B --variant head_quan
 
 | ID | Technique / Variant | Status | Prerequisites / Dependencies | Performance vs. Baseline | Outcome | Ideas to Improve & Next Steps |
 | :--- | :--- | :---: | :--- | :--- | :--- | :--- |
-| **T-01** | **Baseline Setup** | 🟩 Completed | PyTorch (ROCm), HuggingFace `transformers` 5.14 | **Tokens/sec:** 45.9<br>**VRAM:** 3961 MiB<br>**PPL:** 19.0448 | ✅ Reference | Two ROCm-on-Windows workarounds were required to get here: iGPU masking and `torch.distributed` stubs. See README. |
+| **T-01** | **Baseline Setup** | 🟩 Completed | PyTorch (ROCm), HuggingFace `transformers` 5.14 | **Tokens/sec:** 45.9<br>**VRAM:** 3961 MiB<br>**PPL:** 19.0448 | ✅ Reference | (Historical) Two workarounds were originally required for Windows: iGPU masking and `torch.distributed` stubs. We have since migrated to WSL2 Linux. |
 | **T-02** | **LOD: Early Exits (Dynamic Layer Skipping)** | 🟩 Revisited | Skipped-MLP fast paths + Self-Speculation (T-08) | **Skipped MLPs:** 15 MLPs (5.7% early fraction)<br>**Draft Accept:** **89.8%** | ✅ Evolved into Speculation | **Revisited & Evolved into Self-Speculation.** Direct early exit is capped because 18/24 recurrent layers must advance state every token. However, converting skipped-MLP paths into **Self-Speculative Drafting (`T-08`)** yields an **89.8% draft acceptance rate**, driving our **84.2 tok/s (+71.4%) engine speedup** when paired with CUDA Graphs (`T-12`). |
 | **T-03** | **Asset Streaming: KV Cache Windowing** | 🟩 Completed | Sliding window + attention sinks + RoPE re-rotation | **KV:** 96 → 24 MiB at 8k (**−75%**)<br>**Stream PPL:** 17.91 (+5.2%)<br>**RoPE Re-rotation:** Fixed position shift | ✅ Works with RoPE fix | Sinks+window at 2048 is the usable point. **RoPE position re-rotation** (`_rerotate_keys`) implemented to shift window keys by $\Delta p = (S+W)-L$, restoring relative position alignment. |
 | **T-04** | **Asset Streaming: Hierarchical KV Mipmapping** | 🟩 Completed | Multi-tier precision (FP16 -> INT8 -> INT4) | **KV Reduction at 4k:** 49.2 -> 16.9 MB (**2.91x / 65.6% savings**)<br>**MAE Error:** 0.0822 | ✅ **Goal Met:** 2.91x KV Savings | Implemented `HierarchicalKVMipmap` in `src/ftq/tricks/kv_mipmap.py`. Keeps recent 256 tokens in FP16, intermediate 768 tokens in INT8, and distant tokens (>1024) in INT4. Achieves **2.91x KV cache memory reduction** at 4096 sequence length. |
 | **T-05** | **Foveated Rendering: PyTorch Activation Sparsity** | 🟩 Completed | SwiGLU FFN neuron masking | **keep 75%:** ppl +0.2%, 8% MLP MACs<br>**keep 50%:** ppl +2.6%, 17%<br>**keep 25%:** ppl +16.2%, 25% | ⚠️ Real but small | Ceiling is **1/3 of the MLP** — gate and up must run to know which neurons are hot, so only `down_proj` shrinks. Breaking that ceiling requires a *predictor* (PowerInfer), not a mask. `top-k` costs more than it saves in dense PyTorch; use the calibrated threshold mode. |
-| **T-06** | **Foveated Rendering: Tile-Structured Sparsity** | 🟥 Blocked | Custom Triton sparse GEMM | -- | ⛔ No toolchain | **Triton has no Windows build in the ROCm wheel index.** Needs WSL2 + ROCm, or a HIP C++ extension. Prerequisite for converting any T-05 result into wall-clock speed. |
+| **T-06** | **Foveated Rendering: Tile-Structured Sparsity** | 🟥 Blocked | Custom Triton sparse GEMM | -- | ⛔ No toolchain | Blocked. (Note: Originally blocked due to Triton lacking a Windows build; we have since migrated to WSL2+ROCm which unblocks the toolchain, but the implementation remains blocked). |
 | **T-07** | **Dual-Model Parallel: Skeleton & FIM Infill** | 🟥 Refuted (1 GPU) | 2x model instances, CUDA/HIP streams | **Throughput:** $2 \times 0.5 = 1.0$ | ⛔ Bandwidth Bound | Refuted for batch-1 single GPU due to VRAM memory bandwidth contention ($2 \times 0.5 = 1.0$). Keep only for multi-GPU or asymmetric speculative decoding. |
 | **T-08** | **Dual-Model Parallel: Self-Speculative Decoding** | 🟨 Correct, not viable | Snapshot/restore of hybrid cache + depth-dial draft | **Lossless: ✅ YES** (bit-identical to greedy, was ✗)<br>**Acceptance:** 5–10%<br>**Speed:** 7.1 vs 37.1 tok/s (**5x slower**) | ⚠️ Fixed but unprofitable | **Correctness salvaged.** `cache_state.py` snapshots the 18 recurrent states and restores them on rejection; KV is still truncated. Output is now bit-identical to greedy — the earlier "79% acceptance, lossless" was measured against a corrupted cache. **But it cannot pay off:** self-drafting with skipped MLPs agrees with the target only 5–10% of the time, so each step costs K drafts + 1 verify + 1 replay ≈ 5 forwards to commit ~1 token (0.26 tok/forward vs 1.0 baseline). Speculation needs a draft that is several times cheaper *and* ~70% accurate; no such draft exists for a 0.8B hybrid. Revisit only with a genuine small draft model. |
 | **T-09** | **Frustum Culling: MoE Expert Prefetching** | 🟥 Blocked | An actual MoE checkpoint | -- | ⛔ N/A here | `Qwen3.5-0.8B` is **dense** — there are no experts to route between or prefetch. MoE is a training-time architecture, not a post-hoc transform. Requires switching models (`qwen3.5:9b` or similar MoE). |
@@ -120,8 +120,8 @@ Reproduce: `scripts/29_head_quant.py --model Qwen/Qwen3.5-9B --variant head_quan
     imports FSDP and DTensor at module scope gated on the torch *version*, not on
     `torch.distributed.is_available()`, and `core_model_loading` is on the critical path for loading
     any model. Fixed with seven stub modules and one injected symbol.
-  - Throughput is low for a 0.8B because `flash-linear-attention` / `causal-conv1d` do not build on
-    Windows, so the gated-delta-net falls back to a torch implementation.
+  - Throughput is low for a 0.8B because `flash-linear-attention` / `causal-conv1d` lacked a native
+    build in the old OS environment, so the gated-delta-net falls back to a torch implementation.
   - Peak VRAM is dominated by the **prefill logits tensor** (seq × 248320 × 2 B), not by weights or KV.
 
 ---
@@ -566,7 +566,7 @@ A critical discovery in the `ftq.Lab` runtime engine concerns the interaction be
 
 1. **`Fit in VRAM > Un-fused Kernel Overhead`**:
    - In pure compute benchmarks, unpacking 4-bit `uint32` weights to FP16 in PyTorch on the fly (`PackedLinear`) adds launch overhead compared to native FP16 GEMM.
-   - However, when an 18 GB FP16 model exceeds available VRAM (or encounters Windows WDDM paging limits), the OS driver pages weights across the PCIe bus.
+   - However, when an 18 GB FP16 model exceeds available VRAM (or encounters host memory paging limits), the OS driver pages weights across the PCIe bus.
    - Because internal GPU VRAM bandwidth ($960 \text{ GB/s}$) is **$30\times$ faster than the PCIe bus ($31.5 \text{ GB/s}$)**, keeping $100\%$ of model weights in VRAM via 4-bit packing—even with PyTorch-level unpacking overhead—is **dramatically faster** than allowing a single layer to spill over PCIe.
 
 2. **`PackedLinear` Delivers Real 3.88x Memory Compression**:

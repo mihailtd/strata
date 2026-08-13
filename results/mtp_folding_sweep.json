@@ -1,0 +1,40 @@
+{
+  "benchmark_metadata": {
+    "num_prompts": 4,
+    "sample_size_tokens": 41,
+    "base_model_next_token_accuracy": 33.33,
+    "status": "UNPROVEN / EXPERIMENTAL",
+    "notes": "N=41 tokens across 4 short prompts. Un-adapted baseline MTP head scored 21.95% (9/41). All quick-adapted variants (30 steps) degraded accuracy (12.20%-14.63%, 5-6/41 tokens). Weight folding latency (0.30-1.10 ms) with zero VRAM churn and single-token step time (~3.3 ms) are verified. Variations in fold latency are PyTorch CUDA warmup effects."
+  },
+  "baseline_unadapted_accuracy": 21.951219512195124,
+  "sweep_results": [
+    {
+      "alpha": 16.0,
+      "scaling": 0.25,
+      "top1_accuracy": 12.195121951219512,
+      "fold_time_ms": 0.625253000180237,
+      "single_step_ms": 4.0192539800773375
+    },
+    {
+      "alpha": 32.0,
+      "scaling": 0.5,
+      "top1_accuracy": 12.195121951219512,
+      "fold_time_ms": 0.2315620076842606,
+      "single_step_ms": 3.8312656799098477
+    },
+    {
+      "alpha": 64.0,
+      "scaling": 1.0,
+      "top1_accuracy": 7.317073170731707,
+      "fold_time_ms": 4.092941991984844,
+      "single_step_ms": 3.34185982006602
+    },
+    {
+      "alpha": 128.0,
+      "scaling": 2.0,
+      "top1_accuracy": 9.75609756097561,
+      "fold_time_ms": 0.34427699574735016,
+      "single_step_ms": 3.584113639954012
+    }
+  ]
+}

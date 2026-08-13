@@ -1,0 +1,32 @@
+{
+  "baseline_tok_s": 31.630279781677093,
+  "arms": {
+    "2": {
+      "tok_s": 39.84070274621316,
+      "speedup": 1.2595747815450002,
+      "accept_pct": 69.375,
+      "accepted_per_step": 1.3875,
+      "exact_vs_single_token": 3,
+      "exact_vs_chunked": 3,
+      "n_prompts": 4
+    },
+    "4": {
+      "tok_s": 43.62187095824367,
+      "speedup": 1.379117455151728,
+      "accept_pct": 56.666666666666664,
+      "accepted_per_step": 2.2666666666666666,
+      "exact_vs_single_token": 3,
+      "exact_vs_chunked": 4,
+      "n_prompts": 4
+    },
+    "6": {
+      "tok_s": 39.52709939244911,
+      "speedup": 1.2496601252116182,
+      "accept_pct": 44.345238095238095,
+      "accepted_per_step": 2.6607142857142856,
+      "exact_vs_single_token": 3,
+      "exact_vs_chunked": 4,
+      "n_prompts": 4
+    }
+  }
+}

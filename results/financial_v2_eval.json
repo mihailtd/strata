@@ -1,0 +1,525 @@
+{
+  "model": "Qwen/Qwen3.5-4B",
+  "dtype": "torch.bfloat16",
+  "max_new_tokens": 256,
+  "domains": {
+    "financial_planning": {
+      "questions": 20,
+      "base": {
+        "score_pct": 78.33333333333334,
+        "covered": 35,
+        "expected": 44
+      },
+      "wrapped": {
+        "score_pct": 75.83333333333334,
+        "covered": 34,
+        "expected": 44
+      },
+      "folded": {
+        "score_pct": 75.0,
+        "covered": 34,
+        "expected": 44
+      },
+      "delta_folded_minus_wrapped_pp": -0.8333333333333428,
+      "exact_match": 12,
+      "divergence_first_char": [
+        489,
+        249,
+        48,
+        229,
+        314,
+        159,
+        0,
+        86
+      ],
+      "rows": {
+        "base": [
+          {
+            "id": "fin_01",
+            "response": "Money scripts are cognitive frameworks that individuals develop about money, often shaped by early life experiences and cultural influences. These scripts can either facilitate or hinder financial decision-making. Money avoidance scripts involve a tendency to avoid thinking about or dealing with money, which can lead to poor financial planning and decision-making. Money status scripts, on the other hand, relate to how individuals perceive their financial standing and can influence their confidence and behavior in managing finances.",
+            "gen_time_s": 9.756452791996708,
+            "score_pct": 100.0,
+            "covered": 3,
+            "expected": 3
+          },
+          {
+            "id": "fin_02",
+            "response": "A financial planner should address loss aversion by:\n1. **Explaining the long-term benefits of staying invested**\n2. **Providing a clear, written plan that outlines the client's goals and strategy**\n3. **Reassuring the client that the market will recover over time**\n4. **Offering to review the portfolio periodically to adjust for changing circumstances**",
+            "gen_time_s": 6.053970281995134,
+            "score_pct": 50.0,
+            "covered": 1,
+            "expected": 2
+          },
+          {
+            "id": "fin_03",
+            "response": "Financial flashpoint analysis is a method used to identify and evaluate critical moments in a person's financial life where significant decisions or events occur. These flashpoints can be influenced by various factors, including childhood experiences. Childhood experiences shape adult financial decision-making by establishing early patterns of behavior, values, and beliefs about money. For example, if a child grows up in a household where money is scarce, they may develop a fear of spending or a tendency to save excessively. Conversely, if a child is exposed to abundant resources and financial freedom, they may develop a more relaxed approach to spending and investing. Understanding these flashpoints and their underlying causes can help individuals make more informed and strategic financial decisions in adulthood.",
+            "gen_time_s": 9.567058248998364,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_04",
+            "response": "Confirmation bias is a cognitive bias where individuals tend to seek out, interpret, and remember information that confirms their pre-existing beliefs or hypotheses while ignoring or dismissing contradictory evidence. In the context of client investment choices, confirmation bias can lead to several negative outcomes:\n\n1. **Overconfidence in Specific Investments**: Clients may become overly confident in their investment choices, especially if they have a strong belief in a particular asset class or strategy. This can lead to a lack of diversification and increased risk exposure.\n\n2. **Ignoring Contradictory Information**: Clients may ignore or dismiss information that challenges their investment decisions, such as negative news about a company or sector they are invested in. This can result in poor decision-making and potential financial losses.\n\n3. **Reinforcement of Existing Beliefs**: Confirmation bias can reinforce existing beliefs, making it difficult for clients to change their investment strategies even when new information suggests a better approach. This can lead to missed opportunities for optimization.\n\n4. **Emotional Decision-Making**: Confirmation bias can lead to emotional decision-making, where clients make choices based on their feelings rather than objective analysis. This can result in impulsive buying or selling, which can be detrimental to their long-term financial goals.\n\nTo counteract confirmation bias, a financial",
+            "gen_time_s": 14.715764560001844,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_05",
+            "response": "Financial literacy refers to the knowledge and skills required to manage personal finances effectively, while financial psychology focuses on the emotional and behavioral aspects of financial decision-making. In terms of client outcomes, financial literacy helps clients make informed decisions and manage their resources better, leading to improved financial stability. On the other hand, financial psychology addresses the emotional barriers and biases that may hinder clients from making optimal financial choices, ultimately leading to better long-term financial health and satisfaction.",
+            "gen_time_s": 6.167217652000545,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_06",
+            "response": "A financial planner can use active listening and open-ended questions to uncover a client's core financial values by:\n1. **Active Listening**:\n   - **Focus on the Client**: Give the client your full attention, maintain eye contact, and avoid distractions.\n   - **Non-Verbal Cues**: Use nodding, smiling, and appropriate facial expressions to show engagement.\n   - **Paraphrasing and Summarizing**: Repeat back what the client has said to ensure understanding and show that you are listening.\n   - **Ask Clarifying Questions**: If something is unclear, ask the client to elaborate.\n2. **Open-Ended Questions**:\n   - **Explore Values**: Ask questions like \"What is most important to you in your financial life?\" or \"How do you envision your ideal retirement?\"\n   - **Encourage Reflection**: Ask questions that require the client to think deeply about their goals and values.\n   - **Avoid Yes/No Questions**: Instead of asking \"Do you want to save for retirement?\", ask \"What are your thoughts on saving for retirement?\"\n3. **Follow-Up**:\n   - **Connect the Dots**: After the client shares their values, summarize and connect them to the financial planning process.",
+            "gen_time_s": 15.460240962995158,
+            "score_pct": 100.0,
+            "covered": 3,
+            "expected": 3
+          },
+          {
+            "id": "fin_07",
+            "response": "<think>\n\n</think>\n\nNavigating money conflicts between spouses is one of the most common challenges in financial planning. These conflicts often stem not from a lack of financial knowledge, but from differing values, emotional triggers, and communication styles.\n\nHere are several effective strategies a financial planner can use to navigate these conflicts during joint planning sessions:\n\n### 1. Establish a \"No-Blame\" Environment First\nBefore diving into numbers, the planner must set the tone for the session.\n*   **Separate People from Problems:** Explicitly state that the goal is to solve the *financial issue*, not to judge the spouse's past decisions or current habits.\n*   **The \"Why\" Behind the \"What\":** When a conflict arises (e.g., one spouse wants to invest more, the other wants to save more), ask both parties to explain the *emotional* or *value-based* reason behind their preference. Often, the financial solution is secondary to the underlying need for security, freedom, or family legacy.\n\n### 2. Utilize the \"Three-Step\" Communication Framework\nEncourage the couple to use a structured approach to discuss sensitive topics:\n*   **State the Fact:** \"I noticed our cash flow is tight.\"",
+            "gen_time_s": 15.472442478996527,
+            "score_pct": 66.66666666666667,
+            "covered": 2,
+            "expected": 3
+          },
+          {
+            "id": "fin_08",
+            "response": "A planner should deliver disappointing news with empathy, clarity, and a focus on solutions. Here\u2019s a structured approach:\n\n1. **Prepare Thoroughly**:\n   - **Understand the Client\u2019s Goals**: Ensure you fully understand the client\u2019s retirement goals, timeline, and expectations.\n   - **Gather Data**: Collect all relevant financial data, including current assets, income, expenses, and projected growth.\n   - **Anticipate Questions**: Prepare for potential questions or concerns the client may have.\n\n2. **Choose the Right Setting**:\n   - **Private Meeting**: Conduct the conversation in a private, comfortable setting to ensure confidentiality and reduce anxiety.\n   - **Timing**: Choose a time when the client is not rushed or under stress.\n\n3. **Deliver the News**:\n   - **Be Honest and Direct**: Clearly state the issue without sugarcoating it.\n   - **Use Empathy**: Acknowledge the client\u2019s feelings and validate their concerns.\n   - **Explain the \"Why\"**: Provide a clear explanation of why the target age is not achievable, using data and projections.\n\n4. **Offer Solutions**:\n   - **Adjust the Plan**: Propose alternative retirement strategies, such as delaying retirement",
+            "gen_time_s": 14.380396945998655,
+            "score_pct": 50.0,
+            "covered": 1,
+            "expected": 2
+          },
+          {
+            "id": "fin_09",
+            "response": "Motivational interviewing (MI) is a client-centered, directive counseling style that helps people resolve ambivalence and move toward change. In financial counseling, MI is used to help clients explore their own motivations for financial change, identify barriers, and commit to actionable steps. It encourages long-term behavioral change by fostering a collaborative relationship, enhancing self-efficacy, and focusing on intrinsic motivation rather than external pressure.",
+            "gen_time_s": 5.206259632999718,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_10",
+            "response": "A planner can establish trust and rapport with a new client who feels anxious or shame about debt by:\n1. **Creating a safe and non-judgmental environment**:\n   - Listen actively and empathetically to the client's concerns.\n   - Avoid making immediate judgments or assumptions about their financial situation.\n   - Validate their feelings and acknowledge the challenges they face.\n2. **Building a supportive relationship**:\n   - Show genuine interest in the client's well-being, not just their financial status.\n   - Offer reassurance and encouragement throughout the planning process.\n   - Be transparent about your approach and the steps you will take to help them.\n3. **Educating the client**:\n   - Provide clear, jargon-free explanations of financial concepts.\n   - Explain the benefits of debt management and how it can improve their financial health.\n   - Offer resources and tools to help them understand their options.\n4. **Setting realistic goals**:\n   - Work with the client to set achievable short-term and long-term goals.\n   - Celebrate small wins along the way to build confidence.\n   - Adjust goals as needed based on progress and changing circumstances.\n5. **Demonstrating competence and reliability**:",
+            "gen_time_s": 14.576874700003827,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_11",
+            "response": "A client's **risk tolerance** is the amount of risk they are willing to take on in order to achieve their financial goals. It is based on their personal preferences and psychological comfort level with risk.\n\nA client's **risk capacity** is the amount of risk they can afford to take on, based on their financial situation, including their income, net worth, and time horizon. It is based on their financial ability to absorb potential losses.\n\nA client's **risk perception** is how they perceive and interpret risk. It is based on their past experiences, education, and beliefs about risk. It can influence their risk tolerance and capacity.",
+            "gen_time_s": 8.50366884899995,
+            "score_pct": 100.0,
+            "covered": 3,
+            "expected": 3
+          },
+          {
+            "id": "fin_12",
+            "response": "Recency bias causes clients to overestimate the risk of a market downturn during extended bull markets and underestimate the risk of a market downturn during extended bear markets.",
+            "gen_time_s": 3.0921260440009064,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_13",
+            "response": "Sequence of returns risk is critical in retirement income planning because it refers to the impact of market returns occurring early in retirement on the longevity of retirement savings. If market returns are poor in the early years of retirement, the portfolio may be depleted faster than expected, potentially leading to financial insecurity. This risk is particularly significant for retirees who rely on their savings to fund their living expenses.\n\nTo mitigate sequence of returns risk, retirees can:\n1. **Maintain a diversified portfolio**: A well-diversified portfolio can help reduce the impact of poor market performance in any single year.\n2. **Adjust asset allocation**: Retirees can adjust their asset allocation to be more conservative in the early years of retirement, reducing exposure to volatile assets like stocks.\n3. **Use annuities or guaranteed income products**: These products can provide a steady stream of income, reducing reliance on market performance.\n4. **Delay retirement**: Delaying retirement until the market conditions are more favorable can help ensure a more stable financial foundation.\n5. **Maintain a cash buffer**: Keeping a portion of the portfolio in cash or cash equivalents can provide liquidity during market downturns.\n\n---",
+            "gen_time_s": 14.646346841997001,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_14",
+            "response": "A financial planner should educate clients on the importance of treating all money as fungible and help them create a unified financial plan that considers all assets together.",
+            "gen_time_s": 3.481087842003035,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_15",
+            "response": "Emotional intelligence (EI) plays a critical role in managing portfolio risk during economic crises by enabling investors to make rational, data-driven decisions despite heightened market volatility and uncertainty. Here\u2019s how EI contributes to risk management:\n\n1. **Self-Awareness**: Investors with high EI are aware of their emotional triggers, such as fear or greed, which can lead to impulsive decisions. During crises, self-awareness helps them recognize when their emotions are clouding judgment and take steps to maintain objectivity.\n\n2. **Self-Regulation**: EI allows investors to control their emotional responses to market fluctuations. Instead of reacting impulsively to news or price drops, they can stay calm and adhere to their investment strategy, reducing the likelihood of panic selling or overreacting to short-term volatility.\n\n3. **Empathy**: Empathy helps investors understand the broader economic and social implications of market movements. This can lead to more informed decisions about asset allocation and risk management, as they consider the needs of different stakeholders and the potential long-term impact of their choices.\n\n4. **Social Skills**: Strong social skills enable investors to communicate effectively with advisors, peers, and other stakeholders. This can lead to better collaboration, shared insights, and more robust risk management strategies.\n\n5",
+            "gen_time_s": 15.04524848699657,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_16",
+            "response": "**No.** While mathematical models provide a solid foundation for portfolio construction, they cannot account for client-specific emotional responses to risk and return. A financial planner must integrate quantitative analysis with qualitative client communication to ensure that the portfolio aligns with both the client\u2019s financial goals and their psychological comfort level. Ignoring emotional factors can lead to poor adherence to the investment strategy, even if the model is mathematically sound.\n\n---",
+            "gen_time_s": 6.402151258997037,
+            "score_pct": 50.0,
+            "covered": 1,
+            "expected": 2
+          },
+          {
+            "id": "fin_17",
+            "response": "No, giving clients comprehensive financial education alone is not sufficient to change destructive spending habits. While financial education is a crucial component of financial planning, it is not a standalone solution. Destructive spending habits are often deeply rooted in psychological factors, emotional triggers, and behavioral patterns that go beyond mere knowledge.\n\nTo effectively address destructive spending habits, a holistic approach is necessary. This includes:\n\n1. **Behavioral Analysis**: Understanding the underlying reasons for the spending habits, such as emotional triggers, stress relief, or social influences.\n2. **Psychological Support**: Providing counseling or therapy to help clients develop healthier coping mechanisms and emotional regulation skills.\n3. **Accountability Measures**: Implementing systems or tools that help clients track their spending and stay accountable, such as budgeting apps or regular check-ins with a financial advisor.\n4. **Goal Setting**: Helping clients set clear, achievable financial goals that align with their values and priorities, which can provide motivation to change their spending behaviors.\n5. **Long-Term Planning**: Developing a comprehensive financial plan that includes not only budgeting and saving but also investing, debt management, and retirement planning.\n\nBy addressing the root causes of destructive spending habits and providing ongoing support, financial advisors can help clients develop sustainable financial",
+            "gen_time_s": 15.373926653002854,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_18",
+            "response": "No, a planner should not assume a client's risk tolerance questionnaire score remains constant throughout their lifetime.",
+            "gen_time_s": 2.8742956349960878,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_19",
+            "response": "No, it is not best to immediately challenge and correct a client's irrational financial beliefs during the initial consultation. Instead, it is more effective to build rapport and trust with the client first. By establishing a strong relationship, you can create a safe and open environment where the client feels comfortable discussing their financial beliefs and concerns. Once trust is established, you can gently challenge and correct any irrational beliefs in a way that is respectful and constructive. This approach allows the client to feel heard and understood, which can lead to a more productive and collaborative financial planning process.",
+            "gen_time_s": 7.262428960006218,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_20",
+            "response": "No, financial goals should not be established solely around numerical target returns. While numerical targets are useful for measuring progress and ensuring that investments are performing as expected, they should not be the only focus. Personal life values, such as security, freedom, and legacy, should also play a significant role in shaping financial goals.",
+            "gen_time_s": 4.846129165001912,
+            "score_pct": 50.0,
+            "covered": 1,
+            "expected": 2
+          }
+        ],
+        "wrapped": [
+          {
+            "id": "fin_01",
+            "response": "Money scripts are mental models that clients use to make sense of their financial experiences. Two common money scripts are money avoidance and money status.\n\n*   **Money Avoidance Script:** This script involves avoiding money-related topics, such as discussing finances with family or avoiding financial discussions altogether.\n*   **Money Status Script:** This script involves using money to establish status, such as buying expensive items to impress others.\n\nThese scripts can lead to negative financial behaviors, such as:\n*   **Money Avoidance:** Clients may avoid discussing money with family, leading to a lack of financial communication.\n*   **Money Status:** Clients may use money to establish status, which can lead to compulsive buying disorder.",
+            "gen_time_s": 10.547987161000492,
+            "score_pct": 100.0,
+            "covered": 3,
+            "expected": 3
+          },
+          {
+            "id": "fin_02",
+            "response": "To address loss aversion when a client wants to panic-sell, a financial planner should:\n\n1.  **Reframe the situation:** Explain that the current market volatility is a normal part of the investment process and that the client is likely experiencing a temporary dip rather than a permanent loss.\n2.  **Provide context:** Remind the client that the market has experienced similar volatility in the past and that this is a normal part of the investment process.\n3.  **Encourage patience:** Advise the client to hold on and not to panic-sell, as selling during a downturn could lock in losses.\n4.  **Offer reassurance:** Emphasize that the client's long-term financial goals are still on track and that the current market conditions are not a reason to deviate from their plan.",
+            "gen_time_s": 12.00534064200474,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_03",
+            "response": "Financial flashpoint analysis is a method used to identify the specific life events that have had the most significant impact on an individual's financial decision-making. These events, often occurring during childhood, can shape an individual's financial behaviors and beliefs. For example, if a child experiences a sudden loss of money, they might develop a fear of spending. Conversely, if a child experiences a sudden gain, they might develop a habit of saving. Understanding these flashpoints is crucial for financial planning because it helps planners understand the underlying drivers of a client's financial behaviors.",
+            "gen_time_s": 7.673699349004892,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_04",
+            "response": "Confirmation bias causes clients to seek out information that supports their existing beliefs, leading them to ignore contradictory evidence. This can result in clients making investment choices that align with their biases rather than their best financial interests. To counteract this, planners can use techniques like presenting multiple viewpoints, encouraging clients to challenge their own assumptions, and using decision-making frameworks that require clients to consider both sides of an issue.",
+            "gen_time_s": 5.664474021003116,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_05",
+            "response": "Financial literacy is the ability to understand financial concepts, while financial psychology is the ability to apply those concepts to achieve desired outcomes.",
+            "gen_time_s": 2.8745606819938985,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_06",
+            "response": "To uncover a client's core financial values, a financial planner should use active listening and open-ended questions. Active listening involves fully focusing on the client, reflecting what they say, and summarizing their points to ensure understanding. Open-ended questions encourage the client to elaborate on their thoughts and feelings, which can help reveal their core values.",
+            "gen_time_s": 5.101376182996319,
+            "score_pct": 100.0,
+            "covered": 3,
+            "expected": 3
+          },
+          {
+            "id": "fin_07",
+            "response": "To navigate money conflict between married couples during joint planning sessions, financial planners can use several strategies:\n\n1.  **Active Listening:** This involves listening to both partners' perspectives without interrupting or judging.\n2.  **Reflecting:** This involves summarizing what the other partner says to ensure understanding.\n3.  **Paraphrasing:** This involves restating what the other partner says in your own words.\n4.  **Summarizing:** This involves bringing together the key points discussed.\n5.  **Active Listening Skills:** This involves skills like pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing, pacing,",
+            "gen_time_s": 17.984791276001488,
+            "score_pct": 66.66666666666667,
+            "covered": 2,
+            "expected": 3
+          },
+          {
+            "id": "fin_08",
+            "response": "A planner should deliver disappointing news by:\n1. Acknowledging the client's feelings.\n2. Explaining the situation.\n3. Offering a solution.",
+            "gen_time_s": 3.9863860589975957,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_09",
+            "response": "Motivational interviewing is a client-centered counseling approach that encourages clients to explore their own motivations for change. It is designed to enhance the client's motivation and commitment to change, which is crucial for long-term behavioral change.",
+            "gen_time_s": 4.285325518001628,
+            "score_pct": 50.0,
+            "covered": 1,
+            "expected": 2
+          },
+          {
+            "id": "fin_10",
+            "response": "To establish trust and rapport with a client who feels anxious or ashamed about debt, a planner should:\n\n1.  **Listen Actively:** Listen to the client's story and feelings.\n2.  **Validate:** Validate their feelings.\n3.  **Normalize:** Normalize their experience.\n4.  **Be Patient:** Be patient with the client.\n5.  **Be Nonjudgmental:** Be nonjudgmental.\n6.  **Be Empathetic:** Be empathetic.\n7.  **Be Supportive:** Be supportive.\n8.  **Be Understanding:** Be understanding.\n9.  **Be Compassionate:** Be compassionate.\n10. **Be Respectful:** Be respectful.\n11. **Be Sensitive:** Be sensitive.\n12. **Be Attentive:** Be attentive.\n13. **Be Responsive:** Be responsive.\n14. **Be Available:** Be available.\n15. **Be Reliable:** Be reliable.\n16. **Be Consistent:** Be consistent.\n17. **Be Honest:** Be honest.\n18. **Be Transparent:** Be transparent.\n19. **Be Open:** Be open.",
+            "gen_time_s": 15.230383560003247,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_11",
+            "response": "Risk tolerance is the client's comfort level with risk. Risk capacity is the client's ability to take risk based on their age, investment time, and other factors. Risk perception is the client's perception of risk, which can be influenced by their experience, education, and other factors.",
+            "gen_time_s": 4.233212162005657,
+            "score_pct": 100.0,
+            "covered": 3,
+            "expected": 3
+          },
+          {
+            "id": "fin_12",
+            "response": "Recency bias causes clients to overestimate the risk of a market correction during extended bull markets and underestimate the risk of a market correction during extended bear markets.",
+            "gen_time_s": 2.5869105130041135,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_13",
+            "response": "Sequence of returns risk is critical because it can significantly impact the longevity of retirement savings. For example, if a retiree withdraws a fixed amount from their savings each year, a market downturn early in retirement can deplete their savings faster than expected. This is because the fixed withdrawal amount is based on the initial balance, which may be insufficient if the market declines.\n\nTo mitigate this risk, retirees can:\n1. **Adjust Withdrawal Amounts:** Reduce withdrawals during market downturns to preserve capital.\n2. **Diversify Investments:** Spread investments across different asset classes to reduce exposure to any single market.\n3. **Use Dynamic Withdrawal Strategies:** Implement strategies that adjust withdrawal amounts based on market conditions.\n\n---",
+            "gen_time_s": 9.051417756003502,
+            "score_pct": 50.0,
+            "covered": 1,
+            "expected": 2
+          },
+          {
+            "id": "fin_14",
+            "response": "When clients treat inherited money differently from earned income, a financial planner should:\n1.  **Acknowledge the bias:** Recognize that this is a common mental accounting bias.\n2.  **Discuss the impact:** Talk with the client about how this behavior might impact their financial goals.\n3.  **Explore alternatives:** Discuss alternative ways to handle the money, such as:\n    *   Setting aside a portion for future goals.\n    *   Using it for charitable giving.\n    *   Investing it for long-term growth.",
+            "gen_time_s": 7.269595177000156,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_15",
+            "response": "Emotional intelligence is crucial for managing portfolio risk during economic crises. It helps individuals make rational decisions, avoid panic selling, and maintain a long-term investment strategy.",
+            "gen_time_s": 2.7638829719944624,
+            "score_pct": 50.0,
+            "covered": 1,
+            "expected": 2
+          },
+          {
+            "id": "fin_16",
+            "response": "No, a financial planner should not focus strictly on mathematical portfolio optimization without addressing client emotional reactions. Clients' emotional reactions to financial decisions are as important as the mathematical optimization.",
+            "gen_time_s": 3.2293704530020477,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_17",
+            "response": "No, giving clients comprehensive financial education alone is not sufficient to change destructive spending habits.",
+            "gen_time_s": 2.1756053319986677,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_18",
+            "response": "No, a planner should not assume a client's risk tolerance questionnaire score remains constant throughout their lifetime.",
+            "gen_time_s": 2.325702693000494,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_19",
+            "response": "No, it is not best to immediately challenge and correct a client's irrational financial beliefs during the initial consultation. Instead, it is best to listen to the client's beliefs and then gently challenge them later.",
+            "gen_time_s": 3.121993720997125,
+            "score_pct": 50.0,
+            "covered": 1,
+            "expected": 2
+          },
+          {
+            "id": "fin_20",
+            "response": "No, financial goals should not be established solely around numerical target returns. Financial goals should be established around personal life values.",
+            "gen_time_s": 2.4026753490034025,
+            "score_pct": 50.0,
+            "covered": 1,
+            "expected": 2
+          }
+        ],
+        "folded": [
+          {
+            "id": "fin_01",
+            "response": "Money scripts are mental models that clients use to make sense of their financial experiences. Two common money scripts are money avoidance and money status.\n\n*   **Money Avoidance Script:** This script involves avoiding money-related topics, such as discussing finances with family or avoiding financial discussions altogether.\n*   **Money Status Script:** This script involves using money to establish status, such as buying expensive items to impress others.\n\nThese scripts can lead to behaviors like hoarding, overspending, or under-saving. For example, a client with a money avoidance script might avoid discussing finances, leading to poor financial communication. A client with a money status script might overspend to impress others, leading to financial instability.",
+            "gen_time_s": 7.319812790003198,
+            "score_pct": 100.0,
+            "covered": 3,
+            "expected": 3
+          },
+          {
+            "id": "fin_02",
+            "response": "To address loss aversion when a client wants to panic-sell, a financial planner should:\n\n1.  **Reframe the situation:** Explain that the current market volatility is a normal part of the investment process and that the client is likely experiencing loss aversion.\n2.  **Provide context:** Remind the client that the market is expected to recover and that the current losses are temporary.\n3.  **Offer reassurance:** Emphasize that the client's long-term financial goals are still on track.\n4.  **Suggest professional support:** Recommend that the client speak with a financial planner or a mental health professional to help them process their emotions and make a more informed decision.",
+            "gen_time_s": 7.225754296996456,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_03",
+            "response": "Financial flashpoint analysis is a method used to identify the specific life events that have had the most significant impact on an individual's financial decision-making. These events, often occurring during childhood, can shape an individual's financial behaviors and beliefs. For example, if a child experiences a sudden loss of money, they might develop a fear of spending. Conversely, if a child experiences a sudden gain, they might develop a habit of saving. Understanding these flashpoints is crucial for financial planning because it helps planners understand the underlying drivers of a client's financial behaviors.",
+            "gen_time_s": 5.93279810599779,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_04",
+            "response": "Confirmation bias causes clients to seek out information that supports their existing beliefs, leading them to ignore contradictory evidence. This can result in clients making investment choices that align with their biases rather than their best financial interests. To counteract this, planners can use techniques like presenting multiple viewpoints, encouraging clients to challenge their own assumptions, and using decision-making frameworks that require clients to consider both sides of an issue.",
+            "gen_time_s": 4.842387506003433,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_05",
+            "response": "Financial literacy is the ability to understand and use financial concepts, while financial psychology is the ability to understand and use financial concepts in a way that leads to positive client outcomes.",
+            "gen_time_s": 2.543908571002248,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_06",
+            "response": "To uncover a client's core financial values, a financial planner should use active listening and open-ended questions. Active listening involves fully focusing on the client, reflecting what they say, and summarizing their points. Open-ended questions encourage the client to elaborate on their thoughts and feelings.",
+            "gen_time_s": 3.7123528129959595,
+            "score_pct": 100.0,
+            "covered": 3,
+            "expected": 3
+          },
+          {
+            "id": "fin_07",
+            "response": "To navigate money conflict between married couples during joint planning sessions, financial planners can use several strategies:\n\n1.  **Active Listening:** This involves listening to both partners' perspectives without interrupting or judging.\n2.  **Reflecting:** This involves summarizing what the other partner is saying to ensure understanding.\n3.  **Summarizing:** This involves summarizing the key points of the discussion.\n4.  **Paraphrasing:** This involves restating what the other partner is saying in your own words.\n5.  **Active Listening Skills:** This involves using active listening skills to facilitate communication.\n6.  **Active Listening Skills:** This involves using active listening skills to facilitate communication.\n7.  **Active Listening Skills:** This involves using active listening skills to facilitate communication.\n8.  **Active Listening Skills:** This involves using active listening skills to facilitate communication.\n9.  **Active Listening Skills:** This involves using active listening skills to facilitate communication.\n10. **Active Listening Skills:** This involves using active listening skills to facilitate communication.",
+            "gen_time_s": 10.684130808003829,
+            "score_pct": 100.0,
+            "covered": 3,
+            "expected": 3
+          },
+          {
+            "id": "fin_08",
+            "response": "A planner should deliver disappointing news by:\n1. Acknowledging the client's feelings.\n2. Explaining the situation.\n3. Offering a solution.",
+            "gen_time_s": 2.8074927189954906,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_09",
+            "response": "Motivational interviewing is a client-centered counseling approach that encourages clients to explore their own motivations for change. It is designed to enhance the client's motivation and commitment to change, which is crucial for long-term behavioral change.",
+            "gen_time_s": 3.2151820860017324,
+            "score_pct": 50.0,
+            "covered": 1,
+            "expected": 2
+          },
+          {
+            "id": "fin_10",
+            "response": "To establish trust and rapport with a client who feels anxious or ashamed about debt, a planner should:\n\n1.  **Listen Actively:** Listen to the client's story without interruption.\n2.  **Validate Feelings:** Validate the client's feelings.\n3.  **Normalize the Experience:** Normalize the client's experience.\n4.  **Avoid Judgment:** Avoid making assumptions or judgments.\n5.  **Be Patient:** Be patient.\n6.  **Be Nonjudgmental:** Be nonjudgmental.\n7.  **Be Empathetic:** Be empathetic.\n8.  **Be Supportive:** Be supportive.\n9.  **Be Understanding:** Be understanding.\n10. **Be Respectful:** Be respectful.\n11. **Be Sensitive:** Be sensitive.\n12. **Be Compassionate:** Be compassionate.\n13. **Be Attentive:** Be attentive.\n14. **Be Responsive:** Be responsive.\n15. **Be Available:** Be available.\n16. **Be Reliable:** Be reliable.\n17. **Be Consistent:** Be consistent.\n18. **Be Honest:** Be honest.\n19.",
+            "gen_time_s": 13.078534061998653,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_11",
+            "response": "Risk tolerance is the client's comfort level with risk. Risk capacity is the client's ability to take risk based on their age, investment time, and other factors. Risk perception is the client's perception of risk, which can be influenced by their experience, education, and other factors.",
+            "gen_time_s": 3.9645576500042807,
+            "score_pct": 100.0,
+            "covered": 3,
+            "expected": 3
+          },
+          {
+            "id": "fin_12",
+            "response": "Recency bias causes clients to overestimate the risk of a market correction during extended bull markets and underestimate the risk of a market correction during extended bear markets.",
+            "gen_time_s": 2.488861365003686,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_13",
+            "response": "Sequence of returns risk is critical because it can significantly impact the longevity of retirement savings. For example, if a retiree withdraws a fixed amount from their savings each year, a market downturn early in retirement can deplete their savings faster than expected. This is because the fixed withdrawal amount is based on the initial balance, which may be insufficient if the market declines.\n\nTo mitigate this risk, retirees can:\n1. **Adjust Withdrawal Amounts:** Reduce withdrawals during market downturns to preserve capital.\n2. **Diversify Investments:** Spread investments across different asset classes to reduce exposure to any single market.\n3. **Use Dynamic Withdrawal Strategies:** Implement strategies that adjust withdrawal amounts based on market conditions.\n\n---",
+            "gen_time_s": 7.885753727001429,
+            "score_pct": 50.0,
+            "covered": 1,
+            "expected": 2
+          },
+          {
+            "id": "fin_14",
+            "response": "When clients treat inherited money differently from earned income, a financial planner should:\n1.  **Acknowledge the bias:** Recognize that this is a common mental accounting bias.\n2.  **Discuss the impact:** Talk with the client about how this behavior might impact their financial goals.\n3.  **Explore alternatives:** Discuss alternative ways to handle the money, such as:\n    *   Setting aside a portion for future goals.\n    *   Using it for charitable giving.\n    *   Investing it for long-term growth.",
+            "gen_time_s": 6.082684335997328,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_15",
+            "response": "Emotional intelligence is crucial for managing portfolio risk during economic crises. It helps individuals make rational decisions, avoid panic selling, and maintain a long-term investment strategy.",
+            "gen_time_s": 2.628484708999167,
+            "score_pct": 50.0,
+            "covered": 1,
+            "expected": 2
+          },
+          {
+            "id": "fin_16",
+            "response": "No, a financial planner should not focus strictly on mathematical portfolio optimization without addressing client emotional reactions. Clients' emotional reactions to financial decisions are as important as the mathematical optimization.",
+            "gen_time_s": 3.1013399710063823,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_17",
+            "response": "No, giving clients comprehensive financial education alone is not sufficient to change destructive spending habits.",
+            "gen_time_s": 1.887468352993892,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_18",
+            "response": "No, a planner should not assume a client's risk tolerance questionnaire score remains constant throughout their lifetime.",
+            "gen_time_s": 2.0451103980012704,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_19",
+            "response": "No, it is not best to immediately challenge and correct a client's irrational financial beliefs during the initial consultation.",
+            "gen_time_s": 2.77527233499859,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_20",
+            "response": "No, financial goals should not be established solely around numerical target returns. They should be established around personal life values.",
+            "gen_time_s": 2.1460815989994444,
+            "score_pct": 50.0,
+            "covered": 1,
+            "expected": 2
+          }
+        ]
+      }
+    }
+  }
+}

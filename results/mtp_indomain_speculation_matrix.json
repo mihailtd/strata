@@ -1,0 +1,225 @@
+{
+  "device": "AMD Radeon RX 7900 XTX",
+  "k_draft": 4,
+  "tokens_per_prompt": 32,
+  "matrix": {
+    "astral": {
+      "astral": {
+        "expert_folded": "astral",
+        "prompt_domain": "astral",
+        "is_indomain_diagonal": true,
+        "auto_tok_s": 25.791103845958567,
+        "spec_tok_s": 29.085706242430774,
+        "speedup_multiplier": 1.1277418142375657,
+        "speedup_all_reps": [
+          1.1125010099142623,
+          1.1277418142375657,
+          1.1297976267867902
+        ],
+        "speedup_spread": 0.017296616872527926,
+        "straddles_unity": false,
+        "predicted_speedup_from_tau": 1.136094756913998,
+        "tau_accepted_per_step": 2.0231481481481484,
+        "accept_pct": 50.57870370370371,
+        "exact_vs_chunked_pct": 90.0,
+        "repeats": 3,
+        "tot_drafted": 864,
+        "tot_accepted": 437,
+        "tot_steps": 216
+      },
+      "postgresql": {
+        "expert_folded": "astral",
+        "prompt_domain": "postgresql",
+        "is_indomain_diagonal": false,
+        "auto_tok_s": 24.747217567339778,
+        "spec_tok_s": 27.63336528906292,
+        "speedup_multiplier": 1.1166251403362673,
+        "speedup_all_reps": [
+          1.105188012305108,
+          1.1166251403362673,
+          1.1313657201377874
+        ],
+        "speedup_spread": 0.026177707832679253,
+        "straddles_unity": false,
+        "predicted_speedup_from_tau": 1.148567466429543,
+        "tau_accepted_per_step": 2.056338028169014,
+        "accept_pct": 51.40845070422535,
+        "exact_vs_chunked_pct": 70.0,
+        "repeats": 3,
+        "tot_drafted": 852,
+        "tot_accepted": 438,
+        "tot_steps": 213
+      },
+      "financial_planning": {
+        "expert_folded": "astral",
+        "prompt_domain": "financial_planning",
+        "is_indomain_diagonal": false,
+        "auto_tok_s": 24.93260705208788,
+        "spec_tok_s": 26.36684987370937,
+        "speedup_multiplier": 1.0575247834542592,
+        "speedup_all_reps": [
+          1.0556524386439883,
+          1.0575247834542592,
+          1.0900077990134829
+        ],
+        "speedup_spread": 0.0343553603694946,
+        "straddles_unity": false,
+        "predicted_speedup_from_tau": 1.0850760568911642,
+        "tau_accepted_per_step": 1.8873873873873874,
+        "accept_pct": 47.18468468468468,
+        "exact_vs_chunked_pct": 85.0,
+        "repeats": 3,
+        "tot_drafted": 888,
+        "tot_accepted": 419,
+        "tot_steps": 222
+      }
+    },
+    "postgresql": {
+      "astral": {
+        "expert_folded": "postgresql",
+        "prompt_domain": "astral",
+        "is_indomain_diagonal": false,
+        "auto_tok_s": 25.6322210654936,
+        "spec_tok_s": 30.525239017485386,
+        "speedup_multiplier": 1.1911907525552596,
+        "speedup_all_reps": [
+          1.1510048279099108,
+          1.1911907525552596,
+          1.2084728369265394
+        ],
+        "speedup_spread": 0.05746800901662863,
+        "straddles_unity": false,
+        "predicted_speedup_from_tau": 1.2066081599870315,
+        "tau_accepted_per_step": 2.2107843137254903,
+        "accept_pct": 55.26960784313726,
+        "exact_vs_chunked_pct": 85.0,
+        "repeats": 3,
+        "tot_drafted": 816,
+        "tot_accepted": 451,
+        "tot_steps": 204
+      },
+      "postgresql": {
+        "expert_folded": "postgresql",
+        "prompt_domain": "postgresql",
+        "is_indomain_diagonal": true,
+        "auto_tok_s": 24.942683129834354,
+        "spec_tok_s": 29.280066344913404,
+        "speedup_multiplier": 1.1748096086215354,
+        "speedup_all_reps": [
+          1.124465052399497,
+          1.1748096086215354,
+          1.1773513801097206
+        ],
+        "speedup_spread": 0.05288632771022361,
+        "straddles_unity": false,
+        "predicted_speedup_from_tau": 1.125623081122858,
+        "tau_accepted_per_step": 1.9952830188679245,
+        "accept_pct": 49.88207547169811,
+        "exact_vs_chunked_pct": 80.0,
+        "repeats": 3,
+        "tot_drafted": 848,
+        "tot_accepted": 423,
+        "tot_steps": 212
+      },
+      "financial_planning": {
+        "expert_folded": "postgresql",
+        "prompt_domain": "financial_planning",
+        "is_indomain_diagonal": false,
+        "auto_tok_s": 26.043393586511094,
+        "spec_tok_s": 28.826671068094583,
+        "speedup_multiplier": 1.0920057125644433,
+        "speedup_all_reps": [
+          1.0911518595498129,
+          1.0920057125644433,
+          1.1315122852873203
+        ],
+        "speedup_spread": 0.04036042573750742,
+        "straddles_unity": false,
+        "predicted_speedup_from_tau": 1.1557578722710289,
+        "tau_accepted_per_step": 2.0754716981132075,
+        "accept_pct": 51.886792452830186,
+        "exact_vs_chunked_pct": 70.0,
+        "repeats": 3,
+        "tot_drafted": 848,
+        "tot_accepted": 440,
+        "tot_steps": 212
+      }
+    },
+    "financial_planning": {
+      "astral": {
+        "expert_folded": "financial_planning",
+        "prompt_domain": "astral",
+        "is_indomain_diagonal": false,
+        "auto_tok_s": 25.970762810909424,
+        "spec_tok_s": 31.362366487833462,
+        "speedup_multiplier": 1.2076028230737685,
+        "speedup_all_reps": [
+          1.2069880191409155,
+          1.2076028230737685,
+          1.2092631828650204
+        ],
+        "speedup_spread": 0.002275163724104967,
+        "straddles_unity": false,
+        "predicted_speedup_from_tau": 1.1995934711014602,
+        "tau_accepted_per_step": 2.1921182266009853,
+        "accept_pct": 54.80295566502463,
+        "exact_vs_chunked_pct": 95.0,
+        "repeats": 3,
+        "tot_drafted": 812,
+        "tot_accepted": 445,
+        "tot_steps": 203
+      },
+      "postgresql": {
+        "expert_folded": "financial_planning",
+        "prompt_domain": "postgresql",
+        "is_indomain_diagonal": false,
+        "auto_tok_s": 25.292001324342586,
+        "spec_tok_s": 29.701358459857314,
+        "speedup_multiplier": 1.1743380082489119,
+        "speedup_all_reps": [
+          1.1631270159112774,
+          1.1743380082489119,
+          1.1810879622127504
+        ],
+        "speedup_spread": 0.017960946301472935,
+        "straddles_unity": false,
+        "predicted_speedup_from_tau": 1.1468946984039199,
+        "tau_accepted_per_step": 2.05188679245283,
+        "accept_pct": 51.29716981132076,
+        "exact_vs_chunked_pct": 80.0,
+        "repeats": 3,
+        "tot_drafted": 848,
+        "tot_accepted": 435,
+        "tot_steps": 212
+      },
+      "financial_planning": {
+        "expert_folded": "financial_planning",
+        "prompt_domain": "financial_planning",
+        "is_indomain_diagonal": true,
+        "auto_tok_s": 24.945944653977655,
+        "spec_tok_s": 27.859978049304313,
+        "speedup_multiplier": 1.1105639488745849,
+        "speedup_all_reps": [
+          1.10282800731453,
+          1.1105639488745849,
+          1.1414857894372394
+        ],
+        "speedup_spread": 0.03865778212270943,
+        "straddles_unity": false,
+        "predicted_speedup_from_tau": 1.1415767940836543,
+        "tau_accepted_per_step": 2.0377358490566038,
+        "accept_pct": 50.943396226415096,
+        "exact_vs_chunked_pct": 80.0,
+        "repeats": 3,
+        "tot_drafted": 848,
+        "tot_accepted": 432,
+        "tot_steps": 212
+      }
+    }
+  },
+  "speculation_router_config": {
+    "astral": true,
+    "postgresql": true,
+    "financial_planning": true
+  }
+}

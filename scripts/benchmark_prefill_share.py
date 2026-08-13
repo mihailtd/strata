@@ -2,13 +2,20 @@ import argparse
 import json
 import sys
 import time
+import numpy as np
 from pathlib import Path
 
+# 1. CUDA Touch BEFORE transformers import
 import torch
+torch.zeros(1, device="cuda")
+
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(REPO_ROOT))
+sys.path.insert(0, str(REPO_ROOT / "src"))
+
+from gnn_experiment.novel_peft import set_hard_vram_cap
 
 def measure_prefill_decode(model, input_ids, max_new_tokens=1024):
     # 1. Isolate Prefill
@@ -44,11 +51,37 @@ def measure_prefill_decode(model, input_ids, max_new_tokens=1024):
     
     return prefill_time, decode_time
 
+def load_real_text(tokenizer, target_tokens, device):
+    # Load some real text from evaluation data
+    data_path = REPO_ROOT / "data" / "astral" / "evaluation_data.jsonl"
+    text = ""
+    if data_path.exists():
+        with open(data_path) as f:
+            for line in f:
+                if line.strip():
+                    text += json.loads(line).get("prompt", "") + "\n\n"
+    else:
+        text = "Hello world! This is a fallback text. " * 1000
+
+    # Tokenize
+    input_ids = tokenizer(text, return_tensors="pt").input_ids
+    
+    # Repeat if not enough tokens
+    while input_ids.shape[1] < target_tokens:
+        input_ids = torch.cat([input_ids, input_ids], dim=1)
+        
+    return input_ids[:, :target_tokens].to(device)
+
 def main():
     parser = argparse.ArgumentParser(description="Measure Prefill vs Decode Share")
     parser.add_argument("--model-name", default="Qwen/Qwen3.5-4B")
     parser.add_argument("--max-new-tokens", type=int, default=1024)
+    parser.add_argument("--vram-cap-gb", type=float, default=22.0)
+    parser.add_argument("--repeats", type=int, default=3)
     args = parser.parse_args()
+
+    # 2. Hard VRAM cap
+    set_hard_vram_cap(args.vram_cap_gb)
 
     print(f"Loading {args.model_name}...")
     tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
@@ -58,34 +91,45 @@ def main():
     model.eval()
 
     context_lengths = [2048, 4096, 8192]
-    
     print(f"Target Output Length: {args.max_new_tokens} tokens")
-    
-    # Warmup
-    print("Warming up GPU...")
-    dummy_input = torch.randint(0, 1000, (1, 128)).to("cuda:0")
-    measure_prefill_decode(model, dummy_input, max_new_tokens=10)
     
     results = {}
     
     for ctx_len in context_lengths:
         print(f"\n--- Context Length: {ctx_len} ---")
-        # generate random tokens for prompt
-        input_ids = torch.randint(0, 1000, (1, ctx_len)).to("cuda:0")
         
-        prefill_time, decode_time = measure_prefill_decode(model, input_ids, max_new_tokens=args.max_new_tokens)
+        # Use real tokenized text
+        input_ids = load_real_text(tokenizer, ctx_len, "cuda:0")
         
-        total_time = prefill_time + decode_time
-        prefill_pct = (prefill_time / total_time) * 100
-        decode_pct = (decode_time / total_time) * 100
+        print("Per-shape warmup...")
+        # 3. Per-shape warmup BEFORE timed region
+        measure_prefill_decode(model, input_ids, max_new_tokens=2)
         
-        print(f"Prefill time ({ctx_len} tokens): {prefill_time:.3f} s ({prefill_pct:.1f}%)")
-        print(f"Decode time  ({args.max_new_tokens} tokens): {decode_time:.3f} s ({decode_pct:.1f}%)")
-        print(f"Total time   : {total_time:.3f} s")
+        prefill_times = []
+        decode_times = []
+        
+        print(f"Running {args.repeats} repeats...")
+        for rep in range(args.repeats):
+            pt, dt = measure_prefill_decode(model, input_ids, max_new_tokens=args.max_new_tokens)
+            prefill_times.append(pt)
+            decode_times.append(dt)
+            print(f"  Rep {rep+1}: prefill={pt:.3f}s, decode={dt:.3f}s")
+            
+        # 4. Report median
+        prefill_median = float(np.median(prefill_times))
+        decode_median = float(np.median(decode_times))
+        total_time = prefill_median + decode_median
+        
+        prefill_pct = (prefill_median / total_time) * 100
+        decode_pct = (decode_median / total_time) * 100
+        
+        print(f"Median Prefill time ({ctx_len} tokens): {prefill_median:.3f} s ({prefill_pct:.1f}%)")
+        print(f"Median Decode time  ({args.max_new_tokens} tokens): {decode_median:.3f} s ({decode_pct:.1f}%)")
+        print(f"Median Total time   : {total_time:.3f} s")
         
         results[ctx_len] = {
-            "prefill_s": prefill_time,
-            "decode_s": decode_time,
+            "prefill_s": prefill_median,
+            "decode_s": decode_median,
             "total_s": total_time,
             "prefill_pct": prefill_pct,
             "decode_pct": decode_pct

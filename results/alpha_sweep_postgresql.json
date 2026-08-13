@@ -1,0 +1,56 @@
+{
+  "domain": "postgresql",
+  "base_pct": 49.666666666666664,
+  "rows": [
+    {
+      "alpha": 16,
+      "scaling": 0.25,
+      "dw_over_w": 0.02309607381175738,
+      "merge_rel_err_pct": 7.203970543131774,
+      "absorbed_pct": 7.88464464125086,
+      "wrapped_pct": 64.16666666666666,
+      "folded_pct": 59.166666666666664,
+      "delta_pp": -4.999999999999993
+    },
+    {
+      "alpha": 32,
+      "scaling": 0.5,
+      "dw_over_w": 0.04537214212177787,
+      "merge_rel_err_pct": 3.6740383194208146,
+      "absorbed_pct": 4.033213091678307,
+      "wrapped_pct": 65.5,
+      "folded_pct": 65.5,
+      "delta_pp": 0.0
+    },
+    {
+      "alpha": 64,
+      "scaling": 1.0,
+      "dw_over_w": 0.09035971955745481,
+      "merge_rel_err_pct": 1.8514039019462443,
+      "absorbed_pct": 2.0286028111567265,
+      "wrapped_pct": 74.66666666666666,
+      "folded_pct": 75.41666666666666,
+      "delta_pp": 0.75
+    },
+    {
+      "alpha": 128,
+      "scaling": 2.0,
+      "dw_over_w": 0.18087620608275756,
+      "merge_rel_err_pct": 0.9359109965832122,
+      "absorbed_pct": 1.0136548417513487,
+      "wrapped_pct": 65.76923076923077,
+      "folded_pct": 67.27272727272728,
+      "delta_pp": 1.5034965034965069
+    },
+    {
+      "alpha": 256,
+      "scaling": 4.0,
+      "dw_over_w": 0.35867869667708874,
+      "merge_rel_err_pct": 0.4931306916745098,
+      "absorbed_pct": 0.5119258849347224,
+      "wrapped_pct": 49.55882352941176,
+      "folded_pct": 49.57142857142857,
+      "delta_pp": 0.012605042016808454
+    }
+  ]
+}

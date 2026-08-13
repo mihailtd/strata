@@ -1,0 +1,42 @@
+{
+  "base": {
+    "financial_planning": 83.33333333333334,
+    "astral": 12.083333333333334,
+    "postgresql": 51.333333333333336
+  },
+  "fin": {
+    "financial_planning": 83.33333333333334,
+    "astral": 12.636363636363637,
+    "postgresql": 70.0
+  },
+  "ast": {
+    "financial_planning": 75.83333333333334,
+    "astral": 56.518334606569894,
+    "postgresql": 57.30769230769231
+  },
+  "pg": {
+    "financial_planning": 82.5,
+    "astral": 3.333333333333333,
+    "postgresql": 75.41666666666666
+  },
+  "fin+ast": {
+    "financial_planning": 74.16666666666666,
+    "astral": 52.67857142857143,
+    "postgresql": 60.0
+  },
+  "fin+pg": {
+    "financial_planning": 80.83333333333334,
+    "astral": 7.226890756302521,
+    "postgresql": 64.71212121212122
+  },
+  "ast+pg": {
+    "financial_planning": 70.0,
+    "astral": 57.142857142857146,
+    "postgresql": 69.8076923076923
+  },
+  "fin+ast+pg": {
+    "financial_planning": 67.5,
+    "astral": 53.333333333333336,
+    "postgresql": 65.83333333333334
+  }
+}

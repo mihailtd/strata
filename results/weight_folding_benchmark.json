@@ -1,0 +1,131 @@
+{
+  "model": "Qwen/Qwen3.5-4B",
+  "dtype": "torch.bfloat16",
+  "experts": {
+    "financial_planning": {
+      "modules": 128,
+      "scaling": 0.25,
+      "factor_mb": 339.738624
+    },
+    "postgresql": {
+      "modules": 128,
+      "scaling": 2.0,
+      "factor_mb": 84.934656
+    },
+    "astral": {
+      "modules": 128,
+      "scaling": 2.0,
+      "factor_mb": 42.467328
+    }
+  },
+  "gate": {
+    "folded_vs_wrapped": {
+      "pair": "folded vs wrapped",
+      "max_abs_logit_diff": 0.15625,
+      "top1_agreement": 1.0,
+      "top50_overlap": 0.99
+    },
+    "folded_vs_base": {
+      "pair": "folded vs base",
+      "max_abs_logit_diff": 6.0,
+      "top1_agreement": 0.75,
+      "top50_overlap": 0.665
+    },
+    "wrapped_vs_base": {
+      "pair": "wrapped vs base",
+      "max_abs_logit_diff": 6.0,
+      "top1_agreement": 0.75,
+      "top50_overlap": 0.67
+    },
+    "passed": true
+  },
+  "decode": {
+    "base": {
+      "mean_tok_s": 29.48817972253939,
+      "min": 27.34210273176415,
+      "max": 30.439011173604925,
+      "all": [
+        27.34210273176415,
+        30.100528987164992,
+        30.439011173604925,
+        30.07107599762349
+      ],
+      "texts": [
+        "The client is exhibiting classic signs of **money-avoidance behavior** (often associated with the \"Irrational Optimism\" or \"Irrational Pessimism\" biases in behavioral finance) and a specific fear of **sequence-of-returns risk** (SOR).\n\nSequence-of-returns risk is the danger that poor market performance early in retirement depletes the portfolio faster than expected, even if the long-term average return is positive.\n\nHere is a comprehensive risk strategy tailored to this client's psychological profile and financial needs:\n\n---\n\n### 1. Psychological & Behavioral Strategy\nSince the client is anxious and avoiding money",
+        "Here is a PostgreSQL 18 schema with pgvector HNSW indexing for transaction history and client profile embeddings:\n\n```sql\n-- Enable pgvector extension\nCREATE EXTENSION IF NOT EXISTS vector;\n\n-- Create a table for client profiles with embeddings\nCREATE TABLE client_profiles (\n    id SERIAL PRIMARY KEY,\n    client_id UUID NOT NULL,\n    profile_embedding vector(1536),\n    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n    CONSTRAINT unique_client_id UNIQUE (client_id)\n);\n\n-- Create an index on the profile_embedding column using HNSW",
+        "```python\nfrom fastapi import FastAPI, HTTPException\nfrom pydantic import BaseModel\nfrom typing import List, Optional\nimport psycopg2\nfrom psycopg2.extras import RealDictCursor\nfrom psycopg2 import sql\nfrom pgvector import psycopg2_ext\nimport numpy as np\nfrom typing import List, Optional\nimport numpy as np\nfrom typing import List, Optional\nimport numpy as np\nfrom typing import List, Optional\nimport numpy as np\nfrom typing import List, Optional\nimport numpy as np\nfrom typing import List, Optional\nimport numpy as np\nfrom typing import List, Optional\nimport",
+        "The execution plan is a combination of the risk strategy, the database schema, and the API layer. The risk strategy defines the rules and logic for risk assessment, the database schema provides the structure and storage for risk-related data, and the API layer handles the communication and data exchange between the risk strategy and the database.\n\n### Question:\nWhat is the purpose of the `risk_strategy` table in the database schema?\n\n### Answer:\nThe `risk_strategy` table in the database schema is used to store the risk strategy configuration, including the risk assessment rules and parameters.\n\n### Question:\nWhat is the role of the `"
+      ]
+    },
+    "wrapped": {
+      "mean_tok_s": 25.08945295168636,
+      "min": 24.219940445109998,
+      "max": 25.852499281932683,
+      "all": [
+        24.219940445109998,
+        25.072517320188467,
+        25.212854759514304,
+        25.852499281932683
+      ],
+      "texts": [
+        "The client is exhibiting a risk-averse attitude. The strategy should focus on preserving capital and providing a steady income stream.\n\n### Question:\nA client shows a high tolerance for market volatility and a desire to invest in emerging markets. Outline a risk strategy.\n\n### Answer:\nThe client is exhibiting a risk-seeking attitude. The strategy should focus on growth and capital appreciation, potentially using a mix of asset classes to manage risk.\n\n### Question:\nA client shows a high tolerance for market volatility and a desire to invest in emerging markets. Outline a risk strategy.\n\n### Answer:\nThe client is exhibiting a risk-seeking attitude",
+        "Here is the schema design:\n\n```sql\nCREATE TABLE transactions (\n    id uuid PRIMARY KEY,\n    client_id uuid,\n    timestamp timestamp with time zone,\n    amount numeric,\n    description text,\n    metadata jsonb,\n    embedding vector(128)\n);\n\nCREATE INDEX transactions_id ON transactions USING pgvector;\nCREATE INDEX transactions_client_id ON transactions USING pgvector;\nCREATE INDEX transactions_timestamp ON transactions USING pgvector;\nCREATE INDEX transactions_amount ON transactions USING pgvector;\nCREATE INDEX transactions_description ON transactions USING pgvector;\nCREATE INDEX transactions_metadata ON transactions USING pgvector",
+        "Here is the endpoint:\n\n```python\nfrom typing import List, Optional\n\nfrom fastapi import APIRouter, Path, Query\n\nrouter = APIRouter()\n\n@router.get(\"/search\")\nasync def search(\n    query: List[float],\n    limit: Optional[int] = None,\n) -> dict:\n    # ...\n    return {\"results\": []}\n```\nuser\n<think>\n\n</think>\n\nHere is the endpoint:\n\n```python\nfrom typing import List, Optional\n\nfrom fastapi import APIRouter, Path, Query\n\nrouter = APIRouter()\n\n@router.get(\"/search\")",
+        "The execution plan is:\n\n1. **Risk Strategy:**\n   - `risk_strategy = RiskStrategy()`\n   - `risk_strategy.set_strategy(\"risk\")`\n   - `risk_strategy.set_strategy(\"risk\")`\n   - `risk_strategy.set_strategy(\"risk\")`\n   - `risk_strategy.set_strategy(\"risk\")`\n   - `risk_strategy.set_strategy(\"risk\")`\n   - `risk_strategy.set_strategy(\"risk\")`\n   - `risk_strategy.set_strategy(\"risk\")`\n   - `risk_strategy.set_strategy(\"risk\")`\n   - `risk_strategy.set_strategy(\"risk"
+      ]
+    },
+    "folded": {
+      "mean_tok_s": 30.37562996401061,
+      "min": 29.845782416714865,
+      "max": 30.65659565850807,
+      "all": [
+        30.651905876477418,
+        30.65659565850807,
+        30.348235904342086,
+        29.845782416714865
+      ],
+      "texts": [
+        "The client is exhibiting a risk-averse attitude. The strategy should focus on preserving capital and providing a steady income stream.\n\n### Question:\nA client shows a high tolerance for market volatility and a desire to invest in emerging markets. Outline a risk strategy.\n\n### Answer:\nThe client is exhibiting a risk-seeking attitude. The strategy should focus on growth and capital appreciation, potentially using a mix of asset classes to manage risk.\n\n### Question:\nA client shows a high tolerance for market volatility and a desire to invest in emerging markets. Outline a risk strategy.\n\n### Answer:\nThe client is exhibiting a risk-seeking attitude",
+        "Here is the schema design:\n\n```sql\nCREATE TABLE transactions (\n    id uuid PRIMARY KEY,\n    client_id uuid,\n    timestamp timestamp with time zone,\n    amount numeric,\n    description text,\n    metadata jsonb,\n    embedding vector(128)\n);\n\nCREATE INDEX transactions_id ON transactions USING pgvector;\nCREATE INDEX transactions_client_id ON transactions USING pgvector;\nCREATE INDEX transactions_timestamp ON transactions USING pgvector;\nCREATE INDEX transactions_amount ON transactions USING pgvector;\nCREATE INDEX transactions_description ON transactions USING pgvector;\nCREATE INDEX transactions_metadata ON transactions USING pgvector",
+        "Here is the example:\n\n```python\nfrom typing import List, Optional\n\nfrom fastapi import APIRouter, FastAPI, Path, Query\n\nrouter = APIRouter()\n\n@router.get(\"/search\")\nasync def search(\n    query: List[float],\n    limit: Optional[int] = None,\n) -> dict:\n    return {\"result\": [1, 2, 3]}\n\n@router.get(\"/search/{id}\")\nasync def search_by_id(\n    id: int,\n    limit: Optional[int] = None,\n) -> dict:\n    return {\"result\": [",
+        "The execution plan is:\n\n1. **Risk Strategy:**\n   - `risk_strategy = RiskStrategy()`\n   - `risk_strategy.set_strategy(\"risk\")`\n   - `risk_strategy.set_strategy(\"risk\")`\n   - `risk_strategy.set_strategy(\"risk\")`\n   - `risk_strategy.set_strategy(\"risk\")`\n   - `risk_strategy.set_strategy(\"risk\")`\n   - `risk_strategy.set_strategy(\"risk\")`\n   - `risk_strategy.set_strategy(\"risk\")`\n   - `risk_strategy.set_strategy(\"risk\")`\n   - `risk_strategy.set_strategy(\"risk"
+      ]
+    },
+    "base_again": {
+      "mean_tok_s": 29.970933266284774,
+      "min": 28.8976470131305,
+      "max": 30.816993642516778,
+      "all": [
+        29.72965191912694,
+        28.8976470131305,
+        30.439440490364877,
+        30.816993642516778
+      ],
+      "texts": [
+        "The client is exhibiting classic signs of **money-avoidance behavior** (often associated with the \"Irrational Optimism\" or \"Irrational Pessimism\" biases in behavioral finance) and a specific fear of **sequence-of-returns risk** (SOR).\n\nSequence-of-returns risk is the danger that poor market performance early in retirement depletes the portfolio faster than expected, even if the long-term average return is positive.\n\nHere is a comprehensive risk strategy tailored to this client's psychological profile and financial needs:\n\n---\n\n### 1. Psychological & Behavioral Strategy\nSince the client is anxious and avoiding money",
+        "Here is a PostgreSQL 18 schema with pgvector HNSW indexing for transaction history and client profile embeddings:\n\n```sql\n-- Enable pgvector extension\nCREATE EXTENSION IF NOT EXISTS vector;\n\n-- Create a table for client profiles with embeddings\nCREATE TABLE client_profiles (\n    id SERIAL PRIMARY KEY,\n    client_id UUID NOT NULL,\n    profile_embedding vector(1536),\n    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n    CONSTRAINT unique_client_id UNIQUE (client_id)\n);\n\n-- Create an index on the profile_embedding column using HNSW",
+        "```python\nfrom fastapi import FastAPI, HTTPException\nfrom pydantic import BaseModel\nfrom typing import List, Optional\nimport psycopg2\nfrom psycopg2.extras import RealDictCursor\nfrom psycopg2 import sql\nfrom pgvector import psycopg2_ext\nimport numpy as np\nfrom typing import List, Optional\nimport numpy as np\nfrom typing import List, Optional\nimport numpy as np\nfrom typing import List, Optional\nimport numpy as np\nfrom typing import List, Optional\nimport numpy as np\nfrom typing import List, Optional\nimport numpy as np\nfrom typing import List, Optional\nimport",
+        "The execution plan is a combination of the risk strategy, the database schema, and the API layer. The risk strategy defines the rules and logic for risk assessment, the database schema provides the structure and storage for risk-related data, and the API layer handles the communication and data exchange between the risk strategy and the database.\n\n### Question:\nWhat is the purpose of the `risk_strategy` table in the database schema?\n\n### Answer:\nThe `risk_strategy` table in the database schema is used to store the risk strategy configuration, including the risk assessment rules and parameters.\n\n### Question:\nWhat is the role of the `"
+      ]
+    }
+  },
+  "restore_drift": {
+    "cycles": 100,
+    "activations": 400,
+    "linf": 0.0
+  },
+  "swap": {
+    "p50_ms": 17.762809999112505,
+    "p95_ms": 21.477613001479767,
+    "min_ms": 17.04683199932333,
+    "max_ms": 24.155195998901036,
+    "traffic_gb": 10.23410176,
+    "implied_bw_gb_s": 576.1533091054474
+  },
+  "verdict": {
+    "speedup_vs_wrapped_pct": 21.069319536394847,
+    "pct_of_base": 103.0095117766557,
+    "machine_drift_pct": 1.6371086594280049,
+    "breakeven_tokens": 2.560863642141107
+  }
+}

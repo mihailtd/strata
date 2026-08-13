@@ -1,4 +1,31 @@
-"""Train a stock LoRA expert in bf16 for any domain.
+"""CURRENT training methodology (m2). Use this for all new expert training.
+
+METHODOLOGY VERSIONING
+----------------------
+The filename carries `CURRENT` and the methodology id. Exactly one trainer at a
+time is CURRENT. When the methodology changes:
+
+    1. rename this file to `train_expert_m2.py` (drop CURRENT) and move it to
+       scripts/superseded/
+    2. create `train_expert_CURRENT_m3.py` with METHODOLOGY = "m3"
+    3. adapters trained under it are named `m3_<domain>_r<rank>a<alpha>`
+
+so the methodology is readable from both the script name and every adapter it
+produces, and results trained under different methodologies can never be
+silently compared.
+
+    m1  4-bit NF4 base, no fused kernels   (export_adapter.py,
+                                            finetune_novel_adapter.py -- both
+                                            now legacy; adapters learn a
+                                            correction to quantized weights and
+                                            were then folded into bf16 ones)
+    m2  bf16 base + Liger fused kernels    THIS FILE -- fused_linear_cross_entropy
+                                            (no logit materialisation at 248320
+                                            vocab), rms_norm, swiglu; rope off
+
+Hyperparameters fixed across every domain so experts stay comparable: r=8,
+alpha=128 (scaling 16), 7 projections, 150 steps, batch 2, grad-accum 2,
+lr 2e-4, cosine, max_length 512.
 
 WHY THIS EXISTS
 ---------------
@@ -37,13 +64,16 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from gnn_experiment.novel_peft import set_hard_vram_cap  # noqa: E402
 
-# domain -> (training data, output adapter dir)
+METHODOLOGY = "m2"  # bf16 + Liger fused kernels; see docstring
+
+# domain -> (training data, output adapter dir). Adapter names carry the
+# methodology id so an adapter's training regime is readable from its path.
 DOMAINS = {
-    "astral": ("data/astral/training_data.jsonl", "results/adapters/ctl_lora_bf16_ast_a128"),
-    "postgresql": ("data/postgresql/training_data.jsonl", "results/adapters/ctl_lora_bf16_pg_a128"),
+    "astral": ("data/astral/training_data.jsonl", "results/adapters/m2_astral_r8a128"),
+    "postgresql": ("data/postgresql/training_data.jsonl", "results/adapters/m2_postgresql_r8a128"),
     "financial_planning": (
         "data/financial_planning/training_data.jsonl",
-        "results/adapters/ctl_lora_bf16_fin_a128",
+        "results/adapters/m2_financial_r8a128",
     ),
 }
 
@@ -167,10 +197,11 @@ def main():
     (out_dir / "regime.json").write_text(
         json.dumps(
             {
+                "methodology": METHODOLOGY,
                 "precision": "bfloat16",
                 "quantization": None,
                 "liger_fused_kernels": liger_applied,
-                "trained_by": "scripts/train_stock_lora_bf16.py",
+                "trained_by": "scripts/train_expert_CURRENT_m2.py",
                 "domain": args.domain,
                 "rank": args.rank,
                 "alpha": args.alpha,

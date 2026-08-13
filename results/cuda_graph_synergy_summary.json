@@ -1,0 +1,14 @@
+{
+  "model_name": "Qwen/Qwen3.5-4B",
+  "arms": {
+    "base_eager_tok_s": 16.18422233241979,
+    "folded_eager_tok_s": 25.683261912758077,
+    "graph_folded_tok_s": 30.64323108614012,
+    "speedup_vs_eager": 1.8934015151754582
+  },
+  "samples": {
+    "eager_text": "<think>\nThinking Process:\n\n1.  **Analyze the Request:**\n    *   Input: \"Question: Explain loss aversion and money avoida",
+    "folded_eager_text": "assistant\n<think>\n\n</think>\n\nAccording to the Psychology of Financial Planning, key concepts include:\n\nLoss aversion and",
+    "graph_text": "assistant\n<think>\n\n</think>\n\nAccording to the Psychology of Money, key concepts include:\n\nLoss aversion and money avoida"
+  }
+}

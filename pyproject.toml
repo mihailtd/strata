@@ -30,6 +30,7 @@ dependencies = [
     "ebooklib>=0.20",
     "beautifulsoup4>=4.15.0",
     "markdownify>=1.2.3",
+    "liger-kernel>=0.8.1",
 ]
 
 [project.scripts]

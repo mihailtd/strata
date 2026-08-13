@@ -1,0 +1,85 @@
+{
+  "k": 32,
+  "rows": [
+    {
+      "pair": "astral vs itself",
+      "a": "astral",
+      "b": "astral",
+      "retention_pct": 12.54825825254424,
+      "chance_pct": 0.0004722958519345238,
+      "x_chance": 26568.639553251578
+    },
+    {
+      "pair": "astral_alt vs itself",
+      "a": "astral_alt",
+      "b": "astral_alt",
+      "retention_pct": 15.182755725102519,
+      "chance_pct": 0.0004722958519345238,
+      "x_chance": 32146.7056357026
+    },
+    {
+      "pair": "financial vs itself",
+      "a": "financial",
+      "b": "financial",
+      "retention_pct": 19.57515351029212,
+      "chance_pct": 0.0004722958519345238,
+      "x_chance": 41446.80379917014
+    },
+    {
+      "pair": "postgres vs itself",
+      "a": "postgres",
+      "b": "postgres",
+      "retention_pct": 14.015326100411938,
+      "chance_pct": 0.0004722958519345238,
+      "x_chance": 29674.887134843895
+    },
+    {
+      "pair": "astral vs astral_alt",
+      "a": "astral",
+      "b": "astral_alt",
+      "retention_pct": 0.003377313204175288,
+      "chance_pct": 0.0004722958519345238,
+      "x_chance": 7.150842401731485
+    },
+    {
+      "pair": "astral vs financial",
+      "a": "astral",
+      "b": "financial",
+      "retention_pct": 0.0006052716979757733,
+      "chance_pct": 0.0004722958519345238,
+      "x_chance": 1.281552009183609
+    },
+    {
+      "pair": "astral vs postgres",
+      "a": "astral",
+      "b": "postgres",
+      "retention_pct": 0.0005756455764891955,
+      "chance_pct": 0.0004722958519345238,
+      "x_chance": 1.218824120794945
+    },
+    {
+      "pair": "astral_alt vs financial",
+      "a": "astral_alt",
+      "b": "financial",
+      "retention_pct": 0.0005379736371179837,
+      "chance_pct": 0.0004722958519345238,
+      "x_chance": 1.1390606860391503
+    },
+    {
+      "pair": "astral_alt vs postgres",
+      "a": "astral_alt",
+      "b": "postgres",
+      "retention_pct": 0.0005250108124124523,
+      "chance_pct": 0.0004722958519345238,
+      "x_chance": 1.1116142779192493
+    },
+    {
+      "pair": "financial vs postgres",
+      "a": "financial",
+      "b": "postgres",
+      "retention_pct": 0.000519379605333364,
+      "chance_pct": 0.0004722958519345238,
+      "x_chance": 1.0996912278733448
+    }
+  ]
+}

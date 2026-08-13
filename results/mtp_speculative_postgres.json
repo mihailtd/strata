@@ -1,0 +1,15 @@
+{
+  "adapter": "postgres",
+  "baseline_tok_s": 31.67801986281861,
+  "arms": {
+    "4": {
+      "tok_s": 37.02017286190641,
+      "speedup": 1.1686391075648652,
+      "accept_pct": 48.10606060606061,
+      "accepted_per_step": 1.9242424242424243,
+      "exact_vs_single_token": 2,
+      "exact_vs_chunked": 3,
+      "n_prompts": 4
+    }
+  }
+}

@@ -1,0 +1,110 @@
+{
+  "base": 12.202380952380953,
+  "rows": [
+    {
+      "arm": "lora",
+      "rank_total": 8,
+      "alpha": 2,
+      "scaling": 0.25,
+      "score": 25.0
+    },
+    {
+      "arm": "lora",
+      "rank_total": 8,
+      "alpha": 4,
+      "scaling": 0.5,
+      "score": 26.25
+    },
+    {
+      "arm": "lora",
+      "rank_total": 8,
+      "alpha": 8,
+      "scaling": 1.0,
+      "score": 26.25
+    },
+    {
+      "arm": "lora",
+      "rank_total": 8,
+      "alpha": 16,
+      "scaling": 2.0,
+      "score": 42.75
+    },
+    {
+      "arm": "lora",
+      "rank_total": 8,
+      "alpha": 64,
+      "scaling": 8.0,
+      "score": 47.08333333333333
+    },
+    {
+      "arm": "lora",
+      "rank_total": 8,
+      "alpha": 128,
+      "scaling": 16.0,
+      "score": 56.03260869565217
+    },
+    {
+      "arm": "lora",
+      "rank_total": 8,
+      "alpha": 256,
+      "scaling": 32.0,
+      "score": 40.31410256410256
+    },
+    {
+      "arm": "idk_rt8",
+      "rank_total": 8,
+      "alpha": 2,
+      "scaling": 0.25,
+      "score": 30.416666666666668
+    },
+    {
+      "arm": "idk_rt8",
+      "rank_total": 8,
+      "alpha": 4,
+      "scaling": 0.5,
+      "score": 34.86111111111111
+    },
+    {
+      "arm": "idk_rt8",
+      "rank_total": 8,
+      "alpha": 8,
+      "scaling": 1.0,
+      "score": 49.745098039215684
+    },
+    {
+      "arm": "idk_rt8",
+      "rank_total": 8,
+      "alpha": 16,
+      "scaling": 2.0,
+      "score": 57.833333333333336
+    },
+    {
+      "arm": "idk_rt16",
+      "rank_total": 16,
+      "alpha": 4,
+      "scaling": 0.25,
+      "score": 42.91666666666667
+    },
+    {
+      "arm": "idk_rt16",
+      "rank_total": 16,
+      "alpha": 8,
+      "scaling": 0.5,
+      "score": 37.08333333333333
+    },
+    {
+      "arm": "idk_rt16",
+      "rank_total": 16,
+      "alpha": 16,
+      "scaling": 1.0,
+      "score": 56.2396331738437
+    },
+    {
+      "arm": "idk_rt16",
+      "rank_total": 16,
+      "alpha": 32,
+      "scaling": 2.0,
+      "score": 50.83333333333333
+    }
+  ]
+}

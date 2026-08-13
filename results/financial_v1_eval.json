@@ -1,0 +1,523 @@
+{
+  "model": "Qwen/Qwen3.5-4B",
+  "dtype": "torch.bfloat16",
+  "max_new_tokens": 256,
+  "domains": {
+    "financial_planning": {
+      "questions": 20,
+      "base": {
+        "score_pct": 78.33333333333334,
+        "covered": 35,
+        "expected": 44
+      },
+      "wrapped": {
+        "score_pct": 33.33333333333333,
+        "covered": 16,
+        "expected": 44
+      },
+      "folded": {
+        "score_pct": 30.833333333333332,
+        "covered": 14,
+        "expected": 44
+      },
+      "delta_folded_minus_wrapped_pp": -2.4999999999999964,
+      "exact_match": 14,
+      "divergence_first_char": [
+        422,
+        449,
+        515,
+        969,
+        634,
+        0
+      ],
+      "rows": {
+        "base": [
+          {
+            "id": "fin_01",
+            "response": "Money scripts are cognitive frameworks that individuals develop about money, often shaped by early life experiences and cultural influences. These scripts can either facilitate or hinder financial decision-making. Money avoidance scripts involve a tendency to avoid thinking about or dealing with money, which can lead to poor financial planning and decision-making. Money status scripts, on the other hand, relate to how individuals perceive their financial standing and can influence their confidence and behavior in managing finances.",
+            "gen_time_s": 7.137507182997069,
+            "score_pct": 100.0,
+            "covered": 3,
+            "expected": 3
+          },
+          {
+            "id": "fin_02",
+            "response": "A financial planner should address loss aversion by:\n1. **Explaining the long-term benefits of staying invested**\n2. **Providing a clear, written plan that outlines the client's goals and strategy**\n3. **Reassuring the client that the market will recover over time**\n4. **Offering to review the portfolio periodically to adjust for changing circumstances**",
+            "gen_time_s": 4.497925452000345,
+            "score_pct": 50.0,
+            "covered": 1,
+            "expected": 2
+          },
+          {
+            "id": "fin_03",
+            "response": "Financial flashpoint analysis is a method used to identify and evaluate critical moments in a person's financial life where significant decisions or events occur. These flashpoints can be influenced by various factors, including childhood experiences. Childhood experiences shape adult financial decision-making by establishing early patterns of behavior, values, and beliefs about money. For example, if a child grows up in a household where money is scarce, they may develop a fear of spending or a tendency to save excessively. Conversely, if a child is exposed to abundant resources and financial freedom, they may develop a more relaxed approach to spending and investing. Understanding these flashpoints and their underlying causes can help individuals make more informed and strategic financial decisions in adulthood.",
+            "gen_time_s": 7.365850841997599,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_04",
+            "response": "Confirmation bias is a cognitive bias where individuals tend to seek out, interpret, and remember information that confirms their pre-existing beliefs or hypotheses while ignoring or dismissing contradictory evidence. In the context of client investment choices, confirmation bias can lead to several negative outcomes:\n\n1. **Overconfidence in Specific Investments**: Clients may become overly confident in their investment choices, especially if they have a strong belief in a particular asset class or strategy. This can lead to a lack of diversification and increased risk exposure.\n\n2. **Ignoring Contradictory Information**: Clients may ignore or dismiss information that challenges their investment decisions, such as negative news about a company or sector they are invested in. This can result in poor decision-making and potential financial losses.\n\n3. **Reinforcement of Existing Beliefs**: Confirmation bias can reinforce existing beliefs, making it difficult for clients to change their investment strategies even when new information suggests a better approach. This can lead to missed opportunities for optimization.\n\n4. **Emotional Decision-Making**: Confirmation bias can lead to emotional decision-making, where clients make choices based on their feelings rather than objective analysis. This can result in impulsive buying or selling, which can be detrimental to their long-term financial goals.\n\nTo counteract confirmation bias, a financial",
+            "gen_time_s": 12.481467352001346,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_05",
+            "response": "Financial literacy refers to the knowledge and skills required to manage personal finances effectively, while financial psychology focuses on the emotional and behavioral aspects of financial decision-making. In terms of client outcomes, financial literacy helps clients make informed decisions and manage their resources better, leading to improved financial stability. On the other hand, financial psychology addresses the emotional barriers and biases that may hinder clients from making optimal financial choices, ultimately leading to better long-term financial health and satisfaction.",
+            "gen_time_s": 5.456025816005422,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_06",
+            "response": "A financial planner can use active listening and open-ended questions to uncover a client's core financial values by:\n1. **Active Listening**:\n   - **Focus on the Client**: Give the client your full attention, maintain eye contact, and avoid distractions.\n   - **Non-Verbal Cues**: Use nodding, smiling, and appropriate facial expressions to show engagement.\n   - **Paraphrasing and Summarizing**: Repeat back what the client has said to ensure understanding and show that you are listening.\n   - **Ask Clarifying Questions**: If something is unclear, ask the client to elaborate.\n2. **Open-Ended Questions**:\n   - **Explore Values**: Ask questions like \"What is most important to you in your financial life?\" or \"How do you envision your ideal retirement?\"\n   - **Encourage Reflection**: Ask questions that require the client to think deeply about their goals and values.\n   - **Avoid Yes/No Questions**: Instead of asking \"Do you want to save for retirement?\", ask \"What are your thoughts on saving for retirement?\"\n3. **Follow-Up**:\n   - **Connect the Dots**: After the client shares their values, summarize and connect them to the financial planning process.",
+            "gen_time_s": 12.826711312001862,
+            "score_pct": 100.0,
+            "covered": 3,
+            "expected": 3
+          },
+          {
+            "id": "fin_07",
+            "response": "<think>\n\n</think>\n\nNavigating money conflicts between spouses is one of the most common challenges in financial planning. These conflicts often stem not from a lack of financial knowledge, but from differing values, emotional triggers, and communication styles.\n\nHere are several effective strategies a financial planner can use to navigate these conflicts during joint planning sessions:\n\n### 1. Establish a \"No-Blame\" Environment First\nBefore diving into numbers, the planner must set the tone for the session.\n*   **Separate People from Problems:** Explicitly state that the goal is to solve the *financial issue*, not to judge the spouse's past decisions or current habits.\n*   **The \"Why\" Behind the \"What\":** When a conflict arises (e.g., one spouse wants to invest more, the other wants to save more), ask both parties to explain the *emotional* or *value-based* reason behind their preference. Often, the financial solution is secondary to the underlying need for security, freedom, or family legacy.\n\n### 2. Utilize the \"Three-Step\" Communication Framework\nEncourage the couple to use a structured approach to discuss sensitive topics:\n*   **State the Fact:** \"I noticed our cash flow is tight.\"",
+            "gen_time_s": 12.299893651994353,
+            "score_pct": 66.66666666666667,
+            "covered": 2,
+            "expected": 3
+          },
+          {
+            "id": "fin_08",
+            "response": "A planner should deliver disappointing news with empathy, clarity, and a focus on solutions. Here\u2019s a structured approach:\n\n1. **Prepare Thoroughly**:\n   - **Understand the Client\u2019s Goals**: Ensure you fully understand the client\u2019s retirement goals, timeline, and expectations.\n   - **Gather Data**: Collect all relevant financial data, including current assets, income, expenses, and projected growth.\n   - **Anticipate Questions**: Prepare for potential questions or concerns the client may have.\n\n2. **Choose the Right Setting**:\n   - **Private Meeting**: Conduct the conversation in a private, comfortable setting to ensure confidentiality and reduce anxiety.\n   - **Timing**: Choose a time when the client is not rushed or under stress.\n\n3. **Deliver the News**:\n   - **Be Honest and Direct**: Clearly state the issue without sugarcoating it.\n   - **Use Empathy**: Acknowledge the client\u2019s feelings and validate their concerns.\n   - **Explain the \"Why\"**: Provide a clear explanation of why the target age is not achievable, using data and projections.\n\n4. **Offer Solutions**:\n   - **Adjust the Plan**: Propose alternative retirement strategies, such as delaying retirement",
+            "gen_time_s": 12.330723933002446,
+            "score_pct": 50.0,
+            "covered": 1,
+            "expected": 2
+          },
+          {
+            "id": "fin_09",
+            "response": "Motivational interviewing (MI) is a client-centered, directive counseling style that helps people resolve ambivalence and move toward change. In financial counseling, MI is used to help clients explore their own motivations for financial change, identify barriers, and commit to actionable steps. It encourages long-term behavioral change by fostering a collaborative relationship, enhancing self-efficacy, and focusing on intrinsic motivation rather than external pressure.",
+            "gen_time_s": 4.682709389999218,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_10",
+            "response": "A planner can establish trust and rapport with a new client who feels anxious or shame about debt by:\n1. **Creating a safe and non-judgmental environment**:\n   - Listen actively and empathetically to the client's concerns.\n   - Avoid making immediate judgments or assumptions about their financial situation.\n   - Validate their feelings and acknowledge the challenges they face.\n2. **Building a supportive relationship**:\n   - Show genuine interest in the client's well-being, not just their financial status.\n   - Offer reassurance and encouragement throughout the planning process.\n   - Be transparent about your approach and the steps you will take to help them.\n3. **Educating the client**:\n   - Provide clear, jargon-free explanations of financial concepts.\n   - Explain the benefits of debt management and how it can improve their financial health.\n   - Offer resources and tools to help them understand their options.\n4. **Setting realistic goals**:\n   - Work with the client to set achievable short-term and long-term goals.\n   - Celebrate small wins along the way to build confidence.\n   - Adjust goals as needed based on progress and changing circumstances.\n5. **Demonstrating competence and reliability**:",
+            "gen_time_s": 12.295907211002486,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_11",
+            "response": "A client's **risk tolerance** is the amount of risk they are willing to take on in order to achieve their financial goals. It is based on their personal preferences and psychological comfort level with risk.\n\nA client's **risk capacity** is the amount of risk they can afford to take on, based on their financial situation, including their income, net worth, and time horizon. It is based on their financial ability to absorb potential losses.\n\nA client's **risk perception** is how they perceive and interpret risk. It is based on their past experiences, education, and beliefs about risk. It can influence their risk tolerance and capacity.",
+            "gen_time_s": 7.046120336999593,
+            "score_pct": 100.0,
+            "covered": 3,
+            "expected": 3
+          },
+          {
+            "id": "fin_12",
+            "response": "Recency bias causes clients to overestimate the risk of a market downturn during extended bull markets and underestimate the risk of a market downturn during extended bear markets.",
+            "gen_time_s": 2.7147960609945585,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_13",
+            "response": "Sequence of returns risk is critical in retirement income planning because it refers to the impact of market returns occurring early in retirement on the longevity of retirement savings. If market returns are poor in the early years of retirement, the portfolio may be depleted faster than expected, potentially leading to financial insecurity. This risk is particularly significant for retirees who rely on their savings to fund their living expenses.\n\nTo mitigate sequence of returns risk, retirees can:\n1. **Maintain a diversified portfolio**: A well-diversified portfolio can help reduce the impact of poor market performance in any single year.\n2. **Adjust asset allocation**: Retirees can adjust their asset allocation to be more conservative in the early years of retirement, reducing exposure to volatile assets like stocks.\n3. **Use annuities or guaranteed income products**: These products can provide a steady stream of income, reducing reliance on market performance.\n4. **Delay retirement**: Delaying retirement until the market conditions are more favorable can help ensure a more stable financial foundation.\n5. **Maintain a cash buffer**: Keeping a portion of the portfolio in cash or cash equivalents can provide liquidity during market downturns.\n\n---",
+            "gen_time_s": 12.00001732200326,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_14",
+            "response": "A financial planner should educate clients on the importance of treating all money as fungible and help them create a unified financial plan that considers all assets together.",
+            "gen_time_s": 2.6643016030066065,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_15",
+            "response": "Emotional intelligence (EI) plays a critical role in managing portfolio risk during economic crises by enabling investors to make rational, data-driven decisions despite heightened market volatility and uncertainty. Here\u2019s how EI contributes to risk management:\n\n1. **Self-Awareness**: Investors with high EI are aware of their emotional triggers, such as fear or greed, which can lead to impulsive decisions. During crises, self-awareness helps them recognize when their emotions are clouding judgment and take steps to maintain objectivity.\n\n2. **Self-Regulation**: EI allows investors to control their emotional responses to market fluctuations. Instead of reacting impulsively to news or price drops, they can stay calm and adhere to their investment strategy, reducing the likelihood of panic selling or overreacting to short-term volatility.\n\n3. **Empathy**: Empathy helps investors understand the broader economic and social implications of market movements. This can lead to more informed decisions about asset allocation and risk management, as they consider the needs of different stakeholders and the potential long-term impact of their choices.\n\n4. **Social Skills**: Strong social skills enable investors to communicate effectively with advisors, peers, and other stakeholders. This can lead to better collaboration, shared insights, and more robust risk management strategies.\n\n5",
+            "gen_time_s": 12.291695091997099,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_16",
+            "response": "**No.** While mathematical models provide a solid foundation for portfolio construction, they cannot account for client-specific emotional responses to risk and return. A financial planner must integrate quantitative analysis with qualitative client communication to ensure that the portfolio aligns with both the client\u2019s financial goals and their psychological comfort level. Ignoring emotional factors can lead to poor adherence to the investment strategy, even if the model is mathematically sound.\n\n---",
+            "gen_time_s": 5.155167911005265,
+            "score_pct": 50.0,
+            "covered": 1,
+            "expected": 2
+          },
+          {
+            "id": "fin_17",
+            "response": "No, giving clients comprehensive financial education alone is not sufficient to change destructive spending habits. While financial education is a crucial component of financial planning, it is not a standalone solution. Destructive spending habits are often deeply rooted in psychological factors, emotional triggers, and behavioral patterns that go beyond mere knowledge.\n\nTo effectively address destructive spending habits, a holistic approach is necessary. This includes:\n\n1. **Behavioral Analysis**: Understanding the underlying reasons for the spending habits, such as emotional triggers, stress relief, or social influences.\n2. **Psychological Support**: Providing counseling or therapy to help clients develop healthier coping mechanisms and emotional regulation skills.\n3. **Accountability Measures**: Implementing systems or tools that help clients track their spending and stay accountable, such as budgeting apps or regular check-ins with a financial advisor.\n4. **Goal Setting**: Helping clients set clear, achievable financial goals that align with their values and priorities, which can provide motivation to change their spending behaviors.\n5. **Long-Term Planning**: Developing a comprehensive financial plan that includes not only budgeting and saving but also investing, debt management, and retirement planning.\n\nBy addressing the root causes of destructive spending habits and providing ongoing support, financial advisors can help clients develop sustainable financial",
+            "gen_time_s": 12.225945145997684,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_18",
+            "response": "No, a planner should not assume a client's risk tolerance questionnaire score remains constant throughout their lifetime.",
+            "gen_time_s": 2.209384396999667,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_19",
+            "response": "No, it is not best to immediately challenge and correct a client's irrational financial beliefs during the initial consultation. Instead, it is more effective to build rapport and trust with the client first. By establishing a strong relationship, you can create a safe and open environment where the client feels comfortable discussing their financial beliefs and concerns. Once trust is established, you can gently challenge and correct any irrational beliefs in a way that is respectful and constructive. This approach allows the client to feel heard and understood, which can lead to a more productive and collaborative financial planning process.",
+            "gen_time_s": 6.398345504996541,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_20",
+            "response": "No, financial goals should not be established solely around numerical target returns. While numerical targets are useful for measuring progress and ensuring that investments are performing as expected, they should not be the only focus. Personal life values, such as security, freedom, and legacy, should also play a significant role in shaping financial goals.",
+            "gen_time_s": 3.91078216599999,
+            "score_pct": 50.0,
+            "covered": 1,
+            "expected": 2
+          }
+        ],
+        "wrapped": [
+          {
+            "id": "fin_01",
+            "response": "According to the Psychology of Financial Therapy, money scripts are the beliefs, attitudes, and behaviors that a person has about money. These beliefs are often formed in childhood and are influenced by a person\u2019s family, friends, and culture. Money scripts can be positive or negative, and they can have a profound impact on a person\u2019s financial behaviors. For example, a person who has a negative money script may avoid saving money, while a person who has a positive money script may be more likely to save and invest.\n\nMoney avoidance is a money script that is characterized by a person\u2019s tendency to avoid thinking about or dealing with money. This can be caused by a variety of factors, including a fear of failure, a desire to avoid responsibility, or a belief that money is bad. People who avoid money may struggle to save or invest, and they may also struggle to make good financial decisions.\n\nMoney status scripts are beliefs about money that are based on a person\u2019s social status. For example, a person who believes that money is a measure of success may be more likely to save and invest, while a person who believes that money is bad may be less likely to save or invest. Money status scripts can be influenced by a person\u2019s family, friends, and culture. For example",
+            "gen_time_s": 13.724391538002237,
+            "score_pct": 100.0,
+            "covered": 3,
+            "expected": 3
+          },
+          {
+            "id": "fin_02",
+            "response": "According to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key",
+            "gen_time_s": 13.273208689002786,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_03",
+            "response": "Financial flashpoint analysis is a psychological approach that examines how past experiences, particularly those from childhood, influence an individual\u2019s financial behaviors and decision-making in adulthood. It explores the connection between early life events and later financial choices, helping individuals understand the root causes of their financial habits. This analysis is based on the idea that our financial behaviors are often shaped by the environments and experiences we encounter during our formative years.\n\nAccording to the Psychology of Financial Flashpoints, key childhood experiences that can shape adult financial decision-making include:\n\n1. **Financial Flashpoints in Childhood**: These are significant events that occur during a person\u2019s early years and have a lasting impact on their financial behaviors. Examples include:\n   - **Financial Flashpoint 1: Financial Flashpoint 1: Financial Flashpoint 1: Financial Flashpoint 1: Financial Flashpoint 1: Financial Flashpoint 1: Financial Flashpoint 1: Financial Flashpoint 1: Financial Flashpoint 1: Financial Flashpoint 1: Financial Flashpoint 1: Financial Flashpoint 1: Financial Flashpoint 1: Financial Flashpoint 1: Financial Flashpoint 1: Financial Flashpoint 1: Financial Flashpoint 1: Financial Flashpoint 1: Financial Flashpoint 1",
+            "gen_time_s": 13.82195297400176,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_04",
+            "response": "Confirmation bias is a cognitive bias that causes individuals to seek out information that confirms their existing beliefs while ignoring or dismissing information that challenges them. In the context of client investment choices, confirmation bias can lead clients to cling to their initial investment decisions, even when new information suggests that those decisions may not be in their best interest. This bias can be particularly problematic when clients are emotionally invested in their choices, as they may become resistant to considering alternative options or advice that contradicts their initial beliefs.\n\nAccording to the Psychology of Financial Planning, key techniques to counteract confirmation bias include:\n\n1. **Seeking Diverse Perspectives**: Planners can encourage clients to consider multiple viewpoints, including those that challenge their initial assumptions. This can be done by introducing new information or perspectives that contradict the client\u2019s current beliefs. For example, a planner might present data or case studies that highlight the risks of the client\u2019s current investment strategy, prompting them to reconsider their approach.\n\n2. **Encouraging Open-Mindedness**: Planners can foster an environment where clients feel comfortable exploring new ideas and considering alternative perspectives. This can be achieved by actively listening to the client\u2019s concerns and validating their feelings, while also gently introducing new information that challenges their assumptions.\n\n3. **Using Cognitive Ref",
+            "gen_time_s": 13.26274641600321,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_05",
+            "response": "According to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key",
+            "gen_time_s": 13.646251475001918,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_06",
+            "response": "According to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key",
+            "gen_time_s": 13.375742484000511,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 3
+          },
+          {
+            "id": "fin_07",
+            "response": "According to the Psychology of Financial Planning, key strategies include:\n\n1. **Establishing a Safe Space**: Create an environment where both partners feel heard and respected. This can be achieved by encouraging open dialogue, active listening, and validating each other\u2019s perspectives.\n2. **Identifying the Root Causes**: Explore the underlying reasons for the conflict, such as past financial experiences, cultural backgrounds, or differing financial beliefs. Understanding these factors can help the couple address the issue more effectively.\n3. **Setting Clear Boundaries**: Define what behaviors are acceptable and what are not. This can help prevent escalation and ensure that discussions remain productive.\n4. **Using Neutral Ground**: Consider meeting in a neutral location or using a third-party facilitator to help guide the conversation. This can help reduce tension and promote fairness.\n5. **Focusing on Shared Goals**: Remind the couple of their common objectives, such as saving for retirement, buying a home, or supporting their children. This can help shift the focus from differences to shared aspirations.\n6. **Taking Breaks**: If emotions run high, it may be necessary to take a break and revisit the conversation later when both parties are calmer.\n7. **Seeking Professional Help**: In some cases,",
+            "gen_time_s": 13.979264343004616,
+            "score_pct": 66.66666666666667,
+            "covered": 2,
+            "expected": 3
+          },
+          {
+            "id": "fin_08",
+            "response": "According to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key",
+            "gen_time_s": 13.347833362000529,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_09",
+            "response": "According to the Psychology of Financial Counseling, motivational interviewing is a client-centered, collaborative approach that encourages clients to explore their own motivations for change rather than being told what to do. It is based on the idea that people are more likely to make lasting changes when they feel heard, respected, and motivated from within. Key principles include:\n\n1. **Open-ended questions**: These encourage clients to reflect on their own reasons for change, such as \u201cWhat would it mean to you to be more financially healthy?\u201d\n2. **Reflective listening**: The counselor reflects back what the client says to show understanding and validate their feelings. For example, if a client says, \u201cI want to save more but I keep spending,\u201d the counselor might say, \u201cSo you want to save more, but you\u2019re struggling to stop yourself from spending.\u201d\n3. **Affirmations**: These are positive statements that reinforce a client\u2019s strengths, efforts, or progress. For example, \u201cI can see you\u2019ve been working hard on this, and that takes a lot of courage.\u201d\n4. **Summarization**: This involves bringing together key points from the conversation to help the client see the bigger picture. For example, \u201cSo you\u2019ve decided to take some time to think about your",
+            "gen_time_s": 13.3683256469958,
+            "score_pct": 50.0,
+            "covered": 1,
+            "expected": 2
+          },
+          {
+            "id": "fin_10",
+            "response": "According to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key",
+            "gen_time_s": 13.910931304999394,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_11",
+            "response": "According to the Psychology of Financial Planning, key distinctions include:\n\n- **Risk tolerance** is the amount of risk a client is willing to take on in order to achieve their financial goals. It is based on a client\u2019s financial situation, time horizon, and ability to withstand market fluctuations.\n- **Risk capacity** is the amount of risk a client can take on based on their financial situation, time horizon, and ability to withstand market fluctuations. It is based on a client\u2019s financial situation, time horizon, and ability to withstand market fluctuations.\n- **Risk perception** is the client\u2019s perception of risk, which is influenced by their past experiences, beliefs, and biases. It is based on a client\u2019s past experiences, beliefs, and biases.",
+            "gen_time_s": 8.47915634400124,
+            "score_pct": 100.0,
+            "covered": 3,
+            "expected": 3
+          },
+          {
+            "id": "fin_12",
+            "response": "Recency bias distorts a client's perceived risk during extended bull or bear markets by causing them to overreact to recent market movements. In a bull market, clients may become overly optimistic, believing that the market will continue to rise and that it is too late to sell. This can lead to a failure to take profits, leaving them exposed to potential market corrections. Conversely, in a bear market, clients may become overly fearful, believing that the market will continue to fall and that it is too late to buy. This can lead to a failure to take losses, leaving them exposed to further market declines. Recency bias can also lead to a failure to recognize that market conditions are changing and that it may be time to adjust their investment strategy.",
+            "gen_time_s": 8.812763865003944,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_13",
+            "response": "According to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key",
+            "gen_time_s": 13.884482226996624,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_14",
+            "response": "According to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key",
+            "gen_time_s": 13.528007352004352,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_15",
+            "response": "According to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key",
+            "gen_time_s": 13.58271562599839,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_16",
+            "response": "According to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key",
+            "gen_time_s": 13.24105748400325,
+            "score_pct": 50.0,
+            "covered": 1,
+            "expected": 2
+          },
+          {
+            "id": "fin_17",
+            "response": "According to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key",
+            "gen_time_s": 13.525053478995687,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_18",
+            "response": "According to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key",
+            "gen_time_s": 13.18736349199753,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_19",
+            "response": "According to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key",
+            "gen_time_s": 13.117637650997494,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_20",
+            "response": "According to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key",
+            "gen_time_s": 13.353402337001171,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          }
+        ],
+        "folded": [
+          {
+            "id": "fin_01",
+            "response": "According to the Psychology of Financial Therapy, money scripts are the beliefs, attitudes, and behaviors that a person has about money. These beliefs are often formed in childhood and are influenced by a person\u2019s family, friends, and culture. Money scripts can be positive or negative, and they can have a profound impact on a person\u2019s financial behaviors. For example, a person who has a negative money script may avoid thinking about money, which can lead to financial difficulties. On the other hand, a person who has a positive money script may be more likely to save and invest, which can lead to financial well-being.\n\nMoney avoidance is a money script that is characterized by a person\u2019s tendency to avoid thinking about money. This can be caused by a variety of factors, including a fear of failure, a fear of success, or a fear of being judged by others. People who avoid thinking about money may not save or invest, which can lead to financial difficulties.\n\nMoney status scripts are beliefs about money that are based on a person\u2019s social status. For example, a person who is wealthy may believe that money is a measure of success, while a person who is poor may believe that money is a curse. These beliefs can have a profound impact on a person\u2019s financial behaviors.",
+            "gen_time_s": 12.33878322700184,
+            "score_pct": 100.0,
+            "covered": 3,
+            "expected": 3
+          },
+          {
+            "id": "fin_02",
+            "response": "According to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key",
+            "gen_time_s": 12.217754761004471,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_03",
+            "response": "Financial flashpoint analysis is a psychological approach that examines how past experiences, particularly those from childhood, influence an individual\u2019s financial behaviors and decision-making in adulthood. It explores the connection between early life events and later financial choices, helping individuals understand the root causes of their financial habits. This analysis is based on the idea that our financial behaviors are often shaped by our earliest experiences, which can either support or hinder our ability to make sound financial decisions.\n\nAccording to the Psychology of Financial Flashpoints, key childhood experiences that can shape adult financial decision-making include:\n\n1. **Financial Flashpoints in Childhood**: These are pivotal moments that have a lasting impact on a person\u2019s financial psychology. For example, if a child experiences financial instability, such as sudden job loss or bankruptcy, they may develop a fear of money or a tendency to hoard. Conversely, if a child grows up in a financially secure environment, they may develop a sense of entitlement or a lack of financial responsibility.\n\n2. **The Role of Financial Flashpoints in Shaping Financial Behaviors**: Financial flashpoints can lead to a variety of financial behaviors, such as overspending, saving, or avoiding financial planning. For instance, a person who experienced financial hardship as a child may become overly cautious with money, while",
+            "gen_time_s": 12.045529566996265,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_04",
+            "response": "Confirmation bias is a cognitive bias that causes individuals to seek out information that confirms their existing beliefs while ignoring or dismissing information that challenges them. In the context of client investment choices, confirmation bias can lead clients to cling to their initial investment decisions, even when new information suggests that those decisions may not be in their best interest. This bias can be particularly problematic when clients are emotionally invested in their choices, as they may resist changing their course of action despite evidence to the contrary.\n\nAccording to the Psychology of Financial Planning, key techniques to counteract confirmation bias include:\n\n1. **Seeking Diverse Perspectives**: Planners can encourage clients to consider multiple viewpoints, including those of trusted advisors, family members, or even opposing experts. This can help clients see the full range of possibilities and make more informed decisions.\n\n2. **Encouraging Open-Mindedness**: Planners can foster an environment where clients feel safe to explore new ideas and challenge their assumptions. This can be done by encouraging clients to ask themselves, \u201cWhat evidence would I need to change my mind?\u201d and then actively seeking out that evidence.\n\n3. **Using Decision-Making Frameworks**: Planners can introduce structured decision-making frameworks that guide clients through a systematic process of evaluating options. These frameworks can",
+            "gen_time_s": 12.070567789000052,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_05",
+            "response": "According to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key differences include:\n\nAccording to the Psychology of Financial Planning, key",
+            "gen_time_s": 12.616187083993282,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_06",
+            "response": "According to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key",
+            "gen_time_s": 12.265751924001961,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 3
+          },
+          {
+            "id": "fin_07",
+            "response": "According to the Psychology of Financial Planning, key strategies include:\n\n1. **Establishing a Safe Space**: Create an environment where both partners feel heard and respected. This can be achieved by encouraging open dialogue, active listening, and validating each other\u2019s perspectives.\n2. **Identifying the Root Causes**: Explore the underlying reasons for the conflict, such as past financial experiences, cultural backgrounds, or differing financial beliefs. Understanding these factors can help the couple address the issue more effectively.\n3. **Setting Clear Boundaries**: Define what behaviors are acceptable and what are not. This can help prevent escalation and ensure that discussions remain productive.\n4. **Using Neutral Ground**: Consider meeting in a neutral location or using a third-party facilitator to help guide the conversation. This can help reduce tension and promote fairness.\n5. **Focusing on Shared Goals**: Remind the couple of their common financial objectives, such as saving for retirement, buying a home, or supporting their children. This can help shift the focus from conflict to collaboration.\n6. **Seeking Professional Help**: If the conflict is deep-rooted or difficult to resolve, it may be beneficial to seek the help of a financial therapist or counselor. They can provide additional support and guidance.\n\n###",
+            "gen_time_s": 12.217599780000455,
+            "score_pct": 66.66666666666667,
+            "covered": 2,
+            "expected": 3
+          },
+          {
+            "id": "fin_08",
+            "response": "According to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key",
+            "gen_time_s": 10.133715528994799,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_09",
+            "response": "According to the Psychology of Financial Counseling, motivational interviewing is a client-centered, collaborative approach that encourages clients to explore their own motivations for change rather than being told what to do. It is based on the idea that people are more likely to make lasting changes when they feel heard, respected, and motivated from within. Key principles include:\n\n1. **Open-ended questions**: These encourage clients to reflect on their own reasons for change, such as \u201cWhat would it mean to you to be more financially healthy?\u201d\n2. **Reflective listening**: The counselor reflects back what the client says to help them feel understood and to reinforce their own reasoning for change.\n3. **Affirmations**: Positive feedback about the client\u2019s strengths, efforts, or progress can boost confidence and motivation.\n4. **Summarization**: Bringing together key points from the conversation to reinforce the client\u2019s own reasoning for change.\n5. **Rolling with resistance**: Instead of confronting resistance, the counselor acknowledges it and explores it further, such as \u201cI hear that you\u2019re feeling conflicted about this. Can you tell me more about that?\u201d\n6. **Supporting autonomy**: The counselor avoids imposing solutions and instead empowers the client to make their own decisions.\n\nBy using these",
+            "gen_time_s": 9.497876856999937,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_10",
+            "response": "According to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key strategies include:\n\nAccording to the Psychology of Financial Planning, key",
+            "gen_time_s": 9.327390849997755,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_11",
+            "response": "According to the Psychology of Financial Planning, key distinctions include:",
+            "gen_time_s": 1.2982184760039672,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 3
+          },
+          {
+            "id": "fin_12",
+            "response": "Recency bias distorts a client's perceived risk during extended bull or bear markets by causing them to overreact to recent market movements. In a bull market, clients may become overly optimistic, believing that the market will continue to rise and that it is too late to sell. This can lead to a failure to take profits, leaving them exposed to potential market corrections. Conversely, in a bear market, clients may become overly fearful, believing that the market will continue to fall and that it is too late to buy. This can lead to a failure to take losses, leaving them exposed to further market declines. Recency bias can also lead to a failure to recognize that market conditions are changing and that it may be time to adjust their investment strategy.",
+            "gen_time_s": 6.015510795994487,
+            "score_pct": 100.0,
+            "covered": 2,
+            "expected": 2
+          },
+          {
+            "id": "fin_13",
+            "response": "According to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key",
+            "gen_time_s": 9.56105071699858,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_14",
+            "response": "According to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key",
+            "gen_time_s": 9.41798921499867,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_15",
+            "response": "According to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key",
+            "gen_time_s": 9.452985392999835,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_16",
+            "response": "According to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key",
+            "gen_time_s": 9.362319340005342,
+            "score_pct": 50.0,
+            "covered": 1,
+            "expected": 2
+          },
+          {
+            "id": "fin_17",
+            "response": "According to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key",
+            "gen_time_s": 9.547744081995916,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_18",
+            "response": "According to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key",
+            "gen_time_s": 9.68209742399631,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_19",
+            "response": "According to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key",
+            "gen_time_s": 9.463971404002223,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          },
+          {
+            "id": "fin_20",
+            "response": "According to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key principles include:\n\nAccording to the Psychology of Financial Planning, key",
+            "gen_time_s": 9.64202042800025,
+            "score_pct": 0.0,
+            "covered": 0,
+            "expected": 2
+          }
+        ]
+      }
+    }
+  }
+}

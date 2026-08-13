@@ -1,0 +1,15 @@
+{
+  "adapter": "financial",
+  "baseline_tok_s": 32.780588410703054,
+  "arms": {
+    "4": {
+      "tok_s": 33.80612320533223,
+      "speedup": 1.0312848195944626,
+      "accept_pct": 44.927536231884055,
+      "accepted_per_step": 1.7971014492753623,
+      "exact_vs_single_token": 2,
+      "exact_vs_chunked": 3,
+      "n_prompts": 4
+    }
+  }
+}

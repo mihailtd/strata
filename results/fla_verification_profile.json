@@ -1,0 +1,40 @@
+{
+  "fla_active": true,
+  "causal_conv1d_available": false,
+  "method": "append K tokens to warm KV+recurrent cache",
+  "k_sweep": {
+    "1": {
+      "ms": 27.87063601135742,
+      "ratio_vs_k1": 1.0,
+      "required_accepted_tokens": 1.0184041870682545
+    },
+    "2": {
+      "ms": 38.06412100675516,
+      "ratio_vs_k1": 1.3657428194765215,
+      "required_accepted_tokens": 1.7133155440736454
+    },
+    "4": {
+      "ms": 33.26772799482569,
+      "ratio_vs_k1": 1.1936479663136834,
+      "required_accepted_tokens": 1.386335323064253
+    },
+    "8": {
+      "ms": 34.22706600395031,
+      "ratio_vs_k1": 1.2280690684634041,
+      "required_accepted_tokens": 1.4517354171487225
+    }
+  },
+  "attribution_k4": {
+    "wall_ms": 30.898417900607456,
+    "linear_attn_ms": 12.487043619155884,
+    "conv_ms": 1.1818485006690025,
+    "linear_attn_pct": 40.413213580461,
+    "conv_pct": 3.8249482691014016,
+    "conv_pct_of_linear_attn": 9.46459816041625
+  },
+  "break_even_formula": "E[M] >= draft_ms/t1 + ratio*(1+P_partial) - 1",
+  "assumptions": {
+    "draft_ms": 3.3,
+    "p_partial": 0.9
+  }
+}

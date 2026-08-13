@@ -1,0 +1,15 @@
+{
+  "adapter": "none",
+  "baseline_tok_s": 32.42703711150535,
+  "arms": {
+    "4": {
+      "tok_s": 42.6564282341737,
+      "speedup": 1.315458704644924,
+      "accept_pct": 56.666666666666664,
+      "accepted_per_step": 2.2666666666666666,
+      "exact_vs_single_token": 3,
+      "exact_vs_chunked": 4,
+      "n_prompts": 4
+    }
+  }
+}

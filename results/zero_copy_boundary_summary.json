@@ -1,0 +1,61 @@
+{
+  "model_name": "Qwen/Qwen3.5-4B",
+  "equivalence_gate": {
+    "passed": true,
+    "max_logit_err": 0.125,
+    "logit_mse": 0.0005187410279177129,
+    "token_match": true
+  },
+  "swap_cost_by_deployment": {
+    "a_resident_fold_ms": 18.828793996362947,
+    "b_cold_load_from_disk_ms": 367.7220769968699,
+    "c_host_roundtrip_ms_STRAWMAN": 332.3645740019856,
+    "d_ipc_command_rtt_ms": 0.0796329986769706,
+    "vram_transient_churn_bytes": 0,
+    "api_boundary_overhead_x": 1.0042293201939727,
+    "strawman_ratio_x_DO_NOT_CITE": 17.651931083115922
+  },
+  "multi_turn_chain": {
+    "cumulative_swap_ms": 73.67244899069192,
+    "mean_tok_s": 26.5780755582523,
+    "pristine_restore_drift": 0.0,
+    "turns": [
+      {
+        "turn": 1,
+        "domain": "financial_planning",
+        "route": "fold",
+        "swap_latency_ms": 19.77535899641225,
+        "tok_per_sec": 26.30334543165632,
+        "elapsed_s": 3.6497258589952253,
+        "snippet": "According to the Psychology of Financial Planning, key strategies include:\n1. **Avoidance of Risk**: The client may avoid risk by "
+      },
+      {
+        "turn": 2,
+        "domain": "postgresql",
+        "route": "fold",
+        "swap_latency_ms": 17.30692999990424,
+        "tok_per_sec": 26.214730544844965,
+        "elapsed_s": 3.6620631990008405,
+        "snippet": "Here is the schema design:\n\n**Table: `transaction_history`**\n\n*   `id`: BIGSERIAL PRIMARY KEY\n*   `transaction_id`: TEXT NOT NULL "
+      },
+      {
+        "turn": 3,
+        "domain": "astral",
+        "route": "fold",
+        "swap_latency_ms": 17.459897993830964,
+        "tok_per_sec": 26.747758179463577,
+        "elapsed_s": 3.589085835003061,
+        "snippet": "```python\nfrom fastapi import FastAPI\n\napp = FastAPI()\n\n@app.get(\"/search\")\nasync def search():\n    return {\"message\": \"Hello from"
+      },
+      {
+        "turn": 4,
+        "domain": "financial_planning",
+        "route": "fold",
+        "swap_latency_ms": 19.130262000544462,
+        "tok_per_sec": 27.04646807704435,
+        "elapsed_s": 3.549446815995907,
+        "snippet": "According to the Psychology of Financial Planning, key principles include:\n1. **Financial Planning Strategy**: The planner should "
+      }
+    ]
+  }
+}

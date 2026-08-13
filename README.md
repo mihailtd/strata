@@ -621,14 +621,6 @@ opencode --model imb/astral
 opencode run --model imb/postgresql "Design a PostgreSQL 18 schema for embeddings using pgvector"
 ```
 
-#### Windows PowerShell
-```powershell
-# Launch interactive session with Astral expert
-opencode --model imb/astral
-
-# One-off command execution with PostgreSQL expert
-opencode run --model imb/postgresql "Design a PostgreSQL 18 schema for embeddings using pgvector"
-```
 
 ---
 
