@@ -290,7 +290,31 @@ The column spread (8.2%) is **40x** the diagonal effect (0.2%). Financial-planni
 
 **The break-even model now reconciles with measurement.** Predicted $\mathbb{E}[M] = d/t_1 + r(1+P_\text{partial}) - 1$ tracks measured speedup with mean residual $-0.010$ and max $|{\cdot}| = 0.064$, residuals on both signs. The earlier version's model-vs-measurement contradiction was an artifact of the `id_kron` adapters, not a flaw in the formula.
 
-**Caveat that limits all of the above: exact-vs-chunked is 70-95% (mean 81.7%), never 100%.** The speculative loop diverges from the path its own verifier computes on 1-6 of every 20 prompts, in every condition. This is a property of the decoder, not of any cell. It correlates positively with measured speedup ($r = +0.44$, $n=9$), which is the wrong direction for comfort: the cells that look fastest are also the ones that most often stopped agreeing with the reference. These speedups should be read as an upper bound until that divergence is fixed.
+**On the exact-vs-chunked column (70-95%): this is NOT a speculation defect.** An
+earlier revision of this section claimed the loop "diverges from the path its own
+verifier computes" and called the speedups upper bounds pending a fix. That was
+wrong, and it is retracted. The gate function `chunked_reference()` runs a
+*teacher-forced single forward* over the whole sequence, while the verifier runs
+*incremental chunked forwards against a KV cache* -- different numerical paths, so
+the gate never measured speculation correctness. Controls (n=60, 20 prompts x 3
+domains, 32 tokens):
+
+| Comparison | Match |
+| :--- | :---: |
+| greedy vs greedy (determinism control) | **100.0%** |
+| **speculative vs plain greedy** | **80.0%** |
+| plain greedy vs teacher-forced (kernel-divergence control) | 83.3% |
+
+Speculation diverges from greedy at the **same rate two non-speculative paths
+diverge from each other** (80.0% vs 83.3% -- 2 prompts out of 60). Determinism is
+100%, so none of this is sampling noise. The ~20% floor is bf16 kernel
+path-dependence: the chunked multi-token kernel and the single-token recurrent
+kernel genuinely disagree (measured directly: divergence at tokens 2-4 of 32 on
+3/3 prompts, with no speculation involved). Verification is inherently
+multi-token, so it cannot use the single-token kernel, and **100% token-exactness
+against plain greedy is therefore not reachable on this stack** -- not for the
+speculative loop, and not for plain chunked decode either. The speedups stand as
+measured. The earlier `r = +0.44` correlation is void along with its premise.
 
 #### Exactness is not achievable against plain decode, and that is not a bug
 
