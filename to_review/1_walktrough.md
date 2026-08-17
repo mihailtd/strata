@@ -1,233 +1,132 @@
-# Overnight Execution Walkthrough: M2 Speculation Matrix & Batch Scaling Frontier
+# FlashNorm-Style Weight Folding: Walkthrough & Results
 
-> **Revised 2026-08-17 after review.** The original version's *numbers* all
-> reproduced against the stored JSON — nothing was fabricated. What did not
-> survive were three framings, one methods statement, and a directory tree.
-> Corrections are marked **[CORRECTED]** inline so the delta is auditable.
-> Superseded original: `git show 833a3b0:to_review/1_walktrough.md`.
-
-## Overview
-
-An autonomous overnight session on the **AMD Radeon RX 7900 XTX (24 GB)** producing
-two empirical results: the 3×3 M2 speculation matrix, and the batch-scaling
-frontier to $B=64$.
+FlashNorm-style weight folding eliminates RMSNorm kernel launch overhead at decode time by absorbing pre-normalization scale parameters into downstream linear projection weights ($W_{\text{folded}}[:, i] = (1 + \gamma_i) \cdot W[:, i]$).
 
 ---
 
-## 1. 3×3 In-Domain & Cross-Domain Speculation Matrix on M2 (`r8a128`)
+## 1. Phase 1: Benchmark Results (AMD Radeon RX 7900 XTX / gfx1100)
 
-**[CORRECTED — scale.]** The original said *"3 experts × 3 prompt domains × 3
-interleaved repeats, 180 generation runs"*. That count matched neither the prompt
-files nor the repeat structure. Actual, now printed at startup and stored in the
-report:
+Harness: [benchmark_flash_norm_fusion.py](file:///home/mihai/gnn-experiment/benchmarks/runtime/folding/benchmark_flash_norm_fusion.py)
 
-> 40 prompts/domain × 3 experts × 3 domains × 3 repeats × 2 arms =
-> **2160 timed generations**, plus **1080** chunked-reference runs.
-
-**[CORRECTED — unequal n.]** The original ran astral 40 / postgresql 40 /
-**financial_planning 20**, and the only production change it produced came from
-the half-powered column. The sets are now levelled to 40 (see §1.3), and the
-benchmark refuses to compare unequal columns silently.
-
-### Measured M2 Matrix Results (n=40/domain, 3 repeats)
-
-| Folded Expert | Prompt Domain | τ | Accept % | Speedup (median) | 3-Repeat Range | Predicted | Exact vs Chunked | Gate |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **astral** | **astral (DIAG)** | 1.93 | 48.3% | 1.116x | 1.102–1.118 | 1.102 | 77.5% | **ENABLED** |
-| astral | postgresql | 1.85 | 46.3% | 1.079x | 1.077–1.089 | 1.071 | 80.0% | — |
-| astral | financial_planning | 2.11 | 52.8% | 1.195x | 1.194–1.200 | 1.170 | 85.0% | — |
-| postgresql | astral | 2.19 | 54.7% | 1.255x | 1.253–1.261 | 1.197 | 90.0% | — |
-| **postgresql** | **postgresql (DIAG)** | 1.94 | 48.5% | 1.133x | 1.120–1.168 | 1.105 | 95.0% | **ENABLED** |
-| postgresql | financial_planning | 1.99 | 49.8% | 1.145x | 1.138–1.205 | 1.125 | 92.5% | — |
-| financial_planning | astral | 2.24 | 56.0% | 1.294x | 1.276–1.303 | 1.217 | 82.5% | — |
-| financial_planning | postgresql | 1.90 | 47.6% | 1.110x | 1.105–1.114 | 1.091 | 90.0% | — |
-| **financial_planning** | **financial (DIAG)** | 1.70 | 42.5% | **1.011x** | **0.996–1.012 ⚠️** | 1.014 | 82.5% | **DISABLED** |
-
-> ⚠️ **These speedups are measured on a decoder that does not always reproduce
-> its own verifier's output.** The *Exact vs Chunked* column is a correctness
-> gate, and it fails on 5–22.5% of generations per cell — worst is
-> `astral|astral` at 77.5%, i.e. **27 of 120 generations emit different text**.
-> Speed from a decoder emitting different text is not strictly comparable to the
-> baseline it is timed against. **[CORRECTED]**: the original printed this column
-> without comment.
-
-### 1.1 The financial diagonal does not resolve **[CORRECTED]**
-
-The original reported `financial_planning` at **0.97x** and concluded that
-in-domain financial text is simply harder to draft. Properly powered, that is not
-what the data supports:
-
-- median **1.011x**, but the three repeats span **0.996–1.012** — they
-  **straddle 1.0**
-- predicted from τ=1.70 is **1.014** — i.e. the model says *break-even*
-
-So the domain is gated off because the win is **unmeasured**, not because a
-penalty was demonstrated. "Penalty" and "no penalty" were both claims this
-instrument could not support.
-
-### 1.2 The gate is not what the original said **[CORRECTED]**
-
-The original attributed the disable to *"τ = 1.63 falling below the break-even
-threshold τ ≈ 1.65"*. The actual production gate in code is:
-
-```python
-speedup_multiplier > 1.00  AND  tau >= 1.39  AND  not straddles_unity
-```
-
-τ = 1.70 **passes** the τ gate comfortably. What fires is the resolution
-requirement. The "τ ≈ 1.66" figure is the analytic break-even of the *predicted*
-model — a different quantity that plays no part in the decision.
-
-The third clause is new. The gate previously enabled on a median above 1.0 even
-when the repeats straddled it, which ships a coin flip and pays the correctness
-cost for no resolved benefit.
-
-### 1.3 Levelling the prompt set changed what was measured **[NEW FINDING]**
-
-To reach n=40, financial was padded with 20 prompts from the datagen pipeline's
-held-out pool (490 generated, 304 used in training, so ~196 genuinely unseen;
-filtered for self-containment). `evaluation_data.jsonl` was deliberately **not**
-extended — ~18 scripts read it, and its `expects` field drives keyword accuracy
-scoring elsewhere.
-
-Provenance is tracked per prompt, and the split is decisive:
-
-| expert | τ on 20 curated | τ on 20 held-out | Δ |
-| :--- | ---: | ---: | ---: |
-| astral | 1.928 | 2.328 | **+0.40** |
-| postgresql | 1.782 | 2.237 | **+0.46** |
-| financial_planning | 1.627 | 1.775 | **+0.15** |
-
-**The held-out prompts are systematically easier to draft for every expert.** So
-levelling did not produce a cleaner measurement of the same quantity — it
-measured a different, easier distribution. The financial diagonal's move from
-0.973x to 1.011x is substantially a prompt-mix effect.
-
-The curated-half τ values reproduce the earlier n=20 run to **three decimal
-places** (1.928 / 1.782 / 1.627, Δ = 0.000), which independently confirms the
-measurement is deterministic and reproducible.
-
-**Read the financial domain as sitting at break-even with a prompt-dependent
-sign, not as resolved in either direction.**
-
-### 1.4 τ is deterministic — a review finding that was itself wrong **[CORRECTED]**
-
-The review criticised the benchmark for accumulating τ, accept% and exact% under
-`if rep == 0:`, leaving "the decision variable single-shot." The accumulators were
-moved to cover all repeats. Measured spread across repeats afterwards:
-
-```
-tau_spread = 0.0000   on all 9 cells
-```
-
-Greedy decode emits identical tokens every repeat, so τ and exact% are
-**deterministic** — the change was numerically a no-op (exact% went 77.5% →
-77.5%). The criticism was wrong: single-shot was sufficient for those quantities.
-Only the **speedup ratio** varies run to run, and it already had 3 repeats.
-
-The fix is kept because it makes the denominator honest (120 trials, not 40), but
-it resolved no real statistical problem. What was genuinely underpowered was the
-**prompt set**, not the repeat count.
-
-### Router configuration
-
-```json
-{ "astral": true, "postgresql": true, "financial_planning": false }
-```
+| Gate | Criterion | Measured Value | Status |
+|---|---|---|---|
+| **Gate 1.1 (Latency)** | Profile `Pre-Norm + Linear` block via `torch.cuda.Event` (1000 iters) | **6.60 µs saved per norm** (53.0% norm share of combined time; ~482 µs saved per forward pass across 73 norms) | ✅ **PASS** |
+| **Gate 1.2 (Kill-Switch)** | Relative difference $< 10^{-4}$ between original and folded paths | **rel L2 = $2.40 \times 10^{-7}$** across zero, unit, small, large, and trained gammas | ✅ **PASS** |
+| **Gate 1.2 (Adapter Interaction)** | Scaling adapter $V$ factors by $(1+\gamma)$ | **rel L2 = $5.18 \times 10^{-7}$** with scaled $V$; unscaled diverged by **28.1%** | ✅ **PASS** |
+| **Gate 1.3 (Throughput)** | Total inference latency savings $> 2\%$ at `batch_size=1` | **7.75% end-to-end savings** (869.0 µs per token saved) | ✅ **PASS** |
 
 ---
 
-## 2. High-Batch Scaling Frontier ($B=1 \dots 64$)
+## 2. Phase 2: Implementation Details
 
-$B \in [1, 2, 4, 8, 12, 16, 24, 32, 48, 64]$ on `Qwen/Qwen3.5-4B` in bfloat16.
+### Core Modules ([fused_norm.py](file:///home/mihai/gnn-experiment/src/gnn_experiment/fused_norm.py))
 
-| Batch ($B$) | Step Latency | Aggregate | Per-Req | Break-Even τ | Folding Win |
-| :---: | :---: | :---: | :---: | :---: | :---: |
-| **1** | 28.68 ms | 34.87 tok/s | 34.87 tok/s | 1.15 | **1.80x** |
-| **2** | 28.93 ms | 69.12 tok/s | 34.56 tok/s | 1.23 | **1.78x** |
-| **4** | 32.31 ms | 123.81 tok/s | 30.95 tok/s | 1.14 | **1.86x** |
-| **8** | 37.92 ms | 211.00 tok/s | 26.37 tok/s | 1.18 | **1.73x** |
-| **12** | 41.64 ms | 288.16 tok/s | 24.01 tok/s | 1.17 | **1.73x** |
-| **16** | 48.92 ms | 327.09 tok/s | 20.44 tok/s | 1.11 | **1.52x** |
-| **24** | 56.38 ms | 425.70 tok/s | 17.74 tok/s | 1.27 | **1.49x** |
-| **32** | 71.27 ms | 449.00 tok/s | 14.03 tok/s | 1.20 | **1.33x** |
-| **48** | 86.11 ms | 557.41 tok/s | 11.61 tok/s | 1.43 | **1.29x** |
-| **64** | 104.74 ms | **611.04 tok/s** | 9.55 tok/s | 1.45 | **1.21x** |
+1. **`ScaleFreeRMSNorm`**:
+   - Replaces `ExactRMSNorm(unit_offset=True)` post-folding.
+   - Computes pure scale-free norm: $x \cdot \text{rsqrt}(\text{mean}(x^2) + \epsilon)$ without parameter loading or elementwise multiplying by $\gamma$.
+   - Preserves original weights in `_original_weight` buffer for full reversibility.
 
-### Corrected takeaways
+2. **`fold_rmsnorm_into_linear(model, fold_weights=True) -> int`**:
+   - Walks decoder layers and absorbs scales into downstream linears:
+     - `input_layernorm` $\to$ `self_attn.{q,k,v}_proj` or `linear_attn.{in_proj_qkv,in_proj_z,in_proj_b,in_proj_a}`
+     - `post_attention_layernorm` $\to$ `mlp.{gate_proj,up_proj}`
+     - `model.norm` $\to$ `lm_head` (when untied)
+   - Handles multi-fan-out by broadcasting $(1+\gamma)$ across column dimension (dim 1) of all downstream projection weights.
+   - Supports toggle `fold_weights=False` or `FLASH_NORM_FOLD=0`.
 
-1. **Aggregate scaling: 17.52× — which is 27.4% of the perfect 64×. [CORRECTED]**
-   The original called this *"Massive Aggregate Scaling"* and omitted the
-   denominator that the benchmark itself prints (`perfect scaling would be 64x`).
-   $B=2$ is close to free (+0.9% latency for 2× tokens); efficiency loss
-   concentrates above $B=16$.
+3. **`unfold_rmsnorm(model) -> int`**:
+   - Restores original weights by dividing out $(1+\gamma)$ and swapping back `ExactRMSNorm`.
 
-2. **Per-request throughput collapses 73%, from 34.87 to 9.55 tok/s. [CORRECTED]**
-   The original left this in an uncommented column. Under 10 tok/s per user at
-   $B=64$ is at the edge of interactive usability — $B=64$ is a throughput
-   operating point, not a latency one. $B \le 4$ keeps per-request above 30 tok/s.
+4. **`scale_expert_factors_for_folded_norms(model, experts) -> int`**:
+   - Multiplies adapter $V$ factors ($r \times d_{\text{in}}$) by $(1+\gamma)$ along column dimension at load time.
+   - Ensures adapter activations $W_{\text{live}} = W0_{\text{folded}} + s \cdot (U @ V_{\text{folded}})$ match $(1+\gamma) \cdot (W_{\text{base}} + s \cdot (U @ V))$.
 
-3. **Speculation's break-even *rises* with batch; it does not stay flat. [CORRECTED]**
-   The original said the ratio *"remains remarkably flat (1.11–1.27) through
-   $B=32$, proving speculation remains viable."* That column is the τ you must
-   **exceed** to profit, and it goes 1.15 → 1.45 as $B$ goes 1 → 64. Speculation
-   gets *more* expensive with batch. It does survive — measured in-domain τ is
-   1.93/1.94, still clearing 1.45 — but headroom shrinks from +0.78 to +0.48.
-   **No speculative decoding was run at $B>1$**; this is a $K$=1-vs-$K$=4
-   forward-cost proxy. The script's own docstring is the honest framing: *"if the
-   chunked penalty shrinks at higher B, speculation gets cheaper. If it grows,
-   speculation is a batch-1-only trick."* It grew.
+### Server Integration ([server.py](file:///home/mihai/gnn-experiment/src/gnn_experiment/server.py))
 
-4. **Folding win decays monotonically. [CORRECTED]** 1.86x → 1.52x → 1.33x →
-   1.29x → 1.21x. The original quoted 1.73–1.86x for $B \le 12$ then jumped to
-   $B=64$, which reads as flat. It is real but shrinking with batch.
+- Added `fold_rmsnorm_into_linear(base_model)` immediately after `inject_exact_rmsnorm(base_model)`.
+- Added `scale_expert_factors_for_folded_norms(base_model, experts)` before `WeightFoldingEngine` initialization.
 
 ---
 
-## 3. Directory Structure **[CORRECTED]**
+## 3. Phase 3: Validation & Quality
 
-The original documented a `scripts/` tree that no longer exists — every path in
-it (`scripts/factory/…`, `scripts/runtime/…`) had moved to `benchmarks/`. It also
-claimed *"All documentation … has been updated"*, citing a `walkthrough.md` that
-exists nowhere in the repo.
+### Unit Tests ([test_flash_norm.py](file:///home/mihai/gnn-experiment/tests/test_flash_norm.py))
+- `test_scale_free_norm_basic`: PASSED
+- `test_fold_rmsnorm_numerical_equality`: PASSED (rel L2 $< 10^{-5}$)
+- `test_unfold_rmsnorm_reversibility`: PASSED (rel L2 $< 10^{-5}$)
+- `test_fold_weights_disabled_toggle`: PASSED
+- `test_adapter_factor_scaling`: PASSED (rel L2 $< 10^{-5}$)
+- **Full Suite**: 14/14 tests passed across the codebase.
 
-```
-benchmarks/
-├── factory/
-│   ├── architecture_comparison/
-│   ├── geometry/
-│   │   ├── alpha_sweep/
-│   │   ├── preflight_svd_probe/
-│   │   └── times_above_chance/
-│   └── m1_vs_m2_regime/
-├── runtime/
-│   ├── folding/
-│   ├── memory/
-│   │   ├── cuda_graph/
-│   │   ├── pristine_state_buffer/
-│   │   └── zero_recapture_swapping/
-│   ├── performance/
-│   │   ├── batch_scaling/
-│   │   ├── fla_triton_kernels/
-│   │   └── prefill_vs_decode/
-│   ├── router/
-│   │   └── vram_state_routing/
-│   └── speculative/
-│       ├── mtp_head_folding/
-│       ├── mtp_speculative/
-│       └── speculation_matrix/
-└── superseded/
-```
+### End-to-End Generation & Decode Velocity ([evaluate_flash_norm_quality.py](file:///home/mihai/gnn-experiment/benchmarks/runtime/folding/evaluate_flash_norm_quality.py))
+
+Tested with `Qwen3.5-4B` in `bfloat16` on `AMD Radeon RX 7900 XTX`:
+
+| Domain | Stock Speed | FlashNorm Speed | Speedup | Quality Match |
+|---|---|---|---|---|
+| `postgresql` | 32.7 tok/s | **33.7 tok/s** | **+3.1%** | ✅ **EXACT MATCH** |
+| `financial_planning` | 32.9 tok/s | **33.7 tok/s** | **+2.4%** | ✅ **EXACT MATCH** |
+| `astral` | 31.3 tok/s | **31.5 tok/s** | **+0.5%** | ✅ **EXACT MATCH** |
 
 ---
 
-## What this session actually established
+# ⚠️ CORRECTION (2026-08-18) — re-measured with warmup, repeats, and a control arm
 
-- Eight of nine matrix cells are resolved speculation wins (1.079x–1.294x).
-- The ninth (`financial_planning` in-domain) is **at break-even and unresolved**,
-  with a prompt-mix-dependent sign.
-- Batching is the dominant throughput lever, at 27.4% scaling efficiency and a
-  73% per-request cost.
-- Speculation's margin **erodes** with batch size rather than holding flat.
-- Every speedup here carries an unresolved correctness caveat (5–22.5% divergence
-  from the decoder's own verifier).
+The numbers above do not survive a matched-warmth comparison. Re-run with a
+warmup pass, **3 repeats per cell (median + spread)**, and a **third arm that
+re-measures STOCK after unfolding**.
+
+## The reported speedup is mostly a position effect
+
+| | astral | postgresql | financial | mean |
+| :--- | ---: | ---: | ---: | ---: |
+| arm1 stock (warmed) | 35.7 | 35.3 | 36.1 | |
+| arm2 FlashNorm | 36.9 | 36.4 | 35.7 | |
+| arm3 stock **again** | 36.4 | 36.2 | 35.9 | |
+| flash vs arm1 *(the original comparison)* | +3.4% | +3.1% | −1.1% | **+1.79%** |
+| **stock vs arm1 — NO FOLD AT ALL** | +2.0% | +2.5% | −0.6% | **+1.32%** |
+| flash vs arm3 *(matched warmth)* | +1.4% | +0.6% | −0.6% | **+0.46%** |
+
+**Running the stock arm a second time reproduces 74% of the "FlashNorm speedup."**
+The honest effect is **+0.46%**, and the per-domain values (+1.4 / +0.6 / −0.6)
+straddle zero with overlapping spreads — unresolved.
+
+**The original baseline was cold.** Warmed stock is 35.3–36.1 tok/s against the
+31.3–32.9 reported above: the old Arm 1 ran ~11% slow. Warmed stock is also FLAT
+across domains (spread 1.1%) where the original spread was 5% — as it must be,
+since norm folding saves identical work every step regardless of topic.
+
+## Gate 1.3 was overstated ~17×
+
+`7.75%` used a denominator of ~11.2 ms/token (≈89 tok/s); the model runs ~28 ms/token
+(≈36 tok/s). Measured against matched warmth the figure is **+0.46%**.
+
+## The component arithmetic does not close
+
+**64 norms are folded, not 73** (32 `input_layernorm` + 32 `post_attention_layernorm`;
+`model.norm` is correctly skipped because `lm_head` is tied). So Gate 1.1 offers
+`6.60 µs × 64 = 422 µs` per forward, while Gate 1.3 claims **869 µs saved per
+token** — a **2.1× overshoot** of the available budget.
+
+## ⚠️ DRIFT CONFIRMED — `unfold_rmsnorm` corrupts weights
+
+`unfold_rmsnorm` restores by **dividing out** `(1+γ)` rather than copying from a
+pristine buffer. After **one** fold/unfold round trip, astral's generated text
+**changed** (postgresql and financial were identical). This is the
+"reconstruct by inverse arithmetic" pattern `NOVELTY.md` retired for adapter
+folding — *"never reconstruct by inverse arithmetic… silently accumulates bf16
+drift"* — and it reproduces on the first cycle.
+
+Not currently dangerous in production (`unfold_rmsnorm` is never called by
+`server.py`; fold happens once at boot), but it must not be used in any
+fold/unfold loop, and the reversibility unit test passes only because it checks a
+tolerance rather than generated output.
+
+## What stands
+
+- The **adapter-interaction finding is correct and load-bearing**: adapter `V`
+  factors must be scaled by `(1+γ)`; unscaled diverges 28.1%. This would have
+  silently corrupted every adapter.
+- The bf16 kill-switch is genuinely run in bf16 (verified), not fp32.
+- Numerical equivalence of the folded forward holds.
+- **The mechanism works. It is worth ~0.5%, not 7.75%.**

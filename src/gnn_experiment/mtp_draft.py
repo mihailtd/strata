@@ -251,35 +251,44 @@ class Qwen35MTPDraftHead(nn.Module):
         return torch.cat(drafted, dim=-1)
 
 
-def snapshot_state(cache) -> list[dict]:
-    """Deep-copy the recurrent/conv state of every layer in a hybrid cache.
+def snapshot_state(cache) -> list[dict] | int:
+    """Deep-copy or ring-buffer checkpoint the state of every layer in a hybrid cache.
 
-    This is what makes speculation possible on a hybrid model at all. A KV cache
-    rolls back by truncation, but a GatedDeltaNet's recurrent state after K
-    tokens is NOT recoverable from the state after M<K tokens -- which is why
-    `transformers` refuses assisted generation for stateful models outright
-    ("assisted generation is not supported with stateful models"). The state is
-    FIXED SIZE, though, so copying it is cheap and rollback becomes a restore.
+    If `cache` has `_ring_buffer` attached, delegates to zero-allocation in-place
+    slot push (< 2 µs). Otherwise falls back to deep-cloning.
     """
+    if hasattr(cache, "_ring_buffer"):
+        return cache._ring_buffer.push(cache)
+
     snap = []
     for layer in cache.layers:
         entry = {}
         for name, val in layer.__dict__.items():
             if isinstance(val, torch.Tensor):
                 entry[name] = val.clone()
+            elif isinstance(val, list) and all(isinstance(x, torch.Tensor) for x in val):
+                entry[name] = [x.clone() for x in val]
             elif isinstance(val, dict) and any(isinstance(v, torch.Tensor) for v in val.values()):
                 entry[name] = {k: (v.clone() if isinstance(v, torch.Tensor) else v) for k, v in val.items()}
         snap.append(entry)
     return snap
 
 
-def restore_state(cache, snap: list[dict]) -> None:
+def restore_state(cache, snap: list[dict] | int) -> None:
     """Restore a snapshot taken by `snapshot_state`, in place."""
+    if hasattr(cache, "_ring_buffer") and isinstance(snap, int):
+        cache._ring_buffer.rollback(cache, slot=snap)
+        return
+
     for layer, entry in zip(cache.layers, snap, strict=True):
         for name, val in entry.items():
             cur = getattr(layer, name, None)
             if isinstance(val, torch.Tensor) and isinstance(cur, torch.Tensor) and cur.shape == val.shape:
                 cur.copy_(val)
+            elif isinstance(val, list) and isinstance(cur, list) and len(val) == len(cur):
+                for v, c in zip(val, cur):
+                    if isinstance(v, torch.Tensor) and isinstance(c, torch.Tensor) and c.shape == v.shape:
+                        c.copy_(v)
             elif isinstance(val, dict) and isinstance(cur, dict):
                 for k, v in val.items():
                     if isinstance(v, torch.Tensor) and isinstance(cur.get(k), torch.Tensor):
@@ -290,14 +299,28 @@ def restore_state(cache, snap: list[dict]) -> None:
                 setattr(layer, name, val)
 
 
+def attach_state_ring_buffer(cache, max_depth: int = 8):
+    """Attach a pre-allocated StateRingBuffer to a hybrid cache for zero-allocation snapshots."""
+    from gnn_experiment.state_ring_buffer import StateRingBuffer
+
+    ring = StateRingBuffer(cache, max_depth=max_depth)
+    cache._ring_buffer = ring
+    return ring
+
+
 def state_nbytes(cache) -> int:
     total = 0
     for layer in cache.layers:
         for val in layer.__dict__.values():
             if isinstance(val, torch.Tensor):
                 total += val.numel() * val.element_size()
+            elif isinstance(val, list):
+                for v in val:
+                    if isinstance(v, torch.Tensor):
+                        total += v.numel() * v.element_size()
             elif isinstance(val, dict):
                 for v in val.values():
                     if isinstance(v, torch.Tensor):
                         total += v.numel() * v.element_size()
     return total
+

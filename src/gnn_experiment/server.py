@@ -10,11 +10,18 @@ Serves local micro-experts via standard OpenAI REST API endpoints (/v1/chat/comp
    tool DAG, so there is no concurrency to schedule -- see docs/DECISIONS.md §6.
 """
 
-from __future__ import annotations
+import os
+import sys
+
+# Automatically ensure ROCm HSA runtime is preloaded for AMD Radeon RX 7900 XTX
+rocm_hsa_lib = "/opt/rocm-7.2.0/lib/libhsa-runtime64.so"
+if os.path.exists(rocm_hsa_lib) and rocm_hsa_lib not in os.environ.get("LD_PRELOAD", ""):
+    current_preload = os.environ.get("LD_PRELOAD", "")
+    os.environ["LD_PRELOAD"] = f"{rocm_hsa_lib}:{current_preload}".strip(":")
+    os.execve(sys.executable, [sys.executable] + sys.argv, os.environ)
 
 import asyncio
 import json
-import os
 import time
 import uuid
 from collections.abc import AsyncGenerator
@@ -25,6 +32,7 @@ from typing import Any
 
 import torch
 from fastapi import FastAPI
+
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
@@ -32,7 +40,11 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from gnn_experiment.cuda_graph import FoldedCudaGraphDecoder
 from gnn_experiment.dashboard import DASHBOARD_HTML
-from gnn_experiment.fused_norm import inject_exact_rmsnorm
+from gnn_experiment.fused_norm import (
+    fold_rmsnorm_into_linear,
+    inject_exact_rmsnorm,
+    scale_expert_factors_for_folded_norms,
+)
 from gnn_experiment.novel_peft import FoldableExpert, WeightFoldingEngine, set_hard_vram_cap
 from gnn_experiment.router.vram_state_router import VRAMState
 
@@ -246,6 +258,18 @@ CURATED_MODELS = [
         "id": "qwen3.5-4b-financial",
         "owned_by": "M2 Expert: Financial Planning & Wealth Modeling",
     },
+    {
+        "id": "financial_planning",
+        "owned_by": "M2 Expert: Financial Planning & Wealth Modeling (Alias)",
+    },
+    {
+        "id": "postgresql",
+        "owned_by": "M2 Expert: PostgreSQL 17 & Vector DB (Alias)",
+    },
+    {
+        "id": "astral",
+        "owned_by": "M2 Expert: Astral Python Toolchain (Alias)",
+    },
 ]
 
 
@@ -331,6 +355,13 @@ async def lifespan(app: FastAPI):
     injected_count = inject_exact_rmsnorm(base_model)
     print(f"[IMB Server] Injected {injected_count} ExactRMSNorm modules.")
 
+    # FlashNorm-style weight folding: eliminate RMSNorm kernel launch overhead by
+    # folding layer scales into downstream Linear projection weights.
+    fold_norms_enabled = os.environ.get("FLASH_NORM_FOLD", "1") != "0"
+    folded_norm_count = fold_rmsnorm_into_linear(base_model, fold_weights=fold_norms_enabled)
+    if folded_norm_count > 0:
+        print(f"[IMB Server] FlashNorm: Folded {folded_norm_count} RMSNorm scale weights into downstream Linears.")
+
     # Load factor experts into host memory
     # Alpha-sweep winners. Each is the best of five alphas measured against base
     # under the corrected (stop_strings) harness -- see README "Measured Findings".
@@ -347,6 +378,10 @@ async def lifespan(app: FastAPI):
     exp_fin = FoldableExpert.from_dir(financial_dir, "financial_planning")
     exp_pg = FoldableExpert.from_dir(postgres_dir, "postgresql")
     exp_astral = FoldableExpert.from_dir(astral_dir, "astral")
+
+    if folded_norm_count > 0:
+        scaled_factors = scale_expert_factors_for_folded_norms(base_model, [exp_fin, exp_pg, exp_astral])
+        print(f"[IMB Server] FlashNorm: Scaled {scaled_factors} adapter factors by (1+γ) for exact norm alignment.")
 
     folding_engine = WeightFoldingEngine(base_model, [exp_fin, exp_pg, exp_astral], keep_pristine=True)
 

@@ -893,3 +893,68 @@ quantified.
 
 **Kept as evidence, not as a component.** Nothing was wired into the serving path;
 `server.py` still has no draft path at all.
+
+---
+
+## 19. RE-MEASURED — FlashNorm is worth ~0.5%, ReplaySSM is unresolved; both headlines were warmup
+
+Two proposals arrived with strong headline numbers. Both re-measured with warmup,
+repeats and control arms; both headlines were measurement artefacts. **Both
+implementations are correct** — the mechanisms work, they are just small.
+
+### FlashNorm weight folding: claimed +0.5–3.1% (gate 7.75%) → **+0.46%**
+
+| | astral | postgresql | financial | mean |
+| :--- | ---: | ---: | ---: | ---: |
+| flash vs arm1 *(original comparison)* | +3.4% | +3.1% | −1.1% | **+1.79%** |
+| **stock vs arm1 — the SAME arm re-run, no fold** | +2.0% | +2.5% | −0.6% | **+1.32%** |
+| flash vs arm3 *(matched warmth)* | +1.4% | +0.6% | −0.6% | **+0.46%** |
+
+**Re-running the stock arm reproduces 74% of the reported "speedup".** Position in
+the run is worth ~1.3% on this box — a number worth remembering for every future
+A/B here. The original baseline was also cold: warmed stock is 35.3–36.1 tok/s vs
+31.3–32.9 reported, ~11% slow, and warmed stock is FLAT across domains (1.1%
+spread vs 5%) as the mechanism requires.
+
+Gate 1.3's **7.75%** used a ~11.2 ms/token denominator (≈89 tok/s) against a model
+that runs ~28 ms/token — **~17× overstated**. Component arithmetic also fails to
+close: **64 norms are folded, not 73**, so Gate 1.1 offers 6.60 µs × 64 = 422 µs
+while Gate 1.3 claims 869 µs saved per token, a **2.1× overshoot**.
+
+**⚠️ DRIFT CONFIRMED.** `unfold_rmsnorm` restores by dividing out `(1+γ)` instead
+of copying a pristine buffer. After **one** fold/unfold round trip, astral's
+generated text **changed**. This is exactly the "reconstruct by inverse
+arithmetic" pattern `NOVELTY.md` retired for adapter folding, and it reproduces on
+the first cycle. Not live (server folds once at boot and never unfolds), but it
+must never be used in a loop, and the reversibility unit test passes only because
+it checks a tolerance rather than generated output.
+
+**Genuinely correct and load-bearing:** adapter `V` factors must be scaled by
+`(1+γ)` — unscaled diverges 28.1%. That finding would have silently corrupted
+every adapter and it was caught.
+
+### ReplaySSM ring buffer: claimed +17.45% → **+9.58%, and unresolved**
+
+No warmup: Arm A of prompt 1 read **18.9 tok/s** against prompt 2's **42.1 tok/s**
+on an identical config. With warmup and 3 interleaved repeats: +15.28%, +7.45%,
++6.00% (mean +9.58%) — but **every prompt's arm spreads overlap**, so nothing is
+resolved. Arm B's slowest prompt-1 run is slower than Arm A's slowest.
+
+The mechanism bounds it anyway: 498 µs saved × ~13 rollbacks ≈ 6.5 ms of a
+~1300 ms run = **~0.5%**. The residual is 20× that, i.e. variance. Arm A also
+always ran first — the FlashNorm control above measures that bias at ~1.3%.
+
+Two factual errors: **8 full-attention layers, not 12**
+(`{'linear_attention': 24, 'full_attention': 8}`), and the recurrent ring buffer
+is **fp32, not bf16** (51.0 MB only computes in fp32; bf16 would be 25.2 MB).
+
+**Correct and worth keeping:** 100% exact text match, accept rates identical
+across arms (47.1/67.3/50.0), bit-exact restore, 51 MB, tests green.
+
+### The transferable lesson
+
+Every A/B on this box now needs: **a warmup pass, repeats with spreads, and where
+possible a control arm that re-runs the SAME configuration in the treatment's
+position.** The third one is what converted "FlashNorm gains 1.79%" into "position
+gains 1.32%, FlashNorm gains 0.46%", and no amount of repeats alone would have
+found it.
