@@ -1,0 +1,66 @@
+{
+  "device": "AMD Radeon RX 7900 XTX",
+  "batch": 2,
+  "seq_len": 128,
+  "clean_ms_per_step": 460.9291264001513,
+  "forward_ms_per_step": 187.44244779991277,
+  "backward_optim_ms_per_step": 273.4866786002385,
+  "backward_to_forward_ratio": 1.4590434653957063,
+  "gated_delta_fwd_ms": 23.167190974950792,
+  "gated_delta_pct_of_step_fwd": 5.026193756920106,
+  "gated_delta_upper_bound_pct": 12.359628913767084,
+  "rope_fn_ms": 0.9869252018630504,
+  "rope_upper_bound_pct": 0.5265217209052632,
+  "by_class": [
+    {
+      "class": "LigerQwen3MoeSwiGLUMLP",
+      "ms_per_step": 43.925327038764955,
+      "pct_of_forward": 23.434034048495494,
+      "pct_of_step": 9.529735597709136
+    },
+    {
+      "class": "Qwen3_5GatedDeltaNet",
+      "ms_per_step": 23.167190974950792,
+      "pct_of_forward": 12.359628913767082,
+      "pct_of_step": 5.026193756920106
+    },
+    {
+      "class": "Qwen3_5Attention",
+      "ms_per_step": 9.1582692861557,
+      "pct_of_forward": 4.885909991920177,
+      "pct_of_step": 1.9869148555834668
+    },
+    {
+      "class": "LigerRMSNormForQwen3Next",
+      "ms_per_step": 4.792343802098188,
+      "pct_of_forward": 2.5567014613540584,
+      "pct_of_step": 1.0397138144699842
+    },
+    {
+      "class": "Conv1d",
+      "ms_per_step": 4.002302590012551,
+      "pct_of_forward": 2.135216775596554,
+      "pct_of_step": 0.8683119292700088
+    },
+    {
+      "class": "apply_rotary_pos_emb",
+      "ms_per_step": 0.9869252018630504,
+      "pct_of_forward": 0.5265217209052633,
+      "pct_of_step": 0.21411647590398977
+    },
+    {
+      "class": "FusedRMSNormGated",
+      "ms_per_step": 0.39923760136589415,
+      "pct_of_forward": 0.21299209760217394,
+      "pct_of_step": 0.08661583278191445
+    }
+  ],
+  "hooked_counts": {
+    "Qwen3_5GatedDeltaNet": 24,
+    "Conv1d": 24,
+    "FusedRMSNormGated": 24,
+    "LigerQwen3MoeSwiGLUMLP": 32,
+    "LigerRMSNormForQwen3Next": 81,
+    "Qwen3_5Attention": 8
+  }
+}

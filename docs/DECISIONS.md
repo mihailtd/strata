@@ -614,3 +614,60 @@ for the wrong reason:**
    initialisation** — a property of LoRA worth knowing, not just a guard to add.
 3. λ=0.1 adds ~0.005 to a loss of ~1.5. Too weak to move a subspace; a null there
    would have measured the λ, not the idea.
+
+---
+
+## 14. SIZED AND REJECTED — custom Triton kernels for RoPE and GatedDeltaNet
+
+Liger's 47.5% (§12) reset the prior on fusion, so the two ops it does NOT cover
+were sized before committing to a kernel project
+([`benchmark_unfused_op_sizing.py`](../benchmarks/factory/training_profile/benchmark_unfused_op_sizing.py)).
+
+Step = 460.9 ms: **forward 187.4 ms (41%), backward+optimizer 273.5 ms (59%)**.
+Architecture is 24 GatedDeltaNet + 8 full-attention layers.
+
+| layer type | ms/step | % of forward | % of step |
+| :--- | ---: | ---: | ---: |
+| LigerQwen3MoeSwiGLUMLP | 43.93 | 23.4% | 9.5% |
+| **Qwen3_5GatedDeltaNet** | **23.17** | **12.4%** | **5.0%** |
+| Qwen3_5Attention | 9.16 | 4.9% | 2.0% |
+| LigerRMSNormForQwen3Next | 4.79 | 2.6% | 1.0% |
+| Conv1d | 4.00 | 2.1% | 0.9% |
+| **apply_rotary_pos_emb** | **0.99** | **0.5%** | **0.2%** |
+
+**RoPE — REJECTED.** 0.21% of the step, ≤0.53% including a proportional backward.
+Perfect fusion caps at **1.005×**. Liger's blanket `NotImplementedError` for
+Qwen3.5 costs essentially nothing.
+
+**GatedDeltaNet — REJECTED, though 25× the better candidate.** 5.03% forward,
+≤**12.36%** including backward, capping at **1.141×**. That bound is generous
+twice over: it assumes the backward scales with the forward AND that a fused
+kernel makes the op *free*. A realistic 2–3× on the op yields ~1.08×, for
+multi-week Triton work on gfx1100 where `fla` does not build — against 47.5%
+already obtained from a config flag. And this is the **training** path only;
+§8 already concluded training time is not the bottleneck worth optimising.
+
+**⚠️ THREE MEASUREMENT ATTEMPTS, TWO OF WHICH SILENTLY ERASED THE TARGET OP.**
+Recorded because both failures looked like results:
+
+| attempt | method | failure | symptom |
+| ---: | :--- | :--- | :--- |
+| 1 | leaf-module hooks | GatedDeltaNet is COMPOSITE — its scan is functional code in its own forward, so it was never hooked | 240 of 459 ms attributed; **"GatedDeltaNet = 0.0%"** |
+| 2 | all modules − direct children | CONTAINER modules (`ModuleList`) have no forward, never time, so subtracting them removes nothing and parents keep their whole subtree | sum **239%** of step, UNATTRIBUTED **−643 ms** |
+| 3 | whitelist of non-nesting sibling classes, inclusive | — | coherent |
+
+Attempt 1's "0.0%" reads as *"already free, do not fuse"* when it means *"never
+measured"*. Attempt 2 was caught only because an `UNATTRIBUTED` row had been added
+after attempt 1 — without it, a 239% total would have printed as a plausible
+ranked table.
+
+Two rules this leaves behind for any future op sizing here:
+1. **Print the unattributed remainder.** A coverage hole must surface as a number.
+2. **Do not use `register_full_backward_hook` for attribution** — it returned
+   `0.00%` for GatedDeltaNet (unreliable on multi-input/output modules). The
+   backward split here is measured by **ablation** (forward-only vs full step),
+   which cannot silently return zero, and the per-op backward is reported as an
+   explicit upper bound rather than a fake measurement.
+
+`torch.profiler` remains unusable on this ROCm build (zero CUDA events, no
+roctracer), which is why none of this could be done with standard tooling.
