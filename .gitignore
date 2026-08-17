@@ -19,3 +19,6 @@ data/**
 mlruns/
 mlruns.db
 mlartifacts/
+
+# throwaway adapters from the loss-curve diagnostic (curves themselves are tracked)
+results/loss_curves/adapters/

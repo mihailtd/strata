@@ -1,0 +1,74 @@
+{
+  "ema_alpha": 0.1,
+  "domains": {
+    "astral": {
+      "n_steps": 150,
+      "epochs_seen": 0.7361963190184049,
+      "n_records": 815,
+      "first_loss": 1.7084953784942627,
+      "final_ema": 1.071771041262521,
+      "min_ema": 1.0655539591865608,
+      "tail_slope_per_step": -0.0013850825530985925,
+      "smoothed_noise_floor": 0.017141275619542824,
+      "still_descending_at_max_steps": false,
+      "steps_to_reach_final": {
+        "within_0.05": 106,
+        "within_0.02": 107,
+        "within_0.01": 109
+      },
+      "early_stop_would_fire_at": {
+        "min_delta=0.005,patience=15": 55,
+        "min_delta=0.005,patience=25": 65,
+        "min_delta=0.01,patience=15": 55,
+        "min_delta=0.02,patience=15": 54,
+        "min_delta=0.01,patience=30": 70
+      }
+    },
+    "financial_planning": {
+      "n_steps": 150,
+      "epochs_seen": 1.9736842105263157,
+      "n_records": 304,
+      "first_loss": 2.2250328063964844,
+      "final_ema": 0.8764101923423704,
+      "min_ema": 0.8409091078665819,
+      "tail_slope_per_step": 0.0004149183244528882,
+      "smoothed_noise_floor": 0.014951812593463926,
+      "still_descending_at_max_steps": false,
+      "steps_to_reach_final": {
+        "within_0.05": 108,
+        "within_0.02": 109,
+        "within_0.01": 110
+      },
+      "early_stop_would_fire_at": {
+        "min_delta=0.005,patience=15": 45,
+        "min_delta=0.005,patience=25": null,
+        "min_delta=0.01,patience=15": 45,
+        "min_delta=0.02,patience=15": 42,
+        "min_delta=0.01,patience=30": null
+      }
+    },
+    "postgresql": {
+      "n_steps": 150,
+      "epochs_seen": 1.4598540145985401,
+      "n_records": 411,
+      "first_loss": 1.618964433670044,
+      "final_ema": 0.7481486944948431,
+      "min_ema": 0.7255313692926031,
+      "tail_slope_per_step": -0.005353036988794584,
+      "smoothed_noise_floor": 0.018259072382407617,
+      "still_descending_at_max_steps": false,
+      "steps_to_reach_final": {
+        "within_0.05": 131,
+        "within_0.02": 135,
+        "within_0.01": 135
+      },
+      "early_stop_would_fire_at": {
+        "min_delta=0.005,patience=15": 44,
+        "min_delta=0.005,patience=25": null,
+        "min_delta=0.01,patience=15": 44,
+        "min_delta=0.02,patience=15": 44,
+        "min_delta=0.01,patience=30": null
+      }
+    }
+  }
+}

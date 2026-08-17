@@ -189,44 +189,75 @@ the experiment — not a verifier bug hunt.
 
 ---
 
-## 8. OPEN — fixed `max_steps` is wrong, but not only in the direction assumed
+## 8. RESOLVED — keep a single `max_steps`; no early stopping, no per-domain budget
 
-**Measured:** at effective batch 4 (`per_device=2 × grad_accum=2`) × 150 steps =
-600 samples seen:
+**Measured 2026-08-17.** Per-step loss curves captured for all three domains
+(`--logging-steps 1`, 150 steps each, `results/loss_curves/*.json`, analysed by
+`scripts/analyze_loss_curves.py`). This settles two proposals — **both are
+rejected by the data, including the one this file previously leaned toward.**
 
-| domain | records | epochs seen |
-| :--- | ---: | ---: |
-| astral | 815 | **0.74** |
-| postgresql | 411 | 1.46 |
-| financial_planning | 304 | **1.97** |
+### The premise was that domains converge at different rates. They do not.
 
-**Astral never sees a quarter of its training data; financial sees its data
-twice.** A shared step budget across domains is incoherent.
+| domain | records | epochs seen | **converges at step** |
+| :--- | ---: | ---: | ---: |
+| astral | 815 | 0.74 | **107** |
+| financial_planning | 304 | 1.97 | **109** |
+| postgresql | 411 | 1.46 | **135** |
 
-**But early stopping only cuts steps** — it cannot give astral the epoch it is
-missing. It addresses at most half of this.
+("converges" = first step whose EMA is within 0.02 of the final EMA.)
 
-**Three unresolved objections before implementing EMA early stopping:**
+**Convergence step does not track dataset size or epochs.** astral has 2.7× the
+data of financial and sees 0.38× the epochs, yet both converge at essentially the
+same step (107 vs 109). postgresql sits between them on both inputs and converges
+*latest*. There is no monotonic relationship, so the epoch asymmetry — real as it
+is — does **not** translate into a convergence-rate asymmetry.
 
-1. `lr_scheduler_type="cosine"` makes the LR at step *t* a function of
-   `max_steps`. A plateau at step 100/150 is partly the schedule decaying, and
-   halting there skips the low-LR anneal. If fewer steps are wanted, **set**
-   `max_steps` lower so the cosine compresses — do not interrupt a 150-step
-   schedule.
-2. `logging_steps=10` → 15 loss points per run. A patience of 15 *steps* is 1.5
-   logged points. Needs `logging_steps=1` first.
-3. No per-step curve has ever been recorded (`mlruns.db` holds 41 `final_loss`
-   rows and nothing else), so ε=0.005 and patience=15 are guesses about an
-   unobserved curve.
+That removes the motivation for per-domain step budgets. A single budget is
+defensible, and epoch-normalising `max_steps` would be solving a problem the
+curves say does not exist.
 
-**And the safety issue:** the eval resolves ±10pp, so a real 4pp regression from
-under-training would be **invisible**.
+### EMA early stopping would under-train every domain, not just astral
 
-**Cheapest next step:** set `logging_steps=1`, train the three domains, look at
-the curves (~10 GPU-min). That tests the "different domains converge at different
-rates" hypothesis directly and yields ε/patience empirically. A deterministic
-alternative may then be better than early stopping: set
-`max_steps = ceil(target_epochs × records / effective_batch)` per domain, which
-fixes the asymmetry in **both** directions with no callback and no
-schedule conflict — at the cost of changing what "matched methodology" means
-(comparable in *data exposure* rather than in *compute*), which would be an m3.
+Where EMA + min-delta + patience would actually fire:
+
+| domain | needs | d=0.005,p=15 | d=0.005,p=25 | d=0.01,p=15 | d=0.02,p=15 | d=0.01,p=30 |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| astral | 107 | **55** | 65 | 55 | 54 | 70 |
+| financial_planning | 109 | **45** | never | 45 | 42 | never |
+| postgresql | 135 | **44** | never | 44 | 44 | never |
+
+The proposed settings (ε=0.005, patience=15) stop at **~30–37% of the steps
+actually needed**, on all three. The curves have noisy plateaus around step
+42–55 that EMA+patience reads as convergence while ~0.2–0.3 of loss is still to
+come.
+
+**The parameter sensitivity is the second reason not to ship it.** For postgresql
+and financial, `patience=15` fires at step 44–45 while `patience=25` never fires
+at all — the outcome flips between "cut 70% of training" and "change nothing" on
+a constant nobody had data for. Combined with a ±10pp eval that could not detect
+the resulting quality regression, this was a coin flip that would have silently
+degraded every adapter.
+
+### No best-checkpoint selection either
+
+All three end slightly above their minimum EMA (astral +0.006, postgresql +0.022,
+financial +0.036), which would suggest saving the best checkpoint rather than the
+last. But each gap is **within 3× the smoothed step-to-step noise floor**
+(0.015–0.018), so it is not distinguishable from noise. Not worth the complexity.
+
+### What is actually available
+
+A single fixed cut, and it is modest:
+
+- **`max_steps` 150 → 135** keeps all three domains within 0.02 of their final
+  loss, for a **~10% saving**. Safe.
+- **150 → 110** would save 27% and keeps astral and financial within 0.05, but
+  costs postgresql, which needs 135.
+
+`max_steps=150` is roughly right and, for postgresql, arguably short — its tail
+slope is still −0.0054/step at step 150. **Training time is not the bottleneck
+worth optimising here**; the honest conclusion is to leave the budget alone or
+take the 10%.
+
+**Do not implement EMA early stopping. Do not implement per-domain epoch
+budgeting.** Both were reasonable hypotheses; the curves rejected both.
