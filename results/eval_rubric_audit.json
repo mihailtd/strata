@@ -1,0 +1,39 @@
+{
+  "astral": {
+    "file": "data/astral/evaluation_data.jsonl",
+    "n": 40,
+    "n_with_rubric": 0,
+    "prompts_containing_a_good_term": 2,
+    "giveaway_pct": 5.0,
+    "n_leading": 13
+  },
+  "postgresql": {
+    "file": "data/postgresql/evaluation_data.jsonl",
+    "n": 40,
+    "n_with_rubric": 0,
+    "prompts_containing_a_good_term": 22,
+    "giveaway_pct": 55.0,
+    "n_leading": 14
+  },
+  "financial_planning": {
+    "file": "data/financial_planning/evaluation_data.jsonl",
+    "n": 20,
+    "n_with_rubric": 20,
+    "rubric_terms_total": 44,
+    "rubric_terms_in_question": 30,
+    "giveaway_pct": 68.18181818181819,
+    "fully_given_away_ids": [
+      "fin_01",
+      "fin_03",
+      "fin_05",
+      "fin_06",
+      "fin_10",
+      "fin_11",
+      "fin_12",
+      "fin_14",
+      "fin_20"
+    ],
+    "n_fully_given_away": 9,
+    "n_leading": 9
+  }
+}

@@ -373,3 +373,64 @@ take the 10%.
 
 **Do not implement EMA early stopping. Do not implement per-domain epoch
 budgeting.** Both were reasonable hypotheses; the curves rejected both.
+
+---
+
+## 9. RESOLVED — the financial expert was never inert; its eval was blind
+
+**Symptom:** the financial expert scored **83.33%** on its own domain and the base
+model scored **83.33%** — an adapter effect of exactly **+0.00pp**, against
+astral's +44.44pp and postgresql's +24.08pp. One of three production experts
+appeared dead, and a third of the evaluation grid with it.
+
+**Cause 1 — the instrument.** 68.2% of the eval's rubric terms appeared verbatim
+in their own question, and 9 of 20 questions gave away *every* term they asked
+for. `fin_01` asks about "money scripts... money avoidance and money status" and
+scores `['money script','money avoidance','money status']`. The rubric measured
+whether the model echoes the prompt. **Base sat at 100% on 14 of 20 items.**
+
+Run per-question, the adapter **changed 20/20 answers** and the rubric scored
+**0** of those changes. Alive adapter, blind instrument.
+
+The relationship holds across all three domains and is now checkable statically
+by `scripts/audit_eval_rubrics.py`, with no GPU:
+
+| domain | giveaway | adapter effect |
+| :--- | ---: | ---: |
+| astral | 5.0% | +44.44pp |
+| postgresql | 55.0% ⚠️ | +24.08pp |
+| financial_planning | 68.2% ⚠️ | +0.00pp |
+
+⚠️ **postgresql's +24.08pp is therefore an understatement**, and any future null
+result must be checked against this audit before being reported as an adapter
+failure.
+
+**Cause 2 — the corpus taught recitation.** With a 0.0%-giveaway eval the adapter
+measured +10.00pp, CI [−2.50, +22.50] — visible but underpowered. The reason was
+in the training data: **235 "How…", 64 "What…", 5 scenarios, and 0 questions
+asking the model to classify a described client.** Asked definitionally it named
+"money scripts" correctly; shown a vignette it invented "Financial Identity
+Framework", "Financial Enmeshment", "autobiographical memory".
+
+**Fix:** 78 applied classification records (taxonomy, flashpoint→script→behaviour,
+bias, risk tolerance vs capacity) → **+35.00pp, CI [+15.00, +55.00], excludes
+zero**. All four confabulations corrected.
+
+**Two guard-caught mistakes worth keeping.** (a) The generator twice produced
+prefix diversity below the ~97% house standard, including two framings with 40
+characters of fixed template before the variable text — the same failure that
+killed the 940-record corpus. Fixed the generator, not the threshold. (b) Making
+money scripts 64% of the applied set caused the adapter to over-apply that
+framework, answering a mental-accounting vignette with "money vigilance" (**50 →
+0, worse than base**). **Class balance of applied examples is a hyperparameter.**
+
+**Not promoted.** `m2_financial_r8a128`, `evaluation_data.jsonl` and
+`training_data.jsonl` are untouched; the new work sits alongside as `*_v2`.
+Swapping the canonical eval would break comparability with every historical
+financial number in the repo — a human decision, not a side effect.
+
+**Residual:** `v2_18` still over-applies the money-script frame (−50), and the two
+control categories that received no new data slipped from +25.0 to +12.5.
+
+Evidence: `benchmarks/factory/eval_instrument/`, `results/eval_rubric_audit.json`,
+`results/diagnose_financial_planning{,_v2,_v2corpus}.json`.

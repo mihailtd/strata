@@ -108,6 +108,12 @@ def main():
             "rank 2r, not r -- see the printed warning."
         ),
     )
+    ap.add_argument(
+        "--dataset",
+        default=None,
+        help="override the domain's training file (e.g. a corpus revision). Recorded in "
+             "regime.json so an adapter never loses track of what it was trained on.",
+    )
     ap.add_argument("--max-steps", type=int, default=150)
     ap.add_argument("--lr", type=float, default=2e-4)
     ap.add_argument("--vram-cap-gb", type=float, default=22.0)
@@ -126,6 +132,8 @@ def main():
     args = ap.parse_args()
 
     data_rel, out_rel = DOMAINS[args.domain]
+    if args.dataset:
+        data_rel = args.dataset
     dataset_path = REPO_ROOT / data_rel
     out_dir = Path(args.out) if args.out else REPO_ROOT / out_rel
 
