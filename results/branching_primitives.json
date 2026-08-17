@@ -1,0 +1,66 @@
+{
+  "device": "AMD Radeon RX 7900 XTX",
+  "horizon": 4,
+  "ssm_bytes_per_checkpoint": 51904512,
+  "kv_bytes_per_token": 32768,
+  "claim2": {
+    "supported": true,
+    "rollback_ms": 0.3108517994405702,
+    "reprefill_ms": 37.33308379887603,
+    "speedup_vs_reprefill": 120.09930090822431,
+    "bad_tokens": [
+      3427,
+      198,
+      4703,
+      5813
+    ],
+    "resumed": [
+      3427,
+      198,
+      4703,
+      5813
+    ],
+    "reference": [
+      3427,
+      198,
+      4703,
+      5813
+    ]
+  },
+  "claim3": {
+    "explore_ms": 108.66643599729287,
+    "regen_ms": 116.30916700232774,
+    "two_branch_b_wins_ms": 217.33287199458573,
+    "two_branch_a_wins_ms": 333.64203899691347,
+    "first_branch_winner_penalty_pct": 53.51660148549699
+  },
+  "claim1": {
+    "supported": false,
+    "ring_retains_attention_tensors": false,
+    "kv_bytes_per_token": 32768,
+    "tree_sizing": {
+      "2x4": {
+        "live_nodes": 8,
+        "kv_mb": 0.262144,
+        "ssm_mb": 415.236096
+      },
+      "4x4": {
+        "live_nodes": 16,
+        "kv_mb": 0.524288,
+        "ssm_mb": 830.472192
+      },
+      "4x8": {
+        "live_nodes": 32,
+        "kv_mb": 1.048576,
+        "ssm_mb": 1660.944384
+      }
+    },
+    "max_depth": 8,
+    "branch_a_kv_shape": [
+      1,
+      4,
+      4,
+      256
+    ]
+  }
+}

@@ -958,3 +958,62 @@ possible a control arm that re-runs the SAME configuration in the treatment's
 position.** The third one is what converted "FlashNorm gains 1.79%" into "position
 gains 1.32%, FlashNorm gains 0.46%", and no amount of repeats alone would have
 found it.
+
+---
+
+## 20. MEASURED — what the state ring buffer unlocks, and the asymmetry that decides it
+
+ReplaySSM's direct speedup is unresolved and bounded near ~0.5% (§19). Judging it
+on that alone would be near-sighted — **a primitive's value is not only its direct
+speedup**. Three capability claims were made for it; all three now have a
+benchmark, **including the one predicted to fail**
+([`benchmark_branching_primitives.py`](../benchmarks/runtime/speculative/state_replay/benchmark_branching_primitives.py)).
+
+| claim | verdict | measurement |
+| :--- | :--- | :--- |
+| **② Time-travel steering** | **SUPPORTED** | rewind is exact and **120× cheaper than re-prefilling** (0.39 ms vs 35.7–47 ms). Resumed tokens match a fresh-cache reference. Bounded to `max_depth=8` checkpoints. |
+| **③ Local beam search** | **PARTIAL** | 2-branch search costs 220 ms when the second branch wins, **340 ms when the first wins (+54.6%)** — its KV was cropped and must be regenerated. |
+| **① Speculative trees** | **NOT SUPPORTED** | the ring retains **zero KV bytes** (stores `list`s of ints per attention layer), so branch A dies when branch B is explored. |
+
+### ⚠️ The state geometry — and it is the OPPOSITE of what was assumed
+
+| | measured |
+| :--- | ---: |
+| SSM state per checkpoint | **51.90 MB** (fixed, length-independent) |
+| Attention KV | **32.77 KB per token** (grows) |
+| Ring buffer, 8 slots | **415.2 MB** |
+
+**The crossover is ~1,584 tokens.** One SSM checkpoint costs as much as 1,584
+tokens of KV. Speculative trees span 8–32 tokens, so **SSM state is 50–200× more
+expensive than attention KV in this regime.**
+
+Both the ReplaySSM write-up and my own review asserted that attention KV was the
+expensive half blocking trees. **Both were wrong.** KV for a full width-4 × depth-8
+tree is **1.05 MB**; the SSM slots for it are **1,661 MB**.
+
+| tree | live nodes | KV | **SSM** |
+| :--- | ---: | ---: | ---: |
+| width 2 × depth 4 | 8 | 0.26 MB | **415 MB** |
+| width 4 × depth 4 | 16 | 0.52 MB | **830 MB** |
+| width 4 × depth 8 | 32 | 1.05 MB | **1,661 MB** |
+
+**Encouraging consequence:** width-2 × depth-4 needs exactly **8 live nodes, which
+`max_depth=8` already holds**. The only missing piece is KV forking at **0.26 MB**.
+Tree speculation at modest width is a small piece of plumbing, not a
+memory-infrastructure project — a materially better position than "needs paged KV
+blocks."
+
+**Third factual error in the write-up:** the ring buffer is **415.2 MB (1.7% of
+24 GB)**, not the claimed 51.0 MB / 0.208% — 8× understated. Still inside the 5%
+kill-switch, so that verdict stands; the number does not. (Errors 1 and 2: 8
+full-attention layers not 12; fp32 recurrent states not bf16.)
+
+### The lesson worth keeping
+
+Small direct gains can unlock disproportionate capability, and a repo that only
+asks "how much faster?" will discard its own foundations. **The right response is
+not to lower the evidence bar for capability claims — it is to write the benchmark
+that tests them.** Doing so here beat both available narratives: two of three
+claims hold, the third is half-built, the missing half is 200× cheaper than
+anyone (including this reviewer) assumed, and the real constraint turned out to be
+somewhere nobody was looking.

@@ -132,3 +132,80 @@ alternate order.
 
 **The implementation is correct. What it replaces was never a meaningful share of
 the loop, so there is no measurable end-to-end gain to claim.**
+
+---
+
+# REFRAMING (2026-08-18) — what this primitive is actually for
+
+The correction above refutes the **speedup claim**. It does not argue for deleting
+the code, and those are separate questions worth keeping separate.
+
+**A primitive's value is not only its direct speedup.** Judging ReplaySSM solely
+on linear speculative decoding — where its ceiling is ~0.5% — is near-sighted.
+Zero-allocation, bit-exact, O(1) state rollback is infrastructure for generation
+strategies that are otherwise too expensive to attempt at all. That argument is
+sound, and this repo should hold it alongside the refuted number rather than
+letting one erase the other.
+
+But **"unlocks X" is a claim like any other, and claims get measured here.** Three
+were made; each now has a benchmark, including the one predicted to fail
+([`benchmark_branching_primitives.py`](../benchmarks/runtime/speculative/state_replay/benchmark_branching_primitives.py)).
+
+## The asymmetry that decides all three — MEASURED, and it runs the opposite way
+
+Qwen3.5 is hybrid: **24 GatedDeltaNet (SSM) + 8 full-attention** layers. Measured
+geometry:
+
+| | measured | branchable today? |
+| :--- | ---: | :--- |
+| **SSM state** | **51.90 MB per checkpoint** (fixed, independent of length) | **YES** — full copies in pre-allocated slots |
+| **Attention KV** | **32.77 KB per token** (grows) | **NO** — only an integer `seq_lens[slot]` is kept; restore CROPS |
+
+⚠️ **An earlier draft of this analysis (including my own review) asserted that
+attention KV was the expensive half blocking trees. That is wrong.** The crossover
+is **~1,584 tokens**: one SSM checkpoint costs as much as 1,584 tokens of KV.
+Speculative trees span 8–32 tokens, so in this regime **SSM state is 50–200×
+more expensive than KV**.
+
+| tree shape | live nodes | KV needed | **SSM needed** |
+| :--- | ---: | ---: | ---: |
+| width 2 × depth 4 | 8 | 0.26 MB | **415 MB** |
+| width 4 × depth 4 | 16 | 0.52 MB | **830 MB** |
+| width 4 × depth 8 | 32 | 1.05 MB | **1,661 MB** |
+
+**Consequence, and it is encouraging:** a width-2 × depth-4 tree needs exactly
+**8 live nodes — which `max_depth=8` already holds.** The missing piece is KV
+forking, worth **0.26 MB**. Tree speculation at modest width is a small piece of
+plumbing away, not a memory-infrastructure project.
+
+**Also corrects the footprint above:** the ring buffer is **415.2 MB (1.7% of
+24 GB)**, not the 51.0 MB / 0.208% claimed — 8× understated. Still inside the 5%
+gate, so that verdict stands, but the number does not.
+
+## Claim-by-claim
+
+**② Time-travel steering — SUPPORTED.** Rewind to a checkpoint, inject a
+correction, resume. Purely linear: the abandoned future is never revisited, so
+destructive cropping is harmless. Bounded to `max_depth=8` checkpoints.
+
+**③ Local beam search — PARTIAL.** Branch A, rewind, branch B, keep the better.
+Free when B wins (already resident). When **A** wins, its KV was cropped away and A
+must be regenerated. Real, but not the "instant rollback, select optimal path" the
+summary above implies.
+
+**① Speculative trees — NOT SUPPORTED TODAY, but cheaper to fix than assumed.**
+Requires multiple branches alive at once. The ring buffer retains **zero KV
+bytes** (verified: it stores `list`s of ints per attention layer), so branch A's
+entries are freed the moment branch B is explored. The fix is KV forking — and at
+0.26 MB for a width-2 × depth-4 tree that is plumbing, not infrastructure. The
+binding constraint is instead **SSM slots at 51.90 MB each**: `max_depth=8` holds
+8 nodes (415 MB), enough for width-2 × depth-4 and nothing wider.
+
+## The general lesson worth keeping
+
+Small direct gains can unlock disproportionate capability, and a repo that only
+ever asks "how much faster?" will discard its own foundations. **The correct
+response is not to lower the evidence bar for capability claims — it is to write
+the benchmark that tests them.** Here that produced a sharper result than either
+"keep it, it's strategic" or "cut it, it's 0.5%": two of three claims hold, the
+third is half-built, and the missing half is now specified.
