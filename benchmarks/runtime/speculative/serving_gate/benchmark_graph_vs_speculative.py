@@ -52,6 +52,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
+from gnn_experiment.bucketed_speculative import BucketedSpeculativeDecoder  # noqa: E402
 from gnn_experiment.cuda_graph import FoldedCudaGraphDecoder  # noqa: E402
 from gnn_experiment.mtp_draft import (  # noqa: E402
     Qwen35MTPDraftHead,
@@ -185,7 +186,14 @@ def main() -> None:
     eager_autoregressive(model, tok, prompts[0], 8)
     eager_speculative(model, tok, head, prompts[0], 8, args.k)
 
-    res = {"graph_auto": [], "eager_auto": [], "eager_spec": []}
+    print("  Capturing bucketed speculative graphs (widths 1..K+1)...")
+    buck = BucketedSpeculativeDecoder(model, tok, head, k=args.k,
+                                      max_seq_len=args.max_seq_len)
+    buck.capture(dummy)
+    print(f"  captured widths {sorted(buck.buckets)}\n")
+    buck.generate(dummy, max_new_tokens=8)
+
+    res = {"graph_auto": [], "eager_auto": [], "eager_spec": [], "bucketed_spec": []}
     taus = []
     for _ in range(args.repeats):
         for p in prompts:
@@ -200,12 +208,15 @@ def main() -> None:
             res["eager_spec"].append((n_s, s_s))
             taus.append(st["accepted"] / max(1, st["steps"]))
 
+            bt, bs, bst = buck.generate(ids, max_new_tokens=args.tokens)
+            res["bucketed_spec"].append((len(bt), bs))
+
     def tps(key):
         tot_tok = sum(n for n, _ in res[key])
         tot_s = sum(s for _, s in res[key])
         return tot_tok / max(1e-9, tot_s)
 
-    ga, ea, es = tps("graph_auto"), tps("eager_auto"), tps("eager_spec")
+    ga, ea, es, bs_ = tps("graph_auto"), tps("eager_auto"), tps("eager_spec"), tps("bucketed_spec")
     tau = sum(taus) / len(taus)
 
     print("=" * 100)
@@ -216,10 +227,20 @@ def main() -> None:
     print(f"  {'A  graph autoregressive (server)':<34}{ga:>10.2f}{ga / ea:>15.3f}x{'--':>16}")
     print(f"  {'B  eager autoregressive':<34}{ea:>10.2f}{'1.000x':>16}{ea / ga:>15.3f}x")
     print(f"  {'C  eager speculative':<34}{es:>10.2f}{es / ea:>15.3f}x{es / ga:>15.3f}x")
+    print(f"  {'D  BUCKETED graph speculative':<34}{bs_:>10.2f}{bs_ / ea:>15.3f}x{bs_ / ga:>15.3f}x")
     print(f"\n  measured tau = {tau:.3f}")
     print(f"\n  the CUDA graph is worth {ga / ea:.3f}x over eager decode")
     print(f"  speculation is worth      {es / ea:.3f}x over eager decode")
     print()
+    print(f"\n  BUCKETED vs the server's graph path: {bs_ / ga:.3f}x")
+    print(f"  BUCKETED vs eager speculative      : {bs_ / es:.3f}x  "
+          "(what capturing the chunk shapes recovered)")
+    if bs_ > ga:
+        print(f"\n  => SHIP THE BUCKETED PATH. {bs_ / ga:.3f}x over the current server,")
+        print("     keeping graph replay instead of trading it away.")
+    else:
+        print(f"\n  => BUCKETED DOES NOT BEAT THE GRAPH PATH ({bs_ / ga:.3f}x). The chunk")
+        print("     graphs did not recover enough to overcome speculation's overhead.")
     if es > ga:
         print(f"  => WIRE IT IN. Eager speculation beats the graph path by {es / ga:.3f}x.")
         print("     Every benchmark baseline was eager, and the conclusion survives")
@@ -233,6 +254,8 @@ def main() -> None:
 
     report = {"device": dev, "k": args.k, "tokens": args.tokens,
               "graph_auto_tps": ga, "eager_auto_tps": ea, "eager_spec_tps": es,
+              "bucketed_spec_tps": bs_, "bucketed_vs_graph": bs_ / ga,
+              "bucketed_vs_eager_spec": bs_ / es,
               "graph_vs_eager": ga / ea, "spec_vs_eager": es / ea,
               "spec_vs_graph": es / ga, "tau": tau}
     out_p = REPO_ROOT / args.out

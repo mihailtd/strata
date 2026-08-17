@@ -1,0 +1,15 @@
+{
+  "device": "AMD Radeon RX 7900 XTX",
+  "k": 4,
+  "tokens": 64,
+  "graph_auto_tps": 36.81095625929953,
+  "eager_auto_tps": 33.88217534118044,
+  "eager_spec_tps": 37.554888826713864,
+  "bucketed_spec_tps": 39.93705225800049,
+  "bucketed_vs_graph": 1.084922977188652,
+  "bucketed_vs_eager_spec": 1.0634315133318175,
+  "graph_vs_eager": 1.0864401676878002,
+  "spec_vs_eager": 1.1083966259117253,
+  "spec_vs_graph": 1.020209542022598,
+  "tau": 1.9944242424242424
+}

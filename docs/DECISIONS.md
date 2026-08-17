@@ -1256,3 +1256,57 @@ and a large one.
 **Recommendation: do not ship the eager speculative path for +2.4%.** Build the
 bucketed capture first; it is what makes the measured 1.135× and 1.162× additive
 rather than exclusive.
+
+---
+
+## 25. SHIPPED-READY — bucketed graph capture makes speculation and graph replay ADDITIVE (+8.5%)
+
+§24 measured the fork: graph replay and speculation were mutually exclusive, and
+wiring in eager speculation netted only **+2.0%** because it gave back the graph's
+own advantage. Bucketed capture resolves it.
+
+| arm | tok/s | vs eager | **vs graph (server today)** |
+| :--- | ---: | ---: | ---: |
+| A graph autoregressive — server today | 36.81 | 1.086× | — |
+| B eager autoregressive | 33.88 | 1.000× | 0.920× |
+| C eager speculative | 37.55 | 1.108× | 1.020× |
+| **D bucketed graph speculative** | **39.94** | **1.179×** | **1.085×** |
+
+**+8.5% over the current server**, and **+6.3% over eager speculation** — that
+second number is exactly the graph benefit that the eager path was discarding.
+τ = 1.994.
+
+### Why pointer stability turned out to be free
+
+The obstacle §24 flagged — rollback invalidating captured pointers — dissolves
+under `StaticCache`. Probed on this hybrid config it contains:
+
+| layer type | count | rollback |
+| :--- | ---: | :--- |
+| `StaticLayer` (attention) | 8 | **rewind `cache_position`. Nothing else.** KV beyond it is stale, never read, overwritten on the next write. No crop, no re-view, no moved pointers. |
+| `LinearAttentionLayer` (SSM) | 24 | fixed-size `recurrent_states`/`conv_states`, restored by in-place `copy_` from buffers allocated once at capture |
+
+The eager speculative path used `layer.crop()`, which re-views the KV tensor and
+**would** have broken a captured graph. On a static cache the same rollback is a
+counter decrement. Recurrent state and attention KV now roll back under one
+pointer-stable discipline, with different mechanisms (copy vs counter).
+
+### The capture hazard that had to be handled explicitly
+
+fla's Triton kernels autotune by launching variants and timing them — host
+synchronisation, illegal during capture. **Every bucket is warmed on its own shape
+before its capture** so the autotune config is already chosen. Capturing cold
+either fails or records a timing path, silently.
+
+### Shape set
+
+Verification is always K+1; the commit re-forward is 1…K. **5 graphs at K=4**, all
+sharing one `StaticCache` and one CUDA graph memory pool.
+
+`src/gnn_experiment/bucketed_speculative.py`
+
+### Not yet stacked on top
+
+W=2 branching (§22) and the matched draft head (§23) both raise τ and should
+compound with this, but neither has been re-measured on the bucketed path. The
++8.5% is the bucketed path alone.
