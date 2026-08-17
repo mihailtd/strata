@@ -845,3 +845,51 @@ of steps lowers that break-even and could make speculation pay at all.
 token-equality check: this stack already changes text on 33% of prompts from kernel
 numerics alone with no measurable quality cost (+0.19pp, CI [−0.77, +1.17]), so
 "the text changed" is not by itself a defect here.
+
+---
+
+## 18. REFUTED (built and measured) — skipping `commit_fwd` buys 1.008×, not 1.4×
+
+The surgery from §17 was **built**: recurrent state replayed via
+`fused_recurrent_gated_delta_rule`, conv state reconstructed from the `conv1d`
+input window, attention KV truncated with `DynamicLayer.crop()`, hidden states
+sliced from the chunked forward. It works — and it does not pay.
+
+| arm | tokens | wall s | **tok/s** | ms/step |
+| :--- | ---: | ---: | ---: | ---: |
+| baseline | 269 | 6.91 | **38.93** | 77.6 |
+| surgery | 169 | 4.31 | **39.24** | 71.8 |
+
+**⚠️ THE HEADLINE "1.605× WALL CLOCK" IS AN ARTEFACT AND MY OWN BENCHMARK PRINTED
+IT.** The arms do not emit the same number of tokens — the surgery arm hits EOS
+earlier and generated **37% fewer tokens**. It finished sooner because it produced
+less, not because it produced faster.
+
+Normalised properly:
+- **per-token throughput 1.008× — nothing**
+- per-step time 1.082× — modest
+- τ fell **2.022 → 1.817** (−10%), tripping the script's own guard
+
+**Why the predicted saving never appeared.** Removing 33 ms from 75% of steps
+predicts **52.9 ms/step**; measured **71.8**. About **19 ms of the 24.75 ms
+expected saving was consumed by the repair itself** — 24 sequential Python-driven
+kernel launches with shape-varying Triton autotuning (m ranges 1–5), plus conv
+slicing with `.contiguous()` and `crop()` reallocating KV tensors.
+
+**The isolated 1.23 ms micro-benchmark did not survive contact with the loop.**
+That is the same lesson as §12, where a synthetic `seq_len=512` Liger benchmark
+gave the *opposite sign* to the real workload: **component micro-benchmarks do not
+predict in-loop cost.** §17's 27.8× was real and irrelevant.
+
+**Also refuted: the indirect argument.** The hope was that a cheaper step lowers
+the acceptance break-even and makes speculation pay. τ moved the *wrong way*
+(−10%), because the draft head now conditions on chunked-path hidden states rather
+than the re-forward's, and empirically drafts worse from them.
+
+**Not run: the quality harness.** The idea is dead on throughput alone; measuring
+the quality of a change that buys 0.8% would be GPU time spent on a settled
+decision. The 37% shorter output is recorded as a behavioural regression, not
+quantified.
+
+**Kept as evidence, not as a component.** Nothing was wired into the serving path;
+`server.py` still has no draft path at all.

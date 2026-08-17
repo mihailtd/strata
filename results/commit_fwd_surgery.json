@@ -1,0 +1,22 @@
+{
+  "device": "AMD Radeon RX 7900 XTX",
+  "k": 4,
+  "tokens": 64,
+  "n_prompts": 8,
+  "baseline_s": 6.90974198000913,
+  "surgery_s": 4.306436389997543,
+  "speedup": 1.6045150454464445,
+  "identical_sequences": 3,
+  "tau_baseline": 2.0224719101123596,
+  "tau_surgery": 1.8166666666666667,
+  "baseline_stats": {
+    "steps": 89,
+    "accepted": 180,
+    "partial": 62
+  },
+  "surgery_stats": {
+    "steps": 60,
+    "accepted": 109,
+    "partial": 45
+  }
+}
