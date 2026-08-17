@@ -1,5 +1,29 @@
 # ⭐ Prefill vs. Decode Latency Share (Amdahl's Law Audit)
 
+> ## ⚠️ THE "5.9% @8k" NUMBER IS SPECIFIC TO 1024-TOKEN GENERATIONS
+>
+> Everything below is measured with `max_new_tokens=1024`, which amortises prefill
+> over 1024 decode steps. **An agent turn emits ~150 tokens, not 1024**, and the
+> share moves by 5x. Measured by
+> [`benchmark_agent_turn_split.py`](benchmark_agent_turn_split.py):
+>
+> | prompt | out=50 | out=150 | out=300 | out=1024 |
+> | ---: | ---: | ---: | ---: | ---: |
+> | 2000 | 25.2% | 10.2% | 5.2% | 1.5% |
+> | **3000** | 30.8% | **13.0%** | 7.0% | 2.2% |
+> | 8000 | **55.8%** | **30.3%** | 17.5% | 5.8% |
+>
+> The two scripts reconcile at out=1024 (5.8% vs 5.9% @8k), so this is a workload
+> shape difference, not a contradiction.
+>
+> **The claim below that "Decode Acceleration governs >94% of user latency" holds
+> only for long generations.** At the stated agent turn (3,000 in / 150 out) decode
+> is **87%** — still dominant, so decode work remains justified, but a 2x decode
+> win returns **1.77x** end-to-end, not 2x. At 8,000 in / 50 out prefill is
+> **55.8%** and decode optimisation is capped at **1.79x no matter what**.
+>
+> Read the agent-shape table before sizing any decode optimisation.
+
 > **Tier Classification**: **⭐ Industry Standard** (Latency Profiling) / **🔥 Applied Practice** (Amdahl's Law Optimization Prioritization)  
 > **Concept Origin**: **Amdahl's Law execution profiling applied to hybrid linear-attention serving architectures.**
 

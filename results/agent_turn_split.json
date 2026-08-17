@@ -1,0 +1,204 @@
+{
+  "device": "AMD Radeon RX 7900 XTX",
+  "prompt_lens": [
+    500,
+    1000,
+    2000,
+    3000,
+    5000,
+    8000
+  ],
+  "out_lens": [
+    50,
+    150,
+    300
+  ],
+  "cells": {
+    "500x50": {
+      "prefill_s": 0.2613886260005529,
+      "decode_s": 1.5069533399946522,
+      "prefill_share_pct": 14.781565501865247,
+      "total_s": 1.768341965995205,
+      "amdahl_decode_1.5x": 1.3967679176702654,
+      "amdahl_decode_2x": 1.7424400784701783,
+      "amdahl_decode_infinite": 6.765183294515135
+    },
+    "500x150": {
+      "prefill_s": 0.2613886260005529,
+      "decode_s": 4.452474128014728,
+      "prefill_share_pct": 5.545104718585652,
+      "total_s": 4.713862754015281,
+      "amdahl_decode_1.5x": 1.459533664938086,
+      "amdahl_decode_2x": 1.894924454651487,
+      "amdahl_decode_infinite": 18.033924528932296
+    },
+    "500x300": {
+      "prefill_s": 0.2613886260005529,
+      "decode_s": 8.478253389006568,
+      "prefill_share_pct": 2.9908390475458155,
+      "total_s": 8.73964201500712,
+      "amdahl_decode_1.5x": 1.477899206721009,
+      "amdahl_decode_2x": 1.9419202897033379,
+      "amdahl_decode_infinite": 33.435433472107675
+    },
+    "500x1024_projected": {
+      "prefill_share_pct": 0.9223062254949381,
+      "projected": true
+    },
+    "1000x50": {
+      "prefill_s": 0.22299594699870795,
+      "decode_s": 1.4155249189934693,
+      "prefill_share_pct": 13.609588478671995,
+      "total_s": 1.6385208659921773,
+      "amdahl_decode_1.5x": 1.4044313372662751,
+      "amdahl_decode_2x": 1.7604147913760477,
+      "amdahl_decode_infinite": 7.347760746529043
+    },
+    "1000x150": {
+      "prefill_s": 0.22299594699870795,
+      "decode_s": 4.127987506984937,
+      "prefill_share_pct": 5.125184900313487,
+      "total_s": 4.350983453983645,
+      "amdahl_decode_1.5x": 1.4625215335980986,
+      "amdahl_decode_2x": 1.9024936811255357,
+      "amdahl_decode_infinite": 19.511491184227015
+    },
+    "1000x300": {
+      "prefill_s": 0.22299594699870795,
+      "decode_s": 8.404359091000515,
+      "prefill_share_pct": 2.584754493312508,
+      "total_s": 8.627355037999223,
+      "amdahl_decode_1.5x": 1.4808616805856596,
+      "amdahl_decode_2x": 1.9496074342414884,
+      "amdahl_decode_infinite": 38.68839391080597
+    },
+    "1000x1024_projected": {
+      "prefill_share_pct": 0.7524698002577779,
+      "projected": true
+    },
+    "2000x50": {
+      "prefill_s": 0.46896503499738174,
+      "decode_s": 1.3949763869932212,
+      "prefill_share_pct": 25.159859074141334,
+      "total_s": 1.863941421990603,
+      "amdahl_decode_1.5x": 1.332386692875017,
+      "amdahl_decode_2x": 1.5979564173328558,
+      "amdahl_decode_infinite": 3.974585060485393
+    },
+    "2000x150": {
+      "prefill_s": 0.46896503499738174,
+      "decode_s": 4.150764819965843,
+      "prefill_share_pct": 10.151351912786573,
+      "total_s": 4.619729854963225,
+      "amdahl_decode_1.5x": 1.4275425652484066,
+      "amdahl_decode_2x": 1.8156835710772936,
+      "amdahl_decode_infinite": 9.850904673498777
+    },
+    "2000x300": {
+      "prefill_s": 0.46896503499738174,
+      "decode_s": 8.594165394984884,
+      "prefill_share_pct": 5.174426635701627,
+      "total_s": 9.063130429982266,
+      "amdahl_decode_1.5x": 1.4621705293353462,
+      "amdahl_decode_2x": 1.9016029504277772,
+      "amdahl_decode_infinite": 19.325812701650275
+    },
+    "2000x1024_projected": {
+      "prefill_share_pct": 1.463478500655712,
+      "projected": true
+    },
+    "3000x50": {
+      "prefill_s": 0.6508257150017016,
+      "decode_s": 1.461998469014361,
+      "prefill_share_pct": 30.80359075427706,
+      "total_s": 2.1128241840160626,
+      "amdahl_decode_1.5x": 1.2998064675665824,
+      "amdahl_decode_2x": 1.5290100130027229,
+      "amdahl_decode_infinite": 3.2463747748666303
+    },
+    "3000x150": {
+      "prefill_s": 0.6508257150017016,
+      "decode_s": 4.350470464989485,
+      "prefill_share_pct": 13.013140825481937,
+      "total_s": 5.001296179991186,
+      "amdahl_decode_1.5x": 1.4083638166050279,
+      "amdahl_decode_2x": 1.769705704479496,
+      "amdahl_decode_infinite": 7.684539907858604
+    },
+    "3000x300": {
+      "prefill_s": 0.6508257150017016,
+      "decode_s": 8.674124471006508,
+      "prefill_share_pct": 6.979401519787686,
+      "total_s": 9.32495018600821,
+      "amdahl_decode_1.5x": 1.4494195934338874,
+      "amdahl_decode_2x": 1.869518777995842,
+      "amdahl_decode_infinite": 14.327876067379773
+    },
+    "3000x1024_projected": {
+      "prefill_share_pct": 2.2377805977945746,
+      "projected": true
+    },
+    "5000x50": {
+      "prefill_s": 1.172809841002163,
+      "decode_s": 1.4732909750273393,
+      "prefill_share_pct": 44.322190367711485,
+      "total_s": 2.6461008160295023,
+      "amdahl_decode_1.5x": 1.2278868306988078,
+      "amdahl_decode_2x": 1.385788280308314,
+      "amdahl_decode_infinite": 2.2562061840889873
+    },
+    "5000x150": {
+      "prefill_s": 1.172809841002163,
+      "decode_s": 4.5456733040300605,
+      "prefill_share_pct": 20.509107245004465,
+      "total_s": 5.7184831450322235,
+      "amdahl_decode_1.5x": 1.3604880258604213,
+      "amdahl_decode_2x": 1.659625604838183,
+      "amdahl_decode_infinite": 4.87588264108169
+    },
+    "5000x300": {
+      "prefill_s": 1.172809841002163,
+      "decode_s": 8.936533340045571,
+      "prefill_share_pct": 11.601246688319595,
+      "total_s": 10.109343181047734,
+      "amdahl_decode_1.5x": 1.4177610231280364,
+      "amdahl_decode_2x": 1.7920946757750906,
+      "amdahl_decode_infinite": 8.619763262226147
+    },
+    "5000x1024_projected": {
+      "prefill_share_pct": 3.7307670962373765,
+      "projected": true
+    },
+    "8000x50": {
+      "prefill_s": 2.022738373998436,
+      "decode_s": 1.601662769990071,
+      "prefill_share_pct": 55.808899005381456,
+      "total_s": 3.624401143988507,
+      "amdahl_decode_1.5x": 1.1727504444389518,
+      "amdahl_decode_2x": 1.2836237293037558,
+      "amdahl_decode_infinite": 1.7918289337755497
+    },
+    "8000x150": {
+      "prefill_s": 2.022738373998436,
+      "decode_s": 4.650507869981084,
+      "prefill_share_pct": 30.311160416466176,
+      "total_s": 6.67324624397952,
+      "amdahl_decode_1.5x": 1.3025855953203362,
+      "amdahl_decode_2x": 1.5347879595332643,
+      "amdahl_decode_infinite": 3.2991148681221785
+    },
+    "8000x300": {
+      "prefill_s": 2.022738373998436,
+      "decode_s": 9.536632264993386,
+      "prefill_share_pct": 17.498689480337088,
+      "total_s": 11.559370638991822,
+      "amdahl_decode_1.5x": 1.3793186557435393,
+      "amdahl_decode_2x": 1.702146644226778,
+      "amdahl_decode_infinite": 5.714713671121938
+    },
+    "8000x1024_projected": {
+      "prefill_share_pct": 5.774358732297556,
+      "projected": true
+    }
+  }
+}

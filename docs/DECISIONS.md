@@ -434,3 +434,70 @@ control categories that received no new data slipped from +25.0 to +12.5.
 
 Evidence: `benchmarks/factory/eval_instrument/`, `results/eval_rubric_audit.json`,
 `results/diagnose_financial_planning{,_v2,_v2corpus}.json`.
+
+---
+
+## 10. RETIRED (before being built) — SonicSampler-style fused speculative verification
+
+**Roadmap claim:** speculative decoding "wastes critical time bouncing draft
+tokens between CPU and GPU"; fusing verification was scoped at 1–2 weeks of
+ROCm/Triton work. **Never measured on this stack. It is false here.**
+
+Profiled at K=4, 89 speculative steps, τ=2.02
+([`benchmarks/runtime/speculative/loop_profile/`](../benchmarks/runtime/speculative/loop_profile/)):
+
+| phase | % of loop | ms/call |
+| :--- | ---: | ---: |
+| `verify_fwd` | 43.9% | 36.36 |
+| **`commit_fwd`** | **29.4%** | 34.96 |
+| `draft_gen` | 14.4% | 11.88 |
+| `accept_calc` | **1.0%** | 0.81 |
+| `argmax` | **0.6%** | 0.46 |
+
+**The fusion target is 1.5% of the loop — ceiling 1.016×**, and ~1.014%
+end-to-end once the 87% decode share of a 3,000/150 agent turn is applied.
+
+**The negative result that settles it.** The CPU round trip was removed rather
+than argued about: the `.item()` accept loop (484 syncs) was replaced by a single
+GPU reduction (89 syncs). It came out **1.65% SLOWER** (6.16 s → 6.26 s). The
+`.item()` loop short-circuits on first mismatch, averaging 5.4 syncs/step rather
+than a K=4 worst case of 8, and `cumprod`+`sum` launch more kernel overhead than
+the syncs they save. **There is no CPU-bouncing problem to fuse.**
+
+**What the profile found instead: `commit_fwd` at 29.4%, on nobody's list.** On a
+partial accept the chunked forward has already advanced the recurrent state past
+the rejected tokens, so the loop restores the snapshot and re-runs a full forward
+over the committed prefix — on **62 of 89 steps (70%)** at τ=2.02, costing as much
+as the verification it repairs. A speculative step usually costs **two full model
+forwards**. Eliminating it caps at **1.42× on the loop**, ~25× the ceiling of the
+project it displaces. It requires the GatedDeltaNet chunked scan to emit
+intermediate per-position states — a real kernel project, and a different one.
+**Lead, not result:** feasibility on gfx1100 without `fla` is unknown.
+
+---
+
+## 11. CORRECTED — "prefill is 5.9%, off the critical path" holds only for 1024-token generations
+
+`benchmark_prefill_share.py` measured prefill at 1.5% @2k / 3.0% @4k / **5.9%
+@8k** and the repo concluded decode "governs >94% of user latency". The
+measurement is sound; it decodes `max_new_tokens=1024`, which amortises prefill
+over 1024 steps. **An agent turn emits ~150 tokens.**
+
+Measured at agent shapes
+([`benchmark_agent_turn_split.py`](../benchmarks/runtime/performance/prefill_vs_decode/benchmark_agent_turn_split.py)):
+
+| prompt | out=50 | out=150 | out=300 | out=1024 |
+| ---: | ---: | ---: | ---: | ---: |
+| 2000 | 25.2% | 10.2% | 5.2% | 1.5% |
+| **3000** | 30.8% | **13.0%** | 7.0% | 2.2% |
+| 8000 | **55.8%** | **30.3%** | 17.5% | 5.8% |
+
+The two scripts reconcile at out=1024 (5.8% vs 5.9% @8k) — a workload-shape
+difference, not a contradiction.
+
+**Decode work is still justified at the stated agent turn** (3,000 in / 150 out:
+decode 87%, prefill 651 ms of a 5,001 ms turn) — but a 2× decode win returns
+**1.77×** end-to-end, not 2×, and an infinitely fast decode caps at 7.68×. **At
+8,000 in / 50 out prefill is 55.8% and decode optimisation is capped at 1.79×
+regardless.** Size every decode optimisation against the turn shape, not against
+the 1024-token figure.
