@@ -803,3 +803,45 @@ speedup, and (b) whether generated text changes, using the harness from §7. If 
 text holds and the loop speeds up, the interesting consequence is not the 1.4× —
 it is that a cheaper step lowers the acceptance break-even, which is what could
 move speculation from marginal (measured τ 1.67–2.33) to profitable on this rig.
+
+### §17 follow-up (2026-08-17) — end-to-end run, and a FLAW IN THE TEST ARM
+
+Ran the replay inside the real speculative loop, 8 prompts × 64 tokens, K=4.
+
+| measure | result |
+| :--- | ---: |
+| identical token sequences | **3/8** (diverged at tokens 4, 5, 13, 19, 20) |
+| mean relative divergence, early quartile | 8.70e-02 |
+| mean relative divergence, late quartile | 7.59e-02 |
+| **late/early ratio** | **0.87×** |
+| worst observed | 4.41e-01 |
+
+**RESOLVED — the error does NOT compound.** 0.87× across 25 steps and 1152
+samples: the gated delta rule's forget gate damps it rather than accumulating. That
+was the main risk §17 left open and it is now settled.
+
+**⚠️ THE TEXT RESULT IS NOT EVIDENCE ABOUT THE REAL DESIGN. The test arm was
+mis-specified, and the flaw is mine.** To avoid cache surgery, the arm let
+`commit_fwd` run and then overwrote only the recurrent state. That produces a
+configuration neither design generates: **hidden states from `commit_fwd`'s
+re-forward, recurrent state from the replay.** The real design would use the
+chunked forward's hidden states AND the chunked-derived state, consistently.
+
+It also explains the 12× larger divergence (8.70e-02 vs the kill-test's 7.31e-03):
+the kill-test compared replay against the chunked scan on IDENTICAL inputs, while
+this compares it against `commit_fwd`, which recomputes projections through a
+different numerical path whose differences then amplify across 24 layers.
+
+**So the clean number for the real design remains the kill-test's 7.31e-03**, and
+whether skipping `commit_fwd` outright preserves output is **not settleable without
+the surgery** (KV truncation + hidden-state slicing from the chunked forward).
+
+**Status: specced, NOT built.** Honest prize accounting before anyone starts:
+1.396× on a loop `server.py` does not use, for a feature below its own break-even
+(τ 1.67–2.33 vs ~2.8). The strongest argument is indirect — removing 33 ms from 70%
+of steps lowers that break-even and could make speculation pay at all.
+
+**If it is built, the correctness test is the §7 three-arm quality harness**, not a
+token-equality check: this stack already changes text on 33% of prompts from kernel
+numerics alone with no measurable quality cost (+0.19pp, CI [−0.77, +1.17]), so
+"the text changed" is not by itself a defect here.

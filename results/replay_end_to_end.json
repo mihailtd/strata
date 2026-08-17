@@ -1,0 +1,15 @@
+{
+  "device": "AMD Radeon RX 7900 XTX",
+  "k": 4,
+  "tokens": 64,
+  "n_prompts": 8,
+  "identical_sequences": 3,
+  "n_sequences": 8,
+  "baseline_s": 6.292683804997068,
+  "replay_arm_s": 5.307940008995502,
+  "divergence_samples": 1152,
+  "late_over_early_ratio": 0.8725647389481523,
+  "worst_relative_divergence": 0.4405862092971802,
+  "commit_fwd_ms": 34.23,
+  "replay_ms": 1.23
+}
