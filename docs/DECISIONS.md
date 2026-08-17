@@ -671,3 +671,74 @@ Two rules this leaves behind for any future op sizing here:
 
 `torch.profiler` remains unusable on this ROCm build (zero CUDA events, no
 roctracer), which is why none of this could be done with standard tooling.
+
+---
+
+## 15. CORRECTED — `fla` IS available on this rig; the missing piece is `causal_conv1d` only
+
+**This retracts a claim the repo has carried, and which I repeated earlier today.**
+`mtp_draft.py` states the chunked path "falls back to slow PyTorch" because
+`fla`/`causal_conv1d` are "not buildable on this AMD rig", and every run log prints
+"The fast path is not available because one of the required library is not
+installed". Both readings are wrong.
+
+Measured (crucially, **with `--env-file .env`** — a bare `uv run` reports no CUDA,
+which makes `is_flash_linear_attention_available()` return False for the wrong
+reason and nearly produced a bogus "package name mismatch" diagnosis here):
+
+| check | result |
+| :--- | :--- |
+| `flash-linear-attention` / `fla-core` installed | **0.5.2** |
+| `_is_package_available("fla")` | `(True, '0.5.2')` |
+| `is_flash_linear_attention_available()` | **True** |
+| `chunk_gated_delta_rule` bound in `modeling_qwen3_5` | **yes** |
+| `is_causal_conv1d_available()` | **False** ← the only gap |
+
+The warning names two libraries and only `causal_conv1d` is absent. Independent
+corroboration: `benchmark_unfused_op_sizing.py` hooks **`FusedRMSNormGated`** as a
+live module class, and that class is imported from `fla.modules`.
+
+**Consequence: do not write a GatedDeltaNet chunked-scan Triton kernel.** It
+already exists, already compiles on gfx1100, and is already executing. Any
+hand-written replacement would be reimplementing a specialist research library's
+kernel with worse numerics.
+
+**What this does NOT explain.** `mtp_draft.py` measures a 2.84x cost jump from K=1
+to K=2 and attributes it to the PyTorch fallback. The jump is real; the attributed
+cause is not. **Unexplained — do not cite the fallback as the reason.**
+
+**Still open, and the only remaining sized target:** `commit_fwd` is 29.4% of the
+speculative loop (§10) because the chunked scan returns only the FINAL recurrent
+state, forcing a snapshot-restore and full re-forward on 70% of steps. Before any
+kernel work, check (a) whether `fla`'s API can already expose per-position
+intermediate states, and (b) whether `causal_conv1d` builds here. Both are shell
+work, not kernel authorship.
+
+---
+
+## 16. MEASURED — postgresql's eval also leaked; the clean instrument moves it +24.08 → +27.92pp
+
+§9 flagged postgresql at **55% giveaway** and predicted its +24.08pp was an
+understatement. Built `data/postgresql/evaluation_data_v2.jsonl` (40 scenario
+prompts, **0.0% giveaway** on both good AND bad terms — v1 also leaked 12 *bad*
+terms, handing the model legacy vocabulary):
+
+| | base | expert | delta | 95% CI |
+| :--- | ---: | ---: | ---: | :--- |
+| v1 (55% giveaway) | 51.33% | 75.42% | +24.08pp | — |
+| **v2 (0% giveaway)** | **18.33%** | **46.25%** | **+27.92pp** | **[+7.92, +47.50]** |
+
+Prediction confirmed but **modest** — +3.84pp, not the transformation the financial
+case saw (+0.00 → +35.00pp). Base falls 51.33 → 18.33 on the clean set, which is
+the leakage being removed; the *adapter effect* was largely intact all along.
+
+By category: vector_indexing **+80.00pp**, anti_pattern **+20.00pp**,
+unified_platform **+11.67pp**, ai_native_features **+0.00pp**.
+
+**No retrain performed, and none indicated.** Financial needed one because two
+things were broken — blind eval AND a 98.7%-definitional corpus. Here only the
+instrument was at fault: the adapter changes 40/40 answers and posts a
+significant effect on the clean eval, so the corpus is not implicated.
+
+**v1 remains canonical.** v2 sits alongside so every historical postgresql number
+keeps its meaning. Promoting either is a human decision.
