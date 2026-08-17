@@ -1203,3 +1203,56 @@ break-even (~2.8)". That bar came from a `mtp_draft.py` docstring measured befor
 `fla` was available. Chunked verify is **1.27×** a single token, not 2.84×.
 Speculation pays and always did — the stale number caused every speculative result
 here to be undersold.
+
+---
+
+## 24. ⚠️ SERVING GATE — every speculative number here used a baseline the server does not run
+
+Before wiring speculation into `server.py`, the comparison that actually decides it
+([`benchmarks/runtime/speculative/serving_gate/`](../benchmarks/runtime/speculative/serving_gate/)):
+
+| arm | tok/s | vs eager | **vs graph** |
+| :--- | ---: | ---: | ---: |
+| A graph autoregressive — **what server.py runs today** | **36.67** | 1.135× | — |
+| B eager autoregressive — the baseline every spec benchmark used | 32.31 | 1.000× | 0.881× |
+| C eager speculative | 37.55 | 1.162× | **1.024×** |
+
+τ = 1.994.
+
+**The CUDA graph is worth 1.135× by itself.** Speculation is worth 1.162×. They are
+**mutually exclusive**: the graph is captured for a fixed single-token shape, while
+speculative verification is a K+1 chunk and the commit re-forward is n_acc+1 tokens.
+Switching to speculation *gives up* the graph to buy speculation — netting **+2.4%**.
+
+**⚠️ This invalidates the framing of §22–23.** The "1.352× compounded stack"
+(speculation × W=2 branching × matched draft head) was computed against **eager**
+decode. The server does not decode eagerly. Against the real serving path the
+shippable, measured gain is **+2.4%**, and the branching and matched-head factors
+have **not** been re-measured against the graph baseline — they may or may not
+survive it. Do not quote 1.352× as a serving number.
+
+### The resolution is bucketed graph capture, and it is not optional
+
+The shape set is small and bounded: verification is always **K+1**, the commit
+re-forward is **1…K** — **5 graphs at K=4**. Capturing those makes graph replay and
+speculation compose instead of compete, which is the difference between a 2.4% win
+and a large one.
+
+**Two stack-specific obstacles, both real:**
+
+1. **fla's Triton kernels autotune.** `chunk_gated_delta_rule` picks a config by
+   launching variants and timing them — host synchronisation, illegal during
+   capture. Every bucket must be warmed to populate the autotune cache *before*
+   capture, or capture fails silently or records a timing path.
+2. **Rollback invalidates captured pointers.** Graph replay needs pointer-stable
+   memory; `FoldedCudaGraphDecoder` gets that from a pre-allocated `StaticCache`.
+   The speculative path grows KV dynamically and rolls back via
+   `layer.crop(saved_len)`, which re-views or reallocates the KV tensor. A captured
+   graph holding the old address would then read wrong memory. **The speculative
+   path must move to a pre-allocated static KV with rollback by length-pointer**,
+   not tensor slicing — the same discipline the ring buffer already applies to SSM
+   state, extended to KV.
+
+**Recommendation: do not ship the eager speculative path for +2.4%.** Build the
+bucketed capture first; it is what makes the measured 1.135× and 1.162× additive
+rather than exclusive.
