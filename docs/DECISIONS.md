@@ -1075,3 +1075,65 @@ the mechanism's actual advantage.
 - No test of *repeated* swapping, or of swapping back. Cross-task subspace overlap
   is ~chance on the input side but 6–7× chance on the output side (§13), so
   repeated swaps are not obviously safe by extension from one.
+
+---
+
+## 22. MEASURED — branching lifts τ, W=2 is the optimum, and the "2.8 break-even" is STALE
+
+The only question that decides tree speculation is whether acceptance improves
+enough to pay. Measured directly, W independent K-token drafts, verifier keeps the
+best ([`benchmarks/runtime/speculative/tree_search/`](../benchmarks/runtime/speculative/tree_search/)):
+
+| W | τ_eff | vs W=1 | branch wins |
+| ---: | ---: | ---: | :--- |
+| 1 | 1.506 | — | 100% |
+| **2** | **1.795** | **+0.288** | 86%, 14% |
+| 4 | 1.873 | +0.367 | 83%, 13%, 4%, **0%** |
+
+**Branching works, and it saturates immediately.** W=1→2 buys +0.288; W=2→4 buys
+only +0.078 more. At W=4 the top branch already wins **83%** of steps and the
+fourth branch wins **zero**. Combined with the measured batch cost (28.68 / 28.93 /
+32.31 ms), **W=2 is the optimum at 1.391× vs autoregressive; W=4 is WORSE at
+1.351%** — cost outgrows acceptance.
+
+### ⚠️ THE "~2.8 BREAK-EVEN" IS STALE, AND I REPEATED IT ALL SESSION
+
+`mtp_draft.py` states break-even is ~2.8 accepted tokens because "verifying K
+tokens costs 2.84× one token". That was measured **before `fla` was available** —
+the same stale docstring that claimed fla was "not buildable on this AMD rig"
+(§15). Measured now:
+
+| | measured |
+| :--- | ---: |
+| chunked verify of a 5-token chunk | **36.36 ms** |
+| one autoregressive token | 28.68 ms |
+| **ratio** | **1.27×** — not 2.84× |
+
+**Speculation therefore already pays on this rig and always did.** Recomputing
+from measured kernel costs gives 1.18× (W=1), 1.32× (W=2), 1.36× (W=4) — and the
+independently-run speculation matrix measured **1.138×–1.294×**, which is
+consistent. Every statement in this session's earlier notes that speculation "sits
+below its own break-even" is **withdrawn**; it inherited a number that predates the
+current kernel stack.
+
+### What this means for tree search
+
+- **Worth doing, at W=2 only.** ~1.11× on top of single-path speculation, which
+  itself already pays. Not the transformative win the proposal implied.
+- **None of the proposed mechanism is what delivers it.** Not ReplaySSM rollback,
+  not the "SSMs avoid KV explosion" premise (backwards — §20), not tree attention
+  masks (incompatible with recurrent layers). What delivers it is **batching W
+  branches**, priced from the existing batch-scaling table.
+- **The branch-win distribution is the real limit.** 83% top-branch dominance at
+  W=4 means the draft head's second choice is rarely right. Improving τ further
+  needs a *better drafter*, not a wider tree — and §5 already established that
+  adapting the draft head makes acceptance worse.
+
+### Limits of this measurement
+
+- Branches are verified **sequentially**; acceptance is layout-independent so the
+  τ numbers are exact, but the batched engine was **not built**.
+- The net-speedup column applies **batch-scaling costs measured at seq=1** to a
+  seq=5 chunked verify. That is an approximation, and the W=2 vs W=4 ordering
+  could shift under a direct measurement.
+- 6 prompts × 48 tokens, one domain (astral), K=4, no repeats.

@@ -1,0 +1,47 @@
+{
+  "device": "AMD Radeon RX 7900 XTX",
+  "k": 4,
+  "break_even_tau": 2.8,
+  "batch_step_ms": {
+    "1": 28.68,
+    "2": 28.93,
+    "4": 32.31,
+    "8": 37.92
+  },
+  "widths": {
+    "1": {
+      "steps": 83,
+      "accepted": 125,
+      "tau_eff": 1.5060240963855422,
+      "branch_wins": [
+        83
+      ],
+      "measure_seconds": 11.592095820997201,
+      "net_vs_autoregressive": 1.2530120481927711
+    },
+    "2": {
+      "steps": 73,
+      "accepted": 131,
+      "tau_eff": 1.7945205479452055,
+      "branch_wins": [
+        63,
+        10
+      ],
+      "measure_seconds": 12.431495937002182,
+      "net_vs_autoregressive": 1.3911968289371377
+    },
+    "4": {
+      "steps": 71,
+      "accepted": 133,
+      "tau_eff": 1.8732394366197183,
+      "branch_wins": [
+        59,
+        9,
+        3,
+        0
+      ],
+      "measure_seconds": 18.653857320001407,
+      "net_vs_autoregressive": 1.3511150523406052
+    }
+  }
+}
