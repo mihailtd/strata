@@ -82,7 +82,20 @@ error: `τ = accepted/steps` (can exceed 1) and `accept_pct = accepted/drafted`
 
 ---
 
-## 5. Before inventing a name
+## 5. Numerical gotcha worth a glossary entry
+
+**Do not use randomised SVD (`torch.svd_lowrank`) on this model's weight
+matrices.** Their singular spectra are nearly flat — measured `s[0]/s[7] = 2.05`
+on layer 0 `down_proj` — so no top-r subspace is well separated and the
+randomised estimate is both noisy and biased low: five seeds spanned 2.56x and
+all underestimated the exact value, enough to invert a verdict. Use exact SVD, or
+the Gram-matrix route on the small side (see `probe_pissa_premise.top_r_subspace`,
+validated to 0.001% against `linalg.svd` and deterministic across seeds).
+
+`extract_svd_basis.py` and `probe_subspace_overlap.py` already use exact
+`linalg.svd` on a QR-reduced matrix and are unaffected.
+
+## 6. Before inventing a name
 
 1. Search peft's implemented methods: `ls .venv/lib/python*/site-packages/peft/tuners/`
    — it currently ships ~40, including `vera`, `lokr`, `loha`, `boft`, `hra`,

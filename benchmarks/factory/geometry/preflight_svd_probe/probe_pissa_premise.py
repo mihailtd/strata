@@ -1,4 +1,4 @@
-"""Pre-flight probe: does PiSSA's premise hold on this model? (CPU only, no GPU.)
+"""Pre-flight probe: does PiSSA's premise hold on this model?
 
 WHAT PiSSA CLAIMS
 -----------------
@@ -58,14 +58,19 @@ cannot help. It is a cheap gate on an expensive experiment, which is exactly the
 discipline TODO.md already prescribes: "Measure subspace overlap before building
 any further shared-basis scheme."
 
-USAGE (CPU only -- safe to run while the GPU is busy? NO, see below):
-    uv run python benchmarks/factory/geometry/preflight_svd_probe/probe_pissa_premise.py \
-        --adapter results/adapters/m2_astral_r8a128 --layers 0 8 16 24 31
+USAGE:
+    uv run --env-file .env python \
+        benchmarks/factory/geometry/preflight_svd_probe/probe_pissa_premise.py \
+        --adapter results/adapters/m2_astral_r8a128
 
-NOTE ON SCHEDULING: this is CPU-heavy (randomised SVD on 2560x9216 matrices).
-TODO.md records that batch-1 decode on this box is CPU-bound on kernel launches,
-so running this alongside a decode benchmark can skew that benchmark's tok/s.
-Run it on an idle machine.
+Runs on GPU by default (all 32 layers in ~a minute); `--device cpu` is the
+reference path. Because ROCm on this box has silently returned wrong numerics
+before, the GPU path spot-checks modules against a CPU recompute and aborts on
+disagreement -- see `--verify-device-agreement`.
+
+NOTE ON SCHEDULING: heavy on whichever device it uses. TODO.md records that
+batch-1 decode here is CPU-bound on kernel launches, so do not run this beside a
+decode benchmark on either device -- it will skew that benchmark's tok/s.
 """
 
 from __future__ import annotations
@@ -102,21 +107,38 @@ def find_base_shards(model_id: str) -> list[Path]:
     return shards
 
 
-def build_weight_index(shards: list[Path]) -> dict[str, Path]:
-    index: dict[str, Path] = {}
+def build_weight_index(shards: list[Path]) -> dict[str, tuple[Path, str]]:
+    """Index base weights by the `layers.N.<module>.weight` SUFFIX.
+
+    peft records targets as `base_model.model.model.layers.N.…` while this
+    checkpoint stores them as `model.language_model.layers.N.…` (it is a hybrid
+    stack — some layers are `linear_attn`, not `self_attn`). Matching on the
+    suffix makes the probe independent of that prefix, and skips the `mtp.*`
+    draft-head tensors, which share module names but are not what the adapter
+    was folded into.
+    """
+    index: dict[str, tuple[Path, str]] = {}
     for shard in shards:
         with safe_open(str(shard), framework="pt") as f:
             for k in f.keys():
-                index[k] = shard
+                if k.startswith("mtp."):
+                    continue  # draft head, not the backbone the adapter targets
+                m = re.search(r"(layers\.\d+\..*\.weight)$", k)
+                if m:
+                    index[m.group(1)] = (shard, k)
     return index
 
 
-def load_weight(index: dict[str, Path], name: str) -> torch.Tensor | None:
-    shard = index.get(name)
-    if shard is None:
+def load_weight(index: dict[str, tuple[Path, str]], name: str) -> torch.Tensor | None:
+    m = re.search(r"(layers\.\d+\..*\.weight)$", name)
+    if not m:
         return None
+    hit = index.get(m.group(1))
+    if hit is None:
+        return None
+    shard, real_name = hit
     with safe_open(str(shard), framework="pt") as f:
-        return f.get_tensor(name).to(torch.float32)
+        return f.get_tensor(real_name).to(torch.float32)
 
 
 def load_adapter_deltas(adapter_dir: Path) -> dict[str, torch.Tensor]:
@@ -141,11 +163,39 @@ def load_adapter_deltas(adapter_dir: Path) -> dict[str, torch.Tensor]:
     return deltas
 
 
-def top_r_subspace(W: torch.Tensor, r: int, oversample: int = 8) -> tuple[torch.Tensor, torch.Tensor]:
-    """Top-r left/right singular vectors of W via randomised SVD."""
-    q = min(r + oversample, min(W.shape))
-    U, _, V = torch.svd_lowrank(W, q=q, niter=4)
-    return U[:, :r].contiguous(), V[:, :r].contiguous()
+def top_r_subspace(W: torch.Tensor, r: int) -> tuple[torch.Tensor, torch.Tensor]:
+    """EXACT top-r left/right singular vectors, via the Gram matrix.
+
+    Do NOT use `torch.svd_lowrank` here. These weights have a nearly flat
+    spectrum (measured s[0]/s[7] = 2.05 on layer 0 down_proj), and randomised SVD
+    cannot separate a top-r subspace that is barely distinguished from its
+    neighbours. Measured consequence: five different seeds returned retentions
+    spanning 2.56x (1.01e-05 .. 2.60e-05), and all of them UNDERESTIMATED the
+    exact value of 1.79e-05 -> the randomised estimate reported ~1.3x above the
+    chance floor where the truth is 6.59x. That error is large enough to invert
+    this probe's verdict, so exactness is not optional.
+
+    Exact and cheap: eigendecompose the Gram matrix on the SMALL side (2560 here,
+    never 9216), then carry the result across:
+        W (m,n), m <= n:  C = W W^T (m,m); eigh -> U_r, s;  V_r = W^T U_r / s
+        W (m,n), m >  n:  C = W^T W (n,n); eigh -> V_r, s;  U_r = W V_r / s
+    """
+    m, n = W.shape
+    if m <= n:
+        C = W @ W.T                                   # (m, m)
+        evals, evecs = torch.linalg.eigh(C)           # ascending
+        U_r = evecs[:, -r:].flip(-1).contiguous()     # top-r, descending
+        s = evals[-r:].flip(-1).clamp_min(0).sqrt()
+        V_r = (W.T @ U_r) / s.clamp_min(1e-12)
+        V_r = torch.linalg.qr(V_r)[0].contiguous()    # re-orthonormalise
+    else:
+        C = W.T @ W                                   # (n, n)
+        evals, evecs = torch.linalg.eigh(C)
+        V_r = evecs[:, -r:].flip(-1).contiguous()
+        s = evals[-r:].flip(-1).clamp_min(0).sqrt()
+        U_r = (W @ V_r) / s.clamp_min(1e-12)
+        U_r = torch.linalg.qr(U_r)[0].contiguous()
+    return U_r, V_r
 
 
 def retention_in_subspace(dW: torch.Tensor, U_r: torch.Tensor, V_r: torch.Tensor) -> float:
@@ -187,10 +237,26 @@ def main() -> None:
     ap.add_argument("--model-id", default="Qwen/Qwen3.5-4B")
     ap.add_argument("--adapter", default="results/adapters/m2_astral_r8a128")
     ap.add_argument("--rank", type=int, default=None, help="defaults to the adapter's own r")
-    ap.add_argument("--layers", type=int, nargs="+", default=[0, 8, 16, 24, 31])
+    ap.add_argument("--layers", type=int, nargs="+", default=list(range(32)))
     ap.add_argument("--bands", type=int, nargs="+", default=[8, 32, 128, 512])
+    ap.add_argument(
+        "--device",
+        default="cuda" if torch.cuda.is_available() else "cpu",
+        help="cuda is ~10x faster for the randomised SVDs; cpu is the reference",
+    )
+    ap.add_argument(
+        "--verify-device-agreement",
+        type=int,
+        default=2,
+        help="re-check N modules on CPU and assert the GPU agrees. ROCm has "
+             "silently returned wrong results on this box before (AITER kernels "
+             "emitting zeros at hidden=2560 on gfx1100), so a GPU speedup is only "
+             "usable if it is checked. 0 disables.",
+    )
     ap.add_argument("--out", default="results/pissa_premise_probe.json")
     args = ap.parse_args()
+
+    device = torch.device(args.device)
 
     adapter_dir = REPO_ROOT / args.adapter
     cfg = json.loads((adapter_dir / "adapter_config.json").read_text())
@@ -225,12 +291,14 @@ def main() -> None:
             print(f"  ! shape mismatch {name}: W{tuple(W.shape)} dW{tuple(dW.shape)}")
             continue
 
+        W = W.to(device)
+        dW_d = dW.to(device)
         U_r, V_r = top_r_subspace(W, r)
-        retained = retention_in_subspace(dW, U_r, V_r)
+        retained = retention_in_subspace(dW_d, U_r, V_r)
         floor = (r / W.shape[0]) * (r / W.shape[1])
         x_floor = retained / max(1e-30, floor)
 
-        bands = spectral_band_profile(W, dW, args.bands)
+        bands = spectral_band_profile(W, dW_d, args.bands)
 
         rows.append({
             "module": name,
@@ -248,6 +316,30 @@ def main() -> None:
 
     if not rows:
         raise SystemExit("No modules probed -- check --layers against the adapter's target modules.")
+
+    # ROCm has silently produced wrong numerics on this box before, so a GPU
+    # result is only trustworthy if spot-checked against the CPU reference.
+    agreement = None
+    if device.type != "cpu" and args.verify_device_agreement > 0:
+        print(f"\nVerifying {args.verify_device_agreement} module(s) against a CPU recompute...")
+        agreement = []
+        for row in rows[: args.verify_device_agreement]:
+            W_cpu = load_weight(index, row["module"])
+            dW_cpu = deltas[row["module"]]
+            U_c, V_c = top_r_subspace(W_cpu, r)
+            ref = retention_in_subspace(dW_cpu, U_c, V_c)
+            got = row["retained_in_top_r"]
+            rel = abs(got - ref) / max(1e-30, ref)
+            agreement.append({"module": row["module"], "gpu": got, "cpu": ref, "rel_diff": rel})
+            status = "OK" if rel < 0.05 else "MISMATCH"
+            print(f"  {row['module'][-40:]:<42} gpu={got:.3e} cpu={ref:.3e} rel={rel:.2%}  {status}")
+        worst = max(a["rel_diff"] for a in agreement)
+        if worst >= 0.05:
+            raise SystemExit(
+                f"GPU/CPU disagree by {worst:.1%} -- randomised SVD is stochastic but not "
+                "that stochastic. Re-run with --device cpu and do not trust the GPU path here."
+            )
+        print(f"  agreement OK (worst {worst:.2%}); randomised SVD is seed-dependent so small drift is expected")
 
     all_x = [r_["x_above_floor"] for r_ in rows]
     all_x.sort()
@@ -302,6 +394,8 @@ def main() -> None:
         "adapter": args.adapter,
         "rank_probed": r,
         "layers": args.layers,
+        "device": str(device),
+        "device_agreement_check": agreement,
         "median_x_above_floor": median_x,
         "verdict": verdict,
         "per_module_type_median_x": {

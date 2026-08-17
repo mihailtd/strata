@@ -157,14 +157,87 @@ across depth *and* across tasks, with no shared low-dimensional manifold. A
 model whose updates are that idiosyncratic is not obviously one whose updates
 live in the base weight's dominant directions. The probe settles it either way.
 
+## 6b. RESULT — the gate was run, and it fails
+
+**Measured 2026-08-17** on `m2_astral_r8a128`, all 32 layers, 128 modules,
+exact deterministic SVD (`results/pissa_premise_probe.json`):
+
+> **Median alignment of the trained update with `W0`'s top-8 subspace:
+> 1.37x the random-chance floor.**
+
+Per module type (median x above floor):
+
+| module | median | range |
+| :--- | ---: | :--- |
+| `down_proj` | 1.85x | see JSON |
+| `gate_proj` | 1.29x | see JSON |
+| `up_proj` | 1.31x | see JSON |
+| `k_proj` | 1.06x | see JSON |
+| `o_proj` | 1.43x | see JSON |
+| `q_proj` | 1.72x | see JSON |
+| `v_proj` | 1.10x | see JSON |
+
+Spectral band profile — where in `W0`'s spectrum the update actually sits:
+
+| band of `W0` | x above floor |
+| :--- | ---: |
+| top-8 | 1.38x |
+| top-32 | 1.31x |
+| top-128 | 1.16x |
+| top-512 | 1.06x |
+
+**There is no concentration anywhere in the spectrum.** Not in the top-8 that
+PiSSA would initialise into, and not deeper either.
+
+**Calibration against this repo's own scale:** `probe_subspace_overlap.py`
+measured cross-task adapter subspaces at **1.10–1.28x chance** and this project
+calls that *"statistically orthogonal"*. The update's alignment with `W0`'s
+principal subspace is **1.37x** — essentially the same band. By the standard
+already in use here, the trained update is near-orthogonal to the subspace PiSSA
+starts from.
+
+### Verdict
+
+**Do not spend GPU time on a PiSSA training A/B on the strength of the published
+claim.** The premise it rests on does not hold for this model. PiSSA also
+*subtracts* the top-r component from the frozen residual, so initialising into a
+subspace the update does not use is not a free bet.
+
+This does not prove PiSSA cannot help (see the correlational caveat in §6). It
+does mean the expected value no longer justifies the 40 GPU-minutes, and that the
+iteration-speed win in §3 should be treated as unlikely rather than merely
+unmeasured.
+
+### ⚠️ Methodological warning that came out of this — reusable
+
+The first version of this probe used `torch.svd_lowrank` and reported **1.28x**,
+reaching the same verdict **by luck**. Randomised SVD is unreliable on these
+weights because their spectrum is nearly flat (measured `s[0]/s[7] = 2.05` on
+layer 0 `down_proj`), so no top-r subspace is well separated:
+
+- five different seeds returned retentions spanning **2.56x** (1.01e-05 .. 2.60e-05)
+- every one of them **underestimated** the exact value
+- on that module the randomised estimate said ~1.3x above floor; exact says **6.59x**
+
+That error is large enough to invert a verdict. The probe now computes the top-r
+subspace **exactly** via the Gram matrix on the small side (validated to 0.001%
+against full `linalg.svd`, and bit-identical across seeds).
+
+**Checked for spillover: none.** `scripts/extract_svd_basis.py` and
+`probe_subspace_overlap.py` both use exact `torch.linalg.svd` on a QR-reduced
+matrix, so the existing SVD findings in this repo are unaffected.
+
+**Rule: do not use randomised SVD on these weight matrices.** Their spectra are
+too flat for it.
+
 ## 7. Recommendation
 
 1. **Do not implement anything.** peft already has it; it is a config flag.
-2. **Run the CPU gate** ([`probe_pissa_premise.py`](probe_pissa_premise.py)) when
-   the machine is idle. Cost: minutes, no GPU.
-3. **Only if the gate passes**, run the loss-curve A/B (~40 GPU-min), with
-   training loss as the primary endpoint and accuracy as a clearly-underpowered
-   secondary.
+2. ~~Run the gate~~ **DONE — it fails at 1.37x chance (§6b).**
+3. **The gate did not pass, so do not run the A/B** on PiSSA's published rationale.
+   If it is ever run anyway (e.g. to test a different init like `olora` or `eva`),
+   use training loss as the primary endpoint and treat accuracy as the
+   ±10pp-resolution secondary it is.
 4. **Tier it ⭐** regardless of outcome. A favourable measurement on this stack is a useful data point, not a novel contribution — PiSSA is published, peft ships it, and the serving path is untouched either way. The win, if it exists, is **iteration speed on sweeps**, which is a legitimate project goal — just not a novelty claim.
    a useful data point, not a novel contribution — PiSSA is published, peft ships
    it, and the serving path is untouched either way.
