@@ -742,3 +742,64 @@ significant effect on the clean eval, so the corpus is not implicated.
 
 **v1 remains canonical.** v2 sits alongside so every historical postgresql number
 keeps its meaning. Promoting either is a human decision.
+
+---
+
+## 17. PROMISING (kill-test passed) — recurrent state replay can replace `commit_fwd`
+
+**Status: prototype greenlit, NOT a claimed win.** One micro-benchmark passed; the
+end-to-end test has not been run.
+
+`commit_fwd` is 29.4% of the speculative loop (§10): on a partial accept the
+chunked scan has already advanced the recurrent state past the rejected tokens, so
+the loop restores a 52.5 MB snapshot and runs a full model forward over the
+committed prefix purely to re-derive that state.
+
+**fla cannot supply the intermediate state, structurally.**
+`chunk_gated_delta_rule` returns `(o, final_state)` — exactly one state, shape
+`[N, HV, K, V]` — and its `chunk_size` is **64**, so a K+1 = 5 token verification
+window contains **zero chunk boundaries**. Chunked scans compute a block's
+aggregate transition and never materialise per-position states; that is what
+chunking *is*. This is not an upstream API gap to file.
+
+**But `commit_fwd` recovers three things and only one is expensive:** attention KV
+entries are truncatable, hidden states are a slice, and the recurrent SSM state is
+the single irrecoverable tensor. `fused_recurrent_gated_delta_rule` takes the
+*identical* argument list to the chunked call, so the committed prefix can be
+replayed through the recurrent kernel from the snapshot — scan only, no forward.
+
+**Measured** (K=4, n_acc=2, 24 GatedDeltaNet layers,
+[`benchmarks/runtime/speculative/state_replay/`](../benchmarks/runtime/speculative/state_replay/)):
+
+| arm | | |
+| :--- | ---: | :--- |
+| A — full model re-forward over 3 tokens | **34.23 ms** | current cost |
+| B — recurrent replay, 24 layers | **1.23 ms** | **27.8× cheaper** |
+| worst relative divergence, B vs C | **7.31e-03** | |
+
+Arm C is the *chunked* scan over the same prefix from the same initial state —
+included so the numerics comparison isolates recurrent-vs-chunked kernel
+divergence instead of confounding it with every other difference in a forward
+pass.
+
+**⚠️ THE DIVERGENCE IS MARGINAL, NOT CLEAN.** bf16 machine epsilon is ~3.9e-03, so
+7.31e-03 is roughly **2 ULP** — the script's "within slack" verdict used a 1e-2
+threshold chosen by hand, and that threshold is doing real work in the conclusion.
+The state is carried forward, so the open question is whether this **compounds
+across ~85 speculative steps** or is damped by the gated delta rule's forget gate.
+Not measured. Do not treat the pass as settled.
+
+**Other limits of this measurement:**
+- Isolated micro-benchmark, not the loop. The synthetic chunk repeats one token;
+  real drafts differ and the divergence may differ with them.
+- The 1.396× ceiling assumes replay fully replaces `commit_fwd` with no new
+  overhead. A real implementation must cache per-layer projections during the
+  chunked verify, which adds memory traffic not counted here.
+- **Serving path only, and `server.py` has no draft path today.**
+
+**The right follow-up is end-to-end, not another micro-benchmark:** run the
+speculative loop with replay substituted for `commit_fwd` and check (a) real loop
+speedup, and (b) whether generated text changes, using the harness from §7. If the
+text holds and the loop speeds up, the interesting consequence is not the 1.4× —
+it is that a cheaper step lowers the acceptance break-even, which is what could
+move speculation from marginal (measured τ 1.67–2.33) to profitable on this rig.
