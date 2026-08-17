@@ -1,5 +1,5 @@
 """Fine-tune the Astral micro-probe adapter using one of the novel training
-techniques from GOAL_1.md, benchmarked head-to-head against the existing
+techniques, benchmarked head-to-head against the existing
 QLoRA baseline (`scripts/export_adapter.py`, MLflow run
 `finetune_Qwen_Qwen3.5-4B_150steps`, experiment `astral_fine_tuning`):
 
@@ -28,7 +28,7 @@ saves the adapter to `results/adapters/astral_qwen3.5_micro_<variant>/`
 
 Velocity gating uses a dynamic bottom-percentile cutoff (quiet_percentile,
 default 25%), not a fixed absolute threshold. A fixed threshold (this gate's
-original design, GOAL_1.md's 0.05 and this repo's later-recalibrated 0.45)
+original design used 0.05; this repo later recalibrated to 0.45)
 has to be hand-retuned any time the training data changes, and silently goes
 inert -- zero quiet layers, zero effect -- if the real distribution drifts
 away from it without warning; that's exactly what was measured happening on

@@ -31,7 +31,7 @@ amount. "Weight Folding" claims more and explains less.
 
 | our name | established name | status | action |
 | :--- | :--- | :--- | :--- |
-| "SVD-Guided Subspace Initialization", "smarter adapter init" | **PiSSA** (Meng et al. 2024) | **CONFIRMED** — `IDEAS.md:57` already names it, and peft 0.20.0 ships it as `init_lora_weights="pissa"` | Call it PiSSA. It is a config flag, not a project. See [`PISSA_ASSESSMENT.md`](benchmarks/factory/geometry/preflight_svd_probe/PISSA_ASSESSMENT.md) |
+| "SVD-Guided Subspace Initialization", "smarter adapter init" | **PiSSA** (Meng et al. 2024) | **CONFIRMED** — [`docs/RESEARCH_ROADMAP.md`](docs/RESEARCH_ROADMAP.md) already names it, and peft 0.20.0 ships it as `init_lora_weights="pissa"` | Call it PiSSA. It is a config flag, not a project. See [`PISSA_ASSESSMENT.md`](benchmarks/factory/geometry/preflight_svd_probe/PISSA_ASSESSMENT.md) |
 | "Draw-Call Batching" (`cuda_graph.py` title) | **kernel-launch overhead**, addressed by **CUDA Graphs** | **CONFIRMED** | Rename. There are no draw calls in LLM decode — the term is borrowed from rendering and actively misleads. The real mechanism is CPU launch cost, which is what CUDA Graph capture removes |
 | "In-Place Weight Folding", "folding" | **adapter merging** (`peft.merge_and_unload`) | **CONFIRMED** | Keep "folding" as shorthand — it is used in 16 files — but define it once as *"adapter merging, performed in-place against a pristine buffer so it is reversible"*. The merging is standard; the in-place-and-restorable part is ours |
 | "Pristine State Buffer" | **master weights** (mixed-precision training discipline) | **CONFIRMED** — `NOVELTY.md` already credits this lineage | Keep the name, keep the credit line. The application to runtime expert swapping is the contribution, not the idea of holding an unmutated reference copy |
@@ -102,7 +102,9 @@ validated to 0.001% against `linalg.svd` and deterministic across seeds).
    `vblora`, `adalora`, `ia3`, `oft`, `poly`. If it's there, it has a name.
 2. Check `init_lora_weights`' accepted literals for initialisation schemes —
    `pissa`, `olora`, `eva`, `corda`, `loftq`, `orthogonal`, `mica` are all built in.
-3. Check `IDEAS.md` — it already catalogues DoRA, PiSSA, AdaLoRA, VeRA, QLoRA,
-   IA³, Houlsby, prefix tuning.
+3. Check [`docs/RESEARCH_ROADMAP.md`](docs/RESEARCH_ROADMAP.md) — it catalogues the PEFT
+   landscape (DoRA, PiSSA, VeRA, QLoRA, IA³, prefix/prompt tuning). Note it is a
+   condensation of the older `IDEAS.md`, so a method's absence there is not proof
+   it has no established name — fall back to steps 1–2 and a literature check.
 4. Only if all three come back empty, name it — and record here why it needed a
    new name.

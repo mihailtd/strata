@@ -1,5 +1,5 @@
 """Two novel training-time techniques for LoRA fine-tuning, benchmarked against
-the existing QLoRA baseline in `scripts/export_adapter.py` (see GOAL_1.md):
+the existing QLoRA baseline in `scripts/export_adapter.py`:
 
 1. Cross-Layer Tucker Factorization ("tucker" mode): instead of each target
    Linear owning an independent (A, B) pair, every layer sharing a given

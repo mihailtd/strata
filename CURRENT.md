@@ -2,8 +2,9 @@
 
 What is live right now: which trainer, which adapters, which findings hold, and
 what has been retracted. Companion to `SYSTEM.md` (hardware/software snapshot),
-`NOVELTY.md` (honest tiering of what is actually novel here) and `GLOSSARY.md`
-(which of our names are ours, and which already had established names).
+`NOVELTY.md` (honest tiering of what is actually novel here), `GLOSSARY.md`
+(which of our names are ours, and which already had established names) and
+`docs/DECISIONS.md` (what was retired, and the measurement that retired it).
 
 **Read this before citing any number or running any benchmark.** Several results
 in this repo were invalidated by using an adapter that was not what its script

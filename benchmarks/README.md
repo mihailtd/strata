@@ -96,6 +96,7 @@ To ensure scientific rigor and prevent regressions, all future experiments **MUS
 * **[`runtime/performance/batch_scaling/`](runtime/performance/batch_scaling/)**: High-batch throughput scaling up to $B=64$ (611 tok/s).
 
 ### 2. [`factory/`](factory/) — The Factory & Geometric Probes
+* **[`factory/EVALUATION_LADDER.md`](factory/EVALUATION_LADDER.md)**: The 4-stage fast-to-slow evaluation ladder (SVD checks → micro-loss probes → targeted logprob shift → downstream benchmarks).
 * **[`factory/geometry/alpha_sweep/`](factory/geometry/alpha_sweep/)**: `bfloat16` Mantissa ULP Inverse Scaling Law and $\alpha=128$ absorption threshold.
 * **[`factory/geometry/preflight_svd_probe/`](factory/geometry/preflight_svd_probe/)**: Sub-second pre-flight SVD subspace overlap verification.
 * **[`factory/geometry/times_above_chance/`](factory/geometry/times_above_chance/)**: Grassmannian projection normalization proving cross-domain orthogonality.
@@ -103,4 +104,4 @@ To ensure scientific rigor and prevent regressions, all future experiments **MUS
 * **[`factory/m1_vs_m2_regime/`](factory/m1_vs_m2_regime/)**: Controlled A/B audit establishing the unified M2 `bfloat16` + Liger pipeline (+3.36 pp win).
 
 ### 3. [`superseded/`](superseded/) — Historical Provenance
-* Retired benchmarks and legacy prototypes preserved with full documentation of why they were superseded.
+* Retired benchmarks and legacy prototypes preserved with full documentation of why they were superseded (including [`ftq_0.8b_experiments.md`](superseded/ftq_0.8b_experiments.md) and [`AUDIT_HISTORY_2026-08-11.md`](superseded/AUDIT_HISTORY_2026-08-11.md)).

@@ -7,7 +7,7 @@
 ## 1. What it actually is
 
 "SVD-guided subspace initialization" is **PiSSA** (Principal Singular values and
-Singular vectors Adaptation, Meng et al. 2024). `IDEAS.md:57` already names it.
+Singular vectors Adaptation, Meng et al. 2024). [`docs/RESEARCH_ROADMAP.md`](../../../../docs/RESEARCH_ROADMAP.md) already names it.
 Standard LoRA starts at `B=0, A~gaussian` so `dW=0`; PiSSA instead initialises
 `A, B` from the top-r SVD of the base weight `W0`, and subtracts that component
 from the frozen residual.
