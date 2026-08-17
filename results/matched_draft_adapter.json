@@ -1,0 +1,37 @@
+{
+  "device": "AMD Radeon RX 7900 XTX",
+  "k": 4,
+  "domains": {
+    "astral": {
+      "arm_a_pristine": {
+        "steps": 81,
+        "accepted": 157,
+        "tau": 1.9382716049382716
+      },
+      "arm_b_matched": {
+        "steps": 79,
+        "accepted": 159,
+        "tau": 2.0126582278481013
+      },
+      "delta_tau": 0.07438662290982978,
+      "source_layer": 31,
+      "modules_folded": 7
+    },
+    "postgresql": {
+      "arm_a_pristine": {
+        "steps": 119,
+        "accepted": 192,
+        "tau": 1.6134453781512605
+      },
+      "arm_b_matched": {
+        "steps": 116,
+        "accepted": 196,
+        "tau": 1.6896551724137931
+      },
+      "delta_tau": 0.0762097942625326,
+      "source_layer": 31,
+      "modules_folded": 7
+    }
+  },
+  "mean_delta_tau": 0.07529820858618119
+}

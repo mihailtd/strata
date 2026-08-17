@@ -1137,3 +1137,69 @@ current kernel stack.
   seq=5 chunked verify. That is an approximation, and the W=2 vs W=4 ordering
   could shift under a direct measurement.
 - 6 prompts × 48 tokens, one domain (astral), K=4, no repeats.
+
+---
+
+## 23. CONFIRMED — the matched draft adapter works; §5's "never adapt the head" was scoped too widely
+
+**Result:** folding the SAME expert into the MTP draft head that the backbone is
+already wearing raises acceptance in both domains tested:
+
+| domain | τ head pristine | τ head matched | Δ |
+| :--- | ---: | ---: | ---: |
+| astral | 1.938 | **2.013** | **+0.074** |
+| postgresql | 1.613 | **1.690** | **+0.076** |
+
+Two independent domains landing within **0.002** of each other. Worth **+2.6% to
++2.9%** throughput, at **zero VRAM cost** — the adapter is already resident, and
+folding it into the head touches 7 modules.
+
+### This SHARPENS §5 rather than contradicting it
+
+`benchmark_mtp_head_adapter_acceptance.py` measured τ 2.456 → 1.531–1.988 and
+concluded "you cannot adapt a draft head". Its method says: *"The backbone is
+identical across conditions — only the head changes."* It tested an adapted head
+against a **PRISTINE** backbone — the mismatched case. Its own stated mechanism
+("the head forms its own opinions and disagrees with the backbone") **predicts**
+that matching them restores agreement, and it does.
+
+**The corrected rule: a draft head must AGREE WITH ITS BACKBONE. When the backbone
+is domain-folded, the head should be too.** The engine always serves a folded
+backbone, so the matched case is the one that was operationally relevant all along.
+
+Mechanically clean: the MTP head is architecturally a Qwen decoder layer with
+shape-identical modules (`mlp.gate_proj` (9216,2560) in both), so backbone LoRA
+factors fold in with no reshaping. Source is the last shape-compatible backbone
+layer (31), 7 modules, adapter's own scaling.
+
+### The compounded stack, all measured
+
+| | factor |
+| :--- | ---: |
+| speculative decoding (τ 1.506) | **1.181×** |
+| × W=2 branching (τ → 1.795, §22) | **1.116×** |
+| × matched draft head (τ → ~1.87 equivalent) | **1.026×** |
+| **= vs autoregressive** | **1.352×** |
+
+**28.7 ms/token → 21.2 ms.**
+
+### ⚠️ THE BLOCKER IS NOT ANY OF THIS — `server.py` HAS NO SPECULATION AT ALL
+
+Confirmed by grep: zero matches for `speculat|draft|mtp` in `server.py`. Every
+number above is benchmark-only and **users currently receive none of it**. The
+ordering that actually moves user latency:
+
+1. **Speculative decode in the serving loop** — worth 1.18× on its own, and it is
+   the only step that changes what a user experiences today.
+2. W=2 branching — a further 1.12×.
+3. Matched draft adapter — a further 1.03×, free.
+
+Step 1 is worth more than 2 and 3 combined and none of the rest ships without it.
+
+### Correction carried from §22
+
+Earlier notes in this session repeatedly said speculation "sits below its own
+break-even (~2.8)". That bar came from a `mtp_draft.py` docstring measured before
+`fla` was available. Chunked verify is **1.27×** a single token, not 2.84×.
+Speculation pays and always did — the stale number caused every speculative result
+here to be undersold.
