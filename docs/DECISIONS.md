@@ -31,7 +31,8 @@ source-dependent. `test_direct_edge_is_always_optimal` fails loudly if it does.
 
 ## 2. RETIRED — PiSSA and the `W0`-SVD initialisation family
 
-**Applies to:** PiSSA (**measured**), OLoRA / CorDA (**predicted, not measured**).
+**Applies to:** PiSSA (**trained and measured**), OLoRA (**trained and measured**),
+CorDA (**predicted, not measured**).
 
 **Cause (MEASURED, for PiSSA):** the premise fails. The trained update's energy
 in `W0`'s top-8 subspace is **1.37× the random-chance floor** (128 modules, 32
@@ -46,13 +47,68 @@ init at scale.
 `W0`-derived, so the same flat spectrum should apply — but nobody has run them.
 Label accordingly.
 
-**Caveat that must travel with this:** the probe falsifies PiSSA's *stated
-rationale*, not necessarily the method. PiSSA may still help via optimisation
-conditioning (large well-scaled `A,B` at init), which was not tested. If that is
-ever chased, `init_lora_weights="orthogonal"` tests it more cheaply and without
-the residual-subtraction risk.
+### TRAINED AND MEASURED (2026-08-17) — the verdict holds, but for none of the above reasons
 
-**Replaced by:** peft's default init. No change required.
+The caveat this section carried was the right one: *"the probe falsifies PiSSA's
+stated rationale, not necessarily the method. PiSSA may still help via optimisation
+conditioning (large well-scaled `A,B` at init), **which was not tested**."* It has
+now been tested. 10 matched runs, `scripts/compare_init_schemes.py`, same data,
+same r=8, same lr, same 150 steps, `logging_steps=1`, only `init_lora_weights`
+and `alpha` varying. **OLoRA is no longer "predicted" — it was run.**
+
+**Gate that licenses every number below:** PiSSA at init is mathematically the
+base model (`W_res + scaling·B₀A₀ = W0`), as is stock LoRA (`dW = 0`). Step-1
+losses agreed across all three schemes to **≤ 0.011**, so the arms are matched.
+
+**The headline: at matched alpha, both schemes are inert.** astral, α=8, only the
+init differs (noise floor 0.0171):
+
+| init | final EMA loss | vs stock | |
+| :--- | ---: | ---: | :--- |
+| stock | 1.104 | — | |
+| **pissa** | 1.095 | **−0.009** | 0.5× noise — indistinguishable |
+| **olora** | 1.123 | **+0.019** | 1.1× noise — barely resolvable |
+
+**Neither buys an iteration win.** Across all three domains at α=128, neither
+scheme ever reaches the stock run's final loss within 150 steps. Best config in
+the whole sweep remains **stock LoRA r=8 α=128 at 1.072**.
+
+**⚠️ The large apparent deficits were a SCALING ARTEFACT, not the subspace.** Run
+at the repo's α=128 (scaling 16) these schemes look catastrophic; at their
+paper-native α=r they are inert. PiSSA's deficit is monotonic in alpha —
+α=8 +0.024, α=32 +0.054, α=128 +0.127 — and **96.6% of OLoRA's apparent +0.557
+disaster evaporates at matched alpha (+0.019)**. Any future report of these
+schemes MUST hold alpha fixed; the α=128 numbers measure scaling, not
+initialisation.
+
+This also **retires a tempting wrong explanation**. It is natural to say PiSSA and
+OLoRA both initialise on `W0`-derived directions, the task update sits at 1.37×
+chance inside that subspace, so they waste early training unlearning it — a story
+that agrees with the section above and fits the α=128 numbers perfectly. The
+matched-alpha control falsifies it: hold scaling fixed and the init scheme does
+nothing at all. **The geometric argument does not explain these curves.** It may
+still be true of the geometry; it is not what produced the loss differences.
+
+**⚠️ And PiSSA is NOT free downstream, contrary to `PISSA_ASSESSMENT.md` §2.**
+PiSSA trains against a mutated base (`W_res = W0 − scaling·B₀A₀`), while this
+engine folds onto a **pristine `W0`** buffer — so a naively-saved PiSSA adapter
+would add the principal component twice. peft's conversion fixes it by emitting
+`dW = scaling·(B_trained A_trained − B₀A₀)`, and refactorising a *difference of
+two rank-r products* gives **rank 2r**. Measured on disk:
+
+| | rank | alpha | size |
+| :--- | ---: | ---: | ---: |
+| production `m2_financial_r8a128` | 8 | 128 | **41 MB** |
+| PiSSA r=8, serving-compatible | **16** | **256** | **82 MB** |
+
+So adopting PiSSA means doubling adapter size and fold FLOPs — or abandoning the
+pristine-`W0` design the whole swap architecture rests on — to buy a **−0.009**
+loss change. `scripts/train_expert_CURRENT_m2.py --init-lora-weights` performs
+this conversion automatically and warns; do not save a PiSSA adapter without it.
+
+**Replaced by:** peft's default init. No change required — now on evidence rather
+than inference. Evidence: `results/init_scheme_comparison.json`,
+`results/loss_curves/*_{pissa,olora}*.json`.
 See [`PISSA_ASSESSMENT.md`](../benchmarks/factory/geometry/preflight_svd_probe/PISSA_ASSESSMENT.md).
 
 ---

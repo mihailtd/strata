@@ -1,6 +1,34 @@
 # ❓ SVD-Guided Subspace Initialization — assessment before building
 
-**Status: nothing to build. The decision is whether to spend GPU time measuring it.**
+**Status: MEASURED 2026-08-17. The GPU time was spent. Answer: no win, do not adopt.**
+
+> ## Result — the experiment this document proposed
+>
+> 10 matched runs (`scripts/compare_init_schemes.py`): 3 domains × {stock, pissa,
+> olora} at α=128, plus a PiSSA alpha sweep and a **stock control at matched
+> alpha** on astral. Only `init_lora_weights` and `alpha` varied. Step-1 losses
+> agreed to ≤ 0.011, confirming the arms start from the same model.
+>
+> **(a) iteration win — NONE.** Neither scheme reaches the stock run's final loss
+> within 150 steps, in any of the three domains. Nothing to bank.
+>
+> **(b) quality win — NONE.** At matched α=8 on astral (noise floor 0.0171):
+> PiSSA **−0.009** (0.5× noise, indistinguishable), OLoRA **+0.019** (1.1× noise).
+> Best config in the entire sweep is unchanged: **stock LoRA r=8 α=128**.
+>
+> **⚠️ The scary-looking numbers were a scaling artefact.** At the repo's α=128
+> these schemes look catastrophic (PiSSA +0.127, OLoRA +0.557); at their
+> paper-native α=r they are inert. **96.6% of OLoRA's apparent disaster evaporates
+> at matched alpha.** PiSSA's deficit is monotonic in alpha (α=8 +0.024, α=32
+> +0.054, α=128 +0.127). Never report these schemes without holding alpha fixed.
+>
+> **This also kills a plausible wrong story:** that both schemes init on
+> `W0`-derived directions which the task doesn't use (1.37× chance), so they waste
+> early steps unlearning them. It fits the α=128 numbers perfectly and it is not
+> what is happening — hold alpha fixed and the init scheme does nothing at all.
+>
+> See `docs/DECISIONS.md` §2 and the ⚠️ retraction in §2 below — PiSSA's
+> serving-compatible form is **rank 2r**, so it is not free downstream either.
 
 ---
 
@@ -35,9 +63,29 @@ thing that could earn a tier here is the *measurement* on this stack.
 ## 2. The premise stated correctly
 
 Your framing is right and worth keeping verbatim: **it helps convergence during
-training and has exactly zero impact on runtime serving speed.** A PiSSA-trained
-adapter is the same shape, same rank, same `dW`, folded by the same
-`WeightFoldingEngine` in the same 18 ms. Nothing downstream of training changes.
+training and has exactly zero impact on runtime serving speed.**
+
+> ### ⚠️ RETRACTED (2026-08-17) — the second half of this claim is wrong
+>
+> This section used to continue: *"A PiSSA-trained adapter is the same shape, same
+> rank, same `dW`, folded by the same `WeightFoldingEngine` in the same 18 ms.
+> Nothing downstream of training changes."* **Measured, it is not.**
+>
+> PiSSA trains against a **mutated base** (`W_res = W0 − scaling·B₀A₀`). This
+> engine folds onto a **pristine `W0`** buffer, so a naively-saved PiSSA adapter
+> adds the principal component twice. peft converts it back by emitting
+> `dW = scaling·(B_trained A_trained − B₀A₀)` — and refactorising a *difference of
+> two rank-r products* yields **rank 2r**:
+>
+> | | rank | alpha | on disk |
+> | :--- | ---: | ---: | ---: |
+> | production `m2_financial_r8a128` | 8 | 128 | **41 MB** |
+> | PiSSA r=8, serving-compatible | **16** | **256** | **82 MB** |
+>
+> So the real trade is: **double the adapter and the fold FLOPs, or abandon the
+> pristine-`W0` design the swap architecture rests on.** Not free. peft warns about
+> this itself; `train_expert_CURRENT_m2.py --init-lora-weights` now does the
+> conversion automatically.
 
 Faster adapter iteration is a stated goal of this project, so the training-side
 benefit is a real benefit — it just has to be sized correctly.

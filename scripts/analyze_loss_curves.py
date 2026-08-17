@@ -132,7 +132,7 @@ def main() -> None:
     print("=" * 92)
     print(f"  {'domain':<20}{'within 0.05':>13}{'within 0.02':>13}{'within 0.01':>13}{'of max':>10}")
     print("  " + "-" * 88)
-    for name, r in report["domains"].items():
+    for name, _r in report["domains"].items():
         d, steps, losses = load(curve_dir / f"{name}.json")
         sm = ema(losses, args.alpha)
         row = {}

@@ -1,0 +1,162 @@
+{
+  "ema_alpha": 0.1,
+  "schemes": [
+    "pissa",
+    "olora"
+  ],
+  "domains": {
+    "astral": {
+      "step1_loss": {
+        "stock": 1.7084953784942627,
+        "pissa": 1.705394983291626,
+        "olora": 1.7120471000671387
+      },
+      "step1_spread": 0.006652116775512695,
+      "iteration_win": {
+        "target_loss": 1.071771041262521,
+        "stock_steps": 109,
+        "variants": {
+          "pissa": {
+            "steps_to_target": null,
+            "final_ema": 1.1990661709783281
+          },
+          "olora": {
+            "steps_to_target": null,
+            "final_ema": 1.6290459753741715
+          }
+        }
+      },
+      "quality": {
+        "stock_final_ema": 1.071771041262521,
+        "noise_floor": 0.017141275619542824,
+        "deltas_vs_stock": {
+          "pissa": 0.12729512971580714,
+          "olora": 0.5572749341116505
+        }
+      },
+      "wall_clock": {
+        "stock": {
+          "train_s": 124.7976,
+          "s_per_step": 0.8319840000000001,
+          "projected_s_to_target": 90.686256
+        },
+        "pissa": {
+          "train_s": 179.4028,
+          "s_per_step": 1.1960186666666668,
+          "s_per_step_vs_stock": 1.4375500810913031,
+          "projected_s_to_target": null,
+          "net_wall_clock_saving_pct": null
+        },
+        "olora": {
+          "train_s": 176.3412,
+          "s_per_step": 1.175608,
+          "s_per_step_vs_stock": 1.413017558029962,
+          "projected_s_to_target": null,
+          "net_wall_clock_saving_pct": null
+        }
+      }
+    },
+    "postgresql": {
+      "step1_loss": {
+        "stock": 1.618964433670044,
+        "pissa": 1.6193703413009644,
+        "olora": 1.6227869987487793
+      },
+      "step1_spread": 0.0038225650787353516,
+      "iteration_win": {
+        "target_loss": 0.7481486944948431,
+        "stock_steps": 148,
+        "variants": {
+          "pissa": {
+            "steps_to_target": null,
+            "final_ema": 0.7763206589360799
+          },
+          "olora": {
+            "steps_to_target": null,
+            "final_ema": 1.1458453175481158
+          }
+        }
+      },
+      "quality": {
+        "stock_final_ema": 0.7481486944948431,
+        "noise_floor": 0.018259072382407617,
+        "deltas_vs_stock": {
+          "pissa": 0.02817196444123682,
+          "olora": 0.3976966230532727
+        }
+      },
+      "wall_clock": {
+        "stock": {
+          "train_s": 230.2237,
+          "s_per_step": 1.5348246666666667,
+          "projected_s_to_target": 227.15405066666668
+        },
+        "pissa": {
+          "train_s": 208.8096,
+          "s_per_step": 1.392064,
+          "s_per_step_vs_stock": 0.90698568392394,
+          "projected_s_to_target": null,
+          "net_wall_clock_saving_pct": null
+        },
+        "olora": {
+          "train_s": 211.6118,
+          "s_per_step": 1.4107453333333333,
+          "s_per_step_vs_stock": 0.9191573239418878,
+          "projected_s_to_target": null,
+          "net_wall_clock_saving_pct": null
+        }
+      }
+    },
+    "financial_planning": {
+      "step1_loss": {
+        "stock": 2.2250328063964844,
+        "pissa": 2.226674795150757,
+        "olora": 2.235971450805664
+      },
+      "step1_spread": 0.010938644409179688,
+      "iteration_win": {
+        "target_loss": 0.8764101923423704,
+        "stock_steps": 110,
+        "variants": {
+          "pissa": {
+            "steps_to_target": null,
+            "final_ema": 0.9242055058605864
+          },
+          "olora": {
+            "steps_to_target": null,
+            "final_ema": 1.3348523290391456
+          }
+        }
+      },
+      "quality": {
+        "stock_final_ema": 0.8764101923423704,
+        "noise_floor": 0.014951812593463926,
+        "deltas_vs_stock": {
+          "pissa": 0.047795313518215976,
+          "olora": 0.45844213669677525
+        }
+      },
+      "wall_clock": {
+        "stock": {
+          "train_s": 164.1054,
+          "s_per_step": 1.094036,
+          "projected_s_to_target": 120.34396
+        },
+        "pissa": {
+          "train_s": 162.0048,
+          "s_per_step": 1.0800319999999999,
+          "s_per_step_vs_stock": 0.9871996899553579,
+          "projected_s_to_target": null,
+          "net_wall_clock_saving_pct": null
+        },
+        "olora": {
+          "train_s": 161.3151,
+          "s_per_step": 1.075434,
+          "s_per_step_vs_stock": 0.9829969032097664,
+          "projected_s_to_target": null,
+          "net_wall_clock_saving_pct": null
+        }
+      }
+    }
+  }
+}

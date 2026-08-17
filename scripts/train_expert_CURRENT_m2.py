@@ -95,6 +95,19 @@ def main():
     ap.add_argument("--model-id", default="Qwen/Qwen3.5-4B")
     ap.add_argument("--rank", type=int, default=8)
     ap.add_argument("--alpha", type=int, default=128)
+    ap.add_argument(
+        "--init-lora-weights",
+        default="true",
+        help=(
+            "peft init scheme: 'true' (stock LoRA, B=0 so dW=0 at init), 'pissa', "
+            "'pissa_niter_<N>', 'olora', 'eva', 'gaussian'. NOTE: pissa/olora MUTATE "
+            "the base weights (W_res = W0 - scaling*B0@A0), so the trained adapter is a "
+            "delta on W_res, NOT on pristine W0. This engine folds onto a pristine W0 "
+            "buffer, so such adapters are converted back to standard LoRA at save time "
+            "(peft's path_initial_model_for_weight_conversion). That conversion emits "
+            "rank 2r, not r -- see the printed warning."
+        ),
+    )
     ap.add_argument("--max-steps", type=int, default=150)
     ap.add_argument("--lr", type=float, default=2e-4)
     ap.add_argument("--vram-cap-gb", type=float, default=22.0)
@@ -156,6 +169,10 @@ def main():
         trust_remote_code=True,
     )
 
+    # peft wants the bool True for stock LoRA and a string for every other scheme.
+    init_scheme: object = True if args.init_lora_weights.lower() == "true" else args.init_lora_weights
+    mutates_base = args.init_lora_weights.lower().startswith(("pissa", "olora"))
+
     lora_config = LoraConfig(
         r=args.rank,
         lora_alpha=args.alpha,
@@ -163,9 +180,26 @@ def main():
         lora_dropout=0.0,
         bias="none",
         task_type="CAUSAL_LM",
+        init_lora_weights=init_scheme,
     )
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
+
+    # PiSSA/OLoRA subtract their init from the base weights, so the adapter that
+    # comes out is a delta on W_res, not on W0. Folding it onto this engine's
+    # pristine W0 buffer would add the principal component twice. peft can convert
+    # back to an equivalent standard LoRA if it is handed the INITIAL adapter, so
+    # stash that before a single gradient step touches it.
+    init_adapter_dir = None
+    if mutates_base:
+        init_adapter_dir = out_dir / "_pissa_init"
+        init_adapter_dir.mkdir(parents=True, exist_ok=True)
+        model.save_pretrained(str(init_adapter_dir))
+        print(
+            f"  [{args.init_lora_weights}] base weights MUTATED (W_res = W0 - scaling*B0@A0).\n"
+            f"  Initial adapter stashed -> {init_adapter_dir}\n"
+            "  It will be converted back to a pristine-W0 LoRA at save time; expect rank 2r."
+        )
 
     from datasets import Dataset
 
@@ -207,6 +241,9 @@ def main():
                 {
                     "domain": args.domain,
                     "methodology": METHODOLOGY,
+                    "init_lora_weights": args.init_lora_weights,
+                    "rank": args.rank,
+                    "alpha": args.alpha,
                     "max_steps": args.max_steps,
                     "logging_steps": args.logging_steps,
                     "lr": args.lr,
@@ -223,7 +260,15 @@ def main():
         print(f"Loss curve -> {curve_path}")
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    model.save_pretrained(str(out_dir))
+    if init_adapter_dir is not None:
+        # Emits dW = scaling*(B_trained@A_trained - B0@A0) refactorised as a plain
+        # LoRA on pristine W0 -- which is what WeightFoldingEngine requires. The
+        # refactorisation of a difference of two rank-r products is rank 2r.
+        model.save_pretrained(
+            str(out_dir), path_initial_model_for_weight_conversion=str(init_adapter_dir)
+        )
+    else:
+        model.save_pretrained(str(out_dir))
     tokenizer.save_pretrained(str(out_dir))
     # Record the regime in the adapter itself. 0 of 69 existing adapters do this,
     # so provenance was previously recoverable only from directory-layout side
@@ -240,6 +285,9 @@ def main():
                 "rank": args.rank,
                 "alpha": args.alpha,
                 "scaling": args.alpha / args.rank,
+                "init_lora_weights": args.init_lora_weights,
+                "base_weights_mutated_during_training": mutates_base,
+                "converted_to_pristine_w0_lora": init_adapter_dir is not None,
                 "max_steps": args.max_steps,
                 "lr": args.lr,
                 "dataset": data_rel,
