@@ -1017,3 +1017,61 @@ that tests them.** Doing so here beat both available narratives: two of three
 claims hold, the third is half-built, the missing half is 200× cheaper than
 anyone (including this reviewer) assumed, and the real constraint turned out to be
 somewhere nobody was looking.
+
+---
+
+## 21. MEASURED — mid-stream expert hot-swapping works; the carried state is not a liability
+
+**Claim:** swap experts mid-generation within one response stream — Python tooling
+first, fold to the postgres expert when the answer reaches an SQL block — without
+resetting the KV cache or re-forwarding the prefix.
+[`benchmarks/runtime/folding/midstream_swap/`](../benchmarks/runtime/folding/midstream_swap/)
+
+### The attribution in the proposal is wrong, even though the capability holds
+
+The claim credits "In-Place Folding + ReplaySSM". **ReplaySSM contributes nothing
+here.** The KV cache is a *separate object* from the model weights;
+`WeightFoldingEngine.activate()` mutates weights in place and never touches the
+cache passed to `forward()`. A mid-stream swap therefore already works with
+folding alone — there is nothing for a rollback primitive to "hold stable"
+because nothing is rolled back. ReplaySSM is a REWIND mechanism; hot-swapping
+CONTINUES. It would only matter for *undoing* a swap.
+
+### Measured: 4 arms, post-swap text scored on the repo's postgres term lists
+
+| arm | score | |
+| :--- | ---: | :--- |
+| A — astral throughout | **0.00** | floor: never reaches postgres vocabulary |
+| B — postgres throughout | **100.00** | ceiling |
+| **C — swap, state CARRIED** | **100.00** | **the claim — hits the ceiling** |
+| D — swap, prefix RE-PREFILLED under postgres | **66.67** | carried-state control |
+
+**Swap costs 17.63 ms** (independently consistent with the 17.97 ms fold from
+`calibrate_transition_costs.py`) against **55.03 ms** to re-prefill — **3.1×
+cheaper**, and it reaches the same quality as never having used the other expert.
+
+### The counter-intuitive part: re-prefilling is WORSE
+
+D pays full price to re-encode the prefix under postgres and scores *lower* than
+simply carrying the astral-encoded state. The likely reason is that the prefix
+content genuinely *is* astral-domain (uv/ruff/Python tooling), so encoding it with
+astral is the better representation. Carrying the cache leaves **each region
+encoded by the expert appropriate to it** — a hybrid context, not a stale one.
+
+That reframes "without resetting the KV cache" from a risk to be tolerated into
+the mechanism's actual advantage.
+
+### ⚠️ Limits — do not over-read this
+
+- **n=3 prompts**, and the good/bad ratio metric **saturates at 0/100**, so these
+  are three coarse samples, not a distribution. The direction is clear; the
+  magnitude is not.
+- Prompt 1's D=0.00 was inspected directly and is **not degenerate output** — it
+  is fluent, similar length to C (297 vs 308 chars), and simply reaches for
+  `api.postgres`/`openai_embed` imports instead of naming `pgvector`. The metric
+  is doing something reasonable, but it is a keyword ratio, not a quality judge.
+- C and D texts diverge on 3/3 prompts, which is expected: different cache
+  encodings, not an error.
+- No test of *repeated* swapping, or of swapping back. Cross-task subspace overlap
+  is ~chance on the input side but 6–7× chance on the output side (§13), so
+  repeated swaps are not obviously safe by extension from one.

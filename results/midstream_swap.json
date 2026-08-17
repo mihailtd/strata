@@ -1,0 +1,54 @@
+{
+  "device": "AMD Radeon RX 7900 XTX",
+  "swap_at": 32,
+  "tokens": 96,
+  "means": {
+    "score_a_astral": 0.0,
+    "score_b_pg": 100.0,
+    "score_c_carried": 100.0,
+    "score_d_reprefilled": 66.66666666666667,
+    "swap_ms": 17.63053733156994,
+    "reprefill_ms": 55.03081899951212
+  },
+  "rows": [
+    {
+      "prompt": 0,
+      "score_a_astral": 0.0,
+      "score_b_pg": 100.0,
+      "score_c_carried": 100.0,
+      "score_d_reprefilled": 0.0,
+      "swap_ms": 17.74754899815889,
+      "reprefill_ms": 70.8251879987074,
+      "c_equals_d": false,
+      "first_divergence": 14,
+      "text_c": "\nfrom sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker\nfrom sqlalchemy.orm import Session\n\nfrom pgvector import AsyncPgVector\n\nlogging.basicConfig(level=logging.INFO)\nlogger = logging.getLogger(__name__)\n\nasync def main():\n    engine = create_async_engine(\n        \"postgresql+asyncpg://",
+      "text_d": "\nfrom sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker\n\nfrom api.openai_embed import embed_query\nfrom api.postgres import get_db\nfrom api.postgres import models\nfrom api.postgres import search_similar_items\n\n# Configure logging\nlogging.basicConfig(\n    level=logging.INFO,\n   "
+    },
+    {
+      "prompt": 1,
+      "score_a_astral": 0.0,
+      "score_b_pg": 100.0,
+      "score_c_carried": 100.0,
+      "score_d_reprefilled": 100.0,
+      "swap_ms": 17.462390002037864,
+      "reprefill_ms": 49.87436100054765,
+      "c_equals_d": false,
+      "first_divergence": 63,
+      "text_c": " uv add pgvector\n```\n\n**Table Definition (`embeddings.sql`):**\n```sql\nCREATE TABLE embeddings.product_embedding (\n    product_id INTEGER PRIMARY KEY REFERENCES product.id (id) ON DELETE CASCADE,\n    embedding VECTOR(1536) NOT NULL\n);\n```\n\n**Lookup Query (`",
+      "text_d": " uv add pgvector\n```\n\n**Table Definition (`embeddings.sql`):**\n```sql\nCREATE TABLE embeddings.product_embedding (\n    product_id INTEGER PRIMARY KEY REFERENCES product.id (id) ON DELETE CASCADE,\n    embedding VECTOR(1536) NOT NULL\n);\n```\n\n**Lookup Query:**"
+    },
+    {
+      "prompt": 2,
+      "score_a_astral": 0.0,
+      "score_b_pg": 100.0,
+      "score_c_carried": 100.0,
+      "score_d_reprefilled": 100.0,
+      "swap_ms": 17.681672994513065,
+      "reprefill_ms": 44.392907999281306,
+      "c_equals_d": false,
+      "first_divergence": 42,
+      "text_c": "```sql\nCREATE TABLE embeddings.product_embedding (\n    product_id UUID PRIMARY KEY REFERENCES product.id (id) ON DELETE CASCADE,\n    embedding VECTOR(1536) NOT NULL\n);\n\nCREATE TABLE embeddings.product_variant_embedding (\n    product_variant_id UUID PRIMARY KEY REFERENCES product_variant.id (id) ON",
+      "text_d": "```sql\nCREATE TABLE embeddings.product_embedding (\n    product_id UUID PRIMARY KEY REFERENCES product.id (id) ON DELETE CASCADE,\n    embedding VECTOR(1536) NOT NULL\n);\n\nCREATE INDEX idx_product_embedding_embedding ON embeddings.product_embedding (embedding);\n```\n\n#### Python Implementation\n\n```python\n"
+    }
+  ]
+}
