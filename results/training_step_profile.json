@@ -1,0 +1,39 @@
+{
+  "device": "AMD Radeon RX 7900 XTX",
+  "batch": 2,
+  "seq_len": 512,
+  "arms": {
+    "liger_on": {
+      "s_per_step": 0.8742793366500337,
+      "peak_vram_gb": 14.98645504,
+      "liger": true,
+      "phases_s": {
+        "forward": 0.5477246658500008,
+        "backward": 0.39100833304983096,
+        "optimizer": 0.008983969900145893
+      },
+      "phase_pct": {
+        "forward": 57.79411827389174,
+        "backward": 41.257922557294215,
+        "optimizer": 0.947959168814041
+      }
+    },
+    "liger_off": {
+      "s_per_step": 0.6893930156498754,
+      "peak_vram_gb": 19.336577536,
+      "liger": false,
+      "phases_s": {
+        "forward": 0.24493078300019988,
+        "backward": 0.3685238050000407,
+        "optimizer": 0.009977186149990302
+      },
+      "phase_pct": {
+        "forward": 39.287503966902065,
+        "backward": 59.1121306741796,
+        "optimizer": 1.6003653589183378
+      }
+    }
+  },
+  "liger_speedup": 0.7885271751834086,
+  "liger_vram_saved_gb": 4.350122496000001
+}

@@ -501,3 +501,55 @@ decode 87%, prefill 651 ms of a 5,001 ms turn) — but a 2× decode win returns
 8,000 in / 50 out prefill is 55.8% and decode optimisation is capped at 1.79×
 regardless.** Size every decode optimisation against the turn shape, not against
 the 1024-token figure.
+
+---
+
+## 12. CONFIRMED (was untested) — Liger is worth 47.5% on the real workload; keep it
+
+**Item:** "Fused Triton Backprop + Sequence Packing (Faster Training on ROCm)".
+Status before today: fused kernels were **already adopted** (`liger_fused_kernels:
+true` on every m2 adapter) but **never A/B'd on this rig**. Adopted on faith.
+
+**Measured, matched A/B on the real trainer, both arms in-session:**
+
+| arm | train_runtime | final EMA loss | noise floor |
+| :--- | ---: | ---: | ---: |
+| liger | **127.6 s** | 1.0717 | 0.0173 |
+| noliger | 188.2 s | 1.0704 | 0.0172 |
+
+**Liger is 47.5% faster and the losses are equivalent** (Δ −0.0013, well inside
+noise). The Liger arm also reproduces the previous session's baseline (124.8 s),
+so the comparison is anchored. It additionally saves **4.35 GB** peak VRAM.
+
+**⚠️ A synthetic benchmark said the exact opposite and was wrong.**
+`benchmark_training_step_profile.py` at batch 2 × seq 512 with random tokens and
+every position labelled measured **liger_on 874.3 ms/step vs liger_off 689.4** —
+"Liger is 27% SLOWER". The factory never runs that shape: real batches are
+dynamically padded to a **mean of 109 tokens** with the prompt masked. A
+microbenchmark shape that does not match the workload produced a sign error, and
+the real-data A/B supersedes it.
+
+**Two harness bugs were found and fixed getting here, both of which produced
+plausible-looking wrong numbers:**
+
+1. `apply_liger_kernel_to_qwen3_5()` rebinds at **class level** with no unpatch,
+   so running both arms in one process measured **Liger against itself** — it
+   reported 0.994× and −0.01 GB. Caught by arithmetic, not inspection:
+   `fused_linear_cross_entropy` avoids materialising a 2×512×248320 bf16 logits
+   tensor (~508 MB plus gradient), so a saving of zero is impossible. Each arm
+   now runs in a fresh interpreter.
+2. `torch.profiler` returns **zero CUDA events** on this ROCm build (no
+   roctracer). The kernel table printed empty under "total GPU self time 0.0 ms"
+   and nothing flagged it. Replaced with manual synchronised phase timing.
+
+**Consequence for the roadmap: this RAISES the prior for further fusion work.**
+The argument for deprioritising "Fused Triton Backprop" was that Liger's existing
+coverage bounds what more fusion could buy. That bound is 47.5%, not a few
+percent. Fused kernels matter a great deal on gfx1100. **What remains untested is
+whether the ops Liger does NOT cover are a large enough share to be worth
+attacking** — notably RoPE (Liger raises `NotImplementedError` for Qwen3.5's
+hybrid GatedDeltaNet/attention mix) and the GatedDeltaNet backward. Sizing that
+needs a kernel-level trace, which this ROCm build cannot currently provide.
+
+Evidence: `results/training_step_profile.json`,
+`results/loss_curves/astral_{liger,noliger}_insession.json`.

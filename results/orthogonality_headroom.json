@@ -1,0 +1,60 @@
+{
+  "experts": [
+    "astral",
+    "postgresql",
+    "financial"
+  ],
+  "n_modules": 128,
+  "pairs": {
+    "astral|postgresql": {
+      "input_overlap_x_chance": {
+        "mean": 1.0305716923321597,
+        "max": 1.56417578458786,
+        "min": 0.6695997714996338
+      },
+      "output_overlap_x_chance": {
+        "mean": 6.866002426482737,
+        "max": 21.033904552459717,
+        "min": 1.4522035121917725
+      },
+      "delta_interaction": {
+        "mean": 0.05025857806659085,
+        "max": 0.15389042097704259
+      }
+    },
+    "astral|financial": {
+      "input_overlap_x_chance": {
+        "mean": 1.022735611826647,
+        "max": 1.400388777256012,
+        "min": 0.6301573812961578
+      },
+      "output_overlap_x_chance": {
+        "mean": 5.996480860747397,
+        "max": 17.401451110839844,
+        "min": 1.4812649488449097
+      },
+      "delta_interaction": {
+        "mean": 0.0483591767506971,
+        "max": 0.1521562649079667
+      }
+    },
+    "postgresql|financial": {
+      "input_overlap_x_chance": {
+        "mean": 1.036011645628605,
+        "max": 1.6860444992780685,
+        "min": 0.3808923065662384
+      },
+      "output_overlap_x_chance": {
+        "mean": 7.16419058595784,
+        "max": 24.999271631240845,
+        "min": 1.1432123184204102
+      },
+      "delta_interaction": {
+        "mean": 0.052134997683568544,
+        "max": 0.16092014414934422
+      }
+    }
+  },
+  "worst_input_overlap_x_chance": 1.036011645628605,
+  "max_removable_pct": 3.4759884969009978
+}
