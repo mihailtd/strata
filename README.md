@@ -341,7 +341,9 @@ Direct 9-cell empirical audit ([`benchmarks/runtime/speculative/speculation_matr
 
 **The production gate is `measured speedup > 1.0` AND `τ ≥ 1.39` AND `repeats do not straddle 1.0`.** It is not the analytic break-even of the predicted-speedup model (τ ≈ 1.66); an earlier version of this section attributed the disable to that threshold when the speedup arm was what fired. Router: `{"astral": true, "postgresql": true, "financial_planning": false}`.
 
-> ⚠️ **The speedups above are measured on a decoder that does not always reproduce its own verifier's output.** The exact-vs-chunked column is a correctness gate, and it fails on 5–22.5% of generations per cell (worst: `astral|astral` at 77.5%, i.e. 27 of 120 generations emit different text). Speed from a decoder that emits different text is not strictly comparable to its baseline. See the [module README](benchmarks/runtime/speculative/speculation_matrix/) for why 100% exactness is unreachable here.
+> ⚠️ **The speedups above are measured on a decoder that does not always reproduce its own verifier's output.** The exact-vs-chunked column is a correctness gate, and it fails on 5–22.5% of generations per cell (worst: `astral|astral` at 77.5%, i.e. 27 of 120 generations emit different text). See the [module README](benchmarks/runtime/speculative/speculation_matrix/) for why 100% exactness is unreachable here.
+>
+> ✅ **The divergent text is not worse — measured, n=100.** [`speculation_quality/`](benchmarks/runtime/speculative/speculation_quality/) scored three arms on the canonical eval sets with the repo's own scorer: speculative − autoregressive = **+0.19pp, CI [−0.77, +1.17]** (nothing significant, on full or length-matched answers). A control arm running the identical machinery with **every draft rejected** diverges on 28% of prompts against speculation's 33%, so the chunked kernel accounts for nearly all of it; 30 of the 33 diverging prompts scored *identically*. For scale, adapter stacking was retired at −10.96pp on this same metric. **The speedup is not paid for in quality, and the gate needs no quality term.**
 
 > ⚠️ **`financial_planning` sits exactly at break-even and its sign is prompt-dependent.** On the 20 hand-curated prompts alone τ = 1.627 and an earlier run measured 0.973x; adding 20 held-out generated prompts to level the set to n=40 moved it to τ = 1.699 / 1.011x. Those held-out prompts are systematically *easier to draft* for every expert (+0.15 to +0.46 τ), so the two halves measure different difficulty distributions. Treat this domain as at-break-even, not as resolved either way.
 
@@ -393,6 +395,27 @@ multi-token, so it cannot use the single-token kernel, and **100% token-exactnes
 against plain greedy is therefore not reachable on this stack** -- not for the
 speculative loop, and not for plain chunked decode either. The speedups stand as
 measured. The earlier `r = +0.44` correlation is void along with its premise.
+
+**And the divergent text is not worse — that is now measured, not argued.** The
+paragraph above was, until 2026-08-17, an argument from a 3-prompt control. The
+experiment that closes it is
+[`speculation_quality/`](benchmarks/runtime/speculative/speculation_quality/):
+three arms, n=100 paired triples, 256 tokens, the canonical eval sets and the
+repo's own scorer.
+
+| contrast | isolates | Δ | 95% CI |
+| :--- | :--- | ---: | :--- |
+| autoregressive → forced-reject | the chunked kernel alone | +1.02pp | [−0.98, +3.69] |
+| forced-reject → speculative | accepting drafts | −0.83pp | [−3.50, +1.17] |
+| **autoregressive → speculative** | **what a user receives** | **+0.19pp** | **[−0.77, +1.17]** |
+
+The middle arm is the load-bearing one: it runs the identical speculative
+machinery with `n_acc` pinned to 0, so it is the chunked kernel *without*
+speculation. It diverges from plain decode on **28%** of prompts while real
+speculation diverges on **33%** — the kernel does nearly all of it, exactly as
+claimed above. 33/100 prompts emitted different text; **30 of those scored
+identically.** Nothing is significant on either the full answers or with every arm
+truncated to the shortest arm's length. See `docs/DECISIONS.md` §7.
 
 #### Exactness is not achievable against plain decode, and that is not a bug
 

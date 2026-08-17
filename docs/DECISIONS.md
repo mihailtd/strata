@@ -165,7 +165,7 @@ batch-order commitment cost **+3.6 s of P95**.
 **Revive only if the engine becomes multi-tenant** — concurrent callers sharing
 one GPU with different target experts. Then the table above is what comes back.
 
-## 7. NOT A GRAVE — the speculative "correctness gate" is kernel numerics
+## 7. RESOLVED / NOT A GRAVE — the speculative "correctness gate" is kernel numerics, and it costs no quality
 
 **Do not open a bug hunt on this.** The exact-vs-chunked column (77.5–95%) is
 frequently misread as "the engine emits wrong output 1 in 4 times."
@@ -182,10 +182,66 @@ retracted.
 different kernels can yield different but equally valid text. No hallucination
 has been demonstrated.
 
-**The genuinely open question is quality, not exactness:** does speculative
-output *score worse* on the domain evals than non-speculative output? That has
-never been measured. If speculation correctness is to be investigated, that is
-the experiment — not a verifier bug hunt.
+### RESOLVED (2026-08-17) — the quality question was measured, and the answer is no
+
+The paragraph that used to sit here called the quality question "genuinely open."
+It has now been run: [`benchmarks/runtime/speculative/speculation_quality/`](../benchmarks/runtime/speculative/speculation_quality/).
+Three arms on the canonical eval sets with the repo's own scorer, n=100 paired
+triples, 256 new tokens:
+
+| arm | token choice via | drafts accepted | mean score |
+| :--- | :--- | :--- | ---: |
+| A autoregressive | single-token recurrent kernel | — | 61.08% |
+| C forced-reject | chunked verifier | 0 (forced) | 62.10% |
+| B speculative K=4 | chunked verifier | real (τ 1.67–2.33) | 61.27% |
+
+| contrast | isolates | Δ | 95% CI |
+| :--- | :--- | ---: | :--- |
+| A → C | chunked kernel alone | +1.02pp | [−0.98, +3.69] |
+| C → B | accepting drafts | −0.83pp | [−3.50, +1.17] |
+| **A → B** | **what a user receives** | **+0.19pp** | **[−0.77, +1.17]** |
+
+Nothing is significant, on either the full answers or with every arm truncated to
+the shortest arm's token count. **The speedup is not paid for in quality.**
+
+**Why the third arm was necessary.** A two-arm design cannot separate "speculation
+is lossy" from "the chunked kernel rounds differently." Arm C runs the identical
+speculative machinery with every draft rejected, so it is the chunked kernel with
+zero speculation. It diverges from A on **28%** of prompts while B diverges on
+**33%** — i.e. the chunked kernel accounts for essentially all of the divergence
+and accepting drafts adds ~5pp. This is the direct confirmation of the claim §7
+made on a 3-prompt control.
+
+**Divergence is real and score-invisible.** 33/100 prompts produced different text
+under B than under A; **30 of those 33 scored identically**. Median first
+divergence is token 28 (B) / 33 (C).
+
+**Power.** Adapter stacking was retired at −10.96pp, CI [−21.50, −1.62] (§4). The
+CI here is roughly ±1pp on the same metric and same eval sets, so this design
+would have detected a stacking-scale regression with room to spare. The worst case
+consistent with the data is ~1pp of harm against a 2.20× throughput gain.
+
+**Scope, stated honestly.** This shows the divergent text is not worse *on the
+repo's own scorer* — rubric coverage and the good/bad term ratio. That is the
+metric that killed stacking, so the comparison is apples-to-apples, but it is
+coarse and no human judgement was collected. It also does not license the
+speculative decoder for production: `server.py` has no draft path today, so the
+2.20× remains a benchmark result.
+
+**⚠️ One retracted run, kept as provenance:**
+`results/speculative_quality_RETRACTED_eos_overrun.json` reported "+5.71pp pooled,
+speculation IMPROVES quality, SIGNIFICANT." That was a harness bug, not a finding.
+A speculative step commits up to `n_acc+1` tokens at once, so checking EOS on
+`toks[-1]` at the top of the loop let generation run past an EOS that landed
+mid-block: arm B averaged 119.2 tokens against arm A's 46.1 on astral. Arms A and
+C commit one token per iteration and were unaffected, which is what exposed it.
+The good/bad term ratio then rewarded the extra length — and because it scores
+`0.0` when an answer contains no domain term at all, a rambling arm turned 0.0
+into 92.0 on one prompt without being more correct. **The tell was internal:
+financial_planning is the only domain scored by rubric coverage rather than the
+ratio, and it was the only domain reporting exactly 0.00pp.** Lesson for any
+future arm-vs-arm quality benchmark here: **report mean token count per arm, and
+score length-matched as well as full** — both are now in the harness.
 
 ---
 

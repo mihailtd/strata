@@ -21,6 +21,15 @@ against the path its own chunked verifier computes, and it does not always match
 strictly comparable to the baseline it is timed against, so the exact% column
 belongs beside the speedups, not in a footnote.
 
+WHAT THAT CAVEAT DOES *NOT* MEAN (measured 2026-08-17). The divergent text is not
+worse. `benchmarks/runtime/speculative/speculation_quality/` scored three arms on
+the canonical eval sets, n=100 paired triples: speculative minus autoregressive is
++0.19pp, CI [-0.77, +1.17] -- and a control arm that runs this identical machinery
+with EVERY draft rejected diverges on 28% of prompts against speculation's 33%, so
+the chunked kernel accounts for nearly all of it. 30 of the 33 diverging prompts
+scored identically. The exact% column measures ROCm arithmetic, not a quality
+risk, and the gate below needs no quality term. See docs/DECISIONS.md §7.
+
 USAGE:
     uv run --env-file .env python \
         benchmarks/runtime/speculative/speculation_matrix/benchmark_mtp_indomain_speculation_matrix.py \
@@ -553,7 +562,7 @@ def main():
     print("🎯 PRODUCTION DYNAMIC SPECULATION ROUTER CONFIGURATION")
     print("═" * 90)
     print(json.dumps(speculation_config, indent=2))
-    print("\nGate = (measured speedup > 1.0) AND (tau >= %.2f). Why each domain landed:" % TAU_GATE)
+    print(f"\nGate = (measured speedup > 1.0) AND (tau >= {TAU_GATE:.2f}). Why each domain landed:")
     for domain, d in gate_detail.items():
         why = "both gates passed" if d["enabled"] else "; ".join(d["disabled_because"])
         print(f"  {domain:<20s} {'ENABLED ' if d['enabled'] else 'DISABLED'}  ({why})")
