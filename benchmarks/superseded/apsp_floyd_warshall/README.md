@@ -24,7 +24,7 @@ writes `W_live = W0 + s*(U@V)` as one fused addmm per slot, reading from the
 pristine buffer. It never restores first and never reads the live weights. So
 entering state *v* costs the same from every source. Measured
 ([`results/vram_transition_costs.json`](../../../results/vram_transition_costs.json),
-reproduce with [`calibrate_transition_costs.py`](../../runtime/router/vram_state_routing/calibrate_transition_costs.py)):
+reproduce with [`calibrate_transition_costs.py`](../../runtime/cost_model/calibrate_transition_costs.py)):
 
 | from \ to | astral | postgresql | financial |
 | :--- | ---: | ---: | ---: |

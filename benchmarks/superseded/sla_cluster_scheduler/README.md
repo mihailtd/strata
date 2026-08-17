@@ -1,10 +1,18 @@
+> # ⚠️ RETIRED — this whole directory is provenance
+>
+> The scheduler documented below **worked** and beat both baselines on deadline
+> misses. It was retired because the engine turned out to be **single-tenant**:
+> one agent walking a deterministic tool DAG, one node active at a time, so
+> there is nothing to reorder. Revive only if the engine becomes multi-tenant.
+> See [`docs/DECISIONS.md`](../../../docs/DECISIONS.md) §6.
+
 # VRAM State Router — SLA-bounded cluster scheduling
 
 > **Tier**: ⭐ Industry Standard, with one measured finding worth keeping.
 > **Not** 🚀. An earlier version of this document claimed 🚀 *Genuine Discovery*
 > for "Floyd-Warshall All-Pairs Shortest Path applied to GPU memory state
 > transitions". That was wrong, and it is instructive *how* it was wrong — see
-> [`benchmarks/superseded/apsp_floyd_warshall/`](../../../superseded/apsp_floyd_warshall/).
+> [`benchmarks/superseded/apsp_floyd_warshall/`](../apsp_floyd_warshall/).
 
 ---
 
@@ -21,8 +29,8 @@ It is **not** a pathfinding system. There is deliberately no graph solver.
 `WeightFoldingEngine.activate(e)` writes `W_live = W0 + s*(U@V)` as one fused
 addmm per slot, reading from the pristine buffer — it never restores first and
 never reads the live weights. Measured on RX 7900 XTX / Qwen3.5-4B bf16
-([`calibrate_transition_costs.py`](calibrate_transition_costs.py) →
-[`results/vram_transition_costs.json`](../../../../results/vram_transition_costs.json)):
+([`calibrate_transition_costs.py`](../../runtime/cost_model/calibrate_transition_costs.py) →
+[`results/vram_transition_costs.json`](../../../results/vram_transition_costs.json)):
 
 | from \ to | astral | postgresql | financial |
 | :--- | ---: | ---: | ---: |
@@ -100,12 +108,12 @@ scheduling is bounded by that number. Two specific traps already paid for:
   honours them.** `generate_with_graph` was re-folding on every request even on a
   cache hit, so the router's output was discarded downstream. The signature was
   transitions dropping 25.5 → 7.0 while swap *time went up*. Fixed via
-  `apply_expert_state` in [`cuda_graph.py`](../../../../src/gnn_experiment/cuda_graph.py).
+  `apply_expert_state` in [`cuda_graph.py`](../../../src/gnn_experiment/cuda_graph.py).
 
 **Stacking is disabled on purpose.** Co-residency is cheaper (25.86 ms vs
 2 × 18.14 = 36.28 ms, saving ~10.4 ms), but the accuracy question is already
 answered and the answer is no — see
-[`CURRENT.md`](../../../../CURRENT.md) open question 1: `ast+fin` costs astral
+[`CURRENT.md`](../../../CURRENT.md) open question 1: `ast+fin` costs astral
 **−10.96pp, 95% CI [−21.50, −1.62]** (resolved loss, n=40). Trading 11 accuracy
 points for 10.4 ms — 0.55% of a request — is not a trade worth making.
 
@@ -113,11 +121,11 @@ points for 10.4 ms — 0.55% of a request — is not a trade worth making.
 
 | file | what |
 | :--- | :--- |
-| [`calibrate_transition_costs.py`](calibrate_transition_costs.py) | Measures the transition matrix; decides whether cost is destination-only |
+| [`calibrate_transition_costs.py`](../../runtime/cost_model/calibrate_transition_costs.py) | Measures the transition matrix; decides whether cost is destination-only |
 | [`benchmark_vram_router.py`](benchmark_vram_router.py) | Offered-load sweep, 4 regimes, real folds, paired CIs |
 | [`benchmark_router_e2e.py`](benchmark_router_e2e.py) | Live-server A/B with a real FIFO control arm |
-| [`vram_state_router.py`](../../../../src/gnn_experiment/router/vram_state_router.py) | `TransitionCosts`, `VRAMStateGraph`, `VRAMStateScheduler` |
-| [`test_vram_state_router.py`](../../../../tests/test_vram_state_router.py) | 12 tests, incl. the properties that keep the solver retired |
+| [`vram_state_router.py`](../../../src/gnn_experiment/router/vram_state_router.py) | `TransitionCosts`, `VRAMStateGraph`, `VRAMStateScheduler` |
+| [`test_vram_state_router.py`](../../../tests/test_vram_state_router.py) | 12 tests, incl. the properties that keep the solver retired |
 
 ## 6. Reproduce
 

@@ -8,7 +8,7 @@ This directory contains the production inference machinery, speculative decoding
 
 | Subsystem / Module | Tier | Concept Origin & Application |
 | :--- | :---: | :--- |
-| **[`router/vram_state_routing/`](router/vram_state_routing/)** | **⭐ Industry Standard** | **VRAM State Router**: SLA-bounded cluster scheduling over a measured destination-only transition cost. Swaps 25.5 → 16.0 and swap time 494 → 302 ms end-to-end, but that is 0.86% of wall clock so mean latency is unchanged (95% CI [−1481, +1417]) and P95 is 3.6 s worse. Genuine win is deadline protection: SLA violations 98% → 79.5% at ρ=1.5, beating both FIFO and greedy. Formerly tiered 🚀 for a Floyd-Warshall solve that was provably a no-op — [retired](../superseded/apsp_floyd_warshall/). |
+| **[`cost_model/`](cost_model/)** | **⭐ Industry Standard** | **VRAM transition-cost calibration.** Measures the transition matrix and decides whether cost is destination-only. It is the pre-flight that retired the APSP router (0 pairs improved) and grounded the scheduler retirement. |
 | **[`folding/`](folding/)** | **🔥 Applied Practice** | **In-Place Weight Absorption & Composite Stacking (`activate_many()`)**: In-place parameter fusing principles from numerical linear algebra adapted to LLM runtime weight matrices, eliminating 100% of PEFT wrapper overhead (+82.1% speedup). |
 | **[`memory/factor_residency/`](memory/factor_residency/)** | **⭐ Standard** / **🔥 Applied** | **Factor-Based VRAM Residency**: Keeps low-rank factor matrices ($U, V$) resident in standby memory (42.5 MB/expert), achieving a **200.6x memory reduction** and enabling **up to 216 concurrent domain experts** on a single 24GB GPU. |
 | **[`memory/pristine_state_buffer/`](memory/pristine_state_buffer/)** | **🔥 Applied Practice** | **Zero-Drift Pristine Buffer ($W_0$)**: Transactional Memory State Checkpointing (from database write-ahead logging / game state snapshots) applied to LLM expert swapping, achieving bit-exact $L_\infty = 0.00$ drift across millions of hot-swaps. |
@@ -24,7 +24,7 @@ This directory contains the production inference machinery, speculative decoding
 ---
 
 ## Directory Organization
-- **[`router/`](router/)**: VRAM State Router — measured transition-cost calibration and SLA-bounded cluster scheduling. Deliberately contains no pathfinding; see [`superseded/apsp_floyd_warshall/`](../superseded/apsp_floyd_warshall/) before adding any.
+- **[`cost_model/`](cost_model/)**: transition-cost calibration. There is no router directory any more — routing and scheduling both retired; see [`superseded/`](../superseded/) and `docs/DECISIONS.md`.
 - **[`folding/`](folding/)**: In-place weight folding engine, `activate_many()` multi-expert additive composition, and PEFT wrapper comparisons.
 - **[`memory/`](memory/)**: Factor-based VRAM residency, pointer-stable CUDA Graph replay, pristine state buffer management, and zero-recapture swapping synergy.
 - **[`speculative/`](speculative/)**: MTP draft head integration, recurrent state rollback engine, 3x3 domain matrix audits, and $K$-sweep scaling benchmarks.

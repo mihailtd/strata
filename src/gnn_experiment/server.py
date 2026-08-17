@@ -5,9 +5,9 @@ Serves local micro-experts via standard OpenAI REST API endpoints (/v1/chat/comp
 2. Triggers on-device in-place weight mutation (W_live = W0 + s * U@V) at static VRAM addresses.
 3. Executes single-token decode via pre-captured CUDA/HIP Graph descriptor at 32.89 tok/s.
 4. Supports non-streaming JSON responses and streaming Server-Sent Events (SSE text/event-stream).
-5. VRAM State Router reorders concurrent requests to minimise GPU expert swaps.
-   (SLA-bounded clustering; deliberately NOT shortest-path -- see
-   benchmarks/superseded/apsp_floyd_warshall/ for why.)
+5. SINGLE-TENANT: requests execute strictly in arrival order, one at a time.
+   No request reordering. This engine drives one agent through a deterministic
+   tool DAG, so there is no concurrency to schedule -- see docs/DECISIONS.md §6.
 """
 
 from __future__ import annotations
@@ -34,27 +34,10 @@ from gnn_experiment.cuda_graph import FoldedCudaGraphDecoder
 from gnn_experiment.dashboard import DASHBOARD_HTML
 from gnn_experiment.fused_norm import inject_exact_rmsnorm
 from gnn_experiment.novel_peft import FoldableExpert, WeightFoldingEngine, set_hard_vram_cap
-from gnn_experiment.router.vram_state_router import (
-    PendingRequest,
-    TransitionCosts,
-    VRAMState,
-    VRAMStateGraph,
-    VRAMStateScheduler,
-)
+from gnn_experiment.router.vram_state_router import VRAMState
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
-# --- Router Configuration ---
-# `enabled` is the A/B switch: when False the dispatch loop is a strict FIFO
-# passthrough — no batching window AND no queue drain — so it is a genuine
-# control arm. (Setting only batch_window_ms=0 is NOT enough: the unconditional
-# drain below would still collect and reorder whatever is already queued.)
-# Both fields are settable at runtime via POST /v1/router/config, so an A/B can
-# run against one server process without paying for a second model load.
-router_config: dict[str, Any] = {
-    "enabled": os.environ.get("ROUTER_ENABLED", "1") not in ("0", "false", "False"),
-    "batch_window_ms": float(os.environ.get("ROUTER_BATCH_WINDOW_MS", "50")),
-}
 
 # How long the dispatch loop will wait for a streaming response to be consumed
 # before moving on. Bounds the damage from a client that disconnects mid-stream.
@@ -85,10 +68,8 @@ _request_queue: asyncio.Queue[QueuedRequest] = asyncio.Queue()
 
 # Router telemetry counters
 router_telemetry: dict[str, Any] = {
-    "total_batches": 0,
     "total_requests_dispatched": 0,
     "total_transitions": 0,
-    "transitions_avoided": 0,
     "current_gpu_state": "pristine",
     "queue_depth": 0,
 }
@@ -97,10 +78,8 @@ router_telemetry: dict[str, Any] = {
 def _reset_telemetry() -> None:
     """Zeroes the cumulative counters so a benchmark arm measures only itself."""
     router_telemetry.update(
-        total_batches=0,
         total_requests_dispatched=0,
         total_transitions=0,
-        transitions_avoided=0,
         queue_depth=0,
     )
 
@@ -382,27 +361,11 @@ async def lifespan(app: FastAPI):
         "financial_planning": exp_fin,
     }
 
-    # Initialize the VRAM State Router.
-    # Stacking stays off: co-residency is cheaper per the cost model (~10.4 ms
-    # saved) but its effect on per-domain accuracy is unverified, and the server
-    # must not trade correctness for 10 ms on an unverified premise.
-    calib_path = REPO_ROOT / "results" / "vram_transition_costs.json"
-    if calib_path.exists():
-        costs = TransitionCosts.from_calibration(calib_path)
-        print(f"[IMB Server] Loaded measured transition costs from {calib_path.name}.")
-    else:
-        costs = TransitionCosts()
-        print("[IMB Server] No calibration file; using default measured transition costs.")
-
-    graph = VRAMStateGraph(
-        ["financial_planning", "postgresql", "astral"], allow_stacking=False, costs=costs
-    )
-    router_scheduler = VRAMStateScheduler(graph, default_sla_deadline_s=2.0)
-    print(
-        f"[IMB Server] VRAM State Router active with {graph.num_nodes} states "
-        f"(restore={costs.restore_ms:.2f}ms, fold={costs.fold_single_ms:.2f}ms). "
-        "-> scheduling by SLA-bounded clustering (no shortest-path solve; it is provably degenerate here)."
-    )
+    # No scheduler is constructed. Expert state is tracked as a plain VRAMState
+    # (see _record_transition); the measured transition-cost model lives on in
+    # router/vram_state_router.py as documented, tested physics -- it is what
+    # retired the APSP router -- but nothing in the serving path consumes it now
+    # that requests are not reordered. See docs/DECISIONS.md §6.
 
     # Warmup & Capture CUDA Graph ONCE
     # Default to 32768 tokens (32K context) taking ~11.8 GB VRAM total.
@@ -434,15 +397,11 @@ async def lifespan(app: FastAPI):
     model_state["graph_decoder"] = graph_decoder
     model_state["expert_registry"] = expert_registry
     model_state["max_prompt_len"] = max_seq_len
-    model_state["router_scheduler"] = router_scheduler
     model_state["gpu_state"] = VRAMState.single("financial_planning")  # matches final activate above
 
     # Start the dispatch loop as a background task
     dispatch_task = asyncio.create_task(_dispatch_loop())
-    print(
-        f"[IMB Server] Router dispatch loop started "
-        f"(enabled={router_config['enabled']}, batch_window={router_config['batch_window_ms']}ms)."
-    )
+    print("[IMB Server] Sequential executor started (single-tenant, arrival order).")
 
     yield
 
@@ -503,143 +462,73 @@ async def list_models():
     return ModelListResponse(data=model_objects)
 
 
-# --- Dispatch Loop ---
+# --- Sequential Executor ---
+# This engine is SINGLE-TENANT by design: one agent walking a deterministic tool
+# DAG, one node active at a time. It previously carried an SLA-bounded cluster
+# scheduler that reordered concurrent requests to group them by expert. That was
+# solving a multi-tenant web-serving problem this engine does not have:
+#
+#   - with one caller there is nothing to reorder, so the scheduler was inert
+#   - measured end-to-end it bought nothing anyway (swap overhead is 0.86% of
+#     wall clock; mean latency -62 ms, 95% CI [-1481, +1417] = not significant)
+#     while costing +3.6 s of P95 from batch-order commitment
+#
+# What it protected -- minority-domain starvation under concurrent load -- cannot
+# occur here. See docs/DECISIONS.md §6. Execution is now strictly arrival-order,
+# one request at a time, which is what a deterministic DAG driver wants.
 async def _dispatch_loop() -> None:
-    """Background task: drains the request queue, reorders via VRAMStateScheduler, executes sequentially."""
-    print("[Router Dispatch] Background dispatch loop running.")
+    """Executes queued requests strictly in arrival order, one at a time."""
+    print("[Executor] Sequential request executor running (single-tenant, no reordering).")
 
     while True:
-        batch: list[QueuedRequest] = []
+        qr: QueuedRequest | None = None
         try:
-            # Wait for the first request
-            first = await _request_queue.get()
-            batch = [first]
+            qr = await _request_queue.get()
+            router_telemetry["queue_depth"] = _request_queue.qsize()
+            qr.queue_position = router_telemetry["total_requests_dispatched"]
+            router_telemetry["total_requests_dispatched"] += 1
 
-            enabled = router_config["enabled"]
-            window_ms = router_config["batch_window_ms"]
-
-            if enabled:
-                # Batching window: accumulate concurrent arrivals
-                if window_ms > 0:
-                    deadline = asyncio.get_event_loop().time() + (window_ms / 1000.0)
-                    while True:
-                        remaining = deadline - asyncio.get_event_loop().time()
-                        if remaining <= 0:
-                            break
-                        try:
-                            item = await asyncio.wait_for(_request_queue.get(), timeout=remaining)
-                            batch.append(item)
-                        except asyncio.TimeoutError:
-                            break
-
-                # Also drain anything that arrived while we were waiting
-                while not _request_queue.empty():
+            try:
+                result = await _execute_single_request(qr)
+                if not qr.future.done():
+                    qr.future.set_result(result)
+                # A streaming response has not touched the GPU yet -- it runs when
+                # the client consumes it. Wait, so the next request cannot fold a
+                # different expert underneath a stream still in flight.
+                if getattr(qr.req, "stream", False):
                     try:
-                        batch.append(_request_queue.get_nowait())
-                    except asyncio.QueueEmpty:
-                        break
-
-            router_telemetry["queue_depth"] = _request_queue.qsize() + len(batch)
-            router_telemetry["total_batches"] += 1
-
-            scheduler: VRAMStateScheduler = model_state["router_scheduler"]
-
-            # Continuous re-planning: execute ONE request, absorb whatever arrived
-            # while it ran, then re-plan. Committing to a whole batch order up front
-            # and running it to completion means a request arriving mid-batch waits
-            # for every request already committed, no matter how urgent it is — the
-            # SLA bound cannot preempt a plan that is already fixed. Measured at
-            # concurrency 10 that cost +9.1s of P95 latency (19.4s -> 28.5s) to save
-            # 0.37s of swap time.
-            while batch:
-                current_gpu_state: VRAMState = model_state.get("gpu_state", VRAMState.pristine())
-
-                if enabled and len(batch) > 1:
-                    sla = scheduler.default_sla_deadline_s
-                    pending_reqs = [
-                        PendingRequest(
-                            req_id=f"q_{i}",
-                            target_state=VRAMState.from_expert(qr.expert),
-                            arrival_time=qr.enqueue_time,
-                            sla_deadline_s=sla,
-                            metadata={"queued_request": qr},
+                        await asyncio.wait_for(
+                            qr.stream_done.wait(), timeout=STREAM_ORDER_TIMEOUT_S
                         )
-                        for i, qr in enumerate(batch)
-                    ]
-                    scheduled = scheduler.schedule_batch(
-                        pending_reqs,
-                        current_state=current_gpu_state,
-                        current_time_s=time.perf_counter(),
-                    )
-                    chosen = scheduled[0].metadata["queued_request"]
+                    except TimeoutError:
+                        print(
+                            f"[Executor] Stream did not finish within "
+                            f"{STREAM_ORDER_TIMEOUT_S}s (client likely disconnected); "
+                            "continuing so the queue cannot wedge."
+                        )
+            except Exception as exc:
+                if not qr.future.done():
+                    qr.future.set_exception(exc)
 
-                    # Counterfactual: would strict arrival order have paid a
-                    # transition here that this choice avoids?
-                    head_state = VRAMState.from_expert(batch[0].expert)
-                    chosen_state = VRAMState.from_expert(chosen.expert)
-                    if head_state != current_gpu_state and chosen_state == current_gpu_state:
-                        router_telemetry["transitions_avoided"] += 1
-                else:
-                    chosen = batch[0]
-
-                batch.remove(chosen)
-                chosen.queue_position = router_telemetry["total_requests_dispatched"]
-                router_telemetry["total_requests_dispatched"] += 1
-
-                try:
-                    result = await _execute_single_request(chosen)
-                    if not chosen.future.done():
-                        chosen.future.set_result(result)
-                    # A streaming response has not touched the GPU yet — it runs
-                    # when the client consumes it. Wait for it so the next request
-                    # cannot fold a different expert underneath it.
-                    if getattr(chosen.req, "stream", False):
-                        try:
-                            await asyncio.wait_for(
-                                chosen.stream_done.wait(), timeout=STREAM_ORDER_TIMEOUT_S
-                            )
-                        except asyncio.TimeoutError:
-                            print(
-                                f"[Router Dispatch] Stream did not finish within "
-                                f"{STREAM_ORDER_TIMEOUT_S}s (client likely disconnected); "
-                                "continuing so the queue cannot wedge."
-                            )
-                except Exception as exc:
-                    if not chosen.future.done():
-                        chosen.future.set_exception(exc)
-
-                # Absorb arrivals that landed while that request was executing, so
-                # the next plan sees them and can preempt for them if they are urgent.
-                if enabled:
-                    while not _request_queue.empty():
-                        try:
-                            batch.append(_request_queue.get_nowait())
-                        except asyncio.QueueEmpty:
-                            break
-
-                router_telemetry["queue_depth"] = _request_queue.qsize() + len(batch)
+            router_telemetry["queue_depth"] = _request_queue.qsize()
 
         except asyncio.CancelledError:
-            # Shutdown: fail the in-flight batch and everything still queued
-            for qr in batch:
-                if not qr.future.done():
-                    qr.future.set_exception(asyncio.CancelledError())
+            if qr is not None and not qr.future.done():
+                qr.future.set_exception(asyncio.CancelledError())
             while not _request_queue.empty():
                 try:
-                    qr = _request_queue.get_nowait()
-                    if not qr.future.done():
-                        qr.future.set_exception(asyncio.CancelledError())
+                    pending = _request_queue.get_nowait()
+                    if not pending.future.done():
+                        pending.future.set_exception(asyncio.CancelledError())
                 except asyncio.QueueEmpty:
                     break
             raise
         except Exception as exc:
-            # Anything raised outside the per-request try (scheduling, counting,
-            # state lookup) would otherwise strand this batch's futures and hang
-            # those HTTP clients until their own timeout.
-            print(f"[Router Dispatch] Error in dispatch loop: {exc!r}")
-            for qr in batch:
-                if not qr.future.done():
-                    qr.future.set_exception(exc)
+            # Anything raised outside the per-request try would otherwise strand
+            # this request's future and hang that HTTP client until its timeout.
+            print(f"[Executor] Error in executor loop: {exc!r}")
+            if qr is not None and not qr.future.done():
+                qr.future.set_exception(exc)
             continue
 
 
@@ -650,17 +539,6 @@ def _record_transition(target_state: VRAMState) -> None:
         router_telemetry["total_transitions"] += 1
     model_state["gpu_state"] = target_state
     router_telemetry["current_gpu_state"] = target_state.name
-
-
-def _count_transitions(states: list[VRAMState], initial: VRAMState) -> int:
-    """Count expert transitions in a sequence of VRAMStates."""
-    transitions = 0
-    current = initial
-    for s in states:
-        if s != current:
-            transitions += 1
-            current = s
-    return transitions
 
 
 async def _execute_single_request(qr: QueuedRequest) -> Any:
@@ -744,7 +622,7 @@ async def _execute_single_request(qr: QueuedRequest) -> Any:
     json_response = JSONResponse(content=resp_json)
     json_response.headers["X-Router-Queue-Position"] = str(qr.queue_position)
     json_response.headers["X-Router-Wait-Ms"] = f"{wait_ms:.1f}"
-    json_response.headers["X-Router-Transitions-Saved"] = str(router_telemetry["transitions_avoided"])
+    json_response.headers["X-Router-Transitions"] = str(router_telemetry["total_transitions"])
     json_response.headers["X-Router-GPU-State"] = target_state.name
     return json_response
 
@@ -926,68 +804,24 @@ async def completions(req: CompletionRequest):
     return await chat_completions(chat_req)
 
 
-class RouterConfigRequest(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    enabled: bool | None = None
-    batch_window_ms: float | None = None
-    # The SLA bound only does work when it is set relative to realistic service
-    # times. If every request takes 16s under load and the deadline is 2s, every
-    # request is already unsaveable, the scheduler correctly declines to thrash,
-    # and clustering runs unchecked — so the bound must be tunable to be testable.
-    sla_deadline_s: float | None = None
-    service_time_s: float | None = None
-    reset_telemetry: bool = False
-
-
 @app.get("/v1/router/status")
 async def router_status():
-    """Returns live VRAM State Router status and telemetry."""
+    """Live executor + GPU expert-state telemetry.
+
+    Kept at /v1/router/* for endpoint compatibility. There is no scheduler behind
+    it any more: this engine is single-tenant and executes in arrival order, so
+    the reorderable-batch config (enabled / batch_window_ms / sla_deadline_s) is
+    gone. See docs/DECISIONS.md §6.
+    """
     return {
         "router": {
-            "enabled": router_config["enabled"],
-            "batch_window_ms": router_config["batch_window_ms"],
-            "mode": "cluster-scheduled" if router_config["enabled"] else "fifo-passthrough",
+            "mode": "sequential-single-tenant",
             "current_gpu_state": router_telemetry["current_gpu_state"],
-            "total_batches": router_telemetry["total_batches"],
             "total_requests_dispatched": router_telemetry["total_requests_dispatched"],
             "total_transitions": router_telemetry["total_transitions"],
-            "transitions_avoided": router_telemetry["transitions_avoided"],
             "queue_depth": router_telemetry["queue_depth"],
         }
     }
-
-
-@app.post("/v1/router/config")
-async def set_router_config(cfg: RouterConfigRequest):
-    """Switches the router between cluster scheduling and FIFO passthrough at runtime.
-
-    This is what makes a controlled A/B possible: both arms run against the same
-    loaded model, the same CUDA graph and the same warm cache, so the only thing
-    that differs between them is the scheduling policy.
-    """
-    if cfg.enabled is not None:
-        router_config["enabled"] = cfg.enabled
-    if cfg.batch_window_ms is not None:
-        router_config["batch_window_ms"] = max(0.0, cfg.batch_window_ms)
-
-    scheduler: VRAMStateScheduler | None = model_state.get("router_scheduler")
-    if scheduler is not None:
-        if cfg.sla_deadline_s is not None:
-            scheduler.default_sla_deadline_s = cfg.sla_deadline_s
-        if cfg.service_time_s is not None:
-            scheduler.default_service_time_s = cfg.service_time_s
-
-    if cfg.reset_telemetry:
-        _reset_telemetry()
-
-    print(
-        f"[Router] config updated: enabled={router_config['enabled']}, "
-        f"batch_window_ms={router_config['batch_window_ms']}, "
-        f"sla_deadline_s={scheduler.default_sla_deadline_s if scheduler else 'n/a'}, "
-        f"service_time_s={scheduler.default_service_time_s if scheduler else 'n/a'}, "
-        f"telemetry_reset={cfg.reset_telemetry}"
-    )
-    return await router_status()
 
 
 @app.post("/v1/router/reset")

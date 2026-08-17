@@ -83,7 +83,7 @@ To ensure scientific rigor and prevent regressions, all future experiments **MUS
 ## 🏛️ Subsystem Benchmark Index
 
 ### 1. [`runtime/`](runtime/) — The Runtime Engine
-* **[`runtime/router/vram_state_routing/`](runtime/router/vram_state_routing/)**: **⭐ VRAM State Router**: SLA-bounded cluster scheduling over a *measured* destination-only cost model. Cuts GPU swaps 25.5 → 16.0 end-to-end, but swap overhead is only 0.86% of wall clock so mean latency is unchanged (95% CI [−1481, +1417]); the real win is SLA violations (98% → 79.5% at ρ=1.5). **No graph solver** — see [`superseded/apsp_floyd_warshall/`](superseded/apsp_floyd_warshall/).
+* **[`runtime/cost_model/`](runtime/cost_model/)**: Measured VRAM transition-cost calibration — the destination-only model `C(u,v) = f(v)` that retired both the APSP router and (with the single-tenant finding) the SLA scheduler. Run it before proposing any routing idea.
 * **[`runtime/folding/`](runtime/folding/)**: In-place weight folding engine eliminating 100% of PEFT wrapper overhead (+82.1% speedup over wrapped PEFT).
 * **[`runtime/memory/factor_residency/`](runtime/memory/factor_residency/)**: 42.5 MB low-rank factor standby representation (200.6x compression), enabling up to 216 concurrent domain experts on 24GB VRAM.
 * **[`runtime/memory/pristine_state_buffer/`](runtime/memory/pristine_state_buffer/)**: Transactional Memory State Checkpointing preserving $L_\infty = 0.00$ drift across infinite expert hot-swaps.

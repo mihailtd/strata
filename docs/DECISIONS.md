@@ -14,8 +14,9 @@ for a reason that was never measured, say "predicted, not measured".
 
 ## 1. RETIRED — APSP / Floyd-Warshall VRAM state routing
 
-**Replaced by:** direct cost lookup + SLA-bounded cluster scheduling
-(`router/vram_state_router.py`). See
+**Replaced by:** direct cost lookup. (It was briefly replaced by SLA-bounded
+cluster scheduling, which was itself retired in §6 — the engine is single-tenant.)
+See
 [`benchmarks/superseded/apsp_floyd_warshall/`](../benchmarks/superseded/apsp_floyd_warshall/).
 
 **Cause (MEASURED):** transition cost is **destination-only**, `C(u,v) = f(v)`.
@@ -116,37 +117,53 @@ simply not to repeat the `mtp_head_folding` experiment; it is already in
 
 ---
 
-## 6. OPEN — deterministic tool-graph routing vs the SLA scheduler
+## 6. RESOLVED — SLA-bounded cluster scheduler removed (engine is single-tenant)
 
-**Proposed:** replace request scheduling with a deterministic state machine that
-loads the expert dictated by the current tool-graph step.
+**Decided 2026-08-17. Execution is single-threaded**: one agent walking a
+deterministic tool DAG, one node active at a time. There are no concurrent
+callers competing for VRAM, and no minority-domain starvation, because only one
+domain is active at any node.
 
-**This is ❓, not ⭐ — it is not built yet.** ⭐ applies once it exists.
+**Cause: not a defect — an absent problem.** The scheduler worked, and it beat
+both baselines on deadline misses:
 
-**What it would give up, measured:** the SLA-bounded cluster scheduler reduced
-SLA violations against both baselines across the load sweep —
-
-| offered load ρ | FIFO | Greedy | **Router** |
+| offered load ρ | FIFO | Greedy | Router |
 | ---: | ---: | ---: | ---: |
 | 0.8 | 43.5% | 38.5% | **33.0%** |
 | 0.95 | 62.5% | 51.5% | **47.0%** |
 | 1.5 | 98.0% | 96.0% | **79.5%** |
 
-That protection exists because ordering is free under destination-only costs, so
-all ordering freedom is spent on deadlines.
+But those rows only exist under concurrent multi-tenant load. With one caller
+there is nothing to reorder, so the scheduler is inert by construction. The
+end-to-end A/B had already said as much: swap overhead is 0.86% of wall clock,
+mean latency moved −62 ms with 95% CI [−1481, +1417] (not significant), and
+batch-order commitment cost **+3.6 s of P95**.
 
-**The decision hinges on one question:** is execution genuinely single-threaded?
+**What was removed:**
 
-- **Yes — a deterministic tool graph, one request at a time.** Then there is no
-  queue, nothing to schedule, and the scheduler is dead weight. Remove it.
-- **No — concurrent users share the engine.** Then a deterministic state machine
-  removes the only mechanism protecting minority domains under load, and the
-  ρ≥0.95 rows above are what gets given up.
+- `server.py` — the batching window, queue drain, reordering, `router_config`
+  (`enabled` / `batch_window_ms` / `sla_deadline_s`), the `transitions_avoided`
+  counterfactual, `total_batches`, `_count_transitions`, and `POST
+  /v1/router/config`. Replaced by a strict arrival-order executor.
+- `router/vram_state_router.py` — `VRAMStateScheduler`, `PendingRequest`.
+  Retired to [`benchmarks/superseded/sla_cluster_scheduler/`](../benchmarks/superseded/sla_cluster_scheduler/)
+  with the numbers above and the revival condition.
+- Its two benchmarks moved with it.
 
-Decide this explicitly before removing the scheduler. Both answers are
-defensible; silently picking one is not.
+**What was deliberately kept:**
 
----
+- `VRAMState` — the server still tracks which expert is resident.
+- `TransitionCosts` / `VRAMStateGraph` and their tests — this is the measured
+  physics that retired the APSP router (§1), and
+  `test_direct_edge_is_always_optimal` must keep failing loudly if the cost model
+  ever becomes source-dependent.
+- `calibrate_transition_costs.py`, promoted to
+  [`benchmarks/runtime/cost_model/`](../benchmarks/runtime/cost_model/) — it
+  produces that model and is still the pre-flight for any future routing idea.
+- `GET /v1/router/status`, now reporting `mode: sequential-single-tenant`.
+
+**Revive only if the engine becomes multi-tenant** — concurrent callers sharing
+one GPU with different target experts. Then the table above is what comes back.
 
 ## 7. NOT A GRAVE — the speculative "correctness gate" is kernel numerics
 

@@ -100,6 +100,16 @@ def main():
     ap.add_argument("--vram-cap-gb", type=float, default=22.0)
     ap.add_argument("--no-liger", action="store_true", help="disable Liger fused kernels (A/B baseline)")
     ap.add_argument("--out", default=None, help="override the default output dir")
+    ap.add_argument(
+        "--logging-steps", type=int, default=10,
+        help="loss logging interval. Use 1 to capture a per-step convergence curve; "
+             "the default 10 gives only 15 points on a 150-step run, which is too "
+             "coarse to locate a plateau or to drive any early-stopping rule.",
+    )
+    ap.add_argument(
+        "--loss-curve-out", default=None,
+        help="dump the full per-step loss history to this JSON path",
+    )
     args = ap.parse_args()
 
     data_rel, out_rel = DOMAINS[args.domain]
@@ -171,7 +181,7 @@ def main():
         gradient_accumulation_steps=2,
         learning_rate=args.lr,
         max_steps=args.max_steps,
-        logging_steps=10,
+        logging_steps=args.logging_steps,
         lr_scheduler_type="cosine",
         warmup_ratio=0.03,
         bf16=True,
@@ -187,6 +197,30 @@ def main():
 
     print(f"Starting SFT training ({args.max_steps} steps)...")
     trainer.train()
+
+    if args.loss_curve_out:
+        curve_path = Path(args.loss_curve_out)
+        curve_path.parent.mkdir(parents=True, exist_ok=True)
+        effective_batch = 2 * 2  # per_device_train_batch_size * gradient_accumulation_steps
+        curve_path.write_text(
+            json.dumps(
+                {
+                    "domain": args.domain,
+                    "methodology": METHODOLOGY,
+                    "max_steps": args.max_steps,
+                    "logging_steps": args.logging_steps,
+                    "lr": args.lr,
+                    "lr_scheduler_type": "cosine",
+                    "warmup_ratio": 0.03,
+                    "n_records": len(records),
+                    "effective_batch": effective_batch,
+                    "epochs_seen": args.max_steps * effective_batch / max(1, len(records)),
+                    "log_history": trainer.state.log_history,
+                },
+                indent=2,
+            )
+        )
+        print(f"Loss curve -> {curve_path}")
 
     out_dir.mkdir(parents=True, exist_ok=True)
     model.save_pretrained(str(out_dir))

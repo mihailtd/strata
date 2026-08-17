@@ -1,23 +1,22 @@
-"""VRAM state router — SLA-bounded cluster scheduling over measured transition costs.
+"""VRAM expert state and the measured transition-cost model.
 
-Note there is deliberately no shortest-path solver here. See
-`benchmarks/superseded/apsp_floyd_warshall/` for why one was removed.
+Deliberately contains no scheduler and no shortest-path solver:
+
+- shortest-path routing is provably vacuous under this cost model —
+  see `benchmarks/superseded/apsp_floyd_warshall/`
+- request scheduling has nothing to schedule in a single-tenant engine —
+  see `benchmarks/superseded/sla_bounded_cluster_scheduler.py` and
+  `docs/DECISIONS.md` §6
 """
 
 from gnn_experiment.router.vram_state_router import (
-    PendingRequest,
-    SLABoundedClusterScheduler,
     TransitionCosts,
     VRAMState,
     VRAMStateGraph,
-    VRAMStateScheduler,
 )
 
 __all__ = [
-    "PendingRequest",
-    "SLABoundedClusterScheduler",
     "TransitionCosts",
     "VRAMState",
     "VRAMStateGraph",
-    "VRAMStateScheduler",
 ]
