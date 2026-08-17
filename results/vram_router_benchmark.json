@@ -1,0 +1,351 @@
+{
+  "config": {
+    "model_id": "Qwen/Qwen3.5-4B",
+    "num_requests": 200,
+    "gen_tokens": 32,
+    "tok_s": 32.89,
+    "service_time_s": 0.972940103374886,
+    "sla_deadline_s": 2.0,
+    "measured_reload_penalty_ms": 35.44647799571976,
+    "apsp_degenerate": true,
+    "note": "Transitions are real GPU folds; generation is modelled at a fixed rate."
+  },
+  "sweep": {
+    "rho_0.5": {
+      "rho": 0.5,
+      "arrival_rate": 0.51390625,
+      "regimes": {
+        "legacy_reload_fifo": {
+          "regime": "Legacy Reload FIFO",
+          "policy": "fifo",
+          "total_requests": 200,
+          "total_transitions": 129,
+          "total_transition_ms": 2592.1051527257077,
+          "total_makespan_s": 435.4679229576486,
+          "transition_share_of_makespan_pct": 0.5952459448954183,
+          "mean_latency_ms": 1438.2151525578731,
+          "p50_latency_ms": 1060.6190196246246,
+          "p95_latency_ms": 2667.761658628919,
+          "p99_latency_ms": 3451.7151147398126,
+          "sla_violations": 33,
+          "sla_violation_pct": 16.5,
+          "max_drift_after_restore": 0.0
+        },
+        "fifo": {
+          "regime": "In-Place FIFO",
+          "policy": "fifo",
+          "total_requests": 200,
+          "total_transitions": 129,
+          "total_transition_ms": 2366.9446918647736,
+          "total_makespan_s": 435.3573415096962,
+          "transition_share_of_makespan_pct": 0.5436785982882196,
+          "mean_latency_ms": 1391.6569053040391,
+          "p50_latency_ms": 998.5261933672973,
+          "p95_latency_ms": 2561.3234095703633,
+          "p99_latency_ms": 3231.5585868587677,
+          "sla_violations": 29,
+          "sla_violation_pct": 14.499999999999998,
+          "max_drift_after_restore": 0.0
+        },
+        "greedy": {
+          "regime": "Greedy Affinity",
+          "policy": "greedy",
+          "total_requests": 200,
+          "total_transitions": 120,
+          "total_transition_ms": 2260.7585730729625,
+          "total_makespan_s": 435.32114223871577,
+          "transition_share_of_makespan_pct": 0.5193312140656925,
+          "mean_latency_ms": 1389.983853543158,
+          "p50_latency_ms": 998.608670363204,
+          "p95_latency_ms": 2826.637612716297,
+          "p99_latency_ms": 3212.4061915747575,
+          "sla_violations": 27,
+          "sla_violation_pct": 13.5,
+          "max_drift_after_restore": 0.0
+        },
+        "router": {
+          "regime": "SLA-Bounded Cluster Router",
+          "policy": "router",
+          "total_requests": 200,
+          "total_transitions": 132,
+          "total_transition_ms": 2616.1617449251935,
+          "total_makespan_s": 435.3571565057264,
+          "transition_share_of_makespan_pct": 0.6009231055079216,
+          "mean_latency_ms": 1395.0908504630495,
+          "p50_latency_ms": 1005.0679253674843,
+          "p95_latency_ms": 2708.8037567090028,
+          "p99_latency_ms": 3375.4814086295255,
+          "sla_violations": 26,
+          "sla_violation_pct": 13.0,
+          "max_drift_after_restore": 0.0,
+          "paired_vs": {
+            "fifo": {
+              "mean_diff_ms": 3.4339451590103174,
+              "ci95_lo": -41.994667285733684,
+              "ci95_hi": 48.17531109681632,
+              "significant": false
+            },
+            "greedy": {
+              "mean_diff_ms": 5.106996919891528,
+              "ci95_lo": -58.76778164111842,
+              "ci95_hi": 69.01530487222853,
+              "significant": false
+            }
+          }
+        }
+      }
+    },
+    "rho_0.8": {
+      "rho": 0.8,
+      "arrival_rate": 0.82225,
+      "regimes": {
+        "legacy_reload_fifo": {
+          "regime": "Legacy Reload FIFO",
+          "policy": "fifo",
+          "total_requests": 200,
+          "total_transitions": 129,
+          "total_transition_ms": 2435.0311668240465,
+          "total_makespan_s": 274.04900039244745,
+          "transition_share_of_makespan_pct": 0.8885386056278255,
+          "mean_latency_ms": 2161.8960103859986,
+          "p50_latency_ms": 1968.7980146251505,
+          "p95_latency_ms": 4364.980690076663,
+          "p99_latency_ms": 5516.915621391248,
+          "sla_violations": 97,
+          "sla_violation_pct": 48.5,
+          "max_drift_after_restore": 0.0
+        },
+        "fifo": {
+          "regime": "In-Place FIFO",
+          "policy": "fifo",
+          "total_requests": 200,
+          "total_transitions": 129,
+          "total_transition_ms": 2407.5149151613005,
+          "total_makespan_s": 273.94541408553556,
+          "transition_share_of_makespan_pct": 0.8788301578976563,
+          "mean_latency_ms": 2055.1497032771977,
+          "p50_latency_ms": 1872.5972147490565,
+          "p95_latency_ms": 4155.798665085058,
+          "p99_latency_ms": 5272.919987131814,
+          "sla_violations": 87,
+          "sla_violation_pct": 43.5,
+          "max_drift_after_restore": 0.0
+        },
+        "greedy": {
+          "regime": "Greedy Affinity",
+          "policy": "greedy",
+          "total_requests": 200,
+          "total_transitions": 101,
+          "total_transition_ms": 1891.8803390697576,
+          "total_makespan_s": 273.9066673735047,
+          "transition_share_of_makespan_pct": 0.690702551059099,
+          "mean_latency_ms": 2039.1958714535792,
+          "p50_latency_ms": 1704.7770872502924,
+          "p95_latency_ms": 4833.610093214866,
+          "p99_latency_ms": 6728.943455213297,
+          "sla_violations": 77,
+          "sla_violation_pct": 38.5,
+          "max_drift_after_restore": 0.0
+        },
+        "router": {
+          "regime": "SLA-Bounded Cluster Router",
+          "policy": "router",
+          "total_requests": 200,
+          "total_transitions": 123,
+          "total_transition_ms": 2310.0111164385453,
+          "total_makespan_s": 273.9609122065718,
+          "transition_share_of_makespan_pct": 0.8431900367950128,
+          "mean_latency_ms": 2056.889329726905,
+          "p50_latency_ms": 1675.7135930158142,
+          "p95_latency_ms": 5215.263435045643,
+          "p99_latency_ms": 6982.9519234955915,
+          "sla_violations": 66,
+          "sla_violation_pct": 33.0,
+          "max_drift_after_restore": 0.0,
+          "paired_vs": {
+            "fifo": {
+              "mean_diff_ms": 1.7396264497074236,
+              "ci95_lo": -131.7259385672223,
+              "ci95_hi": 144.98023953422378,
+              "significant": false
+            },
+            "greedy": {
+              "mean_diff_ms": 17.693458273325703,
+              "ci95_lo": -128.290473480137,
+              "ci95_hi": 173.65029006477116,
+              "significant": false
+            }
+          }
+        }
+      }
+    },
+    "rho_0.95": {
+      "rho": 0.95,
+      "arrival_rate": 0.9764218749999999,
+      "regimes": {
+        "legacy_reload_fifo": {
+          "regime": "Legacy Reload FIFO",
+          "policy": "fifo",
+          "total_requests": 200,
+          "total_transitions": 129,
+          "total_transition_ms": 2428.9846451720223,
+          "total_makespan_s": 233.50971158912088,
+          "transition_share_of_makespan_pct": 1.0402071197132974,
+          "mean_latency_ms": 2947.6354304308056,
+          "p50_latency_ms": 2865.3396467876037,
+          "p95_latency_ms": 5369.96549806662,
+          "p99_latency_ms": 6521.83429540321,
+          "sla_violations": 142,
+          "sla_violation_pct": 71.0,
+          "max_drift_after_restore": 0.0
+        },
+        "fifo": {
+          "regime": "In-Place FIFO",
+          "policy": "fifo",
+          "total_requests": 200,
+          "total_transitions": 129,
+          "total_transition_ms": 2365.937559865415,
+          "total_makespan_s": 233.1548958741865,
+          "transition_share_of_makespan_pct": 1.0147492511339358,
+          "mean_latency_ms": 2672.9122849132295,
+          "p50_latency_ms": 2425.9490629931265,
+          "p95_latency_ms": 5139.558967523215,
+          "p99_latency_ms": 6167.639552368314,
+          "sla_violations": 125,
+          "sla_violation_pct": 62.5,
+          "max_drift_after_restore": 0.0
+        },
+        "greedy": {
+          "regime": "Greedy Affinity",
+          "policy": "greedy",
+          "total_requests": 200,
+          "total_transitions": 81,
+          "total_transition_ms": 1499.6610508533195,
+          "total_makespan_s": 233.06428274417212,
+          "transition_share_of_makespan_pct": 0.6434538287874224,
+          "mean_latency_ms": 2632.1881595470586,
+          "p50_latency_ms": 2077.4884093183346,
+          "p95_latency_ms": 6057.248427343552,
+          "p99_latency_ms": 7056.438206619802,
+          "sla_violations": 103,
+          "sla_violation_pct": 51.5,
+          "max_drift_after_restore": 0.0
+        },
+        "router": {
+          "regime": "SLA-Bounded Cluster Router",
+          "policy": "router",
+          "total_requests": 200,
+          "total_transitions": 111,
+          "total_transition_ms": 2053.1757359276526,
+          "total_makespan_s": 233.1765905132439,
+          "transition_share_of_makespan_pct": 0.8805239545738348,
+          "mean_latency_ms": 2661.594014240302,
+          "p50_latency_ms": 1954.8038029391391,
+          "p95_latency_ms": 6641.8367740987205,
+          "p99_latency_ms": 9335.846401616094,
+          "sla_violations": 94,
+          "sla_violation_pct": 47.0,
+          "max_drift_after_restore": 0.0,
+          "paired_vs": {
+            "fifo": {
+              "mean_diff_ms": -11.318270672927657,
+              "ci95_lo": -215.89685101865854,
+              "ci95_hi": 196.43448689446618,
+              "significant": false
+            },
+            "greedy": {
+              "mean_diff_ms": 29.405854693243313,
+              "ci95_lo": -230.42624854605398,
+              "ci95_hi": 290.70574072463216,
+              "significant": false
+            }
+          }
+        }
+      }
+    },
+    "rho_1.5": {
+      "rho": 1.5,
+      "arrival_rate": 1.54171875,
+      "regimes": {
+        "legacy_reload_fifo": {
+          "regime": "Legacy Reload FIFO",
+          "policy": "fifo",
+          "total_requests": 200,
+          "total_transitions": 129,
+          "total_transition_ms": 2388.364623999223,
+          "total_makespan_s": 202.21061933465793,
+          "transition_share_of_makespan_pct": 1.1811271988868632,
+          "mean_latency_ms": 29449.66931602959,
+          "p50_latency_ms": 28809.923855065394,
+          "p95_latency_ms": 53760.429942554256,
+          "p99_latency_ms": 57107.48993146294,
+          "sla_violations": 196,
+          "sla_violation_pct": 98.0,
+          "max_drift_after_restore": 0.0
+        },
+        "fifo": {
+          "regime": "In-Place FIFO",
+          "policy": "fifo",
+          "total_requests": 200,
+          "total_transitions": 129,
+          "total_transition_ms": 2369.489868870005,
+          "total_makespan_s": 197.61914891808084,
+          "transition_share_of_makespan_pct": 1.199018355175809,
+          "mean_latency_ms": 27123.000557291496,
+          "p50_latency_ms": 26545.747137704366,
+          "p95_latency_ms": 49312.004857910695,
+          "p99_latency_ms": 52550.05989183729,
+          "sla_violations": 196,
+          "sla_violation_pct": 98.0,
+          "max_drift_after_restore": 0.0
+        },
+        "greedy": {
+          "regime": "Greedy Affinity",
+          "policy": "greedy",
+          "total_requests": 200,
+          "total_transitions": 11,
+          "total_transition_ms": 199.1360261454247,
+          "total_makespan_s": 195.44879507535623,
+          "transition_share_of_makespan_pct": 0.1018865458181243,
+          "mean_latency_ms": 26059.364144084495,
+          "p50_latency_ms": 22265.295373394878,
+          "p95_latency_ms": 65805.44256522798,
+          "p99_latency_ms": 71553.83390790496,
+          "sla_violations": 192,
+          "sla_violation_pct": 96.0,
+          "max_drift_after_restore": 0.0
+        },
+        "router": {
+          "regime": "SLA-Bounded Cluster Router",
+          "policy": "router",
+          "total_requests": 200,
+          "total_transitions": 57,
+          "total_transition_ms": 1043.6165982391685,
+          "total_makespan_s": 196.29327564745,
+          "transition_share_of_makespan_pct": 0.5316619200514757,
+          "mean_latency_ms": 26586.10004073195,
+          "p50_latency_ms": 23576.66134270666,
+          "p95_latency_ms": 58253.72559412469,
+          "p99_latency_ms": 74981.29731103359,
+          "sla_violations": 159,
+          "sla_violation_pct": 79.5,
+          "max_drift_after_restore": 0.0,
+          "paired_vs": {
+            "fifo": {
+              "mean_diff_ms": -536.9005165595444,
+              "ci95_lo": -3016.180303546409,
+              "ci95_hi": 1922.1259404667717,
+              "significant": false
+            },
+            "greedy": {
+              "mean_diff_ms": 526.735896647458,
+              "ci95_lo": -2934.276577683887,
+              "ci95_hi": 4034.9237291985664,
+              "significant": false
+            }
+          }
+        }
+      }
+    }
+  }
+}

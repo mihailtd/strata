@@ -1,5 +1,24 @@
 # Experiment Tracker & Implementation TODO
 
+> **⚠️ DIFFERENT MODEL — DO NOT QUOTE THESE NUMBERS AS THIS PROJECT'S RESULTS**
+>
+> Everything in this document was measured on **`Qwen/Qwen3.5-0.8B` in FP16**
+> (752M params). The live project runs **`Qwen/Qwen3.5-4B` in bfloat16**, whose
+> decode baseline is **~32 tok/s** — not the 53–84 tok/s quoted throughout here.
+>
+> Concretely: T-12 reports "83.94 tok/s FP16 Graph (1.58×)". That is a 0.8B FP16
+> result. Quoting it beside this repo's 4B bf16 numbers compares two different
+> models and inflates the apparent baseline by ~2.6×.
+>
+> These experiments also reference `src/ftq/tricks/`, a path that **does not exist
+> in this repo** — this file predates the current codebase. Its prototype
+> `CudaGraphDecoder` has been moved to
+> [`benchmarks/superseded/cuda_graph_ftq_prototype.py`](benchmarks/superseded/cuda_graph_ftq_prototype.py);
+> the live engine is `FoldedCudaGraphDecoder` in `src/gnn_experiment/cuda_graph.py`.
+>
+> **For numbers you can cite, use `CURRENT.md`.** Kept here for provenance of the
+> ideas, not the measurements.
+
 This document serves as a living tracker for experimental implementations, performance observations vs. baseline, prerequisites, and improvement ideas across all game-engine-inspired LLM optimization techniques.
 
 

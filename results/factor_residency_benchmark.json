@@ -1,0 +1,76 @@
+{
+  "model_name": "Qwen/Qwen3.5-4B",
+  "dense_model_bytes": 8520000000,
+  "dense_model_gb": 7.934868335723877,
+  "factor_expert_bytes": 42467328,
+  "factor_expert_mb": 40.5,
+  "compression_ratio": 200.62481915509258,
+  "mean_load_time_ms": 1107.1744923344038,
+  "scaling_table": [
+    {
+      "fleet_size": 1,
+      "dense_vram_gb": 7.93,
+      "factor_vram_gb": 12.74,
+      "vram_saved_gb": -4.81,
+      "factor_fits": true,
+      "dense_fits": true
+    },
+    {
+      "fleet_size": 2,
+      "dense_vram_gb": 15.87,
+      "factor_vram_gb": 12.78,
+      "vram_saved_gb": 3.09,
+      "factor_fits": true,
+      "dense_fits": true
+    },
+    {
+      "fleet_size": 3,
+      "dense_vram_gb": 23.8,
+      "factor_vram_gb": 12.82,
+      "vram_saved_gb": 10.98,
+      "factor_fits": true,
+      "dense_fits": false
+    },
+    {
+      "fleet_size": 5,
+      "dense_vram_gb": 39.67,
+      "factor_vram_gb": 12.9,
+      "vram_saved_gb": 26.77,
+      "factor_fits": true,
+      "dense_fits": false
+    },
+    {
+      "fleet_size": 10,
+      "dense_vram_gb": 79.35,
+      "factor_vram_gb": 13.1,
+      "vram_saved_gb": 66.25,
+      "factor_fits": true,
+      "dense_fits": false
+    },
+    {
+      "fleet_size": 20,
+      "dense_vram_gb": 158.7,
+      "factor_vram_gb": 13.49,
+      "vram_saved_gb": 145.2,
+      "factor_fits": true,
+      "dense_fits": false
+    },
+    {
+      "fleet_size": 50,
+      "dense_vram_gb": 396.74,
+      "factor_vram_gb": 14.68,
+      "vram_saved_gb": 382.06,
+      "factor_fits": true,
+      "dense_fits": false
+    },
+    {
+      "fleet_size": 100,
+      "dense_vram_gb": 793.49,
+      "factor_vram_gb": 16.66,
+      "vram_saved_gb": 776.83,
+      "factor_fits": true,
+      "dense_fits": false
+    }
+  ],
+  "max_concurrent_experts_24gb": 216
+}

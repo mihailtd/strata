@@ -9,12 +9,11 @@ llm:
   # (Qwen3.5-4B, gemma-4-12B, gemma-4-E4B, gemma-4-E2B; see SYSTEM.md).
   model: models/gemma-4-E2B-it-Q8_0.gguf
   temperature: 0.1
-  # Generous, not-artificially-starved budgets — the server runs with a large
-  # context window (see serving/README.md), no reason to truncate generation.
+  # Calibrated token budgets: prevent runaway repetition and match SFT max_length
   max_tokens:
-    question_gen: 1024
-    verify: 64
-    answer_gen: 8192
+    question_gen: 256
+    verify: 128
+    answer_gen: 1024
 
   # Optional: point the verifier at a *different* already-running server/model
   # for independent judging instead of self-verification (the default when

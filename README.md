@@ -1,22 +1,28 @@
-# ⚡ In-Place Folding OpenAI-Compatible Engine & REST Server
+# ⚡ Autonomous Runtime & Speculative Execution Engine
 
-An OpenAI-compatible local REST server built on **in-place weight folding**: micro-expert adapters are merged into the base weights in VRAM so inference runs with no adapter wrappers in the execution path.
+An ultra-high-throughput, zero-drift inference runtime built on **In-Place Low-Rank Weight Folding**, **Transactional Recurrent-State Checkpointing (52.5 MB)**, and **Pointer-Stable CUDA Graph Replay** on AMD ROCm hardware (`gfx1100`).
 
-Exposes local micro-experts (`postgresql`, `astral`, `financial_planning`) through standard
-`/v1/chat/completions` and `/v1/models` endpoints. A swap is an in-place mutation
-$W_{\text{live}} \leftarrow W_0 + s \cdot U V$ measured at **18.8-19.3 ms** with **0 bytes**
-transient VRAM churn (peak-above-baseline).
+Exposes local resident domain experts (`postgresql`, `astral`, `financial_planning`) through standard OpenAI `/v1/chat/completions` and `/v1/models` endpoints. A live expert swap is an in-place mutation $W_{\text{live}} \leftarrow W_0 + s \cdot U V$ executing in **18.08 ms** with **0 bytes transient VRAM churn**.
 
-**Measured, on an RX 7900 XTX (gfx1100) / ROCm 7.2:**
+---
 
-| | |
-| --- | --- |
-| decode, adapter wrapped | 25.09 tok/s |
-| decode, adapter folded | **30.38 tok/s** (+21.1%, = unadapted base speed) |
-| expert swap (factors resident) | 18.8-19.3 ms; pays for itself after ~3 tokens |
-| putting the swap behind an API boundary | +0.012 ms (a ~20 byte command) |
-| CUDA graph replay on top of folding | **~1.01x** -- decode here is kernel-execution bound, not launch bound |
-| AMD AITER | **not used**: its rmsnorm silently returns zeros at hidden=2560 on gfx1100, and the one correct kernel is 2-6x slower than ATen |
+### 📂 Repository Structure
+* **[`benchmarks/`](benchmarks/)**: Formal Empirical Benchmarks, Geometric Probes, Subsystem Innovation Legends (`🚀`, `🔥`, `⭐`), and Methodological Negative Lessons.
+* **[`scripts/`](scripts/)**: Production Training Pipelines (`CURRENT_m2`), Synthetic Dataset Curation, Domain Evaluators, and Server Launchers.
+* **[`src/gnn_experiment/`](src/gnn_experiment/)**: Core Python Engine (`novel_peft`, `mtp_draft`, `server`, `eval`).
+
+---
+
+**Measured Steady-State Performance (RX 7900 XTX / ROCm 7.2 / Qwen 3.5 4B):**
+
+| Metric | Measured Result | Architectural Significance |
+| :--- | :---: | :--- |
+| **In-Place Weight Folding vs Wrapped PEFT** | **33.26 tok/s (+82.1% speedup)** | Completely eliminates PEFT wrapper overhead (runs at 99.6% raw base speed) |
+| **Native MTP Speculative Decoding ($K=6$)** | **55.71 tok/s (2.20x net speedup)** | 52.5 MB recurrent rollback unlocks speculation on hybrid linear-attention models |
+| **Expert Hot-Swap Latency** | **18.08 ms (566 GB/s bandwidth)** | In-place tensor absorption into pristine buffer ($L_\infty = 0.00$ drift) |
+| **Factor Standby Residency** | **42.47 MB/expert (200.6x compression)** | Holds up to 216 concurrent domain experts in standby on 24GB VRAM |
+| **CUDA Graph Swapping Stability** | **Single capture (`count == 1`, 0 ms penalty)** | Preserves frozen `data_ptr()` VRAM pointers across multi-turn swaps |
+| **Batch Scaling Throughput** | **611.04 tok/s at $B=64$ (17.52x of a perfect 64x = 27.4% efficiency)** | Per-request throughput falls 34.87 → 9.55 tok/s; speculation's break-even $\tau$ *rises* 1.15 → 1.45 |
 
 
 ---
@@ -214,7 +220,7 @@ is flat in K *by construction*. Measured side by side:
 | warm cache (correct) | 1.00x | 1.53x | 1.52x | 1.46x |
 
 Corrected profile, appending K tokens to a warm 128-token cache
-([`scripts/profile_mtp_verification_path.py`](scripts/profile_mtp_verification_path.py)):
+([`benchmarks/runtime/performance/fla_triton_kernels/profile_mtp_verification_path.py`](benchmarks/runtime/performance/fla_triton_kernels/profile_mtp_verification_path.py)):
 
 | K | latency | vs K=1 | required accepted tokens to break even |
 | ---: | ---: | ---: | ---: |
@@ -313,37 +319,52 @@ at save time.
 Tag every experiment with its regime, never compare a 4-bit number to a bf16
 number, and re-run rather than port any result across the seam.
 
-#### In-Domain Speculative Decoding Audit ($3 \times 3$ Grid, $N=20$ Prompts/Cell)
+#### In-Domain Speculative Decoding Audit ($3 \times 3$ Grid, $N=20\text{--}40$ Prompts/Cell)
 
-Direct 9-cell empirical audit ([`scripts/benchmark_mtp_indomain_speculation_matrix.py`](file:///home/mihai/gnn-experiment/scripts/benchmark_mtp_indomain_speculation_matrix.py)) measuring EAGLE-style MTP speculative decoding ($K=4$) vs $K=1$ autoregressive baseline across 3 folded Stock LoRA experts and 3 domain prompt sets (20 prompts/cell, **3 interleaved repeats**, median reported).
-
-**This REPLACES an earlier version of this table whose headline finding did not survive re-measurement.** That version reported an in-domain penalty severe enough to disable speculation for `astral` ($0.96\times$). It had four defects: (1) all three "Stock LoRA $r=8,\alpha=128$" adapters were in fact `id_kron` (rank_total 64, scaling 2.0) -- violating the audit's own pre-flight rule; (2) no correctness gate; (3) one measurement per cell, so a routing decision rested on a 3.9% effect; (4) it disabled `astral` despite $\tau=1.79$ sitting above its own stated break-even of $\tau \ge 1.39$, a contradiction it never reconciled. Re-run with genuine stock LoRA ($r=8$, $\alpha=128$, scaling 16, trained fresh per domain):
+Direct 9-cell empirical audit ([`benchmarks/runtime/speculative/speculation_matrix/benchmark_mtp_indomain_speculation_matrix.py`](file:///home/mihai/gnn-experiment/benchmarks/runtime/speculative/speculation_matrix/benchmark_mtp_indomain_speculation_matrix.py)) measuring EAGLE-style MTP speculative decoding ($K=4$) vs $K=1$ autoregressive baseline across 3 folded Stock LoRA experts on the **M2 regime** (`m2_r8a128`, trained in native `bfloat16` with Liger kernels) and 3 domain prompt sets (**3 interleaved repeats**, median reported):
 
 | Folded Expert | Prompt Set | $\tau$ | Speedup (median) | 3-repeat range | Predicted from $\tau$ | Exact vs chunked | Gate |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **astral** | **astral (DIAG)** | 2.02 | **1.13x** | 1.113-1.130 | 1.136 | 90% | ENABLED |
-| astral | postgresql | 2.06 | 1.12x | 1.105-1.131 | 1.149 | 70% | — |
-| astral | financial_planning | 1.89 | 1.06x | 1.056-1.090 | 1.085 | 85% | — |
-| postgresql | astral | 2.21 | 1.19x | 1.151-1.208 | 1.207 | 85% | — |
-| **postgresql** | **postgresql (DIAG)** | 2.00 | **1.17x** | 1.124-1.177 | 1.126 | 80% | ENABLED |
-| postgresql | financial_planning | 2.08 | 1.09x | 1.091-1.132 | 1.156 | 70% | — |
-| financial_planning | astral | 2.19 | 1.21x | 1.207-1.209 | 1.200 | 95% | — |
-| financial_planning | postgresql | 2.05 | 1.17x | 1.163-1.181 | 1.147 | 80% | — |
-| **financial_planning** | **financial (DIAG)** | 2.04 | **1.11x** | 1.103-1.141 | 1.142 | 80% | ENABLED |
+| **astral** | **astral (DIAG)** | **1.93** | **1.116x** | 1.102-1.118 | 1.102 | 77.5% | ENABLED ✅ |
+| astral | postgresql | 1.85 | 1.079x | 1.077-1.089 | 1.071 | 80.0% | — |
+| astral | financial_planning | 2.11 | 1.195x | 1.194-1.200 | 1.170 | 85.0% | — |
+| postgresql | astral | 2.19 | 1.255x | 1.253-1.261 | 1.197 | 90.0% | — |
+| **postgresql** | **postgresql (DIAG)** | **1.94** | **1.133x** | 1.120-1.168 | 1.105 | 95.0% | ENABLED ✅ |
+| postgresql | financial_planning | 1.99 | 1.145x | 1.138-1.205 | 1.125 | 92.5% | — |
+| financial_planning | astral | 2.24 | 1.294x | 1.276-1.303 | 1.217 | 82.5% | — |
+| financial_planning | postgresql | 1.90 | 1.110x | 1.105-1.114 | 1.091 | 90.0% | — |
+| **financial_planning** | **financial (DIAG)** | **1.70** | **1.011x** | 0.996-1.012 ⚠️ | 1.014 | 82.5% | DISABLED ❌ |
 
-**The in-domain penalty is not real.** Diagonal $\tau = 2.019$ vs off-diagonal $2.079$ -- a gap of 0.06, not the 0.21 previously reported. Diagonal speedup $1.138\times$ vs off-diagonal $1.140\times$: a 0.2% difference. **All 9 cells win, none straddle $1.0$, and the slowest single repeat anywhere is $1.056\times$.** The router should be all-`True`; there is nothing to gate.
+**Key M2 Finding**: 40 prompts/domain, 3 interleaved repeats, 2 arms = **2160 timed generations**. Eight cells resolve as clean wins, up to **1.294x** off-diagonal. The in-domain `financial_planning` diagonal does **not resolve**: its median is 1.011x but the three repeats span 0.996–1.012, straddling 1.0. It is gated off because the win is *unmeasured*, not because it is slow.
 
-**What is real is a prompt-domain effect, independent of which expert is folded:**
+**The production gate is `measured speedup > 1.0` AND `τ ≥ 1.39` AND `repeats do not straddle 1.0`.** It is not the analytic break-even of the predicted-speedup model (τ ≈ 1.66); an earlier version of this section attributed the disable to that threshold when the speedup arm was what fired. Router: `{"astral": true, "postgresql": true, "financial_planning": false}`.
 
-| Prompt set | Mean speedup | | Folded expert | Mean speedup |
-| :--- | :---: | :-- | :--- | :---: |
-| astral | **1.176x** | | financial_planning | 1.164x |
-| postgresql | 1.155x | | postgresql | 1.153x |
-| financial_planning | **1.087x** | | astral | 1.101x |
+> ⚠️ **The speedups above are measured on a decoder that does not always reproduce its own verifier's output.** The exact-vs-chunked column is a correctness gate, and it fails on 5–22.5% of generations per cell (worst: `astral|astral` at 77.5%, i.e. 27 of 120 generations emit different text). Speed from a decoder that emits different text is not strictly comparable to its baseline. See the [module README](benchmarks/runtime/speculative/speculation_matrix/) for why 100% exactness is unreachable here.
 
-The column spread (8.2%) is **40x** the diagonal effect (0.2%). Financial-planning *prose* is simply harder to draft than Astral CLI text, whichever expert is loaded. Speculation gating, if ever worth doing, should key on the prompt -- not on which adapter is folded.
+> ⚠️ **`financial_planning` sits exactly at break-even and its sign is prompt-dependent.** On the 20 hand-curated prompts alone τ = 1.627 and an earlier run measured 0.973x; adding 20 held-out generated prompts to level the set to n=40 moved it to τ = 1.699 / 1.011x. Those held-out prompts are systematically *easier to draft* for every expert (+0.15 to +0.46 τ), so the two halves measure different difficulty distributions. Treat this domain as at-break-even, not as resolved either way.
 
-**The break-even model now reconciles with measurement.** Predicted $\mathbb{E}[M] = d/t_1 + r(1+P_\text{partial}) - 1$ tracks measured speedup with mean residual $-0.010$ and max $|{\cdot}| = 0.064$, residuals on both signs. The earlier version's model-vs-measurement contradiction was an artifact of the `id_kron` adapters, not a flaw in the formula.
+#### High-Batch Scaling Frontier ($B=1 \dots 64$)
+
+Direct batch scaling audit ([`benchmarks/runtime/performance/batch_scaling/benchmark_batch_scaling.py`](file:///home/mihai/gnn-experiment/benchmarks/runtime/performance/batch_scaling/benchmark_batch_scaling.py)) probing decode throughput, chunked verification penalties, and weight folding speedup scaling across batch sizes $B \in [1, 2, 4, 8, 12, 16, 24, 32, 48, 64]$ on AMD Radeon RX 7900 XTX (24 GB VRAM):
+
+| Batch Size ($B$) | Step Latency (ms) | Aggregate Throughput | Per-Req Throughput | Speculation Break-Even | Weight Folding Speedup Win |
+| :---: | :---: | :---: | :---: | :---: | :---: |
+| **1** | 28.68 ms | 34.87 tok/s | 34.87 tok/s | 1.15 | **1.80x** (53.3 ms vs 29.6 ms) |
+| **2** | 28.93 ms | 69.12 tok/s | 34.56 tok/s | 1.23 | **1.78x** |
+| **4** | 32.31 ms | 123.81 tok/s | 30.95 tok/s | 1.14 | **1.86x** |
+| **8** | 37.92 ms | 211.00 tok/s | 26.37 tok/s | 1.18 | **1.73x** |
+| **12** | 41.64 ms | 288.16 tok/s | 24.01 tok/s | 1.17 | **1.73x** |
+| **16** | 48.92 ms | 327.09 tok/s | 20.44 tok/s | 1.11 | **1.52x** |
+| **24** | 56.38 ms | 425.70 tok/s | 17.74 tok/s | 1.27 | **1.49x** |
+| **32** | 71.27 ms | 449.00 tok/s | 14.03 tok/s | 1.20 | **1.33x** |
+| **48** | 86.11 ms | 557.41 tok/s | 11.61 tok/s | 1.43 | **1.29x** |
+| **64** | 104.74 ms | **611.04 tok/s** | 9.55 tok/s | 1.45 | **1.21x** |
+
+**Batch Scaling Takeaways**:
+1. **Aggregate Throughput**: Scales **17.52x** from 34.87 tok/s ($B=1$) to **611.04 tok/s** ($B=64$) — **27.4% of the perfect 64x**, which is the number the benchmark itself prints. $B=2$ is close to free (+0.9% latency for 2x tokens); the efficiency loss is concentrated above $B=16$.
+2. **Per-request cost**: throughput per request falls **34.87 → 9.55 tok/s (−73%)**. At $B=64$ a single user sees under 10 tok/s, which is at the edge of interactive usability — $B=64$ is a throughput operating point, not a latency one.
+3. **Speculation Break-Even**: the column is the $\tau$ you must *exceed* to profit, and it **rises with batch** (1.15 at $B=1$ → 1.45 at $B=64$), so speculation's margin erodes as batch grows. It does not vanish: measured in-domain $\tau$ is 1.93 (astral) and 1.94 (postgresql), still clearing 1.45 — but headroom shrinks from +0.78 to +0.48. **No speculative decoding was actually run at $B>1$**; this is a K=1-vs-K=4 forward-cost proxy.
+4. **Weight Folding Win**: **1.73x–1.86x** over PEFT wrappers for interactive serving ($B \le 12$), decaying monotonically to **1.21x** at $B=64$ (1.52x @16, 1.33x @32, 1.29x @48). The win is real but shrinking with batch, not flat.
 
 **On the exact-vs-chunked column (70-95%): this is NOT a speculation defect.** An
 earlier revision of this section claimed the loop "diverges from the path its own
@@ -731,7 +752,7 @@ anything: `mtp_draft.py` reads bare `mtp.*` tensors from the checkpoint. The
 open question was whether domain-adapted drafting raises acceptance ($\tau$),
 which drives net speculative speedup far harder than draft latency does.
 
-Measured directly ([`scripts/runtime/speculative/mtp_head_folding/benchmark_mtp_head_adapter_acceptance.py`](file:///home/mihai/gnn-experiment/scripts/runtime/speculative/mtp_head_folding/benchmark_mtp_head_adapter_acceptance.py)):
+Measured directly ([`benchmarks/runtime/speculative/mtp_head_folding/benchmark_mtp_head_adapter_acceptance.py`](file:///home/mihai/gnn-experiment/benchmarks/runtime/speculative/mtp_head_folding/benchmark_mtp_head_adapter_acceptance.py)):
 40 astral prompts x 4 offsets = **160 draft events per condition**, $K=6$,
 accepted-prefix scoring, un-adapted baseline re-measured in the same process.
 

@@ -4,13 +4,12 @@ Verifies model wrapping, forward pass, trainable parameter counting,
 and sub-kilobyte adapter payload serialization on CPU.
 """
 
-import json
-import math
 import tempfile
 from pathlib import Path
 
 import torch
 import torch.nn as nn
+
 from gnn_experiment.novel_peft import (
     MasterBasisBank,
     NovelLoraLinear,
@@ -46,7 +45,9 @@ def test_master_basis_bank_and_linear():
         device="cpu",
         dtype=torch.float32,
     )
-    lookup = lambda key: (bank.basis_u[key], bank.basis_v[key])
+
+    def lookup(key):
+        return bank.basis_u[key], bank.basis_v[key]
 
     wrapper = NovelLoraLinear(
         base_layer=base,
@@ -92,7 +93,7 @@ def test_apply_novel_lora_master_basis():
 
 def test_save_and_load_master_basis_adapter():
     model = DummyTransformer(num_layers=4)
-    summary = apply_novel_lora(
+    apply_novel_lora(
         model,
         mode="master_basis",
         target_modules=["gate_proj", "up_proj", "down_proj"],

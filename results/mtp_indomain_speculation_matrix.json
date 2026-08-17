@@ -8,70 +8,123 @@
         "expert_folded": "astral",
         "prompt_domain": "astral",
         "is_indomain_diagonal": true,
-        "auto_tok_s": 30.17507063859408,
-        "spec_tok_s": 34.1874232203819,
-        "speedup_multiplier": 1.0936339103094082,
+        "auto_tok_s": 33.00295922441774,
+        "spec_tok_s": 36.51586959869181,
+        "speedup_multiplier": 1.1161057150477924,
         "speedup_all_reps": [
-          1.0904219551073002,
-          1.0936339103094082,
-          1.1329691197692178
+          1.101998736040865,
+          1.1161057150477924,
+          1.1175900423066873
         ],
-        "speedup_spread": 0.04254716466191755,
+        "speedup_spread": 0.015591306265822391,
         "straddles_unity": false,
         "predicted_speedup_from_tau": 1.101773085989546,
+        "tau_break_even": 1.6609999999999996,
         "tau_accepted_per_step": 1.9318181818181819,
+        "tau_per_repeat": [
+          1.9318181818181819,
+          1.9318181818181819,
+          1.9318181818181819
+        ],
+        "tau_spread": 0.0,
         "accept_pct": 48.29545454545455,
         "exact_vs_chunked_pct": 77.5,
+        "exact_trials": 120,
+        "n_prompts": 40,
         "repeats": 3,
-        "tot_drafted": 1760,
-        "tot_accepted": 850,
-        "tot_steps": 440
+        "tot_drafted": 5280,
+        "tot_accepted": 2550,
+        "tot_steps": 1320,
+        "by_prompt_source": {
+          "curated": {
+            "tau": 1.9318181818181819,
+            "exact_pct": 77.5,
+            "prompts_per_repeat": 40
+          }
+        }
       },
       "postgresql": {
         "expert_folded": "astral",
         "prompt_domain": "postgresql",
         "is_indomain_diagonal": false,
-        "auto_tok_s": 34.18955603588796,
-        "spec_tok_s": 37.565253049372004,
-        "speedup_multiplier": 1.0985743658094413,
+        "auto_tok_s": 33.510738595240966,
+        "spec_tok_s": 36.397526187943164,
+        "speedup_multiplier": 1.0790645447620204,
         "speedup_all_reps": [
-          1.0927200002277881,
-          1.0985743658094413,
-          1.1009436978764116
+          1.0766821118900756,
+          1.0790645447620204,
+          1.0894173623665013
         ],
-        "speedup_spread": 0.008223697648623407,
+        "speedup_spread": 0.012735250476425763,
         "straddles_unity": false,
         "predicted_speedup_from_tau": 1.071067965735914,
+        "tau_break_even": 1.6609999999999996,
         "tau_accepted_per_step": 1.8501118568232662,
+        "tau_per_repeat": [
+          1.8501118568232662,
+          1.8501118568232662,
+          1.8501118568232662
+        ],
+        "tau_spread": 0.0,
         "accept_pct": 46.25279642058165,
         "exact_vs_chunked_pct": 80.0,
+        "exact_trials": 120,
+        "n_prompts": 40,
         "repeats": 3,
-        "tot_drafted": 1788,
-        "tot_accepted": 827,
-        "tot_steps": 447
+        "tot_drafted": 5364,
+        "tot_accepted": 2481,
+        "tot_steps": 1341,
+        "by_prompt_source": {
+          "curated": {
+            "tau": 1.8501118568232662,
+            "exact_pct": 80.0,
+            "prompts_per_repeat": 40
+          }
+        }
       },
       "financial_planning": {
         "expert_folded": "astral",
         "prompt_domain": "financial_planning",
         "is_indomain_diagonal": false,
-        "auto_tok_s": 34.22675884027383,
-        "spec_tok_s": 38.27407642162884,
-        "speedup_multiplier": 1.124700351622025,
+        "auto_tok_s": 33.49461205692596,
+        "spec_tok_s": 39.982803626167495,
+        "speedup_multiplier": 1.1949259597373514,
         "speedup_all_reps": [
-          1.098581306076535,
-          1.124700351622025,
-          1.1348039598461832
+          1.1937085152147604,
+          1.1949259597373514,
+          1.2000905974696048
         ],
-        "speedup_spread": 0.03622265376964817,
+        "speedup_spread": 0.006382082254844379,
         "straddles_unity": false,
-        "predicted_speedup_from_tau": 1.1001885794643937,
-        "tau_accepted_per_step": 1.9276018099547512,
-        "accept_pct": 48.19004524886878,
-        "exact_vs_chunked_pct": 90.0,
+        "predicted_speedup_from_tau": 1.1701621393402872,
+        "tau_break_even": 1.6609999999999996,
+        "tau_accepted_per_step": 2.1138014527845037,
+        "tau_per_repeat": [
+          2.1138014527845037,
+          2.1138014527845037,
+          2.1138014527845037
+        ],
+        "tau_spread": 0.0,
+        "accept_pct": 52.84503631961259,
+        "exact_vs_chunked_pct": 85.0,
+        "exact_trials": 120,
+        "n_prompts": 40,
         "repeats": 3,
-        "tot_drafted": 884,
-        "tot_accepted": 426,
-        "tot_steps": 221
+        "tot_drafted": 4956,
+        "tot_accepted": 2619,
+        "tot_steps": 1239,
+        "by_prompt_source": {
+          "curated": {
+            "tau": 1.9276018099547512,
+            "exact_pct": 90.0,
+            "prompts_per_repeat": 20
+          },
+          "heldout_generated": {
+            "tau": 2.328125,
+            "exact_pct": 80.0,
+            "prompts_per_repeat": 20
+          }
+        }
       }
     },
     "postgresql": {
@@ -79,70 +132,123 @@
         "expert_folded": "postgresql",
         "prompt_domain": "astral",
         "is_indomain_diagonal": false,
-        "auto_tok_s": 34.243081879150935,
-        "spec_tok_s": 43.23686977080136,
-        "speedup_multiplier": 1.263271524354166,
+        "auto_tok_s": 33.667130176844566,
+        "spec_tok_s": 42.26232332371584,
+        "speedup_multiplier": 1.255299251873355,
         "speedup_all_reps": [
-          1.2626453986644917,
-          1.263271524354166,
-          1.2694435707802985
+          1.2530567529086547,
+          1.255299251873355,
+          1.26121156455902
         ],
-        "speedup_spread": 0.0067981721158068,
+        "speedup_spread": 0.008154811650365357,
         "straddles_unity": false,
         "predicted_speedup_from_tau": 1.1973974106741532,
+        "tau_break_even": 1.6609999999999996,
         "tau_accepted_per_step": 2.1862745098039214,
+        "tau_per_repeat": [
+          2.1862745098039214,
+          2.1862745098039214,
+          2.1862745098039214
+        ],
+        "tau_spread": 0.0,
         "accept_pct": 54.65686274509803,
         "exact_vs_chunked_pct": 90.0,
+        "exact_trials": 120,
+        "n_prompts": 40,
         "repeats": 3,
-        "tot_drafted": 1632,
-        "tot_accepted": 892,
-        "tot_steps": 408
+        "tot_drafted": 4896,
+        "tot_accepted": 2676,
+        "tot_steps": 1224,
+        "by_prompt_source": {
+          "curated": {
+            "tau": 2.1862745098039214,
+            "exact_pct": 90.0,
+            "prompts_per_repeat": 40
+          }
+        }
       },
       "postgresql": {
         "expert_folded": "postgresql",
         "prompt_domain": "postgresql",
         "is_indomain_diagonal": true,
-        "auto_tok_s": 34.357251964274774,
-        "spec_tok_s": 39.112937982517295,
-        "speedup_multiplier": 1.138418334359327,
+        "auto_tok_s": 33.27283295112169,
+        "spec_tok_s": 37.704436502423135,
+        "speedup_multiplier": 1.1331898476397106,
         "speedup_all_reps": [
-          1.1324888314144634,
-          1.138418334359327,
-          1.1522489736452752
+          1.1204547614684206,
+          1.1331898476397106,
+          1.168494803788239
         ],
-        "speedup_spread": 0.019760142230811795,
+        "speedup_spread": 0.0480400423198184,
         "straddles_unity": false,
         "predicted_speedup_from_tau": 1.1050369907907853,
+        "tau_break_even": 1.6609999999999996,
         "tau_accepted_per_step": 1.9405034324942791,
+        "tau_per_repeat": [
+          1.9405034324942791,
+          1.9405034324942791,
+          1.9405034324942791
+        ],
+        "tau_spread": 0.0,
         "accept_pct": 48.51258581235698,
         "exact_vs_chunked_pct": 95.0,
+        "exact_trials": 120,
+        "n_prompts": 40,
         "repeats": 3,
-        "tot_drafted": 1748,
-        "tot_accepted": 848,
-        "tot_steps": 437
+        "tot_drafted": 5244,
+        "tot_accepted": 2544,
+        "tot_steps": 1311,
+        "by_prompt_source": {
+          "curated": {
+            "tau": 1.9405034324942791,
+            "exact_pct": 95.0,
+            "prompts_per_repeat": 40
+          }
+        }
       },
       "financial_planning": {
         "expert_folded": "postgresql",
         "prompt_domain": "financial_planning",
         "is_indomain_diagonal": false,
-        "auto_tok_s": 34.43810385392094,
-        "spec_tok_s": 36.90042750951416,
-        "speedup_multiplier": 1.071499977642145,
+        "auto_tok_s": 33.431383480524914,
+        "spec_tok_s": 38.05534876548779,
+        "speedup_multiplier": 1.1445581056671552,
         "speedup_all_reps": [
-          1.0533481880128288,
-          1.071499977642145,
-          1.0773472365410053
+          1.1383121128581628,
+          1.1445581056671552,
+          1.2046450023160538
         ],
-        "speedup_spread": 0.02399904852817647,
+        "speedup_spread": 0.06633288945789095,
         "straddles_unity": false,
-        "predicted_speedup_from_tau": 1.0453436259474966,
-        "tau_accepted_per_step": 1.7816593886462881,
-        "accept_pct": 44.54148471615721,
-        "exact_vs_chunked_pct": 95.0,
+        "predicted_speedup_from_tau": 1.1247554448988646,
+        "tau_break_even": 1.6609999999999996,
+        "tau_accepted_per_step": 1.9929742388758782,
+        "tau_per_repeat": [
+          1.9929742388758782,
+          1.9929742388758782,
+          1.9929742388758782
+        ],
+        "tau_spread": 0.0,
+        "accept_pct": 49.824355971896956,
+        "exact_vs_chunked_pct": 92.5,
+        "exact_trials": 120,
+        "n_prompts": 40,
         "repeats": 3,
-        "tot_drafted": 916,
-        "tot_accepted": 408,
-        "tot_steps": 229
+        "tot_drafted": 5124,
+        "tot_accepted": 2553,
+        "tot_steps": 1281,
+        "by_prompt_source": {
+          "curated": {
+            "tau": 1.7816593886462881,
+            "exact_pct": 95.0,
+            "prompts_per_repeat": 20
+          },
+          "heldout_generated": {
+            "tau": 2.2373737373737375,
+            "exact_pct": 90.0,
+            "prompts_per_repeat": 20
+          }
+        }
       }
     },
     "financial_planning": {
@@ -150,76 +256,185 @@
         "expert_folded": "financial_planning",
         "prompt_domain": "astral",
         "is_indomain_diagonal": false,
-        "auto_tok_s": 34.390976987594264,
-        "spec_tok_s": 44.590710732565746,
-        "speedup_multiplier": 1.301370295650612,
+        "auto_tok_s": 33.705301472271636,
+        "spec_tok_s": 43.62731622856888,
+        "speedup_multiplier": 1.294375493554324,
         "speedup_all_reps": [
-          1.2954451018731883,
-          1.301370295650612,
-          1.3053148939699424
+          1.2756686700337507,
+          1.294375493554324,
+          1.3030926193350358
         ],
-        "speedup_spread": 0.009869792096754093,
+        "speedup_spread": 0.02742394930128511,
         "straddles_unity": false,
         "predicted_speedup_from_tau": 1.2170963800588817,
+        "tau_break_even": 1.6609999999999996,
         "tau_accepted_per_step": 2.2386934673366836,
+        "tau_per_repeat": [
+          2.2386934673366836,
+          2.2386934673366836,
+          2.2386934673366836
+        ],
+        "tau_spread": 0.0,
         "accept_pct": 55.96733668341709,
         "exact_vs_chunked_pct": 82.5,
+        "exact_trials": 120,
+        "n_prompts": 40,
         "repeats": 3,
-        "tot_drafted": 1592,
-        "tot_accepted": 891,
-        "tot_steps": 398
+        "tot_drafted": 4776,
+        "tot_accepted": 2673,
+        "tot_steps": 1194,
+        "by_prompt_source": {
+          "curated": {
+            "tau": 2.2386934673366836,
+            "exact_pct": 82.5,
+            "prompts_per_repeat": 40
+          }
+        }
       },
       "postgresql": {
         "expert_folded": "financial_planning",
         "prompt_domain": "postgresql",
         "is_indomain_diagonal": false,
-        "auto_tok_s": 34.48909973245769,
-        "spec_tok_s": 38.29712796827563,
-        "speedup_multiplier": 1.1102742012263143,
+        "auto_tok_s": 33.25738053831436,
+        "spec_tok_s": 37.049483830418524,
+        "speedup_multiplier": 1.1098874243386625,
         "speedup_all_reps": [
-          1.1089404995520484,
-          1.1102742012263143,
-          1.120541873194803
+          1.104592366626845,
+          1.1098874243386625,
+          1.1140229095233598
         ],
-        "speedup_spread": 0.011601373642754487,
+        "speedup_spread": 0.009430542896514904,
         "straddles_unity": false,
         "predicted_speedup_from_tau": 1.0912450702709704,
+        "tau_break_even": 1.6609999999999996,
         "tau_accepted_per_step": 1.9038031319910516,
+        "tau_per_repeat": [
+          1.9038031319910516,
+          1.9038031319910516,
+          1.9038031319910516
+        ],
+        "tau_spread": 0.0,
         "accept_pct": 47.59507829977629,
         "exact_vs_chunked_pct": 90.0,
+        "exact_trials": 120,
+        "n_prompts": 40,
         "repeats": 3,
-        "tot_drafted": 1788,
-        "tot_accepted": 851,
-        "tot_steps": 447
+        "tot_drafted": 5364,
+        "tot_accepted": 2553,
+        "tot_steps": 1341,
+        "by_prompt_source": {
+          "curated": {
+            "tau": 1.9038031319910516,
+            "exact_pct": 90.0,
+            "prompts_per_repeat": 40
+          }
+        }
       },
       "financial_planning": {
         "expert_folded": "financial_planning",
         "prompt_domain": "financial_planning",
         "is_indomain_diagonal": true,
-        "auto_tok_s": 34.236950126340055,
-        "spec_tok_s": 33.330383823589614,
-        "speedup_multiplier": 0.9729471955063232,
+        "auto_tok_s": 33.37928120131149,
+        "spec_tok_s": 33.74312716477275,
+        "speedup_multiplier": 1.0109003534637817,
         "speedup_all_reps": [
-          0.9671546945751498,
-          0.9729471955063232,
-          0.9893746625066541
+          0.9956055182056072,
+          1.0109003534637817,
+          1.01219651476146
         ],
-        "speedup_spread": 0.02221996793150427,
-        "straddles_unity": false,
-        "predicted_speedup_from_tau": 0.9870560002245437,
-        "tau_accepted_per_step": 1.6265560165975104,
-        "accept_pct": 40.66390041493776,
-        "exact_vs_chunked_pct": 75.0,
+        "speedup_spread": 0.016590996555852833,
+        "straddles_unity": true,
+        "predicted_speedup_from_tau": 1.0143376709405794,
+        "tau_break_even": 1.6609999999999996,
+        "tau_accepted_per_step": 1.6991525423728813,
+        "tau_per_repeat": [
+          1.6991525423728813,
+          1.6991525423728813,
+          1.6991525423728813
+        ],
+        "tau_spread": 0.0,
+        "accept_pct": 42.478813559322035,
+        "exact_vs_chunked_pct": 82.5,
+        "exact_trials": 120,
+        "n_prompts": 40,
         "repeats": 3,
-        "tot_drafted": 964,
-        "tot_accepted": 392,
-        "tot_steps": 241
+        "tot_drafted": 5664,
+        "tot_accepted": 2406,
+        "tot_steps": 1416,
+        "by_prompt_source": {
+          "curated": {
+            "tau": 1.6265560165975104,
+            "exact_pct": 75.0,
+            "prompts_per_repeat": 20
+          },
+          "heldout_generated": {
+            "tau": 1.774891774891775,
+            "exact_pct": 90.0,
+            "prompts_per_repeat": 20
+          }
+        }
       }
     }
   },
+  "prompts_per_domain": 40,
+  "repeats": 3,
+  "tau_gate": 1.39,
   "speculation_router_config": {
     "astral": true,
     "postgresql": true,
     "financial_planning": false
-  }
+  },
+  "speculation_router_gate_detail": {
+    "astral": {
+      "enabled": true,
+      "passes_speedup_gate": true,
+      "passes_tau_gate": true,
+      "is_resolved": true,
+      "tau_gate": 1.39,
+      "measured_speedup": 1.1161057150477924,
+      "measured_tau": 1.9318181818181819,
+      "speedup_all_reps": [
+        1.101998736040865,
+        1.1161057150477924,
+        1.1175900423066873
+      ],
+      "straddles_unity": false,
+      "disabled_because": null
+    },
+    "postgresql": {
+      "enabled": true,
+      "passes_speedup_gate": true,
+      "passes_tau_gate": true,
+      "is_resolved": true,
+      "tau_gate": 1.39,
+      "measured_speedup": 1.1331898476397106,
+      "measured_tau": 1.9405034324942791,
+      "speedup_all_reps": [
+        1.1204547614684206,
+        1.1331898476397106,
+        1.168494803788239
+      ],
+      "straddles_unity": false,
+      "disabled_because": null
+    },
+    "financial_planning": {
+      "enabled": false,
+      "passes_speedup_gate": true,
+      "passes_tau_gate": true,
+      "is_resolved": false,
+      "tau_gate": 1.39,
+      "measured_speedup": 1.0109003534637817,
+      "measured_tau": 1.6991525423728813,
+      "speedup_all_reps": [
+        0.9956055182056072,
+        1.0109003534637817,
+        1.01219651476146
+      ],
+      "straddles_unity": true,
+      "disabled_because": [
+        "UNRESOLVED: repeats 0.996-1.012 straddle 1.0"
+      ]
+    }
+  },
+  "gate_rule": "measured speedup > 1.0 AND tau >= tau_gate AND repeats do not straddle 1.0"
 }

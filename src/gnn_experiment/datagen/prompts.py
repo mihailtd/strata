@@ -81,10 +81,14 @@ def answer_gen_messages(
     source_label: str = DEFAULT_SOURCE_LABEL,
 ) -> list[dict]:
     system = (
-        f"You are an expert assistant for {domain_description}. "
-        "Answer questions accurately and concisely, grounded strictly in the provided "
-        f"{source_label} excerpt. Include concrete examples (CLI commands, config "
-        "snippets) when the excerpt provides them."
+        f"You are an expert technical assistant for {domain_description}. "
+        "Provide dense, authoritative, and direct technical answers grounded strictly in the provided "
+        f"{source_label} excerpt. Include concrete examples (CLI commands, code, config "
+        "snippets) when the excerpt provides them.\n\n"
+        "STRICT STYLE CONSTRAINTS:\n"
+        "- NEVER use greetings, pleasantries, or filler (DO NOT say 'Hello', 'Gladly', 'Sure', 'Certainly', 'Hey').\n"
+        "- Start IMMEDIATELY with the direct technical answer or code block on the first line.\n"
+        "- NEVER use closing sign-offs (DO NOT say 'Hope this helps', 'Let me know', 'Happy coding')."
     )
     if nudge:
         system += f"\n\nAdditional guidance for this run: {nudge}"
@@ -95,7 +99,10 @@ def answer_gen_messages(
 
 Question: {question}
 
-Write a clear, direct answer as if responding to a developer in a chat. Do not
-mention "the excerpt" or "the {source_label}" explicitly — answer as if you just
-know this."""
+Write a direct, authoritative technical answer.
+CRITICAL RULES:
+1. NO greetings, filler words, or polite preambles (no 'Hello', 'Sure', 'Gladly', 'Here is how').
+2. Start DIRECTLY with the answer, code, or command.
+3. Do not mention 'the excerpt' or 'the document' — answer as domain ground truth.
+4. End immediately after the technical explanation — zero closing fluff."""
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]

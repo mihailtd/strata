@@ -1,4 +1,8 @@
-"""Draw-Call Batching & In-Place Weight Folding Synergy: CUDA Graph Capture for Micro-Experts.
+"""CUDA Graph capture over merged (folded) adapters — removing CPU kernel-launch overhead.
+
+Naming note: this was titled "Draw-Call Batching", a rendering term. There are no
+draw calls in LLM decode. The real cost is CPU kernel-launch overhead, and the
+real mechanism is CUDA/HIP Graph capture and replay. See GLOSSARY.md.
 
 Combines In-Place Weight Folding (WeightFoldingEngine) with CUDA/HIP Graph Capture:
 1. Weight Folding unwraps model layers completely, removing dynamic PEFT hooks.
@@ -17,6 +21,47 @@ import torch
 from transformers import PreTrainedModel, PreTrainedTokenizerBase, StaticCache
 
 from gnn_experiment.novel_peft import FoldableExpert, WeightFoldingEngine
+
+
+def apply_expert_state(
+    engine: WeightFoldingEngine | None,
+    expert: FoldableExpert | None,
+) -> float:
+    """Brings the live weights to `expert` (or pristine when None). Returns ms spent.
+
+    Two things this does that a bare `engine.activate(expert)` does not:
+
+    1. Skips the fold when the requested expert is ALREADY resident. `activate()`
+       rewrites every touched weight unconditionally, so without this check a
+       request that lands on the current expert still pays a full ~18 ms fold.
+       That made any request-scheduling work worthless: the VRAM state router can
+       cut logical transitions from 25 to 7 across a batch, and the measured swap
+       time will not move, because the engine re-folds on all 30 requests anyway.
+       `engine.active` is the authoritative record of what is resident.
+
+    2. Restores pristine W0 when `expert is None`. The previous code only acted
+       `if expert is not None`, so a request for the base model served whatever
+       expert happened to be folded in from the preceding request.
+    """
+    if engine is None:
+        return 0.0
+
+    target_name = expert.name if expert is not None else None
+    if engine.active == target_name:
+        return 0.0  # cache hit — the whole point of clustering requests by expert
+
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    t0 = time.perf_counter()
+
+    if expert is None:
+        engine.restore()
+    else:
+        engine.activate(expert)
+
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    return (time.perf_counter() - t0) * 1000.0
 
 
 class FoldedCudaGraphDecoder:
@@ -170,18 +215,9 @@ class FoldedCudaGraphDecoder:
         if not self._is_captured:
             self.capture(prompt_tokens)
 
-        # Swap expert in-place (mutates W_live at static VRAM pointers)
-        swap_ms = 0.0
-        if engine is not None and expert is not None:
-            if torch.cuda.is_available():
-                torch.cuda.synchronize()
-            t0 = time.perf_counter()
-
-            engine.activate(expert)
-
-            if torch.cuda.is_available():
-                torch.cuda.synchronize()
-            swap_ms = (time.perf_counter() - t0) * 1000.0
+        # Swap expert in-place (mutates W_live at static VRAM pointers).
+        # Costs 0 ms when the expert is already resident.
+        swap_ms = apply_expert_state(engine, expert)
 
         # Prefill prompt into StaticCache
         self.prefill(prompt_tokens)
@@ -286,8 +322,7 @@ class FoldedCudaGraphDecoder:
         if not self._is_captured:
             self.capture(prompt_tokens)
 
-        if engine is not None and expert is not None:
-            engine.activate(expert)
+        apply_expert_state(engine, expert)
 
         self.prefill(prompt_tokens)
 

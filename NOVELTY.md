@@ -48,6 +48,12 @@ Overclaiming novelty fails the same way overclaiming a benchmark does — and th
 project has already paid that cost. But *under*-claiming a genuine first
 application is also a failure. Both are errors.
 
+**Naming is where this starts.** An invented name for an existing technique hides
+the prior art from us and reads as a novelty claim to everyone else. `GLOSSARY.md`
+records which of our names are genuinely ours (keep them) and which already had
+established names (use those) — e.g. "SVD-guided subspace initialization" is
+**PiSSA**, and peft has shipped it since before we named it.
+
 | tag | meaning |
 | :--- | :--- |
 | 🚀 **Genuine Discovery** | New knowledge, not derivable from existing theory before running the experiment |
@@ -114,7 +120,6 @@ should be drawn on a board as if it ships.
 | item | state | what would settle it |
 | :--- | :--- | :--- |
 | **Graph replay survives expert swaps** | BUILT, UNVERIFIED. Its own stored run shows graph and eager emitting different text ("Psychology of Financial Planning" vs "Psychology of Money"), and the 1.89× headline compares graph+folded against a 16.18 tok/s base_eager — half the ~32 tok/s baseline everywhere else, so it conflates folding, graphing and probably regime. | `FoldedCudaGraphDecoder.verify_against_eager()` **already exists** (`cuda_graph.py:229`) and is **never called** by `benchmark_folded_cuda_graph.py`. Wire it in and run: ~10 min. |
-| **APSP VRAM State Router** | **NOT BUILT.** Zero references anywhere in the codebase. | Implement it, or drop it from the board. |
 
 ---
 
@@ -123,10 +128,11 @@ should be drawn on a board as if it ships.
 | hypothesis | why it died |
 | :--- | :--- |
 | **Adapting/folding the MTP head** | Falsified — see 🚀 above. The *measurement* is a contribution; the hypothesis is not. Retrying needs a distillation objective, not tuning. |
+| **APSP / shortest-path VRAM state routing** | Falsified twice over, by measurement. (1) The transition cost is **destination-only**: `activate()` writes `W0 + dW` in one fused addmm and never reads the live weights, so entering state *v* costs `f(v)` from every source — measured spread across sources 0.23–0.31 ms against 0.66–2.12 ms of noise (`results/vram_transition_costs.json`). Any detour `u→k→v` costs `f(k)+f(v) > f(v)`, so the direct edge is always optimal and Floyd-Warshall provably returns its input, for *any* expert count — 0 pairs improved from 1 to 10 experts. The solver is **removed**, not disabled; the implementation and runnable proof live in `benchmarks/superseded/apsp_floyd_warshall/`, and `test_direct_edge_is_always_optimal` pins the property so a future source-dependent cost model fails loudly instead of silently reviving it. (2) Even granting perfect clustering, swap overhead is **0.86% of wall clock** end-to-end, so there is nothing material to win. The measured A/B (30 req, concurrency 10, 2 alternating repeats) cut GPU swaps 25.5→16.0 and swap time 494→302 ms, and mean latency was **not significant** (−62 ms, 95% CI [−1481, +1417]) while P95 got **worse by 3.6 s**. What survives is the cost model, the degeneracy proof, and the SLA-bounded cluster scheduler that replaced it. |
 | **Folding the MTP head for latency** | Nothing is wrapped (bare checkpoint tensors, no peft layer), and drafting is ~27% of a round → Amdahl ceiling ~1.14×. |
 | **Hybrid Radix caching as a priority** | Prefill is 5.9% at 8k, not 54%. The original figure was ~33 s of Triton JIT inside the timed region. |
 | **Monotonic stacking decay / N≤2 rule** | Not monotonic — a third expert moved astral back *above* solo. One resolved cell cannot support a stack-size rule. |
-| **In-domain speculation penalty** | Artifact of id_kron adapters mislabelled as stock LoRA. All 9 cells win; router is all-True. |
+| ~~**In-domain speculation penalty**~~ **— the claim on BOTH sides was overstated** | History: an early run disabled *astral* on a single 3.9% measurement (real artifact — id_kron adapters mislabelled as stock LoRA). The correction over-generalised to "all 9 cells win, router all-True". A later m2 run then measured `financial_planning` at 0.973x and flipped it back to disabled. **Properly powered (40 prompts/domain, 3 repeats, 2160 generations), the honest answer is neither:** the financial diagonal measures 1.011x with repeats spanning 0.996–1.012 — it **straddles 1.0 and does not resolve**. It is gated off for lack of a measured win, not because a penalty was demonstrated. Two things make it unresolvable rather than merely small: it sits at break-even (predicted 1.014 from τ=1.70), and its sign moves with the prompt mix — on the 20 curated prompts τ=1.627, on 20 held-out generated prompts τ=1.775, and the held-out set is easier to draft for *every* expert (+0.15 to +0.46 τ). **Lesson: 'penalty' and 'no penalty' were both claims the instrument could not support.** See `results/mtp_indomain_speculation_matrix.json`. |
 | **Stacking retention >100%** | Degenerate statistic — financial's solo gain is 0.83 question-equivalents at n=20. |
 
 ---

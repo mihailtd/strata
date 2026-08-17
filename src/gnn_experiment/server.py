@@ -5,35 +5,104 @@ Serves local micro-experts via standard OpenAI REST API endpoints (/v1/chat/comp
 2. Triggers on-device in-place weight mutation (W_live = W0 + s * U@V) at static VRAM addresses.
 3. Executes single-token decode via pre-captured CUDA/HIP Graph descriptor at 32.89 tok/s.
 4. Supports non-streaming JSON responses and streaming Server-Sent Events (SSE text/event-stream).
+5. VRAM State Router reorders concurrent requests to minimise GPU expert swaps.
+   (SLA-bounded clustering; deliberately NOT shortest-path -- see
+   benchmarks/superseded/apsp_floyd_warshall/ for why.)
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import torch
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from gnn_experiment.cuda_graph import FoldedCudaGraphDecoder
+from gnn_experiment.dashboard import DASHBOARD_HTML
 from gnn_experiment.fused_norm import inject_exact_rmsnorm
 from gnn_experiment.novel_peft import FoldableExpert, WeightFoldingEngine, set_hard_vram_cap
+from gnn_experiment.router.vram_state_router import (
+    PendingRequest,
+    TransitionCosts,
+    VRAMState,
+    VRAMStateGraph,
+    VRAMStateScheduler,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
+# --- Router Configuration ---
+# `enabled` is the A/B switch: when False the dispatch loop is a strict FIFO
+# passthrough — no batching window AND no queue drain — so it is a genuine
+# control arm. (Setting only batch_window_ms=0 is NOT enough: the unconditional
+# drain below would still collect and reorder whatever is already queued.)
+# Both fields are settable at runtime via POST /v1/router/config, so an A/B can
+# run against one server process without paying for a second model load.
+router_config: dict[str, Any] = {
+    "enabled": os.environ.get("ROUTER_ENABLED", "1") not in ("0", "false", "False"),
+    "batch_window_ms": float(os.environ.get("ROUTER_BATCH_WINDOW_MS", "50")),
+}
+
+# How long the dispatch loop will wait for a streaming response to be consumed
+# before moving on. Bounds the damage from a client that disconnects mid-stream.
+STREAM_ORDER_TIMEOUT_S = float(os.environ.get("STREAM_ORDER_TIMEOUT_S", "300"))
 
 # --- Global State Containers ---
 model_state: dict[str, Any] = {}
 engine_lock = asyncio.Lock()
+
+
+# --- Dispatch Queue Infrastructure ---
+@dataclass
+class QueuedRequest:
+    """Wraps a chat completion request with its async Future for result delivery."""
+
+    req: Any  # ChatCompletionRequest
+    expert: FoldableExpert | None
+    future: asyncio.Future
+    enqueue_time: float = field(default_factory=time.perf_counter)
+    queue_position: int = 0  # Filled by dispatch loop after scheduling
+    # Streaming responses hand the generator back to the client before any GPU
+    # work happens, so the dispatch loop waits on this to keep execution ordered.
+    stream_done: asyncio.Event = field(default_factory=asyncio.Event)
+
+
+# Async queue for incoming requests
+_request_queue: asyncio.Queue[QueuedRequest] = asyncio.Queue()
+
+# Router telemetry counters
+router_telemetry: dict[str, Any] = {
+    "total_batches": 0,
+    "total_requests_dispatched": 0,
+    "total_transitions": 0,
+    "transitions_avoided": 0,
+    "current_gpu_state": "pristine",
+    "queue_depth": 0,
+}
+
+
+def _reset_telemetry() -> None:
+    """Zeroes the cumulative counters so a benchmark arm measures only itself."""
+    router_telemetry.update(
+        total_batches=0,
+        total_requests_dispatched=0,
+        total_transitions=0,
+        transitions_avoided=0,
+        queue_depth=0,
+    )
 
 
 # --- Pydantic OpenAI Schemas ---
@@ -50,7 +119,8 @@ class ChatCompletionRequest(BaseModel):
     messages: list[ChatMessage]
     temperature: float | None = 0.7
     top_p: float | None = 0.9
-    max_tokens: int | None = 64
+    max_tokens: int | None = 4096
+    max_completion_tokens: int | None = None
     stream: bool | None = False
 
 
@@ -59,20 +129,22 @@ class CompletionRequest(BaseModel):
     model: str
     prompt: str
     temperature: float | None = 0.7
-    max_tokens: int | None = 64
+    max_tokens: int | None = 4096
     stream: bool | None = False
 
 
 class ChatCompletionChoice(BaseModel):
     index: int
     message: ChatMessage
-    finish_reason: str = "stop"
-
-
 class UsageInfo(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     prompt_tokens: int
     completion_tokens: int
     total_tokens: int
+    tokens_per_second: float | None = None
+    generation_time_ms: float | None = None
+    time_to_first_token_ms: float | None = None
+    swap_time_ms: float | None = None
 
 
 class ChatCompletionResponse(BaseModel):
@@ -103,6 +175,43 @@ class ChatCompletionChunkResponse(BaseModel):
     created: int = Field(default_factory=lambda: int(time.time()))
     model: str
     choices: list[ChatCompletionChunkChoice]
+    usage: UsageInfo | None = None
+
+
+# --- Server Telemetry Tracker ---
+server_telemetry: dict[str, Any] = {
+    "total_requests": 0,
+    "total_prompt_tokens": 0,
+    "total_generated_tokens": 0,
+    "total_generation_time_s": 0.0,
+    "last_request": {},
+}
+
+
+def update_telemetry(
+    model: str,
+    prompt_tokens: int,
+    completion_tokens: int,
+    gen_time_s: float,
+    tok_s: float,
+    ttft_ms: float,
+    swap_ms: float,
+) -> None:
+    server_telemetry["total_requests"] += 1
+    server_telemetry["total_prompt_tokens"] += prompt_tokens
+    server_telemetry["total_generated_tokens"] += completion_tokens
+    server_telemetry["total_generation_time_s"] += gen_time_s
+    server_telemetry["last_request"] = {
+        "model": model,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": prompt_tokens + completion_tokens,
+        "tokens_per_second": round(tok_s, 2),
+        "generation_time_ms": round(gen_time_s * 1000.0, 1),
+        "time_to_first_token_ms": round(ttft_ms, 1),
+        "expert_swap_ms": round(swap_ms, 2),
+        "timestamp": int(time.time()),
+    }
 
 
 class ModelObject(BaseModel):
@@ -141,21 +250,50 @@ def extract_msg_content(content: Any) -> str:
             return str(content["text"])
         if "content" in content:
             return str(content["content"])
-    return str(content)
+CURATED_MODELS = [
+    {
+        "id": "qwen3.5-4b-base",
+        "owned_by": "Pristine Base (W0 Checkpoint, Un-enhanced Baseline)",
+    },
+    {
+        "id": "qwen3.5-4b-astral",
+        "owned_by": "M2 Expert: Astral Python Toolchain (uv, ruff, packaging)",
+    },
+    {
+        "id": "qwen3.5-4b-postgresql",
+        "owned_by": "M2 Expert: PostgreSQL 17 & Vector DB (pgvector, HNSW, SQL)",
+    },
+    {
+        "id": "qwen3.5-4b-financial",
+        "owned_by": "M2 Expert: Financial Planning & Wealth Modeling",
+    },
+]
 
 
 def resolve_expert(model_name: str) -> FoldableExpert | None:
     """Maps request model string to loaded FoldableExpert instance.
 
-    Strips provider prefixes (e.g. openai/postgresql -> postgresql).
+    Handles curated names (qwen3.5-4b-*) as well as friendly domain aliases.
     """
     name_clean = model_name.split("/")[-1].lower().strip()
     registry = model_state.get("expert_registry", {})
+
+    # 1. Base / Pristine Model Check (returns None so folding_engine.restore() is called)
+    if any(k in name_clean for k in ["base", "pristine", "default"]) or name_clean in ("qwen3.5", "qwen3.5-4b"):
+        return None
+
+    # 2. Direct exact match in registry
     if name_clean in registry:
         return registry[name_clean]
-    for key, expert in registry.items():
-        if key in name_clean or name_clean in key:
-            return expert
+
+    # 3. Domain keyword resolution
+    if any(k in name_clean for k in ["astral", "python", "uv", "ruff"]):
+        return registry.get("astral")
+    if any(k in name_clean for k in ["postgre", "postgres", "sql", "db"]):
+        return registry.get("postgresql")
+    if any(k in name_clean for k in ["fin", "wealth"]):
+        return registry.get("financial_planning")
+
     return None
 
 
@@ -223,9 +361,9 @@ async def lifespan(app: FastAPI):
     #     financial   a32  83.33% vs base 78.33%   (+5.00pp)
     # The previous financial adapter (financial_planning_krona_dora) was trained on
     # a dataset of 940 copies of ONE templated prompt and scored 33.3% -- below base.
-    financial_dir = REPO_ROOT / "results" / "adapters" / "fin_sweep_a32"
-    postgres_dir = REPO_ROOT / "results" / "adapters" / "pg_sweep_a64"
-    astral_dir = REPO_ROOT / "results" / "adapters" / "astral_sweep_a64"
+    financial_dir = REPO_ROOT / "results" / "adapters" / "m2_financial_r8a128"
+    postgres_dir = REPO_ROOT / "results" / "adapters" / "m2_postgresql_r8a128"
+    astral_dir = REPO_ROOT / "results" / "adapters" / "m2_astral_r8a128"
 
     exp_fin = FoldableExpert.from_dir(financial_dir, "financial_planning")
     exp_pg = FoldableExpert.from_dir(postgres_dir, "postgresql")
@@ -234,28 +372,49 @@ async def lifespan(app: FastAPI):
     folding_engine = WeightFoldingEngine(base_model, [exp_fin, exp_pg, exp_astral], keep_pristine=True)
 
     expert_registry = {
+        "qwen3.5-4b-base": None,
+        "qwen3.5-4b-astral": exp_astral,
+        "qwen3.5-4b-postgresql": exp_pg,
+        "qwen3.5-4b-financial": exp_fin,
         "base": None,
-        "qwen3.5": None,
-        "financial_planning": exp_fin,
-        "financial": exp_fin,
-        "fin": exp_fin,
-        "postgresql": exp_pg,
-        "postgres": exp_pg,
         "astral": exp_astral,
+        "postgresql": exp_pg,
+        "financial_planning": exp_fin,
     }
 
+    # Initialize the VRAM State Router.
+    # Stacking stays off: co-residency is cheaper per the cost model (~10.4 ms
+    # saved) but its effect on per-domain accuracy is unverified, and the server
+    # must not trade correctness for 10 ms on an unverified premise.
+    calib_path = REPO_ROOT / "results" / "vram_transition_costs.json"
+    if calib_path.exists():
+        costs = TransitionCosts.from_calibration(calib_path)
+        print(f"[IMB Server] Loaded measured transition costs from {calib_path.name}.")
+    else:
+        costs = TransitionCosts()
+        print("[IMB Server] No calibration file; using default measured transition costs.")
+
+    graph = VRAMStateGraph(
+        ["financial_planning", "postgresql", "astral"], allow_stacking=False, costs=costs
+    )
+    router_scheduler = VRAMStateScheduler(graph, default_sla_deadline_s=2.0)
+    print(
+        f"[IMB Server] VRAM State Router active with {graph.num_nodes} states "
+        f"(restore={costs.restore_ms:.2f}ms, fold={costs.fold_single_ms:.2f}ms). "
+        "-> scheduling by SLA-bounded clustering (no shortest-path solve; it is provably degenerate here)."
+    )
+
     # Warmup & Capture CUDA Graph ONCE
-    # Default to 8192 tokens (8K context) taking ~11.1 GB VRAM total.
+    # Default to 32768 tokens (32K context) taking ~11.8 GB VRAM total.
     # Can be overridden via MAX_SEQ_LEN env var (e.g. MAX_SEQ_LEN=4096 or 16384 or 32768)
-    import os
 
     env_max_len = os.environ.get("MAX_SEQ_LEN")
     if env_max_len:
         max_seq_len = int(env_max_len)
     else:
         text_config = getattr(base_model.config, "text_config", base_model.config)
-        max_seq_len = getattr(text_config, "max_position_embeddings", 8192)
-        max_seq_len = min(max_seq_len, 8192)
+        max_seq_len = getattr(text_config, "max_position_embeddings", 32768)
+        max_seq_len = min(max_seq_len, 32768)
 
     folding_engine.activate(exp_fin)
     graph_decoder = FoldedCudaGraphDecoder(base_model, tokenizer, max_seq_len=max_seq_len, device=base_model.device)
@@ -275,8 +434,24 @@ async def lifespan(app: FastAPI):
     model_state["graph_decoder"] = graph_decoder
     model_state["expert_registry"] = expert_registry
     model_state["max_prompt_len"] = max_seq_len
+    model_state["router_scheduler"] = router_scheduler
+    model_state["gpu_state"] = VRAMState.single("financial_planning")  # matches final activate above
+
+    # Start the dispatch loop as a background task
+    dispatch_task = asyncio.create_task(_dispatch_loop())
+    print(
+        f"[IMB Server] Router dispatch loop started "
+        f"(enabled={router_config['enabled']}, batch_window={router_config['batch_window_ms']}ms)."
+    )
 
     yield
+
+    # Cancel dispatch loop
+    dispatch_task.cancel()
+    try:
+        await dispatch_task
+    except asyncio.CancelledError:
+        pass
 
     print("[IMB Server] Shutting down. Restoring pristine W0 base weights...")
     folding_engine.restore()
@@ -288,8 +463,6 @@ async def lifespan(app: FastAPI):
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
-        if hasattr(torch.cuda, "ipc_collect"):
-            torch.cuda.ipc_collect()
     print("[IMB Server] Restored pristine W0 base weights and cleaned up VRAM memory successfully.")
 
 
@@ -320,28 +493,188 @@ async def health_check():
 
 @app.get("/v1/models", response_model=ModelListResponse)
 async def list_models():
-    registry = model_state.get("expert_registry", {})
-    unique_models = list(dict.fromkeys(registry.keys()))
-    prefixed_models = [f"openai/{m}" for m in unique_models]
-    all_models = unique_models + prefixed_models
-    model_objects = [ModelObject(id=m) for m in all_models]
+    model_objects = [
+        ModelObject(
+            id=m["id"],
+            owned_by=m["owned_by"],
+        )
+        for m in CURATED_MODELS
+    ]
     return ModelListResponse(data=model_objects)
 
 
-@app.post("/v1/chat/completions")
-async def chat_completions(req: ChatCompletionRequest):
+# --- Dispatch Loop ---
+async def _dispatch_loop() -> None:
+    """Background task: drains the request queue, reorders via VRAMStateScheduler, executes sequentially."""
+    print("[Router Dispatch] Background dispatch loop running.")
+
+    while True:
+        batch: list[QueuedRequest] = []
+        try:
+            # Wait for the first request
+            first = await _request_queue.get()
+            batch = [first]
+
+            enabled = router_config["enabled"]
+            window_ms = router_config["batch_window_ms"]
+
+            if enabled:
+                # Batching window: accumulate concurrent arrivals
+                if window_ms > 0:
+                    deadline = asyncio.get_event_loop().time() + (window_ms / 1000.0)
+                    while True:
+                        remaining = deadline - asyncio.get_event_loop().time()
+                        if remaining <= 0:
+                            break
+                        try:
+                            item = await asyncio.wait_for(_request_queue.get(), timeout=remaining)
+                            batch.append(item)
+                        except asyncio.TimeoutError:
+                            break
+
+                # Also drain anything that arrived while we were waiting
+                while not _request_queue.empty():
+                    try:
+                        batch.append(_request_queue.get_nowait())
+                    except asyncio.QueueEmpty:
+                        break
+
+            router_telemetry["queue_depth"] = _request_queue.qsize() + len(batch)
+            router_telemetry["total_batches"] += 1
+
+            scheduler: VRAMStateScheduler = model_state["router_scheduler"]
+
+            # Continuous re-planning: execute ONE request, absorb whatever arrived
+            # while it ran, then re-plan. Committing to a whole batch order up front
+            # and running it to completion means a request arriving mid-batch waits
+            # for every request already committed, no matter how urgent it is — the
+            # SLA bound cannot preempt a plan that is already fixed. Measured at
+            # concurrency 10 that cost +9.1s of P95 latency (19.4s -> 28.5s) to save
+            # 0.37s of swap time.
+            while batch:
+                current_gpu_state: VRAMState = model_state.get("gpu_state", VRAMState.pristine())
+
+                if enabled and len(batch) > 1:
+                    sla = scheduler.default_sla_deadline_s
+                    pending_reqs = [
+                        PendingRequest(
+                            req_id=f"q_{i}",
+                            target_state=VRAMState.from_expert(qr.expert),
+                            arrival_time=qr.enqueue_time,
+                            sla_deadline_s=sla,
+                            metadata={"queued_request": qr},
+                        )
+                        for i, qr in enumerate(batch)
+                    ]
+                    scheduled = scheduler.schedule_batch(
+                        pending_reqs,
+                        current_state=current_gpu_state,
+                        current_time_s=time.perf_counter(),
+                    )
+                    chosen = scheduled[0].metadata["queued_request"]
+
+                    # Counterfactual: would strict arrival order have paid a
+                    # transition here that this choice avoids?
+                    head_state = VRAMState.from_expert(batch[0].expert)
+                    chosen_state = VRAMState.from_expert(chosen.expert)
+                    if head_state != current_gpu_state and chosen_state == current_gpu_state:
+                        router_telemetry["transitions_avoided"] += 1
+                else:
+                    chosen = batch[0]
+
+                batch.remove(chosen)
+                chosen.queue_position = router_telemetry["total_requests_dispatched"]
+                router_telemetry["total_requests_dispatched"] += 1
+
+                try:
+                    result = await _execute_single_request(chosen)
+                    if not chosen.future.done():
+                        chosen.future.set_result(result)
+                    # A streaming response has not touched the GPU yet — it runs
+                    # when the client consumes it. Wait for it so the next request
+                    # cannot fold a different expert underneath it.
+                    if getattr(chosen.req, "stream", False):
+                        try:
+                            await asyncio.wait_for(
+                                chosen.stream_done.wait(), timeout=STREAM_ORDER_TIMEOUT_S
+                            )
+                        except asyncio.TimeoutError:
+                            print(
+                                f"[Router Dispatch] Stream did not finish within "
+                                f"{STREAM_ORDER_TIMEOUT_S}s (client likely disconnected); "
+                                "continuing so the queue cannot wedge."
+                            )
+                except Exception as exc:
+                    if not chosen.future.done():
+                        chosen.future.set_exception(exc)
+
+                # Absorb arrivals that landed while that request was executing, so
+                # the next plan sees them and can preempt for them if they are urgent.
+                if enabled:
+                    while not _request_queue.empty():
+                        try:
+                            batch.append(_request_queue.get_nowait())
+                        except asyncio.QueueEmpty:
+                            break
+
+                router_telemetry["queue_depth"] = _request_queue.qsize() + len(batch)
+
+        except asyncio.CancelledError:
+            # Shutdown: fail the in-flight batch and everything still queued
+            for qr in batch:
+                if not qr.future.done():
+                    qr.future.set_exception(asyncio.CancelledError())
+            while not _request_queue.empty():
+                try:
+                    qr = _request_queue.get_nowait()
+                    if not qr.future.done():
+                        qr.future.set_exception(asyncio.CancelledError())
+                except asyncio.QueueEmpty:
+                    break
+            raise
+        except Exception as exc:
+            # Anything raised outside the per-request try (scheduling, counting,
+            # state lookup) would otherwise strand this batch's futures and hang
+            # those HTTP clients until their own timeout.
+            print(f"[Router Dispatch] Error in dispatch loop: {exc!r}")
+            for qr in batch:
+                if not qr.future.done():
+                    qr.future.set_exception(exc)
+            continue
+
+
+def _record_transition(target_state: VRAMState) -> None:
+    """Records a GPU state change. Call at the point the fold actually happens."""
+    old_state = model_state.get("gpu_state", VRAMState.pristine())
+    if target_state != old_state:
+        router_telemetry["total_transitions"] += 1
+    model_state["gpu_state"] = target_state
+    router_telemetry["current_gpu_state"] = target_state.name
+
+
+def _count_transitions(states: list[VRAMState], initial: VRAMState) -> int:
+    """Count expert transitions in a sequence of VRAMStates."""
+    transitions = 0
+    current = initial
+    for s in states:
+        if s != current:
+            transitions += 1
+            current = s
+    return transitions
+
+
+async def _execute_single_request(qr: QueuedRequest) -> Any:
+    """Execute a single queued request under engine_lock. Returns the response object."""
+    req = qr.req
     tokenizer = model_state["tokenizer"]
     base_model = model_state["base_model"]
     folding_engine = model_state["folding_engine"]
     graph_decoder = model_state["graph_decoder"]
     max_prompt_len = model_state["max_prompt_len"]
 
-    print(f"[IMB Server] Request: model='{req.model}', msgs={len(req.messages)}, stream={req.stream}")
-
-    expert = resolve_expert(req.model)
+    expert = qr.expert
     prompt_text = format_prompt(req.messages)
 
-    # Encode prompt exact without artificial padding to preserve full context window
     prompt_tokens = tokenizer(
         prompt_text,
         return_tensors="pt",
@@ -349,95 +682,21 @@ async def chat_completions(req: ChatCompletionRequest):
         truncation=True,
     ).input_ids.to(base_model.device)
 
-    max_new_tokens = req.max_tokens or 512
+    max_new_tokens = req.max_completion_tokens or req.max_tokens or 4096
+    wait_ms = (time.perf_counter() - qr.enqueue_time) * 1000.0
+    target_state = VRAMState.from_expert(expert)
 
+    # Streaming: the generator body runs only when the client consumes it, so the
+    # fold has not happened yet. Hand the response back now and let the generator
+    # record the transition at the moment it actually occurs; the dispatch loop
+    # waits on qr.stream_done before starting the next request.
     if req.stream:
+        return _build_streaming_response(
+            req, expert, prompt_tokens, max_new_tokens, wait_ms, qr.queue_position, qr
+        )
 
-        async def sse_generator() -> AsyncGenerator[str]:
-            chunk_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
-
-            # Initial role chunk
-            initial_chunk = ChatCompletionChunkResponse(
-                id=chunk_id,
-                model=req.model,
-                choices=[ChatCompletionChunkChoice(index=0, delta=ChatCompletionChunkDelta(role="assistant"))],
-            )
-            yield f"data: {json.dumps(initial_chunk.model_dump())}\n\n"
-
-            in_thinking = False
-
-            async with engine_lock:
-                for token_piece in graph_decoder.generate_tokens_stream(
-                    prompt_tokens, engine=folding_engine, expert=expert, max_new_tokens=max_new_tokens
-                ):
-                    if "<think>" in token_piece:
-                        in_thinking = True
-                        token_piece = token_piece.replace("<think>", "")
-
-                    if in_thinking:
-                        if "</think>" in token_piece:
-                            in_thinking = False
-                            think_part, main_part = token_piece.split("</think>", 1)
-                            if think_part:
-                                chunk = ChatCompletionChunkResponse(
-                                    id=chunk_id,
-                                    model=req.model,
-                                    choices=[
-                                        ChatCompletionChunkChoice(
-                                            index=0, delta=ChatCompletionChunkDelta(reasoning_content=think_part)
-                                        )
-                                    ],
-                                )
-                                yield f"data: {json.dumps(chunk.model_dump())}\n\n"
-                            if main_part:
-                                chunk = ChatCompletionChunkResponse(
-                                    id=chunk_id,
-                                    model=req.model,
-                                    choices=[
-                                        ChatCompletionChunkChoice(
-                                            index=0, delta=ChatCompletionChunkDelta(content=main_part)
-                                        )
-                                    ],
-                                )
-                                yield f"data: {json.dumps(chunk.model_dump())}\n\n"
-                        else:
-                            if token_piece:
-                                chunk = ChatCompletionChunkResponse(
-                                    id=chunk_id,
-                                    model=req.model,
-                                    choices=[
-                                        ChatCompletionChunkChoice(
-                                            index=0, delta=ChatCompletionChunkDelta(reasoning_content=token_piece)
-                                        )
-                                    ],
-                                )
-                                yield f"data: {json.dumps(chunk.model_dump())}\n\n"
-                    else:
-                        if token_piece:
-                            chunk = ChatCompletionChunkResponse(
-                                id=chunk_id,
-                                model=req.model,
-                                choices=[
-                                    ChatCompletionChunkChoice(
-                                        index=0, delta=ChatCompletionChunkDelta(content=token_piece)
-                                    )
-                                ],
-                            )
-                            yield f"data: {json.dumps(chunk.model_dump())}\n\n"
-                    await asyncio.sleep(0)  # Yield ASGI event loop frame
-
-            # Final stop chunk
-            final_chunk = ChatCompletionChunkResponse(
-                id=chunk_id,
-                model=req.model,
-                choices=[ChatCompletionChunkChoice(index=0, delta=ChatCompletionChunkDelta(), finish_reason="stop")],
-            )
-            yield f"data: {json.dumps(final_chunk.model_dump())}\n\n"
-            yield "data: [DONE]\n\n"
-
-        return StreamingResponse(sse_generator(), media_type="text/event-stream")
-
-    # Non-streaming Response
+    # Non-streaming: execute synchronously under lock
+    _record_transition(target_state)
     async with engine_lock:
         output_tokens, elapsed, tok_s, swap_ms = await asyncio.to_thread(
             graph_decoder.generate_with_graph,
@@ -453,7 +712,14 @@ async def chat_completions(req: ChatCompletionRequest):
     prompt_num_toks = prompt_tokens.shape[1]
     completion_num_toks = len(output_tokens)
 
-    return ChatCompletionResponse(
+    update_telemetry(req.model, prompt_num_toks, completion_num_toks, elapsed, tok_s, swap_ms, swap_ms)
+
+    print(
+        f"[IMB Telemetry] model='{req.model}' | {completion_num_toks} toks in {elapsed:.2f}s "
+        f"({tok_s:.2f} tok/s) | swap: {swap_ms:.2f}ms | router wait: {wait_ms:.1f}ms"
+    )
+
+    response = ChatCompletionResponse(
         model=req.model,
         choices=[
             ChatCompletionChoice(
@@ -466,8 +732,186 @@ async def chat_completions(req: ChatCompletionRequest):
             prompt_tokens=prompt_num_toks,
             completion_tokens=completion_num_toks,
             total_tokens=prompt_num_toks + completion_num_toks,
+            tokens_per_second=round(tok_s, 2),
+            generation_time_ms=round(elapsed * 1000.0, 1),
+            time_to_first_token_ms=round(swap_ms, 1),
+            swap_time_ms=round(swap_ms, 2),
         ),
     )
+
+    # Wrap with router headers
+    resp_json = response.model_dump()
+    json_response = JSONResponse(content=resp_json)
+    json_response.headers["X-Router-Queue-Position"] = str(qr.queue_position)
+    json_response.headers["X-Router-Wait-Ms"] = f"{wait_ms:.1f}"
+    json_response.headers["X-Router-Transitions-Saved"] = str(router_telemetry["transitions_avoided"])
+    json_response.headers["X-Router-GPU-State"] = target_state.name
+    return json_response
+
+
+def _build_streaming_response(
+    req: Any,
+    expert: FoldableExpert | None,
+    prompt_tokens: Any,
+    max_new_tokens: int,
+    wait_ms: float,
+    queue_position: int,
+    qr: QueuedRequest | None = None,
+) -> StreamingResponse:
+    """Builds a StreamingResponse for SSE streaming requests."""
+    graph_decoder = model_state["graph_decoder"]
+    folding_engine = model_state["folding_engine"]
+
+    async def sse_generator() -> AsyncGenerator[str]:
+        chunk_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
+        t_stream_start = time.perf_counter()
+        t_first_token: float | None = None
+        token_count = 0
+
+        # Initial role chunk
+        initial_chunk = ChatCompletionChunkResponse(
+            id=chunk_id,
+            model=req.model,
+            choices=[ChatCompletionChunkChoice(index=0, delta=ChatCompletionChunkDelta(role="assistant"))],
+        )
+        yield f"data: {json.dumps(initial_chunk.model_dump())}\n\n"
+
+        in_thinking = False
+
+        # The fold happens here, not when the dispatch loop handed this back.
+        _record_transition(VRAMState.from_expert(expert))
+
+        async with engine_lock:
+            for token_piece in graph_decoder.generate_tokens_stream(
+                prompt_tokens, engine=folding_engine, expert=expert, max_new_tokens=max_new_tokens
+            ):
+                token_count += 1
+                if t_first_token is None:
+                    t_first_token = time.perf_counter()
+
+                if "<think>" in token_piece:
+                    in_thinking = True
+                    token_piece = token_piece.replace("<think>", "")
+
+                if in_thinking:
+                    if "</think>" in token_piece:
+                        in_thinking = False
+                        think_part, main_part = token_piece.split("</think>", 1)
+                        if think_part:
+                            chunk = ChatCompletionChunkResponse(
+                                id=chunk_id,
+                                model=req.model,
+                                choices=[
+                                    ChatCompletionChunkChoice(
+                                        index=0, delta=ChatCompletionChunkDelta(reasoning_content=think_part)
+                                    )
+                                ],
+                            )
+                            yield f"data: {json.dumps(chunk.model_dump())}\n\n"
+                        if main_part:
+                            chunk = ChatCompletionChunkResponse(
+                                id=chunk_id,
+                                model=req.model,
+                                choices=[
+                                    ChatCompletionChunkChoice(
+                                        index=0, delta=ChatCompletionChunkDelta(content=main_part)
+                                    )
+                                ],
+                            )
+                            yield f"data: {json.dumps(chunk.model_dump())}\n\n"
+                    else:
+                        if token_piece:
+                            chunk = ChatCompletionChunkResponse(
+                                id=chunk_id,
+                                model=req.model,
+                                choices=[
+                                    ChatCompletionChunkChoice(
+                                        index=0, delta=ChatCompletionChunkDelta(reasoning_content=token_piece)
+                                    )
+                                ],
+                            )
+                            yield f"data: {json.dumps(chunk.model_dump())}\n\n"
+                else:
+                    if token_piece:
+                        chunk = ChatCompletionChunkResponse(
+                            id=chunk_id,
+                            model=req.model,
+                            choices=[
+                                ChatCompletionChunkChoice(
+                                    index=0, delta=ChatCompletionChunkDelta(content=token_piece)
+                                )
+                            ],
+                        )
+                        yield f"data: {json.dumps(chunk.model_dump())}\n\n"
+                await asyncio.sleep(0)  # Yield ASGI event loop frame
+
+        t_stream_end = time.perf_counter()
+        elapsed_s = t_stream_end - t_stream_start
+        ttft_ms = ((t_first_token - t_stream_start) * 1000.0) if t_first_token else 0.0
+        tok_s = token_count / elapsed_s if elapsed_s > 0 else 0.0
+
+        prompt_num_toks = prompt_tokens.shape[1]
+        update_telemetry(req.model, prompt_num_toks, token_count, elapsed_s, tok_s, ttft_ms, 0.0)
+
+        print(
+            f"[IMB Telemetry] model='{req.model}' | {token_count} toks in {elapsed_s:.2f}s "
+            f"({tok_s:.2f} tok/s) | TTFT: {ttft_ms:.1f}ms | router wait: {wait_ms:.1f}ms"
+        )
+
+        usage_info = UsageInfo(
+            prompt_tokens=prompt_num_toks,
+            completion_tokens=token_count,
+            total_tokens=prompt_num_toks + token_count,
+            tokens_per_second=round(tok_s, 2),
+            generation_time_ms=round(elapsed_s * 1000.0, 1),
+            time_to_first_token_ms=round(ttft_ms, 1),
+            swap_time_ms=0.0,
+        )
+
+        # Final stop chunk with telemetry usage
+        final_chunk = ChatCompletionChunkResponse(
+            id=chunk_id,
+            model=req.model,
+            choices=[ChatCompletionChunkChoice(index=0, delta=ChatCompletionChunkDelta(), finish_reason="stop")],
+            usage=usage_info,
+        )
+        yield f"data: {json.dumps(final_chunk.model_dump())}\n\n"
+        yield "data: [DONE]\n\n"
+
+    async def ordered_sse_generator() -> AsyncGenerator[str]:
+        """Releases the dispatch loop once the stream is fully consumed or aborted."""
+        try:
+            async for chunk in sse_generator():
+                yield chunk
+        finally:
+            if qr is not None:
+                qr.stream_done.set()
+
+    headers = {
+        "X-Router-Queue-Position": str(queue_position),
+        "X-Router-Wait-Ms": f"{wait_ms:.1f}",
+        "X-Router-GPU-State": VRAMState.from_expert(expert).name,
+    }
+    return StreamingResponse(
+        ordered_sse_generator(), media_type="text/event-stream", headers=headers
+    )
+
+
+@app.post("/v1/chat/completions")
+async def chat_completions(req: ChatCompletionRequest):
+    print(f"[IMB Server] Request: model='{req.model}', msgs={len(req.messages)}, stream={req.stream}")
+
+    expert = resolve_expert(req.model)
+
+    # Enqueue request into the router dispatch queue
+    loop = asyncio.get_event_loop()
+    future: asyncio.Future = loop.create_future()
+    queued = QueuedRequest(req=req, expert=expert, future=future)
+    await _request_queue.put(queued)
+
+    # Wait for the dispatch loop to process and return the result
+    result = await future
+    return result
 
 
 @app.post("/v1/completions")
@@ -480,3 +924,141 @@ async def completions(req: CompletionRequest):
         stream=req.stream,
     )
     return await chat_completions(chat_req)
+
+
+class RouterConfigRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    enabled: bool | None = None
+    batch_window_ms: float | None = None
+    # The SLA bound only does work when it is set relative to realistic service
+    # times. If every request takes 16s under load and the deadline is 2s, every
+    # request is already unsaveable, the scheduler correctly declines to thrash,
+    # and clustering runs unchecked — so the bound must be tunable to be testable.
+    sla_deadline_s: float | None = None
+    service_time_s: float | None = None
+    reset_telemetry: bool = False
+
+
+@app.get("/v1/router/status")
+async def router_status():
+    """Returns live VRAM State Router status and telemetry."""
+    return {
+        "router": {
+            "enabled": router_config["enabled"],
+            "batch_window_ms": router_config["batch_window_ms"],
+            "mode": "cluster-scheduled" if router_config["enabled"] else "fifo-passthrough",
+            "current_gpu_state": router_telemetry["current_gpu_state"],
+            "total_batches": router_telemetry["total_batches"],
+            "total_requests_dispatched": router_telemetry["total_requests_dispatched"],
+            "total_transitions": router_telemetry["total_transitions"],
+            "transitions_avoided": router_telemetry["transitions_avoided"],
+            "queue_depth": router_telemetry["queue_depth"],
+        }
+    }
+
+
+@app.post("/v1/router/config")
+async def set_router_config(cfg: RouterConfigRequest):
+    """Switches the router between cluster scheduling and FIFO passthrough at runtime.
+
+    This is what makes a controlled A/B possible: both arms run against the same
+    loaded model, the same CUDA graph and the same warm cache, so the only thing
+    that differs between them is the scheduling policy.
+    """
+    if cfg.enabled is not None:
+        router_config["enabled"] = cfg.enabled
+    if cfg.batch_window_ms is not None:
+        router_config["batch_window_ms"] = max(0.0, cfg.batch_window_ms)
+
+    scheduler: VRAMStateScheduler | None = model_state.get("router_scheduler")
+    if scheduler is not None:
+        if cfg.sla_deadline_s is not None:
+            scheduler.default_sla_deadline_s = cfg.sla_deadline_s
+        if cfg.service_time_s is not None:
+            scheduler.default_service_time_s = cfg.service_time_s
+
+    if cfg.reset_telemetry:
+        _reset_telemetry()
+
+    print(
+        f"[Router] config updated: enabled={router_config['enabled']}, "
+        f"batch_window_ms={router_config['batch_window_ms']}, "
+        f"sla_deadline_s={scheduler.default_sla_deadline_s if scheduler else 'n/a'}, "
+        f"service_time_s={scheduler.default_service_time_s if scheduler else 'n/a'}, "
+        f"telemetry_reset={cfg.reset_telemetry}"
+    )
+    return await router_status()
+
+
+@app.post("/v1/router/reset")
+async def reset_router_telemetry():
+    """Zeroes cumulative counters so a benchmark arm measures only its own traffic."""
+    _reset_telemetry()
+    return await router_status()
+
+
+@app.get("/stats")
+@app.get("/v1/stats")
+@app.get("/metrics")
+async def get_server_stats():
+    """Returns live server performance stats, tok/s, latency metrics, and hardware telemetry."""
+    vram_alloc = torch.cuda.memory_allocated() / (1024**3) if torch.cuda.is_available() else 0.0
+    vram_res = torch.cuda.memory_reserved() / (1024**3) if torch.cuda.is_available() else 0.0
+
+    avg_tok_s = (
+        server_telemetry["total_generated_tokens"] / server_telemetry["total_generation_time_s"]
+        if server_telemetry["total_generation_time_s"] > 0
+        else 0.0
+    )
+
+    folding_engine = model_state.get("folding_engine")
+    active_expert_name = (
+        folding_engine.active
+        if (folding_engine and folding_engine.active)
+        else "base (pristine W0)"
+    )
+
+    return {
+        "status": "online",
+        "runtime": "Autonomous In-Place Weight-Folding & VRAM State Router Engine",
+        "live_metrics": {
+            "average_tokens_per_second": round(avg_tok_s, 2),
+            "total_requests_served": server_telemetry["total_requests"],
+            "total_tokens_generated": server_telemetry["total_generated_tokens"],
+            "total_generation_time_seconds": round(server_telemetry["total_generation_time_s"], 2),
+        },
+        "last_request": server_telemetry["last_request"],
+        "hardware": {
+            "device": "AMD ROCm GPU (gfx1100)",
+            "active_expert": active_expert_name,
+            "vram_allocated_gb": round(vram_alloc, 2),
+            "vram_reserved_gb": round(vram_res, 2),
+            "vram_hard_cap_gb": 22.0,
+        },
+        "cuda_graph": {
+            "locked": model_state.get("graph_decoder")._is_locked if "graph_decoder" in model_state else False,
+            "capture_count": model_state.get("graph_decoder").capture_count if "graph_decoder" in model_state else 0,
+            "max_seq_len": model_state.get("max_prompt_len", 32768),
+        },
+        "router": router_telemetry,
+    }
+
+
+@app.get("/", response_class=HTMLResponse)
+@app.get("/dashboard", response_class=HTMLResponse)
+async def serve_dashboard():
+    """Serves the real-time dark-mode GPU telemetry and VRAM state router dashboard."""
+    return HTMLResponse(content=DASHBOARD_HTML)
+
+
+@app.get("/events")
+async def sse_telemetry_feed() -> StreamingResponse:
+    """Streams real-time server telemetry and hardware stats via Server-Sent Events (SSE)."""
+
+    async def event_publisher() -> AsyncGenerator[str]:
+        while True:
+            stats = await get_server_stats()
+            yield f"data: {json.dumps(stats)}\n\n"
+            await asyncio.sleep(1.0)
+
+    return StreamingResponse(event_publisher(), media_type="text/event-stream")

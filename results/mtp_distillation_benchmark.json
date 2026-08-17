@@ -1,0 +1,54 @@
+{
+  "domain": "astral",
+  "base_greedy_tok_s": 25.435099065218918,
+  "k_sweep": {
+    "K=2": {
+      "k": 2,
+      "stock_tau": 1.6041755654036176,
+      "stock_tok_s": 36.5361171494057,
+      "stock_speedup": 1.44,
+      "distilled_tau": 0.8065735910489022,
+      "distilled_tok_s": 19.992939668736604,
+      "distilled_speedup": 0.79,
+      "delta_tau": -0.7976019743547154,
+      "ci95_lo": -0.9007940760864155,
+      "ci95_hi": -0.6967789862339595
+    },
+    "K=4": {
+      "k": 4,
+      "stock_tau": 2.6319047323479507,
+      "stock_tok_s": 41.3706198606361,
+      "stock_speedup": 1.63,
+      "distilled_tau": 0.9318583384902543,
+      "distilled_tok_s": 21.98166659339784,
+      "distilled_speedup": 0.86,
+      "delta_tau": -1.7000463938576964,
+      "ci95_lo": -1.8755509557976464,
+      "ci95_hi": -1.4948354187141573
+    },
+    "K=6": {
+      "k": 6,
+      "stock_tau": 3.2715916337011217,
+      "stock_tok_s": 45.60420184173138,
+      "stock_speedup": 1.79,
+      "distilled_tau": 0.9401535318081269,
+      "distilled_tok_s": 21.80085073038823,
+      "distilled_speedup": 0.86,
+      "delta_tau": -2.331438101892995,
+      "ci95_lo": -2.603349828659275,
+      "ci95_hi": -2.032900164954926
+    },
+    "K=8": {
+      "k": 8,
+      "stock_tau": 3.4987584017287885,
+      "stock_tok_s": 50.64543779575487,
+      "stock_speedup": 1.99,
+      "distilled_tau": 0.9485918040073182,
+      "distilled_tok_s": 21.052482639449057,
+      "distilled_speedup": 0.83,
+      "delta_tau": -2.5501665977214705,
+      "ci95_lo": -2.8440802518231965,
+      "ci95_hi": -2.20985662966113
+    }
+  }
+}

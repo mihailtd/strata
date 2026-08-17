@@ -1,8 +1,9 @@
 # CURRENT
 
 What is live right now: which trainer, which adapters, which findings hold, and
-what has been retracted. Companion to `SYSTEM.md` (hardware/software snapshot) and `NOVELTY.md`
-(honest tiering of what is actually novel here).
+what has been retracted. Companion to `SYSTEM.md` (hardware/software snapshot),
+`NOVELTY.md` (honest tiering of what is actually novel here) and `GLOSSARY.md`
+(which of our names are ours, and which already had established names).
 
 **Read this before citing any number or running any benchmark.** Several results
 in this repo were invalidated by using an adapter that was not what its script
@@ -37,7 +38,7 @@ measurable: the financial expert moved from **−5.00pp to +4.17pp** on its own
 domain when retrained bf16, with a data change that altered zero rubric terms.
 
 **To iterate the methodology:** rename this file to `train_expert_m2.py`, move it
-to `scripts/superseded/`, create `train_expert_CURRENT_m3.py` with
+to `benchmarks/superseded/`, create `train_expert_CURRENT_m3.py` with
 `METHODOLOGY = "m3"`. Adapters then get named `m3_<domain>_r8a128`.
 
 **Liger notes (verified, not assumed).** The patch must be applied *before*
@@ -94,7 +95,7 @@ in one comparison.
 | :--- | :--- | :--- |
 | Batching is the largest lever | **~6–7×** aggregate at B=8 (6.83 and 6.18 on two runs) | `benchmark_batch_scaling.py` |
 | Weight folding beats wrapped execution | **1.83×** vs peft wrapper; 1.21× vs `NovelLoraLinear` | `benchmark_batch_scaling.py` §3 |
-| Speculative decoding works via fla | **~1.14×**, uniform across domains | `benchmark_mtp_indomain_speculation_matrix.py` |
+| Speculative decoding works via fla | **1.08–1.29×** on 8 of 9 cells; in-domain `financial_planning` **does not resolve** (1.011x, repeats 0.996–1.012) and is gated off | `benchmark_mtp_indomain_speculation_matrix.py` |
 | bf16 merge-absorption law | `merge_rel_err ≈ 0.167 / (‖dW‖/‖W‖)` | `benchmark_alpha_absorption_sweep.py` |
 | Cross-task adapter subspaces are near-orthogonal | 1.10–1.28× chance | `probe_subspace_overlap.py` |
 | id_kron ≈ stock LoRA at matched scaling | parity; LoRA more stable (id_kron diverges past scaling ~2) | `eval_controlled_headtohead.py` |
@@ -135,7 +136,7 @@ than an optimisation.
 
 | claim | what actually happened |
 | :--- | :--- |
-| "In-domain speculation penalty; disable astral" | Adapters were id_kron mislabelled as Stock LoRA; single measurement; contradicted its own break-even rule. Corrected: diagonal 1.138× vs off-diagonal 1.140×, **all 9 cells win**, router all-True. |
+| "In-domain speculation penalty; disable **astral**" | The *astral* penalty was an artifact: adapters were id_kron mislabelled as Stock LoRA, single measurement, contradicting its own break-even rule. Astral is fine (diagonal 1.138× vs off-diagonal 1.140×). **But do not read this as "there is no in-domain penalty anywhere" — that over-generalisation was recorded here and in `NOVELTY.md`, and is itself retracted (2026-08-17).** Properly powered (n=40/domain, 3 repeats), in-domain `financial_planning` measures 1.011x with repeats 0.996–1.012: it **straddles 1.0 and does not resolve**, so it is gated off for lack of a measured win — not because a penalty was shown. Its sign also moves with the prompt mix (curated τ=1.627 vs held-out τ=1.775). See `results/mtp_indomain_speculation_matrix.json`. |
 | "Speculative loop diverges from its verifier (r=+0.44)" | The gate was broken, not the loop. `chunked_reference()` teacher-forces a full forward while the verifier steps incrementally. Controls: spec-vs-greedy **80.0%** against a *non-speculative* control of **83.3%**, determinism 100%. 100% exactness is unreachable here. |
 | "Hybrid Radix caching is MANDATORY, prefill = 54%" | ~33 s of Triton JIT landed inside the timed region. 2× context gave 1.06× time — impossible as compute. Corrected to 5.9% @8k. **Off the critical path.** |
 | "Stacking retention 144–247%" | Degenerate statistic: financial's solo gain is +4.17pp = **0.83 questions** at n=20. Values >100% mean the denominator broke. Superseded by absolute pp deltas with paired bootstrap CIs. |
@@ -165,6 +166,26 @@ than an optimisation.
    Wide CIs are the metric's shape, not sample size: only 15-18 of 40 questions
    change at all, but those that do swing the full [-100, +100] (sd 32-40pp),
    because the good/bad term ratio is bimodal per question.
+
+   **Serving economics (settled 2026-08-17).** Stacking was proposed as a
+   *latency* optimisation for the VRAM state router: `activate_many([a,b])`
+   measures 25.86 ms against 2 x 18.14 = 36.28 ms for two separate folds, so
+   co-residency saves ~10.4 ms whenever a batch needs both domains. That trade is
+   not worth making, for two independent reasons:
+
+   - **Accuracy.** The one 2-way stack measured with adequate power is exactly
+     the case the router would exploit, and it is a **resolved loss**:
+     `ast+fin` costs astral -10.96pp, CI [-21.50, -1.62].
+   - **The upside is below the noise floor anyway.** Measured end-to-end, swap
+     overhead is 0.86% of wall clock, and eliminating 39% of it produced no
+     significant latency change (-62 ms, 95% CI [-1481, +1417]). 10.4 ms is
+     0.55% of a ~1.9 s request. Even a perfectly accuracy-neutral stack could
+     not produce a measurable serving win here.
+
+   So stacking stays **disabled** in the router (`allow_stacking=False`), and
+   `stacking_saving_ms()` exists only as cost analysis. Re-open this only if
+   transition cost rises by an order of magnitude (e.g. a regime without the
+   pristine buffer, where a cold reload is 35.4 ms) — not for the current engine.
 2. **Is the m1→m2 seam large elsewhere?** MEASURED, INCONCLUSIVE
    (`benchmark_m1_vs_m2_regime.py`, matched hyperparameters/data/eval, paired
    bootstrap, n=40):
