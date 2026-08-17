@@ -1,0 +1,109 @@
+{
+  "experts": [
+    "astral",
+    "pg_base",
+    "pg_lam1",
+    "pg_lam10"
+  ],
+  "n_modules": 128,
+  "pairs": {
+    "astral|pg_base": {
+      "input_overlap_x_chance": {
+        "mean": 1.0305716923321597,
+        "max": 1.56417578458786,
+        "min": 0.6695997714996338
+      },
+      "output_overlap_x_chance": {
+        "mean": 6.866002426482737,
+        "max": 21.033904552459717,
+        "min": 1.4522035121917725
+      },
+      "delta_interaction": {
+        "mean": 0.05025857806659085,
+        "max": 0.15389042097704259
+      }
+    },
+    "astral|pg_lam1": {
+      "input_overlap_x_chance": {
+        "mean": 0.0058813083458062465,
+        "max": 0.05765469279140234,
+        "min": 0.0007733385427854955
+      },
+      "output_overlap_x_chance": {
+        "mean": 0.023953201860877016,
+        "max": 0.2247631810605526,
+        "min": 0.0007797999423928559
+      },
+      "delta_interaction": {
+        "mean": 0.0024374405376002386,
+        "max": 0.012489458664911126
+      }
+    },
+    "astral|pg_lam10": {
+      "input_overlap_x_chance": {
+        "mean": 0.00022548873130290303,
+        "max": 0.0011298970493953675,
+        "min": 1.2723201052722288e-05
+      },
+      "output_overlap_x_chance": {
+        "mean": 0.000737328444074592,
+        "max": 0.006024469330441207,
+        "min": 2.983277227031067e-05
+      },
+      "delta_interaction": {
+        "mean": 0.0003942303038221161,
+        "max": 0.0013171526616522135
+      }
+    },
+    "pg_base|pg_lam1": {
+      "input_overlap_x_chance": {
+        "mean": 1.4213737226091325,
+        "max": 4.770914912223816,
+        "min": 0.700422078371048
+      },
+      "output_overlap_x_chance": {
+        "mean": 57.48253793269396,
+        "max": 149.22420501708984,
+        "min": 4.865012168884277
+      },
+      "delta_interaction": {
+        "mean": 0.15458015444538406,
+        "max": 0.32249034323669046
+      }
+    },
+    "pg_base|pg_lam10": {
+      "input_overlap_x_chance": {
+        "mean": 1.2337415714282542,
+        "max": 2.9484364986419678,
+        "min": 0.696222260594368
+      },
+      "output_overlap_x_chance": {
+        "mean": 45.83970974199474,
+        "max": 127.7662239074707,
+        "min": 4.053731918334961
+      },
+      "delta_interaction": {
+        "mean": 0.1302735637941234,
+        "max": 0.2852505296406867
+      }
+    },
+    "pg_lam1|pg_lam10": {
+      "input_overlap_x_chance": {
+        "mean": 1.3131467929342762,
+        "max": 3.4988633394241333,
+        "min": 0.7173652201890945
+      },
+      "output_overlap_x_chance": {
+        "mean": 59.20715717040002,
+        "max": 137.84588813781738,
+        "min": 6.900648593902588
+      },
+      "delta_interaction": {
+        "mean": 0.14850791227674645,
+        "max": 0.3050275374534739
+      }
+    }
+  },
+  "worst_input_overlap_x_chance": 1.4213737226091325,
+  "max_removable_pct": 29.645526430279116
+}

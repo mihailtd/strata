@@ -101,20 +101,58 @@ class OrthPenaltyTrainer(SFTTrainer):
                 continue
             peer_in, peer_out = self.peer_bases[key]
             # peft: lora_A is (r, in) -> read side is its ROWS; lora_B is (out, r).
+            #
+            # NOTE ON THE ZERO GUARD. LoRA initialises lora_B to EXACTLY ZERO, and
+            # QR of a zero matrix is degenerate -- the first version of this
+            # penalty returned `nan` at step 0 for precisely that reason. The
+            # output-side subspace does not exist at initialisation and the
+            # penalty cannot act on it until B has grown away from zero. That is
+            # a property of LoRA, not a numerical nuisance, and it is the same
+            # B=0/A=random asymmetry that leaves the input side at chance while
+            # the output side reaches 6-7x chance.
             if self.side in ("input", "both"):
-                qa = orthonormal(mod.lora_A["default"].weight.T)  # (in, r)
-                total = total + (qa.T @ peer_in.to(qa.device)).pow(2).sum()
-                n += 1
+                a = mod.lora_A["default"].weight.T  # (in, r)
+                if a.norm() > 1e-6:
+                    qa = orthonormal(a)
+                    total = total + (qa.T @ peer_in.to(qa.device)).pow(2).sum()
+                    n += 1
             if self.side in ("output", "both"):
-                qb = orthonormal(mod.lora_B["default"].weight)  # (out, r)
-                total = total + (qb.T @ peer_out.to(qb.device)).pow(2).sum()
-                n += 1
+                b = mod.lora_B["default"].weight  # (out, r)
+                if b.norm() > 1e-6:
+                    qb = orthonormal(b)
+                    total = total + (qb.T @ peer_out.to(qb.device)).pow(2).sum()
+                    n += 1
         return total / max(1, n)
 
     def _match(self, name: str) -> str | None:
-        """peft module path -> the key used in the frozen expert's factor dict."""
+        """peft module path -> the key used in the frozen expert's factor dict.
+
+        peft yields `base_model.model.model.layers.0.mlp.down_proj` while
+        FoldableExpert keys are `model.layers.0.mlp.down_proj.WEIGHT`. Missing the
+        suffix made every lookup miss, n stayed 0, and the trainer ran to
+        completion reporting `final penalty term: 0.000000` — a silently disabled
+        experiment that would have "measured" the penalty doing nothing.
+        `_assert_matched` now makes that failure loud instead.
+        """
         clean = name.replace("base_model.model.", "").replace(".base_layer", "")
-        return clean if clean in self.peer_bases else None
+        for cand in (f"{clean}.weight", clean):
+            if cand in self.peer_bases:
+                return cand
+        return None
+
+    def _assert_matched(self, model) -> None:
+        n = sum(
+            1 for name, mod in model.named_modules()
+            if hasattr(mod, "lora_A") and "default" in getattr(mod, "lora_A", {})
+            and self._match(name) is not None
+        )
+        if self.lam > 0 and n == 0:
+            raise RuntimeError(
+                "orthogonality penalty matched 0 modules — the peft module names do "
+                "not line up with the frozen expert's factor keys, so the penalty "
+                "would be silently inert. Refusing to run a disabled experiment."
+            )
+        print(f"  penalty active on {n} modules")
 
     def compute_loss(self, model, inputs, return_outputs=False, **kw):
         out = super().compute_loss(model, inputs, return_outputs=True, **kw)
@@ -197,6 +235,7 @@ def main() -> None:
         processing_class=tok,
         peer_bases=peer_bases, lam=args.lambda_orth, side=args.penalty_side,
     )
+    trainer._assert_matched(model)
     trainer.train()
     print(f"  final penalty term: {trainer.last_penalty:.6f}")
 

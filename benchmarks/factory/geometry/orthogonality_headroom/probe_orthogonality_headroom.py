@@ -86,8 +86,17 @@ def overlap_ratio(a: torch.Tensor, b: torch.Tensor, ambient: int) -> float:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--vram-cap-gb", type=float, default=22.0)
+    ap.add_argument(
+        "--experts", nargs="+", default=None,
+        help="override as name=path pairs, e.g. astral=results/adapters/m2_astral_r8a128 "
+             "pg_orth=results/adapters/probe_orth_lam1.0_postgresql",
+    )
     ap.add_argument("--out", default="results/orthogonality_headroom.json")
     args = ap.parse_args()
+
+    global EXPERTS
+    if args.experts:
+        EXPERTS = dict(x.split("=", 1) for x in args.experts)
 
     set_hard_vram_cap(args.vram_cap_gb)
     dev = "cuda" if torch.cuda.is_available() else "cpu"

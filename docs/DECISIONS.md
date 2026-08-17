@@ -553,3 +553,64 @@ needs a kernel-level trace, which this ROCm build cannot currently provide.
 
 Evidence: `results/training_step_profile.json`,
 `results/loss_curves/astral_{liger,noliger}_insession.json`.
+
+---
+
+## 13. REFUTED (measured) — the explicit subspace-orthogonalisation penalty
+
+**Applies to:** "Explicit Subspace Orthogonalization Penalty" and "Explicit
+Subspace Orthogonalization for 100+ Experts (Zero Fleet Collision)".
+
+Previously dismissed by *inference* ("overlap is already 1.10–1.28× chance"). Now
+measured on both sides, and the inference was half wrong — which is why it was
+worth checking.
+
+**Static headroom** (three live experts, 128 common modules,
+[`benchmarks/factory/geometry/orthogonality_headroom/`](../benchmarks/factory/geometry/orthogonality_headroom/)):
+
+| pair | INPUT side (read) | OUTPUT side (write) |
+| :--- | ---: | ---: |
+| astral \| postgresql | 1.031× | **6.866×** (max 21.0×) |
+| astral \| financial | 1.023× | **5.996×** (max 17.4×) |
+| postgresql \| financial | 1.036× | **7.164×** (max 25.0×) |
+
+**"Statistically orthogonal" holds only for the INPUT side.** The output side —
+which directions each expert writes into — sits at 6–7× chance. Note LoRA
+initialises `B = 0` and `A` random, so U is entirely gradient-driven while V
+retains its random init; the input-side result may partly be an artefact of A
+never moving far from initialisation rather than evidence the tasks are
+orthogonal.
+
+**Trained with the penalty** (postgresql, frozen astral peer, both sides,
+`scripts/train_with_orthogonality_penalty.py`):
+
+| λ | overlap IN | overlap OUT | final EMA loss | vs baseline |
+| ---: | ---: | ---: | ---: | ---: |
+| — | 1.031× | 6.866× | 0.7481 | — |
+| 1.0 | **0.006×** | **0.024×** | 0.7741 | **+0.0260** (1.4× noise) |
+| 10.0 | **0.000×** | **0.001×** | 0.7968 | **+0.0486** (2.7× noise) |
+
+**The penalty works perfectly and that is the refutation.** Baseline overlap was
+already AT chance, so there was no harmful overlap to remove; all the penalty can
+do is push past random into anti-correlation (0.006× is ~170× *below* random),
+which confers no interference benefit. It charges a monotonic loss cost for it —
+a clean dose-response, so causal rather than noise — plus **1.9× training wall
+clock** (430.9 s vs ~230 s) for the per-step QR over 128 modules. Its only
+consumer, adapter stacking, is retired independently (§4).
+
+**Not run:** solo-quality and stacked-accuracy evals were started and cancelled.
+Neither could change the verdict — a technique that costs loss and wall clock, has
+nothing to remove, and serves a retired consumer is dead regardless of how those
+land. Recorded so nobody assumes they exist.
+
+**Three implementation bugs, two of which would have produced the right verdict
+for the wrong reason:**
+1. peft yields `base_model.model.model.layers.N...` while FoldableExpert keys
+   carry a `.weight` suffix — every lookup missed and the run completed reporting
+   `final penalty term: 0.000000`. That reads as "the penalty does nothing" when
+   in fact the experiment was switched off. `_assert_matched` now refuses to run.
+2. `QR(0)` is degenerate and LoRA initialises `lora_B` to exactly zero, so the
+   penalty returned `nan`. **The output-side subspace does not exist at
+   initialisation** — a property of LoRA worth knowing, not just a guard to add.
+3. λ=0.1 adds ~0.005 to a loss of ~1.5. Too weak to move a subspace; a null there
+   would have measured the λ, not the idea.
