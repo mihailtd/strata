@@ -78,19 +78,44 @@ DOMAINS = {
 }
 
 
-def load_dataset_records(path: Path):
+ANSWER_MARKER = "\n\n### Answer:\n"
+
+
+def load_dataset_records(path: Path, completion_only: bool = True):
+    """Load records as PROMPT/COMPLETION pairs so loss can skip the prompt.
+
+    PROMPT-TARGET SEPARATION. Training on the full string makes the adapter learn
+    to GENERATE the corpus's questions, not just answer them. Measured on the v2
+    corpora: answer-only median 124 tokens against full-text median 167, so ~26%
+    of the gradient signal was teaching question text -- and far more on the
+    original book-derived corpora, whose questions are long. That is a direct
+    mechanism for the narrowing the held-out benchmark measured (experts -0.233
+    vs base on constructs absent from their corpora).
+
+    Splitting on the answer marker gives TRL an explicit prompt/completion pair;
+    `completion_only_loss=True` then masks the prompt tokens to -100.
+    """
     records = []
     with open(path) as f:
         for line in f:
             if not line.strip():
                 continue
             d = json.loads(line)
-            if "text" in d:
-                records.append({"text": d["text"]})
-            elif "messages" in d:
+            if "messages" in d:
                 u = d["messages"][0]["content"]
                 a = d["messages"][1]["content"]
-                records.append({"text": f"### Question:\n{u}\n\n### Answer:\n{a}"})
+            elif "text" in d and ANSWER_MARKER in d["text"]:
+                head, a = d["text"].split(ANSWER_MARKER, 1)
+                u = head[len("### Question:\n"):] if head.startswith("### Question:\n") else head
+            else:
+                # no recoverable split -- keep it, but it cannot be masked
+                records.append({"text": d.get("text", "")})
+                continue
+            if completion_only:
+                records.append({"prompt": f"### Question:\n{u}{ANSWER_MARKER}",
+                                "completion": a})
+            else:
+                records.append({"text": f"### Question:\n{u}{ANSWER_MARKER}{a}"})
     return records
 
 
@@ -125,6 +150,9 @@ def main():
     ap.add_argument("--lr", type=float, default=2e-4)
     ap.add_argument("--vram-cap-gb", type=float, default=22.0)
     ap.add_argument("--no-liger", action="store_true", help="disable Liger fused kernels (A/B baseline)")
+    ap.add_argument("--no-completion-only", action="store_true",
+                    help="train on the FULL sequence (prompt+answer). The pre-2026-08-18 "
+                         "behaviour, kept only as an A/B baseline.")
     ap.add_argument("--out", default=None, help="override the default output dir")
     ap.add_argument(
         "--logging-steps", type=int, default=10,
@@ -218,13 +246,20 @@ def main():
 
     from datasets import Dataset
 
-    records = load_dataset_records(dataset_path)
+    completion_only = not args.no_completion_only
+    records = load_dataset_records(dataset_path, completion_only=completion_only)
+    n_split = sum(1 for r in records if "prompt" in r)
     print(f"Loaded {len(records)} records from {dataset_path}")
+    print(f"  prompt/completion split: {n_split}/{len(records)} "
+          f"({'completion-only loss ON' if completion_only else 'FULL-SEQUENCE loss'})")
+    if completion_only and n_split < len(records):
+        print(f"  WARNING: {len(records) - n_split} records had no '### Answer:' marker "
+              "and will train on the full sequence")
     train_dataset = Dataset.from_list(records)
 
     sft_config = SFTConfig(
         output_dir=str(out_dir / "checkpoints"),
-        dataset_text_field="text",
+        completion_only_loss=completion_only,
         max_length=512,
         per_device_train_batch_size=2,
         gradient_accumulation_steps=2,
@@ -243,6 +278,58 @@ def main():
         train_dataset=train_dataset,
         processing_class=tokenizer,
     )
+
+    # VERIFY THE MASK IS REAL, do not assume it.
+    # §13 in docs/DECISIONS.md records an entire training run whose
+    # orthogonality penalty silently evaluated to 0.000000 because a name did not
+    # match. A masking flag that quietly does nothing fails the same way: training
+    # looks fine, loss drops, and the defect only shows up as behaviour later.
+    mask_report = {"checked": False}
+    if completion_only:
+        batch = next(iter(trainer.get_train_dataloader()))
+        labels = batch["labels"]
+        n_masked = int((labels == -100).sum())
+        n_total = int(labels.numel())
+        # a prompt-masked batch must have SOME masked and SOME unmasked positions
+        assert n_masked > 0, (
+            "completion_only_loss=True but NO labels are -100 -- the prompt is not "
+            "being masked and the adapter is still training on question text")
+        assert n_masked < n_total, "every label masked -- nothing left to learn from"
+        mask_report = {"checked": True, "masked_frac": round(n_masked / n_total, 4),
+                       "masked": n_masked, "total": n_total}
+        print(f"  MASK VERIFIED: {n_masked}/{n_total} label positions are -100 "
+              f"({n_masked / n_total:.1%} of the batch is prompt, excluded from loss)")
+
+    # POST-TRAIN GEOMETRY GATE (pre-flight SVD probe + times-above-chance).
+    # Both probes compare TWO adapters, so they can only run once this one exists.
+    # Recorded, not enforced: high overlap with a sibling expert predicts that the
+    # two will interfere, and near-chance overlap is what makes stacking safe.
+    def geometry_report(new_dir: Path) -> dict:
+        try:
+            sys.path.insert(0, str(REPO_ROOT / "benchmarks/factory/geometry/preflight_svd_probe"))
+            from probe_subspace_overlap import evaluate_subspace_overlap
+        except Exception as ex:
+            return {"error": f"probe unavailable: {type(ex).__name__}: {ex}"}
+
+        def summarise(a, b, k):
+            res = evaluate_subspace_overlap(a, b, k=k)
+            if not res:
+                return float("nan"), float("nan"), float("nan")
+            ret = sum(m["retained_energy_pct"] for m in res.values()) / len(res)
+            fl = sum(m["random_floor_pct"] for m in res.values()) / len(res)
+            return ret, fl, ret / max(1e-30, fl)
+        out = {}
+        for sib in sorted((REPO_ROOT / "results/adapters").glob("m2_*")):
+            if sib.resolve() == new_dir.resolve() or not (sib / "adapter_model.safetensors").exists():
+                continue
+            try:
+                ret, floor, ratio = summarise(new_dir, sib, 32)
+                out[sib.name] = {"retained_pct": round(ret, 3),
+                                 "random_floor_pct": round(floor, 3),
+                                 "times_above_chance": round(ratio, 3)}
+            except Exception as ex:
+                out[sib.name] = {"error": f"{type(ex).__name__}"}
+        return out
 
     print(f"Starting SFT training ({args.max_steps} steps)...")
     trainer.train()
@@ -295,6 +382,9 @@ def main():
                 "precision": "bfloat16",
                 "quantization": None,
                 "liger_fused_kernels": liger_applied,
+                "completion_only_loss": completion_only,
+                "prompt_mask_verified": mask_report,
+                "subspace_geometry": geometry_report(out_dir),
                 "trained_by": "scripts/train_expert_CURRENT_m2.py",
                 "domain": args.domain,
                 "rank": args.rank,

@@ -1652,3 +1652,85 @@ only softens it. `enable_thinking=False` is required, and our decoder is
 greedy-only anyway.
 
 `benchmarks/factory/agentic/handoff_gate/`, `scripts/build_postgresql_applied_examples.py`
+
+---
+
+## §32 — The trainer was computing loss on the prompt. 48.4% of every batch was question text.
+
+**Status: FIXED and verified live.**
+
+`train_expert_CURRENT_m2.py` used `SFTConfig(dataset_text_field="text")` with no
+collator, no `completion_only_loss`, no `assistant_only_loss` — so the loss ran
+over the WHOLE string. The adapter was trained to **generate the corpus's
+questions**, not merely answer them.
+
+Measured on a real batch, not estimated:
+
+```
+prompt/completion split: 741/741 (completion-only loss ON)
+MASK VERIFIED: 183/378 label positions are -100
+               (48.4% of the batch is prompt, excluded from loss)
+```
+
+**Nearly half the gradient signal was teaching question text.** That is a direct
+mechanism for the narrowing §31's held-out benchmark measured (experts −0.233 vs
+base, CI [−0.356, −0.111], on constructs absent from their corpora): training on
+question text teaches the corpus's *distribution*.
+
+TRL 1.9.2 exposed `completion_only_loss`, `assistant_only_loss`, `padding_free`
+and `packing` the whole time. None were used.
+
+### The fix, and why it asserts
+
+`load_dataset_records` now emits prompt/completion pairs split on the
+`\n\n### Answer:\n` marker, and `completion_only_loss=True` masks the prompt.
+
+A **hard assertion** verifies the mask on a real batch before training starts:
+some labels must be −100 and some must not. §13 records an entire run whose
+orthogonality penalty silently evaluated to `0.000000` because a name did not
+match — a masking flag that quietly does nothing fails identically, and only
+shows up as behaviour months later. `regime.json` now records
+`prompt_mask_verified` with the measured fraction.
+
+### Also wired: the geometry probes
+
+The pre-flight SVD / times-above-chance probes ran only as standalone scripts.
+They are now computed after every train and recorded in `regime.json`.
+
+Doing so exposed a **broken import**: `build_orthogonality_map.py` imported from
+`scripts.factory.geometry...`, a path that ceased to exist when the probes moved
+under `benchmarks/`. The module raised ModuleNotFoundError. Repaired.
+
+New adapter vs its siblings (k=32):
+
+| pair | times above chance |
+| :--- | ---: |
+| pg v3 vs astral v2 | 1.26x |
+| pg v3 vs pg v2 (same domain) | **26.94x** |
+| pg v3 vs financial | 1.29x |
+
+Cross-domain sits at chance, same-domain at 27x — the probe discriminates.
+
+### Factory audit, all eight requested items
+
+| item | status |
+| :--- | :--- |
+| Dynamic sequence masking / prompt-target separation | **ADDED** |
+| Response-only completion loss | **ADDED**, mask asserted |
+| Agentic corpus-to-instruction pipeline | present (`build_*_applied_examples.py`) |
+| Liger fused kernels (FLCE + rms_norm + swiglu, rope off) | already present |
+| Stock LoRA r=8 alpha=128, 7 projections | already present |
+| Pre-flight SVD subspace probe | **WIRED** into regime.json |
+| Times-above-chance SVD probe | **WIRED** into regime.json |
+| Hyperparameter scale calibration (alpha sweep) | ⚠️ **NOT wired, deliberately** |
+
+⚠️ The alpha sweep measures **bf16 merge-absorption error**
+(`merge_rel_err ≈ 0.167 / (‖dW‖/‖W‖)`), not capability retention. Calibrating
+alpha from it would optimise the wrong objective — its own finding is that
+*larger* alpha merges more faithfully, which is the opposite of what narrowing
+needs. The right instrument for choosing alpha is §31's held-out benchmark.
+
+**Unproven:** completion-only loss is a well-motivated fix for narrowing, not a
+demonstrated one. It may only improve answer quality. §31's gate decides.
+
+`results/adapters/m2_postgresql_r8a128_v3`

@@ -28,7 +28,10 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.factory.geometry.preflight_svd_probe.probe_subspace_overlap import evaluate_subspace_overlap  # noqa: E402
+# the probes live under benchmarks/, not scripts/ -- the old path silently
+# broke this module (ModuleNotFoundError) when it moved
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'preflight_svd_probe'))
+from probe_subspace_overlap import evaluate_subspace_overlap  # noqa: E402
 
 # One representative peft-format LoRA per domain (the probe reads peft or novel).
 ADAPTERS = {
