@@ -39,6 +39,7 @@ that is a different finding from degrading everywhere.
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -68,11 +69,34 @@ from gnn_experiment.novel_peft import (  # noqa: E402
 # `uv run python scripts/audit_adapters.py`. Do NOT default to m1 (4-bit NF4)
 # adapters -- every benchmark here loads a bf16 base, so an m1 adapter folds a
 # correction-to-quantized-weights into unquantized ones.
-ADAPTERS = {
+# §33 RE-TEST: the original verdict ("a draft head must AGREE with its backbone")
+# was measured on adapters trained with loss over the PROMPT as well as the answer
+# (§32: 48.4% of every batch was question text). An adapter trained to generate
+# question text is precisely one whose hidden states disagree with the backbone --
+# so the measurement and the defect may be the same phenomenon. ADAPTER_SET lets
+# the same instrument compare the old adapters against completion-only v3 ones.
+_SETS = {
+    "v2": {
+        "financial": "results/adapters/m2_financial_r8a128",
+        "astral": "results/adapters/m2_astral_r8a128_v2",
+        "postgres": "results/adapters/m2_postgresql_r8a128_v2",
+    },
+    "v3": {
+        "astral_v3": "results/adapters/m2_astral_r8a128_v3",
+        "postgres_v3": "results/adapters/m2_postgresql_r8a128_v3",
+    },
+    "both": {
+        "astral_v2": "results/adapters/m2_astral_r8a128_v2",
+        "astral_v3": "results/adapters/m2_astral_r8a128_v3",
+        "postgres_v2": "results/adapters/m2_postgresql_r8a128_v2",
+        "postgres_v3": "results/adapters/m2_postgresql_r8a128_v3",
+    },
+}
+ADAPTERS = _SETS.get(os.environ.get("ADAPTER_SET", "legacy"), {
     "financial": "results/adapters/m2_financial_r8a128",
     "astral": "results/adapters/m2_astral_r8a128",
     "postgres": "results/adapters/m2_postgresql_r8a128",
-}
+})
 
 PROMPTS = {
     "financial": [

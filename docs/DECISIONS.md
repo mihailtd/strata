@@ -1804,3 +1804,64 @@ question-format, which is shared across corpora, overlap should have been
 elevated; it measured near chance (1.10–1.28x).
 
 `results/adapters/m2_postgresql_r8a128_v3`, `results/adapters/m2_astral_r8a128_v3`
+
+---
+
+## §34 — §5 re-test: my hypothesis FAILED, but §5's framing is incomplete
+
+**Status: hypothesis refuted at n=36; §5 neither reproduced nor refuted. In-domain
+acceptance RISES, which §5's blanket claim does not accommodate.**
+
+§33 flagged §5 as the highest-priority re-test: its verdict was *"all five adapters
+lower tau (2.456 -> 1.531-1.988), a draft head must AGREE with its backbone, not be
+domain-fluent"*, and §32 showed those adapters were trained with ~48% of the
+gradient on question text — so the measurement and the defect might be the same
+phenomenon.
+
+Re-measured with `benchmark_mtp_acceptance_vs_adapter.py` (same instrument,
+`ADAPTER_SET` override), K=6, offsets [0,8,16,24]:
+
+| condition | overall (of 6) | vs base |
+| :--- | ---: | ---: |
+| un-adapted (base) | **2.44** | — |
+| astral v2 (prompt loss) | 2.44 | −0.00 |
+| astral v3 (completion-only) | 2.11 | −0.33 |
+| postgres v2 | 2.33 | −0.11 |
+| postgres v3 | 2.19 | −0.25 |
+
+**The prediction was wrong.** Completion-only loss did not restore acceptance; it
+trended slightly worse. The proposed mechanism did not appear.
+
+**And the deltas are not resolvable.** n = 12 drafts/domain, **36/condition**,
+against §5's **n=160**. Per-domain means span 1.42–3.92, so SE ~ 0.33 — the −0.33
+"effect" is about one standard error. Every condition here sits within noise of
+every other.
+
+So §5 is **not refuted either**: base reproduces exactly (2.44 vs its 2.456), but
+no adapted condition reaches its 1.531–1.988 range, and at n=36 that cannot be
+distinguished from sampling.
+
+### The unpredicted signal, which matters more
+
+| adapter folded | financial | astral | postgres |
+| :--- | ---: | ---: | ---: |
+| none (base) | 2.08 | 2.75 | 2.50 |
+| postgres v2 | 1.42 | 1.67 | **3.92** |
+| astral v2 | 1.83 | 2.17 | 3.33 |
+
+**In-domain acceptance RISES** — postgres adapter on postgres prompts scores 3.92
+against base's 2.50, the largest effect in the table — while out-of-domain falls.
+§5's framing ("a draft head must agree with its backbone, not be domain-fluent")
+does not accommodate this: the adapted backbone makes the head BETTER inside its
+domain. The averaging that produced §5's single number hides a sign flip.
+
+That also matches §16/CURRENT.md's unresolved in-domain speculation result
+(financial 1.011x, repeats 0.996–1.012), which straddles 1.0 rather than losing.
+
+### What would settle it
+
+n=160/condition as §5 used — roughly 45 minutes at this instrument's rate, versus
+the ~10 minutes spent here. Worth doing only if speculation is reopened; §26
+rejected the serving path on throughput grounds independent of tau.
+
+`results/mtp_acceptance_v2_vs_v3.json`

@@ -1,0 +1,111 @@
+{
+  "k": 6,
+  "offsets": [
+    0,
+    8,
+    16,
+    24
+  ],
+  "results": {
+    "none": {
+      "per_domain": {
+        "financial": {
+          "mean_accepted": 2.0833333333333335,
+          "accept_rate_pct": 34.72222222222222,
+          "n_drafts": 12
+        },
+        "astral": {
+          "mean_accepted": 2.75,
+          "accept_rate_pct": 45.833333333333336,
+          "n_drafts": 12
+        },
+        "postgres": {
+          "mean_accepted": 2.5,
+          "accept_rate_pct": 41.666666666666664,
+          "n_drafts": 12
+        }
+      },
+      "overall_mean_accepted": 2.4444444444444446
+    },
+    "astral_v2": {
+      "per_domain": {
+        "financial": {
+          "mean_accepted": 1.8333333333333333,
+          "accept_rate_pct": 30.555555555555557,
+          "n_drafts": 12
+        },
+        "astral": {
+          "mean_accepted": 2.1666666666666665,
+          "accept_rate_pct": 36.111111111111114,
+          "n_drafts": 12
+        },
+        "postgres": {
+          "mean_accepted": 3.3333333333333335,
+          "accept_rate_pct": 55.55555555555556,
+          "n_drafts": 12
+        }
+      },
+      "overall_mean_accepted": 2.444444444444444
+    },
+    "astral_v3": {
+      "per_domain": {
+        "financial": {
+          "mean_accepted": 2.1666666666666665,
+          "accept_rate_pct": 36.111111111111114,
+          "n_drafts": 12
+        },
+        "astral": {
+          "mean_accepted": 1.5,
+          "accept_rate_pct": 25.0,
+          "n_drafts": 12
+        },
+        "postgres": {
+          "mean_accepted": 2.6666666666666665,
+          "accept_rate_pct": 44.44444444444444,
+          "n_drafts": 12
+        }
+      },
+      "overall_mean_accepted": 2.111111111111111
+    },
+    "postgres_v2": {
+      "per_domain": {
+        "financial": {
+          "mean_accepted": 1.4166666666666667,
+          "accept_rate_pct": 23.61111111111111,
+          "n_drafts": 12
+        },
+        "astral": {
+          "mean_accepted": 1.6666666666666667,
+          "accept_rate_pct": 27.77777777777778,
+          "n_drafts": 12
+        },
+        "postgres": {
+          "mean_accepted": 3.9166666666666665,
+          "accept_rate_pct": 65.27777777777777,
+          "n_drafts": 12
+        }
+      },
+      "overall_mean_accepted": 2.3333333333333335
+    },
+    "postgres_v3": {
+      "per_domain": {
+        "financial": {
+          "mean_accepted": 1.8333333333333333,
+          "accept_rate_pct": 30.555555555555557,
+          "n_drafts": 12
+        },
+        "astral": {
+          "mean_accepted": 2.0833333333333335,
+          "accept_rate_pct": 34.72222222222222,
+          "n_drafts": 12
+        },
+        "postgres": {
+          "mean_accepted": 2.6666666666666665,
+          "accept_rate_pct": 44.44444444444444,
+          "n_drafts": 12
+        }
+      },
+      "overall_mean_accepted": 2.194444444444444
+    }
+  }
+}
