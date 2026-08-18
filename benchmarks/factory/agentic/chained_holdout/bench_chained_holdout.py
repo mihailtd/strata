@@ -67,8 +67,8 @@ ADAPTERS = {
     "postgresql": os.environ.get("PG_ADAPTER", "results/adapters/m2_postgresql_r8a128_v2"),
     "astral": os.environ.get("ASTRAL_ADAPTER", "results/adapters/m2_astral_r8a128_v2"),
 }
-MAX_NEW = int(os.environ.get("MAX_NEW", "384"))
-MAX_SEQ = 4096
+MAX_NEW = int(os.environ.get("MAX_NEW", "1536"))
+MAX_SEQ = 8192
 BLOCK = re.compile(r"```(?:sql|python|py)?\s*(.*?)```", re.S | re.I)
 
 

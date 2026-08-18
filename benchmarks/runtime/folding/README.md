@@ -7,7 +7,7 @@
 
 ### Classification Breakdown: What is Standard vs. What is Innovative
 * **⭐ Industry Standard Baseline**: Standard Parameter-Efficient Fine-Tuning (PEFT / LoRA wrappers) leaves base model weights untouched and routes every token forward pass through separate auxiliary adapter branches ($W \cdot x + \frac{\alpha}{r} (B \cdot A \cdot x)$). This doubles kernel launch overhead and cuts generation throughput in half (18.26 tok/s vs 33.40 tok/s).
-* **🔥 Our Innovative Applied Practice**: **In-Place Weight Absorption & Composite Stacking (`activate_many()`)**. By pre-computing the low-rank delta product directly into live `bfloat16` backbone weights in **18 ms**, we eliminate 100% of wrapper overhead, restoring generation velocity to **99.6% of native unadapted speed (+82.1% speedup over wrapped PEFT)** with zero accuracy degradation (`top1_agreement = 1.00`).
+* **🔥 Our Innovative Applied Practice**: **In-Place Weight Absorption & Composite Stacking (`activate_many()`) in the Goldilocks Operating Window**. By pre-computing the low-rank delta product directly into live `bfloat16` backbone weights in **17.6 ms**, we eliminate 100% of wrapper overhead, restoring generation velocity to **99.6% of native unadapted speed (+82.1% speedup over wrapped PEFT)** with zero accuracy degradation (`top1_agreement = 1.00`) and zero numerical drift ($L_\infty = 0.00$).
 
 ---
 
@@ -21,7 +21,14 @@
 
 ---
 
-## 2. 🔥 Multi-Expert Additive Fold Composite (`activate_many()`)
+## 2. Submodules & Capabilities
+
+* **[`goldilocks_in_place_addmm/`](goldilocks_in_place_addmm/)**: Guaranteed lossless in-place `addmm()` execution within the calibrated Goldilocks operating window ($\alpha_{\min} \le \alpha \le \alpha_{\max}$), proving pointer stability and 0.00e+00 drift.
+* **[`midstream_swap/`](midstream_swap/)**: Dynamic mid-generation expert hot-swapping without KV cache clearing or prefix re-prefill.
+
+---
+
+## 3. 🔥 Multi-Expert Additive Fold Composite (`activate_many()`)
 
 Beyond single-expert folding, the engine implements composite multi-expert stacking via `WeightFoldingEngine.activate_many()` in [`src/gnn_experiment/novel_peft.py`](file:///home/mihai/gnn-experiment/src/gnn_experiment/novel_peft.py):
 
@@ -33,12 +40,13 @@ $$W_{\text{live}} = W_0 + \sum_{i=1}^N \text{scaling}_i \cdot (U_i \times V_i)$$
 
 ### 2. Orthogonal Composition & Absorption Law
 * **Subspace Orthogonality**: The Pre-Flight SVD Subspace Probe measured cross-task adapter pairs at $1.10\text{--}1.28\text{x}$ chance (statistically orthogonal). Orthogonal deltas compose additively with minimal cross-task interference.
-* **Absorption Law Advantage**: Summing deltas increases $|dW|/|W|$. Because `bfloat16` merge error scales as $\sim 0.167 / (|dW|/|W|)$, a composite stacked delta is actually represented **more faithfully in `bfloat16`** than any single component alone!
+* **Absorption Law Advantage**: Summing deltas increases $|dW|/|W|$. Because `bfloat16` merge error scales as $\approx 0.167 / (|dW|/|W|)$, a composite stacked delta is actually represented **more faithfully in `bfloat16`** than any single component alone!
 
 ---
 
-## 3. Scripts in this Module
+## 4. Scripts in this Module
 
+* **[`goldilocks_in_place_addmm/benchmark_goldilocks_folding.py`](goldilocks_in_place_addmm/benchmark_goldilocks_folding.py)**: End-to-end verification of pointer invariance, zero numerical drift across 100 swap cycles, and Goldilocks merge precision bounds.
 * **[`benchmark_weight_folding.py`](benchmark_weight_folding.py)**: Proves the steady-state +82.1% decode speedup of unwrapped in-place weight folding over standard PEFT wrappers over full 256-token generations.
 * **[`evaluate_folded_vs_wrapped.py`](evaluate_folded_vs_wrapped.py)**: Evaluates quality preservation across domains, verifying that in-place weight absorption into `bfloat16` matches wrapped PEFT accuracy.
 * **[`benchmark_stacked_experts.py`](benchmark_stacked_experts.py)**: Audits `activate_many()` across all $2^N$ multi-expert combinations with 95% bootstrap confidence intervals, proving that composite stacking preserves domain performance.

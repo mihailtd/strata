@@ -1,4 +1,17 @@
-"""Chained multi-turn tasks built ONLY from constructs absent from both training corpora.
+"""Chained multi-turn tasks built ONLY from constructs RESERVED from training.
+
+⚠️ HOW THE HOLD-OUT IS NOW GUARANTEED
+The first version chose constructs by scanning the v2 corpora for zero
+occurrences. The v3 corpora then added 32 of the 45 steps' constructs, because
+DISTINCT ON / FILTER / LATERAL / percentile_cont / singledispatch / TaskGroup /
+Protocol / __slots__ are the obvious contents of an "Advanced PostgreSQL" and a
+"Modern Python" chapter. Scanning for absence is only valid until the next corpus
+revision, and the corpus author cannot know what is reserved.
+
+It is now guaranteed by REMOVAL instead: `scripts/reserve_eval_constructs.py`
+holds an explicit reserved-family list, strips those families from training
+(postgresql -214 records, astral -172), and VERIFIES zero residual occurrences.
+Train on `training_data_v4.jsonl`, never v3.
 
 WHY THE HOLD-OUT MATTERS MORE THAN THE CHAINING
 -----------------------------------------------
@@ -13,8 +26,13 @@ Every construct below was verified to occur ZERO times across
     SQL     DISTINCT ON, FILTER (WHERE), WITH ORDINALITY, TABLESAMPLE,
             percentile_cont/WITHIN GROUP, array_agg/unnest, COLLATE, date_trunc,
             LAG/LEAD, LATERAL
-    Python  singledispatch, asyncio.TaskGroup, functools.partial, Protocol/ABC,
-            __slots__
+    Python  singledispatch, asyncio.TaskGroup, functools.partial, __slots__,
+            cached_property
+
+    Protocol was DROPPED as a gate construct: the astral `modern_typing` family
+    also emits it (103 hits survive filtering `py_protocol_slots`), and that family
+    is valuable general typing content, so it is not worth reserving. Replaced by
+    cached_property, verified at zero occurrences in the filtered corpus.
 
 Rejected as CONTAMINATED (present in the corpora, counts in parentheses):
     WITH RECURSIVE (4), window OVER() (169), LISTEN/NOTIFY (20),
@@ -100,14 +118,14 @@ INSERT INTO orders VALUES
  (6,3,'2024-02-01',10),(7,4,'2024-05-01',30),(8,4,'2024-05-09',80);
 """
 
-PY_PROTOCOL = (
-    "Write a Python module defining a structural interface named `Scorer` with a "
-    "method `score(self, rows: list[dict]) -> float`, plus two independent "
-    "implementations `SumScorer` (returns the sum of every row's 'value') and "
-    "`MaxScorer` (returns the largest 'value'). The interface must be usable for "
-    "static type checking WITHOUT the implementations inheriting from it. "
-    "Then print, on one line, the two scores separated by a single space, "
-    "computed over: {rows}. Print nothing else. Output only a ```python block."
+PY_CACHED = (
+    "Write a Python module with a class `Report` holding a list of numbers. Its "
+    "`total` must be an expensive value computed only ONCE per instance and reused "
+    "on every later access -- use the standard-library decorator for that, not a "
+    "manual cache attribute or a plain property. Increment a module-level counter "
+    "each time the computation actually runs. Access `total` three times on one "
+    "instance built from {rows}, then print the total and the counter separated by "
+    "a single space. Print nothing else. Output only a ```python block."
 )
 PY_SLOTS = (
     "Write a Python module with a memory-compact class `Point` holding exactly two "
@@ -159,9 +177,9 @@ TASKS: list[Task] = [
              reference="SELECT author_id, count(*) AS all_count, "
                        "count(*) FILTER (WHERE views > 200) AS hot_count "
                        "FROM articles GROUP BY author_id ORDER BY author_id;"),
-        dict(domain="astral", kind="python", construct="Protocol",
-             prompt=PY_PROTOCOL.format(rows="[{'value': 3.0}, {'value': 7.5}, {'value': 1.5}]"),
-             reference="12.0 7.5"),
+        dict(domain="astral", kind="python", construct="cached_property",
+             prompt=PY_CACHED.format(rows="[3.0, 7.5, 1.5]"),
+             reference="12.0 1"),
     ]),
     _t("t02_tag_explode", SEED_EVENTS, [
         dict(domain="postgresql", kind="sql", construct="unnest",
@@ -251,9 +269,9 @@ TASKS: list[Task] = [
                     "Output only SQL in a ```sql block.",
              reference="SELECT DISTINCT ON (customer_id) customer_id, id, placed "
                        "FROM orders ORDER BY customer_id, placed DESC;"),
-        dict(domain="astral", kind="python", construct="Protocol",
-             prompt=PY_PROTOCOL.format(rows="[{'value': 2.0}, {'value': 4.0}]"),
-             reference="6.0 4.0"),
+        dict(domain="astral", kind="python", construct="cached_property",
+             prompt=PY_CACHED.format(rows="[2.0, 4.0]"),
+             reference="6.0 1"),
     ]),
     _t("t07_running_delta", SEED_ORDERS, [
         dict(domain="postgresql", kind="sql", construct="LAG",
@@ -340,9 +358,9 @@ TASKS: list[Task] = [
                     "Output only SQL in a ```sql block.",
              reference="SELECT DISTINCT ON (country) country, id, name FROM authors "
                        "ORDER BY country, id;"),
-        dict(domain="astral", kind="python", construct="Protocol",
-             prompt=PY_PROTOCOL.format(rows="[{'value': 1.0}, {'value': 2.0}, {'value': 9.0}]"),
-             reference="12.0 9.0"),
+        dict(domain="astral", kind="python", construct="cached_property",
+             prompt=PY_CACHED.format(rows="[1.0, 2.0, 9.0]"),
+             reference="12.0 1"),
     ]),
     _t("t12_ordinality_join", SEED_ORDERS, [
         dict(domain="postgresql", kind="sql", construct="WITH ORDINALITY",

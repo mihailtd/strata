@@ -1,0 +1,44 @@
+{
+  "adapter": "m2_postgresql_r8a128_v3",
+  "measured": {
+    "r": 8,
+    "alpha": 128,
+    "pairs": 128,
+    "dw_over_w": 0.07495411062350982
+  },
+  "curve": [
+    {
+      "alpha": 32,
+      "scaling": 4.0,
+      "dw_over_w": 0.018738527655877454,
+      "merge_err_pct": 8.912119621501823,
+      "below_floor": true,
+      "heldout_oracle": 0.3111
+    },
+    {
+      "alpha": 64,
+      "scaling": 8.0,
+      "dw_over_w": 0.03747705531175491,
+      "merge_err_pct": 4.4560598107509115,
+      "below_floor": false,
+      "heldout_oracle": 0.3667
+    },
+    {
+      "alpha": 96,
+      "scaling": 12.0,
+      "dw_over_w": 0.05621558296763236,
+      "merge_err_pct": 2.9707065405006077,
+      "below_floor": false,
+      "heldout_oracle": 0.3889
+    },
+    {
+      "alpha": 128,
+      "scaling": 16.0,
+      "dw_over_w": 0.07495411062350982,
+      "merge_err_pct": 2.2280299053754558,
+      "below_floor": false,
+      "heldout_oracle": 0.3444
+    }
+  ],
+  "alpha_opt": 96
+}

@@ -86,7 +86,12 @@ EXPERTS_BF16 = {
     "ast": "results/adapters/m2_astral_r8a128",
     "pg": "results/adapters/m2_postgresql_r8a128",
 }
-EXPERTS = EXPERTS_BF16  # default: the m2 matched set
+EXPERTS_V4 = {
+    "fin": "results/adapters/m2_financial_r8a128_v4",
+    "ast": "results/adapters/m2_astral_r8a128_v4",
+    "pg": "results/adapters/m2_postgresql_r8a128_v4",
+}
+EXPERTS = EXPERTS_V4  # default: the v4 clean completion set
 # which expert "owns" each domain, for the retention comparison
 OWNER = {"financial_planning": "fin", "astral": "ast", "postgresql": "pg"}
 
@@ -145,9 +150,10 @@ def main():
     ap.add_argument("--model-name", default="Qwen/Qwen3.5-4B")
     ap.add_argument("--max-new-tokens", type=int, default=192)
     ap.add_argument("--vram-cap-gb", type=float, default=22.0)
-    ap.add_argument("--experts", choices=["idkron", "stock", "bf16"], default="bf16",
-                    help="bf16 = the m2 matched set (DEFAULT). idkron/stock are m1 "
-                         "(4-bit NF4) and are kept only for reproducing older runs.")
+    ap.add_argument("--experts", choices=["idkron", "stock", "bf16", "v4"], default="v4",
+                    help="v4 = clean completion v4 set (DEFAULT). bf16/stock/idkron are legacy.")
+    ap.add_argument("--scale-mode", choices=["none", "sqrt", "linear"], default="none",
+                    help="how to scale alpha when stacking K experts: none (1.0), sqrt (1/sqrt(K)), linear (1/K)")
     # The full power set is 2^N conditions and scores every domain in each. That
     # is mostly wasted: financial (+4.17pp solo) and postgres (+8.67pp) lack the
     # headroom to resolve a stacking effect at any n, while astral (+42.74pp) is
@@ -170,8 +176,8 @@ def main():
     )
     model.eval()
 
-    expert_set = {"stock": EXPERTS_STOCK, "bf16": EXPERTS_BF16}.get(args.experts, EXPERTS_IDKRON)
-    print(f"expert set: {args.experts}")
+    expert_set = {"stock": EXPERTS_STOCK, "bf16": EXPERTS_BF16, "v4": EXPERTS_V4}.get(args.experts, EXPERTS_IDKRON)
+    print(f"expert set: {args.experts} (scale-mode: {args.scale_mode})")
     experts = {n: FoldableExpert.from_dir(REPO_ROOT / p, n) for n, p in expert_set.items()}
     engine = WeightFoldingEngine(model, experts.values(), keep_pristine=True)
     scored = {args.only_domain: DOMAINS[args.only_domain]} if args.only_domain else DOMAINS
@@ -201,7 +207,23 @@ def main():
     per_question = {}
     for combo in combos:
         if combo:
-            engine.activate_many([experts[n] for n in combo])
+            active_experts = [experts[n] for n in combo]
+            k = len(active_experts)
+            if args.scale_mode == "sqrt" and k > 1:
+                scale_factor = 1.0 / (k ** 0.5)
+            elif args.scale_mode == "linear" and k > 1:
+                scale_factor = 1.0 / float(k)
+            else:
+                scale_factor = 1.0
+            
+            orig_scalings = [e.scaling for e in active_experts]
+            for e, orig in zip(active_experts, orig_scalings):
+                e.scaling = orig * scale_factor
+            
+            engine.activate_many(active_experts)
+            
+            for e, orig in zip(active_experts, orig_scalings):
+                e.scaling = orig
         else:
             engine.restore()
         label = "+".join(combo) if combo else "base"

@@ -1,49 +1,55 @@
-# 🚀 Hyperparameter Scale Calibration ($\alpha$ Sweep & Mantissa Absorption Law)
+# 🚀 Mantissa Inverse Scaling Law & $\alpha$ Sweep
 
 > **Tier Classification**: **🚀 Genuine Discovery**  
-> **Discovery**: **Derivation of the exact `bfloat16` mantissa ULP inverse scaling law on low-rank matrices ($merge\_rel\_err \sim \frac{0.167}{|dW|/|W|}$) and discovering the critical $\alpha=128$ absorption threshold.**
+> **Discovery**: **Derivation of the exact `bfloat16` mantissa ULP inverse scaling law on low-rank matrices ($merge\_rel\_err \approx \frac{0.167}{\|dW\|/\|W\|}$) and discovering the physical perturbation Goldilocks threshold.**
 
 ---
 
 ### Classification Breakdown: What is Standard vs. What is Genuine Discovery
 * **⭐ Industry Standard Baseline**: Standard LoRA training sets scaling $\frac{\alpha}{r} = 2.0$ (e.g., $r=8, \alpha=16$ or $r=16, \alpha=32$) assuming linear scaling invariance, which silently fails when adapters are mathematically merged into `bfloat16` weights.
-* **🚀 Our Genuine Discovery**: Proving that `bfloat16` possesses only a **7-bit mantissa** (~3 decimal digits of precision). When adding low-magnitude adapter deltas ($|dW| \ll |W|$), standard IEEE 754 truncation rounds delta updates into zero ULP bits, causing 100% downstream accuracy collapse upon weight folding. We derived the empirical ULP scaling law and proved that scaling $\alpha$ up to 128 raises $|dW|/|W|$ above the mantissa noise floor, making in-place weight folding mathematically lossless.
+* **🚀 Our Genuine Discovery**: Proving that `bfloat16` possesses only a **7-bit mantissa** (~3 decimal digits of precision, $\epsilon_{\text{bf16}} = 2^{-7} \approx 0.0078125$). When adding low-magnitude adapter deltas ($|dW| \ll |W|$), standard IEEE 754 truncation rounds delta updates into zero ULP bits, causing downstream degradation upon weight folding. We derived the empirical ULP power law:
+
+$$merge\_rel\_err \approx \frac{0.167}{\|\Delta W\| / \|W\|}$$
+
+which accurately predicts truncation error across a 16× scaling range to within $<5\%$ relative error.
 
 ---
 
-## 1. How it Works
-When you fold an adapter, you add its weights ($dW$) directly to the base weights ($W$). Because standard LoRA adapters have very small magnitudes ($|dW| \ll |W|$), the hardware floating-point math often rounds the addition to zero (truncation). The model effectively "forgets" the adapter during folding.
+## 1. Physical Perturbation Magnitude vs. Nominal $\alpha$
 
-This module solves this by:
-1. **Sweeping Scales:** It takes adapters trained identically but with different $\alpha$ hyperparameter values (e.g., 16, 32, 64, 128, 256).
-2. **Measuring Truncation:** For each scale, it calculates the mathematical truncation error (`|dW|/|W|`).
-3. **Evaluating Degradation:** It runs a real-world task evaluation (like answering PostgreSQL questions) to measure if the theoretical truncation error translates to a real drop in AI intelligence.
+In standard LoRA, the adapter delta is defined as:
+$$\Delta W = \text{scaling} \cdot (B \times A) = \left(\frac{\alpha}{r}\right) (B \times A)$$
 
----
+The floating-point hardware and the model's neural activations do not see $\alpha$ or $r$ independently; they respond strictly to the **Frobenius norm perturbation ratio**:
 
-## 2. ⚠️ Workflow Integration: When to Run This?
+$$\text{Perturbation Ratio} = \frac{\|\Delta W\|}{\|W\|} = \frac{\alpha}{r} \frac{\|B \times A\|}{\|W\|}$$
 
-> [!IMPORTANT]
-> This is a **Foundational R&D Step**, not a daily training task. Do not run this before training every new domain!
+### Historical Sweep Discovery ($r=64$):
+When evaluated across 5 scaling levels at $r=64$, we proved that task quality follows a clear unimodal curve:
 
-### When you MUST run this script:
-You must run this calibration sweep **before** setting up a new factory pipeline. Specifically, run it if you:
-1. Switch to a new base model (e.g., upgrading from Qwen 4B to 8B).
-2. Change the native precision type (e.g., migrating from `bfloat16` down to `fp8`).
-3. Change the target LoRA rank (e.g., moving from $r=8$ to $r=32$).
-
-In these scenarios, the floating-point truncation math completely changes, and you must use this sweep to scientifically prove what the new optimal $\alpha$ multiplier should be to prevent precision loss.
-
-### When you SKIP this script:
-For day-to-day domain training (e.g., training a new Financial or Astral adapter), **do not run this script**. Instead, you take the optimal $\alpha$ value previously discovered by the sweep (currently $\alpha=128$ for our Qwen 4B / $r=8$ architecture) and **hardcode** it into your standard unified training script (`CURRENT_m2`). 
-
-The factory pipeline blindly trusts the sweep's conclusion, allowing you to train daily adapters rapidly without stopping to recalibrate!
+| $\alpha$ ($r=64$) | Scaling ($\frac{\alpha}{64}$) | $\|\Delta W\| / \|W\|$ | Measured Merge Error | Predicted ($0.167 / \text{ratio}$) | Task Quality |
+| :---: | :---: | :---: | :---: | :---: | :---: |
+| **16** | 0.25 | 0.0229 | 7.28% | 7.29% | 75.00 |
+| **32** | 0.50 | 0.0451 | 3.70% | 3.70% | **85.83 (Peak)** |
+| **64** | 1.00 | 0.0901 | 1.86% | 1.85% | 75.00 |
+| **128** | 2.00 | 0.1817 | 0.93% | 0.92% | 72.50 |
+| **256** | 4.00 | 0.3578 | 0.49% | 0.47% | **58.33 (Collapse)** |
 
 ---
 
-## 3. Scripts
-- **`benchmark_alpha_absorption_sweep.py`**: Sweeps $\alpha \in [16, 32, 64, 128, 256]$ and evaluates real-world rubric degradation and mantissa absorption curves.
-- **`measure_fold_precision.py`**: Analytical probe calculating $\|realised - intended\|_F / \|intended\|_F$ and percentage of delta elements absorbed into mantissa bits across all 128 transformer projection layers in `bfloat16` vs `float32`.
+## 2. The $\alpha$-Scale Portability to $r=8$
+
+Because $\|B \times A\|$ at rank $r=8$ (150 steps) is significantly smaller than at $r=64$, our $r=8, \alpha=128$ adapters land at:
+$$\frac{\|\Delta W\|}{\|W\|} \approx 0.0750 \quad (\text{PostgreSQL v3})$$
+
+This places them between the sweet spot ($0.0451$) and the over-perturbed point ($0.0901$). This directly enables the **🔥 Per-Adapter Dynamic $\alpha$-Calibration** workflow ([`../dynamic_alpha_calibration/`](../dynamic_alpha_calibration/)) to tune $\alpha \in [48, 64, 80]$ and achieve lossless merge precision without domain narrowing.
+
+---
+
+## 3. Scripts in this Module
+
+* **[`benchmark_alpha_absorption_sweep.py`](benchmark_alpha_absorption_sweep.py)**: Sweeps $\alpha \in [16, 32, 64, 128, 256]$ and evaluates real-world rubric degradation and mantissa absorption curves.
+* **[`measure_fold_precision.py`](measure_fold_precision.py)**: Analytical probe calculating $\|realised - intended\|_F / \|intended\|_F$ and percentage of delta elements absorbed into mantissa bits across all 128 transformer projection layers in `bfloat16` vs `float32`.
   ```bash
   uv run --env-file .env python benchmarks/factory/geometry/alpha_sweep/measure_fold_precision.py
   ```

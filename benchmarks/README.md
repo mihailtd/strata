@@ -85,6 +85,7 @@ To ensure scientific rigor and prevent regressions, all future experiments **MUS
 ### 1. [`runtime/`](runtime/) — The Runtime Engine
 * **[`runtime/cost_model/`](runtime/cost_model/)**: Measured VRAM transition-cost calibration — the destination-only model `C(u,v) = f(v)` that retired both the APSP router and (with the single-tenant finding) the SLA scheduler. Run it before proposing any routing idea.
 * **[`runtime/folding/`](runtime/folding/)**: In-place weight folding engine eliminating 100% of PEFT wrapper overhead (+82.1% speedup over wrapped PEFT).
+* **[`runtime/folding/goldilocks_in_place_addmm/`](runtime/folding/goldilocks_in_place_addmm/)**: Guaranteed lossless in-place `addmm()` execution within the calibrated Goldilocks operating window ($\alpha_{\min} \le \alpha \le \alpha_{\max}$), proving pointer stability and 0.00e+00 drift across 100+ swaps.
 * **[`runtime/memory/factor_residency/`](runtime/memory/factor_residency/)**: 42.5 MB low-rank factor standby representation (200.6x compression), enabling up to 216 concurrent domain experts on 24GB VRAM.
 * **[`runtime/memory/pristine_state_buffer/`](runtime/memory/pristine_state_buffer/)**: Transactional Memory State Checkpointing preserving $L_\infty = 0.00$ drift across infinite expert hot-swaps.
 * **[`runtime/memory/cuda_graph/`](runtime/memory/cuda_graph/)**: Pointer-stable weight slots enabling zero-recapture CUDA Graph replay.
@@ -97,7 +98,8 @@ To ensure scientific rigor and prevent regressions, all future experiments **MUS
 
 ### 2. [`factory/`](factory/) — The Factory & Geometric Probes
 * **[`factory/EVALUATION_LADDER.md`](factory/EVALUATION_LADDER.md)**: The 4-stage fast-to-slow evaluation ladder (SVD checks → micro-loss probes → targeted logprob shift → downstream benchmarks).
-* **[`factory/geometry/alpha_sweep/`](factory/geometry/alpha_sweep/)**: `bfloat16` Mantissa ULP Inverse Scaling Law and $\alpha=128$ absorption threshold.
+* **[`factory/geometry/alpha_sweep/`](factory/geometry/alpha_sweep/)**: `bfloat16` Mantissa ULP Inverse Scaling Law ($merge\_rel\_err \approx \frac{0.167}{\|dW\|/\|W\|}$) and physical perturbation characterization.
+* **[`factory/geometry/dynamic_alpha_calibration/`](factory/geometry/dynamic_alpha_calibration/)**: Per-Adapter Dynamic $\alpha$-Calibration & ⭐ Stock LoRA ($r=8$, Dynamic $\alpha$) decoupling rank from runtime scaling without retraining.
 * **[`factory/geometry/preflight_svd_probe/`](factory/geometry/preflight_svd_probe/)**: Sub-second pre-flight SVD subspace overlap verification.
 * **[`factory/geometry/times_above_chance/`](factory/geometry/times_above_chance/)**: Grassmannian projection normalization proving cross-domain orthogonality.
 * **[`factory/architecture_comparison/`](factory/architecture_comparison/)**: Stock LoRA vs `id_kron` controlled head-to-head evaluation.

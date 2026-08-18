@@ -331,6 +331,43 @@ def main():
                 out[sib.name] = {"error": f"{type(ex).__name__}"}
         return out
 
+    # PRECISION FLOOR, measured not assumed (see scripts/calibrate_expert_alpha.py).
+    # alpha alone is meaningless; the hardware responds to the perturbation
+    # magnitude |dW|/|W|, and dW = (alpha/r) * B@A depends on what B@A actually
+    # LEARNED -- unknowable before training. Two adapters trained with identical
+    # hyperparameters measured 0.0750 and 0.0741. Recording it per adapter makes
+    # the lower bound of the admissible alpha window computable for free, since
+    # |dW|/|W| is exactly linear in alpha.
+    def precision_report() -> dict:
+        try:
+            num = den = 0.0
+            pairs = 0
+            for mod in model.modules():
+                A = getattr(mod, "lora_A", None)
+                B = getattr(mod, "lora_B", None)
+                W = getattr(mod, "base_layer", None)
+                if A is None or B is None or W is None:
+                    continue
+                try:
+                    a = A["default"].weight.detach().float()
+                    b = B["default"].weight.detach().float()
+                    w = W.weight.detach().float()
+                except Exception:
+                    continue
+                dW = (b @ a) * (args.alpha / args.rank)
+                num += float(dW.norm() ** 2)
+                den += float(w.norm() ** 2)
+                pairs += 1
+            if pairs == 0:
+                return {"error": "no lora/base pairs found"}
+            ratio = (num ** 0.5) / max(1e-30, den ** 0.5)
+            # law fitted across the 5-point alpha sweep: err_pct * |dW|/|W| ~= 0.167
+            return {"pairs": pairs, "dw_over_w": round(ratio, 6),
+                    "predicted_merge_err_pct": round(0.167 / max(1e-9, ratio), 4),
+                    "note": "|dW|/|W| is linear in alpha; divide/multiply to re-derive"}
+        except Exception as ex:
+            return {"error": f"{type(ex).__name__}: {ex}"}
+
     print(f"Starting SFT training ({args.max_steps} steps)...")
     trainer.train()
 
@@ -385,6 +422,7 @@ def main():
                 "completion_only_loss": completion_only,
                 "prompt_mask_verified": mask_report,
                 "subspace_geometry": geometry_report(out_dir),
+                "merge_precision": precision_report(),
                 "trained_by": "scripts/train_expert_CURRENT_m2.py",
                 "domain": args.domain,
                 "rank": args.rank,
