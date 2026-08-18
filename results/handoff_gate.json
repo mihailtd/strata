@@ -14,8 +14,10 @@
         "task": "products",
         "step": 0,
         "arm": "A base",
-        "sec": 1.1156055869942065,
-        "swap_ms": 0.0
+        "sec": 1.2583393050008453,
+        "swap_ms": 0.0,
+        "emitted": 24,
+        "think_closed": false
       },
       {
         "fenced": true,
@@ -30,8 +32,10 @@
         "task": "products",
         "step": 1,
         "arm": "A base",
-        "sec": 1.1168408960074885,
-        "swap_ms": 0.0
+        "sec": 1.0702212839969434,
+        "swap_ms": 0.0,
+        "emitted": 22,
+        "think_closed": false
       },
       {
         "fenced": true,
@@ -47,8 +51,10 @@
         "task": "products",
         "step": 2,
         "arm": "A base",
-        "sec": 11.967540917001315,
-        "swap_ms": 0.0
+        "sec": 15.299725927005056,
+        "swap_ms": 0.0,
+        "emitted": 340,
+        "think_closed": false
       },
       {
         "fenced": true,
@@ -63,8 +69,10 @@
         "task": "tickets",
         "step": 0,
         "arm": "A base",
-        "sec": 1.1040012830053456,
-        "swap_ms": 12.911036988953128
+        "sec": 1.1504557150037726,
+        "swap_ms": 17.4259869963862,
+        "emitted": 24,
+        "think_closed": false
       },
       {
         "fenced": true,
@@ -79,8 +87,10 @@
         "task": "tickets",
         "step": 1,
         "arm": "A base",
-        "sec": 0.8491979829996126,
-        "swap_ms": 0.0
+        "sec": 0.9427117250015726,
+        "swap_ms": 0.0,
+        "emitted": 22,
+        "think_closed": false
       },
       {
         "fenced": false,
@@ -96,8 +106,10 @@
         "task": "tickets",
         "step": 2,
         "arm": "A base",
-        "sec": 14.217795151998871,
-        "swap_ms": 0.0
+        "sec": 14.647384096009773,
+        "swap_ms": 0.0,
+        "emitted": 384,
+        "think_closed": false
       },
       {
         "fenced": true,
@@ -112,8 +124,10 @@
         "task": "docs",
         "step": 0,
         "arm": "A base",
-        "sec": 0.9487643559987191,
-        "swap_ms": 17.54652999807149
+        "sec": 1.625926213004277,
+        "swap_ms": 18.57433198892977,
+        "emitted": 24,
+        "think_closed": false
       },
       {
         "fenced": true,
@@ -128,8 +142,10 @@
         "task": "docs",
         "step": 1,
         "arm": "A base",
-        "sec": 1.5542490880034165,
-        "swap_ms": 0.0
+        "sec": 1.6099016960070003,
+        "swap_ms": 0.0,
+        "emitted": 34,
+        "think_closed": false
       },
       {
         "fenced": true,
@@ -145,8 +161,10 @@
         "task": "docs",
         "step": 2,
         "arm": "A base",
-        "sec": 8.496852451004088,
-        "swap_ms": 0.0
+        "sec": 9.147645966993878,
+        "swap_ms": 0.0,
+        "emitted": 231,
+        "think_closed": false
       },
       {
         "fenced": true,
@@ -161,8 +179,10 @@
         "task": "papers",
         "step": 0,
         "arm": "A base",
-        "sec": 1.0158091240009526,
-        "swap_ms": 22.95452798716724
+        "sec": 1.1352927230036585,
+        "swap_ms": 13.378096002270468,
+        "emitted": 25,
+        "think_closed": false
       },
       {
         "fenced": true,
@@ -177,8 +197,10 @@
         "task": "papers",
         "step": 1,
         "arm": "A base",
-        "sec": 1.0210144209995633,
-        "swap_ms": 0.0
+        "sec": 0.905134080996504,
+        "swap_ms": 0.0,
+        "emitted": 22,
+        "think_closed": false
       },
       {
         "fenced": false,
@@ -194,8 +216,10 @@
         "task": "papers",
         "step": 2,
         "arm": "A base",
-        "sec": 13.685380326991435,
-        "swap_ms": 0.0
+        "sec": 14.190591817998211,
+        "swap_ms": 0.0,
+        "emitted": 384,
+        "think_closed": false
       },
       {
         "fenced": true,
@@ -210,8 +234,10 @@
         "task": "images",
         "step": 0,
         "arm": "A base",
-        "sec": 0.9067079889937304,
-        "swap_ms": 13.038834003964439
+        "sec": 1.0371464679919882,
+        "swap_ms": 16.743250991567038,
+        "emitted": 23,
+        "think_closed": false
       },
       {
         "fenced": true,
@@ -226,8 +252,10 @@
         "task": "images",
         "step": 1,
         "arm": "A base",
-        "sec": 0.9262352140067378,
-        "swap_ms": 0.0
+        "sec": 1.0806764559965814,
+        "swap_ms": 0.0,
+        "emitted": 22,
+        "think_closed": false
       },
       {
         "fenced": false,
@@ -243,8 +271,10 @@
         "task": "images",
         "step": 2,
         "arm": "A base",
-        "sec": 13.964372779999394,
-        "swap_ms": 0.0
+        "sec": 15.105847038998036,
+        "swap_ms": 0.0,
+        "emitted": 384,
+        "think_closed": false
       }
     ],
     "B oracle": [
@@ -253,16 +283,18 @@
         "parses": true,
         "checks": {
           "creates_index": true,
-          "ann_method": false,
-          "cosine_opclass": false
+          "ann_method": true,
+          "cosine_opclass": true
         },
-        "score": 0.5,
-        "code": "CREATE INDEX IF NOT EXISTS idx_product_embedding\nON product (embedding vector_l2_ops);",
+        "score": 1.0,
+        "code": "CREATE INDEX products_embedding_hnsw_idx\n    ON products\n    USING hnsw (embedding vector_cosine_ops)\n    WITH (m = 16, ef_construction = 64);",
         "task": "products",
         "step": 0,
         "arm": "B oracle",
-        "sec": 0.9304724219982745,
-        "swap_ms": 17.926526998053305
+        "sec": 2.557882595996489,
+        "swap_ms": 485.041852996801,
+        "emitted": 47,
+        "think_closed": false
       },
       {
         "fenced": true,
@@ -273,12 +305,69 @@
           "limits_ten": true
         },
         "score": 1.0,
-        "code": "SELECT p.id, p.title, p.price\nFROM product p\nORDER BY p.embedding <=> $1::vector LIMIT 10;",
+        "code": "SELECT id, embedding <=> $1 AS distance\nFROM products\nORDER BY embedding <=> $1\nLIMIT 10;",
         "task": "products",
         "step": 1,
         "arm": "B oracle",
-        "sec": 1.4000884139968548,
-        "swap_ms": 0.0
+        "sec": 1.6259600250050426,
+        "swap_ms": 0.0,
+        "emitted": 30,
+        "think_closed": false
+      },
+      {
+        "fenced": true,
+        "parses": false,
+        "checks": {
+          "async_handler": true,
+          "route_decorator": true,
+          "annotated": false,
+          "pooled": true
+        },
+        "score": 0.6,
+        "code": "from typing import List, Optional, Tuple\nfrom fastapi import FastAPI, Query\nfrom sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker\nfrom sqlalchemy import select\n\napp = FastAPI()\n\n# Connection pool configuration\nengine = create_async_engine(\"postgresql+asyncpg://user:password@localhost:5432/dbname\")\nAsyncSession = async_sessionmaker(engine, class_=AsyncSession, exp",
+        "task": "products",
+        "step": 2,
+        "arm": "B oracle",
+        "sec": 8.620103238004958,
+        "swap_ms": 36.118955991696566,
+        "emitted": 204,
+        "think_closed": false
+      },
+      {
+        "fenced": true,
+        "parses": true,
+        "checks": {
+          "creates_index": true,
+          "ann_method": true,
+          "cosine_opclass": true
+        },
+        "score": 1.0,
+        "code": "CREATE INDEX tickets_embedding_hnsw_idx\n    ON tickets\n    USING hnsw (embedding vector_cosine_ops)\n    WITH (m = 16, ef_construction = 64);",
+        "task": "tickets",
+        "step": 0,
+        "arm": "B oracle",
+        "sec": 2.4203285069961566,
+        "swap_ms": 18.895394998253323,
+        "emitted": 47,
+        "think_closed": false
+      },
+      {
+        "fenced": true,
+        "parses": true,
+        "checks": {
+          "distance_operator": true,
+          "orders_by_distance": true,
+          "limits_ten": true
+        },
+        "score": 1.0,
+        "code": "SELECT id, embedding <=> $1 AS distance\nFROM tickets\nORDER BY embedding <=> $1\nLIMIT 10;",
+        "task": "tickets",
+        "step": 1,
+        "arm": "B oracle",
+        "sec": 1.5336205330095254,
+        "swap_ms": 0.0,
+        "emitted": 30,
+        "think_closed": false
       },
       {
         "fenced": true,
@@ -290,12 +379,14 @@
           "pooled": true
         },
         "score": 0.8,
-        "code": "from typing import Annotated, List, Optional\nfrom fastapi import FastAPI, HTTPException\nfrom pydantic import BaseModel\nfrom sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker\n\napp = FastAPI()\n\n# Connection pool configuration\nengine = create_async_engine(\"postgresql+asyncpg://user:password@localhost:5432/dbname\")\nAsyncSession = async_sessionmaker(engine, class_=Asyn",
-        "task": "products",
+        "code": "from typing import List, Optional, Tuple\nfrom fastapi import FastAPI, Query\nfrom sqlalchemy import create_engine, text\nfrom sqlalchemy.pool import QueuePool\n\napp = FastAPI()\n\nengine = create_engine(\n    \"postgresql://user:password@localhost:5432/dbname\",\n    poolclass=QueuePool,\n    pool_size=10,\n    max_overflow=20,\n)\n\n@app.get(\"/search\")\nasync def search(\n    q: str = Query(..., min_length=1),\n ",
+        "task": "tickets",
         "step": 2,
         "arm": "B oracle",
-        "sec": 8.354812863006373,
-        "swap_ms": 21.09554799972102
+        "sec": 9.815366376002203,
+        "swap_ms": 19.97631099948194,
+        "emitted": 257,
+        "think_closed": false
       },
       {
         "fenced": true,
@@ -303,113 +394,17 @@
         "checks": {
           "creates_index": true,
           "ann_method": true,
-          "cosine_opclass": false
-        },
-        "score": 0.75,
-        "code": "CREATE INDEX IF NOT EXISTS idx_tickets_embedding ON tickets USING hnsw (embedding vector_l2_ops);",
-        "task": "tickets",
-        "step": 0,
-        "arm": "B oracle",
-        "sec": 1.0235081760038156,
-        "swap_ms": 22.19967299606651
-      },
-      {
-        "fenced": true,
-        "parses": true,
-        "checks": {
-          "distance_operator": true,
-          "orders_by_distance": true,
-          "limits_ten": true
-        },
-        "score": 1.0,
-        "code": "SELECT id, subject, status, embedding\nFROM tickets\nORDER BY embedding <=> $1::vector LIMIT 10;",
-        "task": "tickets",
-        "step": 1,
-        "arm": "B oracle",
-        "sec": 1.1932207089994336,
-        "swap_ms": 0.0
-      },
-      {
-        "fenced": true,
-        "parses": true,
-        "checks": {
-          "async_handler": true,
-          "route_decorator": true,
-          "annotated": true,
-          "pooled": true
-        },
-        "score": 1.0,
-        "code": "from typing import Annotated, AsyncGenerator, List, Optional\n\nfrom fastapi import FastAPI, HTTPException\nfrom pydantic import BaseModel\n\nfrom database import get_pool\n\napp = FastAPI()\n\n\nclass QueryRequest(BaseModel):\n    q: str\n\n\n@app.post(\"/search\")\nasync def search(query: QueryRequest) -> AsyncGenerator[List[dict], None]:\n    async with get_pool() as pool:\n        async with pool.acquire() as co",
-        "task": "tickets",
-        "step": 2,
-        "arm": "B oracle",
-        "sec": 7.460273040007451,
-        "swap_ms": 18.117568994057365
-      },
-      {
-        "fenced": true,
-        "parses": true,
-        "checks": {
-          "creates_index": true,
-          "ann_method": false,
-          "cosine_opclass": false
-        },
-        "score": 0.5,
-        "code": "CREATE INDEX IF NOT EXISTS idx_documents_embedding\nON documents (embedding vector_l2_ops);",
-        "task": "docs",
-        "step": 0,
-        "arm": "B oracle",
-        "sec": 0.9241074660094455,
-        "swap_ms": 23.290940007427707
-      },
-      {
-        "fenced": true,
-        "parses": true,
-        "checks": {
-          "distance_operator": true,
-          "orders_by_distance": true,
-          "limits_ten": true
-        },
-        "score": 1.0,
-        "code": "SELECT\n    id,\n    body,\n    tenant_id\nFROM\n    documents\nORDER BY\n    embedding <=> $1\nLIMIT 10;",
-        "task": "docs",
-        "step": 1,
-        "arm": "B oracle",
-        "sec": 1.4263125589932315,
-        "swap_ms": 0.0
-      },
-      {
-        "fenced": true,
-        "parses": false,
-        "checks": {
-          "async_handler": true,
-          "route_decorator": true,
-          "annotated": false,
-          "pooled": true
-        },
-        "score": 0.6,
-        "code": "from typing import List, Optional\n\nfrom fastapi import FastAPI, Query\nfrom sqlalchemy import select\nfrom sqlalchemy.ext.asyncio import AsyncSession\nfrom sqlalchemy.pool import QueuePool\n\napp = FastAPI()\n\n# Configure the connection pool\nengine = None  # Assume this is configured elsewhere with QueuePool\n\n@app.get(\"/search\")\nasync def search_documents(\n    q: str = Query(..., min_length=1),\n    limi",
-        "task": "docs",
-        "step": 2,
-        "arm": "B oracle",
-        "sec": 6.918941602008999,
-        "swap_ms": 17.75601299596019
-      },
-      {
-        "fenced": true,
-        "parses": true,
-        "checks": {
-          "creates_index": true,
-          "ann_method": false,
           "cosine_opclass": true
         },
-        "score": 0.75,
-        "code": "CREATE INDEX IF NOT EXISTS idx_embedding_cosine\nON papers (embedding vector_cosine_ops);",
-        "task": "papers",
+        "score": 1.0,
+        "code": "CREATE INDEX documents_embedding_hnsw_idx\n    ON documents\n    USING hnsw (embedding vector_cosine_ops)\n    WITH (m = 16, ef_construction = 64);",
+        "task": "docs",
         "step": 0,
         "arm": "B oracle",
-        "sec": 0.9244150320009794,
-        "swap_ms": 25.87161000701599
+        "sec": 1.8623432800086448,
+        "swap_ms": 23.31874099036213,
+        "emitted": 47,
+        "think_closed": false
       },
       {
         "fenced": true,
@@ -420,29 +415,33 @@
           "limits_ten": true
         },
         "score": 1.0,
-        "code": "SELECT id, abstract, year\nFROM papers\nORDER BY embedding <=> $1::vector LIMIT 10;",
-        "task": "papers",
+        "code": "SELECT id, body, embedding <=> $1 AS distance\nFROM documents\nORDER BY embedding <=> $1\nLIMIT 10;",
+        "task": "docs",
         "step": 1,
         "arm": "B oracle",
-        "sec": 1.084582354000304,
-        "swap_ms": 0.0
+        "sec": 1.2728297979920171,
+        "swap_ms": 0.0,
+        "emitted": 32,
+        "think_closed": false
       },
       {
         "fenced": true,
-        "parses": false,
+        "parses": true,
         "checks": {
           "async_handler": true,
           "route_decorator": true,
           "annotated": false,
           "pooled": true
         },
-        "score": 0.6,
-        "code": "from typing import Annotated, AsyncGenerator, List, Optional\nfrom fastapi import FastAPI, HTTPException\nfrom fastapi.responses import StreamingResponse\nfrom sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker\nfrom sqlalchemy import select\n\napp = FastAPI()\n\n# Connection pool\nengine = create_async_engine(\"postgresql+asyncpg://user:pass@localhost/papers\")\nAsyncSession ",
-        "task": "papers",
+        "score": 0.8,
+        "code": "from typing import List, Optional, Tuple\nfrom fastapi import FastAPI, Query\nfrom sqlalchemy import create_engine, text\nfrom sqlalchemy.pool import QueuePool\n\napp = FastAPI()\n\nengine = create_engine(\n    \"postgresql://user:password@localhost:5432/db\",\n    poolclass=QueuePool,\n    pool_size=10,\n    max_overflow=20,\n)\n\n@app.get(\"/search\")\nasync def search_documents(\n    q: str = Query(..., min_length",
+        "task": "docs",
         "step": 2,
         "arm": "B oracle",
-        "sec": 8.192938842999865,
-        "swap_ms": 24.320026990608312
+        "sec": 11.220118271012325,
+        "swap_ms": 24.643076001666486,
+        "emitted": 268,
+        "think_closed": false
       },
       {
         "fenced": true,
@@ -450,15 +449,17 @@
         "checks": {
           "creates_index": true,
           "ann_method": true,
-          "cosine_opclass": false
+          "cosine_opclass": true
         },
-        "score": 0.75,
-        "code": "CREATE INDEX IF NOT EXISTS idx_embedding_cosine\nON embeddings.embedding\nUSING ivfflat (embedding vector_l2_ops);",
-        "task": "images",
+        "score": 1.0,
+        "code": "CREATE INDEX papers_embedding_hnsw_idx\n    ON papers\n    USING hnsw (embedding vector_cosine_ops)\n    WITH (m = 16, ef_construction = 64);",
+        "task": "papers",
         "step": 0,
         "arm": "B oracle",
-        "sec": 1.144530338991899,
-        "swap_ms": 26.902059005806223
+        "sec": 2.02856572100427,
+        "swap_ms": 19.928538997191936,
+        "emitted": 47,
+        "think_closed": false
       },
       {
         "fenced": true,
@@ -469,12 +470,14 @@
           "limits_ten": true
         },
         "score": 1.0,
-        "code": "SELECT\n    id,\n    caption,\n    1 - (embedding <=> $1) AS distance\nFROM\n    embeddings.embedding\nORDER BY\n    embedding <=> $1\nLIMIT 10;",
-        "task": "images",
+        "code": "SELECT id, embedding <=> $1 AS distance\nFROM papers\nORDER BY embedding <=> $1\nLIMIT 10;",
+        "task": "papers",
         "step": 1,
         "arm": "B oracle",
-        "sec": 1.830507801991189,
-        "swap_ms": 0.0
+        "sec": 1.1605361399997491,
+        "swap_ms": 0.0,
+        "emitted": 30,
+        "think_closed": false
       },
       {
         "fenced": true,
@@ -486,12 +489,69 @@
           "pooled": true
         },
         "score": 0.6,
-        "code": "from typing import List, Optional, Tuple\n\nfrom fastapi import FastAPI, Query\nfrom sqlalchemy import select\nfrom sqlalchemy.ext.asyncio import AsyncSession\nfrom sqlalchemy.pool import QueuePool\n\napp = FastAPI()\n\n# Configure the connection pool\nengine = None  # Assume this is configured elsewhere with QueuePool\n\n@app.get(\"/search\")\nasync def search(\n    q: str = Query(..., min_length=1),\n    limit: ",
+        "code": "from typing import List, Optional, Tuple\nfrom fastapi import FastAPI, Query\nfrom sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker\nfrom sqlalchemy import select\n\napp = FastAPI()\n\n# Connection pool configuration\nengine = create_async_engine(\"postgresql+asyncpg://user:password@localhost:5432/dbname\", pool_size=10)\nAsyncSession = async_sessionmaker(engine, class_=Asy",
+        "task": "papers",
+        "step": 2,
+        "arm": "B oracle",
+        "sec": 9.463987099006772,
+        "swap_ms": 29.59491500223521,
+        "emitted": 210,
+        "think_closed": false
+      },
+      {
+        "fenced": true,
+        "parses": true,
+        "checks": {
+          "creates_index": true,
+          "ann_method": true,
+          "cosine_opclass": true
+        },
+        "score": 1.0,
+        "code": "CREATE INDEX images_embedding_hnsw_idx\n    ON images\n    USING hnsw (embedding vector_cosine_ops)\n    WITH (m = 16, ef_construction = 64);",
+        "task": "images",
+        "step": 0,
+        "arm": "B oracle",
+        "sec": 1.7389939050044632,
+        "swap_ms": 22.848149004857987,
+        "emitted": 47,
+        "think_closed": false
+      },
+      {
+        "fenced": true,
+        "parses": true,
+        "checks": {
+          "distance_operator": true,
+          "orders_by_distance": true,
+          "limits_ten": true
+        },
+        "score": 1.0,
+        "code": "SELECT id, embedding <=> $1 AS distance\nFROM images\nORDER BY embedding <=> $1\nLIMIT 10;",
+        "task": "images",
+        "step": 1,
+        "arm": "B oracle",
+        "sec": 1.3695926289947238,
+        "swap_ms": 0.0,
+        "emitted": 30,
+        "think_closed": false
+      },
+      {
+        "fenced": true,
+        "parses": true,
+        "checks": {
+          "async_handler": true,
+          "route_decorator": true,
+          "annotated": false,
+          "pooled": true
+        },
+        "score": 0.8,
+        "code": "from typing import List, Optional, Tuple\nfrom fastapi import FastAPI, Query\nfrom sqlalchemy import create_engine, text\nfrom sqlalchemy.pool import QueuePool\n\napp = FastAPI()\n\n# Create an engine with a connection pool\nengine = create_engine(\n    \"postgresql://user:password@localhost:5432/dbname\",\n    poolclass=QueuePool,\n    pool_size=10,\n    max_overflow=20,\n)\n\n@app.get(\"/search\")\nasync def search",
         "task": "images",
         "step": 2,
         "arm": "B oracle",
-        "sec": 7.142715661000693,
-        "swap_ms": 17.573353994521312
+        "sec": 10.045903029007604,
+        "swap_ms": 27.462756988825276,
+        "emitted": 265,
+        "think_closed": false
       }
     ],
     "C self": [
@@ -500,16 +560,18 @@
         "parses": true,
         "checks": {
           "creates_index": true,
-          "ann_method": false,
-          "cosine_opclass": false
+          "ann_method": true,
+          "cosine_opclass": true
         },
-        "score": 0.5,
-        "code": "CREATE INDEX IF NOT EXISTS idx_product_embedding\nON product (embedding vector_l2_ops);",
+        "score": 1.0,
+        "code": "CREATE INDEX products_embedding_hnsw_idx\n    ON products\n    USING hnsw (embedding vector_cosine_ops)\n    WITH (m = 16, ef_construction = 64);",
         "task": "products",
         "step": 0,
         "arm": "C self",
-        "sec": 0.9717928880127147,
-        "swap_ms": 17.51345999946352
+        "sec": 1.7939614399947459,
+        "swap_ms": 27.03426500374917,
+        "emitted": 47,
+        "think_closed": false
       },
       {
         "fenced": true,
@@ -520,12 +582,69 @@
           "limits_ten": true
         },
         "score": 1.0,
-        "code": "SELECT p.id, p.title, p.price\nFROM product p\nORDER BY p.embedding <=> $1::vector LIMIT 10;",
+        "code": "SELECT id, embedding <=> $1 AS distance\nFROM products\nORDER BY embedding <=> $1\nLIMIT 10;",
         "task": "products",
         "step": 1,
         "arm": "C self",
-        "sec": 1.2576640009938274,
-        "swap_ms": 23.494462002418004
+        "sec": 1.2153315169998677,
+        "swap_ms": 21.235484004137106,
+        "emitted": 30,
+        "think_closed": false
+      },
+      {
+        "fenced": true,
+        "parses": false,
+        "checks": {
+          "async_handler": true,
+          "route_decorator": true,
+          "annotated": false,
+          "pooled": true
+        },
+        "score": 0.6,
+        "code": "from typing import List, Optional, Tuple\nfrom fastapi import FastAPI, Query\nfrom sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker\nfrom sqlalchemy import select\n\napp = FastAPI()\n\n# Connection pool configuration\nengine = create_async_engine(\"postgresql+asyncpg://user:password@localhost:5432/dbname\")\nAsyncSession = async_sessionmaker(engine, class_=AsyncSession, exp",
+        "task": "products",
+        "step": 2,
+        "arm": "C self",
+        "sec": 8.003397672000574,
+        "swap_ms": 17.77947900700383,
+        "emitted": 204,
+        "think_closed": false
+      },
+      {
+        "fenced": true,
+        "parses": true,
+        "checks": {
+          "creates_index": true,
+          "ann_method": true,
+          "cosine_opclass": true
+        },
+        "score": 1.0,
+        "code": "CREATE INDEX tickets_embedding_hnsw_idx\n    ON tickets\n    USING hnsw (embedding vector_cosine_ops)\n    WITH (m = 16, ef_construction = 64);",
+        "task": "tickets",
+        "step": 0,
+        "arm": "C self",
+        "sec": 2.292777238995768,
+        "swap_ms": 19.443063996732235,
+        "emitted": 47,
+        "think_closed": false
+      },
+      {
+        "fenced": true,
+        "parses": true,
+        "checks": {
+          "distance_operator": true,
+          "orders_by_distance": true,
+          "limits_ten": true
+        },
+        "score": 1.0,
+        "code": "SELECT id, embedding <=> $1 AS distance\nFROM tickets\nORDER BY embedding <=> $1\nLIMIT 10;",
+        "task": "tickets",
+        "step": 1,
+        "arm": "C self",
+        "sec": 1.5896048349968623,
+        "swap_ms": 25.41026400285773,
+        "emitted": 30,
+        "think_closed": false
       },
       {
         "fenced": true,
@@ -537,12 +656,14 @@
           "pooled": true
         },
         "score": 0.8,
-        "code": "from typing import Annotated, List, Optional\nfrom fastapi import FastAPI, HTTPException\nfrom pydantic import BaseModel\nfrom sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker\n\napp = FastAPI()\n\n# Connection pool configuration\nengine = create_async_engine(\"postgresql+asyncpg://user:password@localhost:5432/dbname\")\nAsyncSession = async_sessionmaker(engine, class_=Asyn",
-        "task": "products",
+        "code": "from typing import List, Optional, Tuple\nfrom fastapi import FastAPI, Query\nfrom sqlalchemy import create_engine, text\nfrom sqlalchemy.pool import QueuePool\n\napp = FastAPI()\n\nengine = create_engine(\n    \"postgresql://user:password@localhost:5432/dbname\",\n    poolclass=QueuePool,\n    pool_size=10,\n    max_overflow=20,\n)\n\n@app.get(\"/search\")\nasync def search(\n    q: str = Query(..., min_length=1),\n ",
+        "task": "tickets",
         "step": 2,
         "arm": "C self",
-        "sec": 8.06049918300414,
-        "swap_ms": 17.26377299928572
+        "sec": 11.047713402003865,
+        "swap_ms": 19.23158000863623,
+        "emitted": 257,
+        "think_closed": false
       },
       {
         "fenced": true,
@@ -550,113 +671,17 @@
         "checks": {
           "creates_index": true,
           "ann_method": true,
-          "cosine_opclass": false
-        },
-        "score": 0.75,
-        "code": "CREATE INDEX IF NOT EXISTS idx_tickets_embedding ON tickets USING hnsw (embedding vector_l2_ops);",
-        "task": "tickets",
-        "step": 0,
-        "arm": "C self",
-        "sec": 1.149644678007462,
-        "swap_ms": 24.68960199621506
-      },
-      {
-        "fenced": true,
-        "parses": true,
-        "checks": {
-          "distance_operator": true,
-          "orders_by_distance": true,
-          "limits_ten": true
-        },
-        "score": 1.0,
-        "code": "SELECT id, subject, status, embedding\nFROM tickets\nORDER BY embedding <=> $1::vector LIMIT 10;",
-        "task": "tickets",
-        "step": 1,
-        "arm": "C self",
-        "sec": 1.153734057006659,
-        "swap_ms": 17.69668400811497
-      },
-      {
-        "fenced": true,
-        "parses": true,
-        "checks": {
-          "async_handler": true,
-          "route_decorator": true,
-          "annotated": true,
-          "pooled": true
-        },
-        "score": 1.0,
-        "code": "from typing import Annotated, AsyncGenerator, List, Optional\n\nfrom fastapi import FastAPI, HTTPException\nfrom pydantic import BaseModel\n\nfrom database import get_pool\n\napp = FastAPI()\n\n\nclass QueryRequest(BaseModel):\n    q: str\n\n\n@app.post(\"/search\")\nasync def search(query: QueryRequest) -> AsyncGenerator[List[dict], None]:\n    async with get_pool() as pool:\n        async with pool.acquire() as co",
-        "task": "tickets",
-        "step": 2,
-        "arm": "C self",
-        "sec": 7.832542550007929,
-        "swap_ms": 21.32411599450279
-      },
-      {
-        "fenced": true,
-        "parses": true,
-        "checks": {
-          "creates_index": true,
-          "ann_method": false,
-          "cosine_opclass": false
-        },
-        "score": 0.5,
-        "code": "CREATE INDEX IF NOT EXISTS idx_documents_embedding\nON documents (embedding vector_l2_ops);",
-        "task": "docs",
-        "step": 0,
-        "arm": "C self",
-        "sec": 0.821647339995252,
-        "swap_ms": 18.07513099629432
-      },
-      {
-        "fenced": true,
-        "parses": true,
-        "checks": {
-          "distance_operator": true,
-          "orders_by_distance": true,
-          "limits_ten": true
-        },
-        "score": 1.0,
-        "code": "SELECT\n    id,\n    body,\n    tenant_id\nFROM\n    documents\nORDER BY\n    embedding <=> $1\nLIMIT 10;",
-        "task": "docs",
-        "step": 1,
-        "arm": "C self",
-        "sec": 1.3826369599992177,
-        "swap_ms": 37.13156199955847
-      },
-      {
-        "fenced": true,
-        "parses": false,
-        "checks": {
-          "async_handler": true,
-          "route_decorator": true,
-          "annotated": false,
-          "pooled": true
-        },
-        "score": 0.6,
-        "code": "from typing import List, Optional\n\nfrom fastapi import FastAPI, Query\nfrom sqlalchemy import select\nfrom sqlalchemy.ext.asyncio import AsyncSession\nfrom sqlalchemy.pool import QueuePool\n\napp = FastAPI()\n\n# Configure the connection pool\nengine = None  # Assume this is configured elsewhere with QueuePool\n\n@app.get(\"/search\")\nasync def search_documents(\n    q: str = Query(..., min_length=1),\n    limi",
-        "task": "docs",
-        "step": 2,
-        "arm": "C self",
-        "sec": 6.681687785006943,
-        "swap_ms": 17.9023129894631
-      },
-      {
-        "fenced": true,
-        "parses": true,
-        "checks": {
-          "creates_index": true,
-          "ann_method": false,
           "cosine_opclass": true
         },
-        "score": 0.75,
-        "code": "CREATE INDEX IF NOT EXISTS idx_embedding_cosine\nON papers (embedding vector_cosine_ops);",
-        "task": "papers",
+        "score": 1.0,
+        "code": "CREATE INDEX documents_embedding_hnsw_idx\n    ON documents\n    USING hnsw (embedding vector_cosine_ops)\n    WITH (m = 16, ef_construction = 64);",
+        "task": "docs",
         "step": 0,
         "arm": "C self",
-        "sec": 0.8904302849987289,
-        "swap_ms": 17.389946995535865
+        "sec": 2.2688443400111282,
+        "swap_ms": 21.780397990369238,
+        "emitted": 47,
+        "think_closed": false
       },
       {
         "fenced": true,
@@ -667,29 +692,33 @@
           "limits_ten": true
         },
         "score": 1.0,
-        "code": "SELECT id, abstract, year\nFROM papers\nORDER BY embedding <=> $1::vector LIMIT 10;",
-        "task": "papers",
+        "code": "SELECT id, body, embedding <=> $1 AS distance\nFROM documents\nORDER BY embedding <=> $1\nLIMIT 10;",
+        "task": "docs",
         "step": 1,
         "arm": "C self",
-        "sec": 1.088801792007871,
-        "swap_ms": 17.505555995739996
+        "sec": 1.231352048998815,
+        "swap_ms": 17.651254995143972,
+        "emitted": 32,
+        "think_closed": false
       },
       {
         "fenced": true,
-        "parses": false,
+        "parses": true,
         "checks": {
           "async_handler": true,
           "route_decorator": true,
           "annotated": false,
           "pooled": true
         },
-        "score": 0.6,
-        "code": "from typing import Annotated, AsyncGenerator, List, Optional\nfrom fastapi import FastAPI, HTTPException\nfrom fastapi.responses import StreamingResponse\nfrom sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker\nfrom sqlalchemy import select\n\napp = FastAPI()\n\n# Connection pool\nengine = create_async_engine(\"postgresql+asyncpg://user:pass@localhost/papers\")\nAsyncSession ",
-        "task": "papers",
+        "score": 0.8,
+        "code": "from typing import List, Optional, Tuple\nfrom fastapi import FastAPI, Query\nfrom sqlalchemy import create_engine, text\nfrom sqlalchemy.pool import QueuePool\n\napp = FastAPI()\n\nengine = create_engine(\n    \"postgresql://user:password@localhost:5432/db\",\n    poolclass=QueuePool,\n    pool_size=10,\n    max_overflow=20,\n)\n\n@app.get(\"/search\")\nasync def search_documents(\n    q: str = Query(..., min_length",
+        "task": "docs",
         "step": 2,
         "arm": "C self",
-        "sec": 8.316882479004562,
-        "swap_ms": 17.356774988002144
+        "sec": 10.219852711001295,
+        "swap_ms": 18.1289580068551,
+        "emitted": 268,
+        "think_closed": false
       },
       {
         "fenced": true,
@@ -697,15 +726,17 @@
         "checks": {
           "creates_index": true,
           "ann_method": true,
-          "cosine_opclass": false
+          "cosine_opclass": true
         },
-        "score": 0.75,
-        "code": "CREATE INDEX IF NOT EXISTS idx_embedding_cosine\nON embeddings.embedding\nUSING ivfflat (embedding vector_l2_ops);",
-        "task": "images",
+        "score": 1.0,
+        "code": "CREATE INDEX papers_embedding_hnsw_idx\n    ON papers\n    USING hnsw (embedding vector_cosine_ops)\n    WITH (m = 16, ef_construction = 64);",
+        "task": "papers",
         "step": 0,
         "arm": "C self",
-        "sec": 1.4673188779997872,
-        "swap_ms": 20.569107990013435
+        "sec": 1.849967526999535,
+        "swap_ms": 21.86940799583681,
+        "emitted": 47,
+        "think_closed": false
       },
       {
         "fenced": true,
@@ -716,12 +747,14 @@
           "limits_ten": true
         },
         "score": 1.0,
-        "code": "SELECT\n    id,\n    caption,\n    1 - (embedding <=> $1) AS distance\nFROM\n    embeddings.embedding\nORDER BY\n    embedding <=> $1\nLIMIT 10;",
-        "task": "images",
+        "code": "SELECT id, embedding <=> $1 AS distance\nFROM papers\nORDER BY embedding <=> $1\nLIMIT 10;",
+        "task": "papers",
         "step": 1,
         "arm": "C self",
-        "sec": 1.9670954020111822,
-        "swap_ms": 25.62749999924563
+        "sec": 1.1892454599874327,
+        "swap_ms": 20.71611100109294,
+        "emitted": 30,
+        "think_closed": false
       },
       {
         "fenced": true,
@@ -733,12 +766,69 @@
           "pooled": true
         },
         "score": 0.6,
-        "code": "from typing import List, Optional, Tuple\n\nfrom fastapi import FastAPI, Query\nfrom sqlalchemy import select\nfrom sqlalchemy.ext.asyncio import AsyncSession\nfrom sqlalchemy.pool import QueuePool\n\napp = FastAPI()\n\n# Configure the connection pool\nengine = None  # Assume this is configured elsewhere with QueuePool\n\n@app.get(\"/search\")\nasync def search(\n    q: str = Query(..., min_length=1),\n    limit: ",
+        "code": "from typing import List, Optional, Tuple\nfrom fastapi import FastAPI, Query\nfrom sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker\nfrom sqlalchemy import select\n\napp = FastAPI()\n\n# Connection pool configuration\nengine = create_async_engine(\"postgresql+asyncpg://user:password@localhost:5432/dbname\", pool_size=10)\nAsyncSession = async_sessionmaker(engine, class_=Asy",
+        "task": "papers",
+        "step": 2,
+        "arm": "C self",
+        "sec": 8.150031612007297,
+        "swap_ms": 23.68966799986083,
+        "emitted": 210,
+        "think_closed": false
+      },
+      {
+        "fenced": true,
+        "parses": true,
+        "checks": {
+          "creates_index": true,
+          "ann_method": true,
+          "cosine_opclass": true
+        },
+        "score": 1.0,
+        "code": "CREATE INDEX images_embedding_hnsw_idx\n    ON images\n    USING hnsw (embedding vector_cosine_ops)\n    WITH (m = 16, ef_construction = 64);",
+        "task": "images",
+        "step": 0,
+        "arm": "C self",
+        "sec": 2.287768798007164,
+        "swap_ms": 26.74467100587208,
+        "emitted": 47,
+        "think_closed": false
+      },
+      {
+        "fenced": true,
+        "parses": true,
+        "checks": {
+          "distance_operator": true,
+          "orders_by_distance": true,
+          "limits_ten": true
+        },
+        "score": 1.0,
+        "code": "SELECT id, embedding <=> $1 AS distance\nFROM images\nORDER BY embedding <=> $1\nLIMIT 10;",
+        "task": "images",
+        "step": 1,
+        "arm": "C self",
+        "sec": 1.321469910995802,
+        "swap_ms": 17.97164599702228,
+        "emitted": 30,
+        "think_closed": false
+      },
+      {
+        "fenced": true,
+        "parses": true,
+        "checks": {
+          "async_handler": true,
+          "route_decorator": true,
+          "annotated": false,
+          "pooled": true
+        },
+        "score": 0.8,
+        "code": "from typing import List, Optional, Tuple\nfrom fastapi import FastAPI, Query\nfrom sqlalchemy import create_engine, text\nfrom sqlalchemy.pool import QueuePool\n\napp = FastAPI()\n\n# Create an engine with a connection pool\nengine = create_engine(\n    \"postgresql://user:password@localhost:5432/dbname\",\n    poolclass=QueuePool,\n    pool_size=10,\n    max_overflow=20,\n)\n\n@app.get(\"/search\")\nasync def search",
         "task": "images",
         "step": 2,
         "arm": "C self",
-        "sec": 6.970691237002029,
-        "swap_ms": 17.61021200218238
+        "sec": 10.963477329001762,
+        "swap_ms": 31.765348991029896,
+        "emitted": 265,
+        "think_closed": false
       }
     ]
   },

@@ -29,6 +29,9 @@ Decision rule, fixed before running:
     B > A ~= C   -> experts work, ROUTING is the hard problem
     C > A        -> build everything
 
+Outcome: v1 hit the first branch, v2 hits the third in DIRECTION but not with
+significance -- see the re-run below.
+
 ## Result (5 tasks, 15 paired steps)
 
 | arm | score | vs A | parse rate | routing acc | mean swap |
@@ -67,6 +70,37 @@ exact failure §9 diagnosed for the financial expert, whose applied-examples
 rebuild moved it +0.00pp → +35.00pp. postgresql scores +27.92pp on its own eval
 (§16) because that eval is recitation-shaped too, matching its training
 distribution.
+
+## RE-RUN after rebuilding the postgresql corpus — the gate FLIPPED
+
+`scripts/build_postgresql_applied_examples.py` replaced the recitation corpus
+(14.8% applied, 10.9% author biography) with 741 records at 54.1% applied, every
+generated SQL answer verified by `sqlglot`. Retrained 4:18, loss 1.527 -> 0.804.
+
+Same instrument, same prompts, only the adapter changed:
+
+| arm | v1 adapter | v2 adapter |
+| :--- | ---: | ---: |
+| A base | 0.867 | 0.867 (identical — clean control) |
+| B oracle | 0.790 (**−0.077**) | **0.907 (+0.040)** |
+| C self | 0.790 (−0.077) | **0.907 (+0.040)** |
+| parse rate | 0.800 | **0.867** |
+
+The pgvector regression is **gone**, and this part is categorical, not noise —
+consistent across all 15 steps:
+
+| check | base | v1 expert | v2 expert |
+| :--- | ---: | ---: | ---: |
+| `ann_method` | 1.000 | 0.400 | **1.000** |
+| `cosine_opclass` | 1.000 | 0.200 | **1.000** |
+
+⚠️ **The net win is NOT significant.** Paired bootstrap: mean **+0.0400**, 95% CI
+**[−0.0133, +0.1067]**. 3 steps improved, 1 regressed, **11 tied**.
+
+The blocker is a **CEILING EFFECT**: base already scores 1.000 on 8 of the 10
+checks, so there is almost no headroom for an expert to demonstrate value. Before
+this gate can settle the blueprint, the tasks need to be hard enough that base
+does NOT saturate them.
 
 ## ⚠️ Instrument note — the first run was invalid
 

@@ -58,9 +58,14 @@ from gnn_experiment.novel_peft import (  # noqa: E402
 )
 
 MODEL = "Qwen/Qwen3.5-4B"
-ADAPTERS = {"postgresql": "results/adapters/m2_postgresql_r8a128",
+ADAPTERS = {"postgresql": os.environ.get("PG_ADAPTER",
+                                        "results/adapters/m2_postgresql_r8a128"),
             "astral": "results/adapters/m2_astral_r8a128"}
 MAX_NEW = int(os.environ.get("MAX_NEW", "384"))
+# THINKING=1 gives the model a test-time-compute runway. The gate's first run used
+# THINKING=0 for tractability; all arms shared it, so the A/B/C comparison was fair,
+# but it could not see whether EXPERTS benefit from deliberation differentially.
+THINKING = os.environ.get("THINKING", "0") == "1"
 MAX_SEQ = 4096
 
 # ---------------------------------------------------------------- the tasks
@@ -196,7 +201,7 @@ def gen(dec, tok, messages, engine, expert, max_new=MAX_NEW):
     # It is also the right product choice: an agent that spends 1000+ tokens
     # deliberating per tool call is unusable whatever the adapter quality.
     text = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True,
-                                   enable_thinking=False)
+                                   enable_thinking=THINKING)
     ids = tok(text, return_tensors="pt").input_ids.to(dec.model.device)
     if ids.shape[1] + max_new >= MAX_SEQ:
         ids = ids[:, -(MAX_SEQ - max_new - 8):]
@@ -205,9 +210,12 @@ def gen(dec, tok, messages, engine, expert, max_new=MAX_NEW):
                                                  max_new_tokens=max_new)
     dt = time.perf_counter() - t
     raw = tok.decode(out, skip_special_tokens=True)
-    if "</think>" in raw:
-        raw = raw.split("</think>", 1)[1]
-    return raw.strip(), dt, swap_ms
+    closed = "</think>" in raw
+    # An unclosed <think> means the runway was too short: there IS no final answer,
+    # only deliberation. Counting that as an empty answer is the honest scoring --
+    # it is exactly what a caller would receive.
+    body = raw.split("</think>", 1)[1] if closed else ("" if THINKING else raw)
+    return body.strip(), dt, swap_ms, {"emitted": len(out), "think_closed": closed}
 
 
 ROUTE_Q = ("Which specialist should handle the next request: answer with exactly one "
@@ -215,8 +223,8 @@ ROUTE_Q = ("Which specialist should handle the next request: answer with exactly
 
 
 def route(dec, tok, prompt, engine):
-    txt, _, _ = gen(dec, tok, [{"role": "user", "content": ROUTE_Q.format(p=prompt)}],
-                    engine, None, max_new=8)
+    txt, _, _, _ = gen(dec, tok, [{"role": "user", "content": ROUTE_Q.format(p=prompt)}],
+                    engine, None, max_new=8 if not THINKING else 256)
     low = txt.lower()
     if "database" in low or "sql" in low or "postgres" in low:
         return "postgresql"
@@ -264,18 +272,20 @@ def main():
                                    "true": st["domain"], "picked": picked})
                     exp = experts.get(picked) if picked else None
                 msgs.append({"role": "user", "content": st["prompt"]})
-                txt, dt, swap_ms = gen(dec, tok, msgs, engine, exp)
+                txt, dt, swap_ms, meta = gen(dec, tok, msgs, engine, exp)
                 msgs.append({"role": "assistant", "content": txt})
                 sc = score_step(txt, st)
                 sc.update({"task": task["id"], "step": si, "arm": arm,
-                           "sec": dt, "swap_ms": swap_ms})
+                           "sec": dt, "swap_ms": swap_ms, **meta})
                 per_step.append(sc)
                 swaps[arm].append(swap_ms)
             results[arm].extend(per_step)
             m = sum(s["score"] for s in per_step) / len(per_step)
             stage(f"  {task['id']:9s} {arm:9s} score={m:.3f} "
                   f"parses={sum(s['parses'] for s in per_step)}/3 "
-                  f"fenced={sum(s['fenced'] for s in per_step)}/3")
+                  f"fenced={sum(s['fenced'] for s in per_step)}/3 "
+                  f"closed={sum(s['think_closed'] for s in per_step)}/3 "
+                  f"toks={sum(s['emitted'] for s in per_step)}")
 
     stage("=" * 78)
     base_mean = None
@@ -287,8 +297,11 @@ def main():
         if base_mean is None:
             base_mean = mean
         fen = sum(s["fenced"] for s in rs) / len(rs)
+        cl = sum(s["think_closed"] for s in rs) / len(rs)
+        et = sum(s["emitted"] for s in rs) / len(rs)
         stage(f"  {arm:9s} score={mean:.3f} ({mean-base_mean:+.3f} vs A)  "
-              f"parse_rate={parse:.3f}  fenced={fen:.3f}  mean_swap={sw:.1f} ms")
+              f"parse_rate={parse:.3f}  fenced={fen:.3f}  think_closed={cl:.3f}  "
+              f"mean_toks={et:.0f}  mean_swap={sw:.1f} ms")
     if routes:
         acc = sum(r["picked"] == r["true"] for r in routes) / len(routes)
         stage(f"  routing accuracy (arm C): {acc:.3f} over {len(routes)} decisions")
@@ -306,7 +319,8 @@ def main():
             row.append(sum(vals) / len(vals) if vals else float("nan"))
         stage(f"  {k:22s} " + "  ".join(f"{v:9.3f}" for v in row))
 
-    out = REPO_ROOT / "results/handoff_gate.json"
+    out = REPO_ROOT / ("results/handoff_gate_thinking.json" if THINKING
+                       else "results/handoff_gate.json")
     out.write_text(json.dumps({"results": results, "routes": routes}, indent=2, default=str))
     stage(f"wrote {out}")
     stage("ALL DONE")

@@ -1587,3 +1587,68 @@ same reason — the CPU is blocked on the GPU anyway.
 layer gives up 7%, and the decoder is at the hardware's graph-replay ceiling.
 
 `benchmarks/runtime/performance/serving_path/`
+
+---
+
+## §31 — Expert routing: the corpus was the defect, not the routing. Gate flipped, but the benchmark now saturates.
+
+**Status: postgresql corpus REBUILT and the regression FIXED. Net win over base is
+positive but NOT significant — the gate has a ceiling problem.**
+
+### The gate
+
+Three arms on identical 3-step cross-domain agent conversations, scored
+objectively (SQL parses as Postgres via `sqlglot`, Python via `ast.parse`) with a
+pre-registered rubric audited for giveaways. Decision rule fixed in advance.
+
+**Routing was never the problem: 15/15 correct, and self-routing == oracle in
+both runs.** Pillar-1 plumbing works.
+
+### The defect was the training data
+
+`data/postgresql/training_data.jsonl`, 411 records:
+
+| shape | share |
+| :--- | ---: |
+| about-style ("What is...", "How does...") | **85.2%** |
+| write-style ("Write...", "Generate...") | 14.8% |
+| book/author biography | **10.9%** |
+
+Not a coverage gap — it mentions hnsw/ivfflat/pgvector **205 times**. It is
+book-derived recitation that teaches talking about Postgres, never writing it,
+exactly as §9 found for financial. Records like *"What is Marc Linster's
+background?"* are author biography in a database expert's corpus.
+
+### The rebuild and the result
+
+`scripts/build_postgresql_applied_examples.py` -> 741 records, **54.1% applied**,
+**342/342 generated SQL answers verified by sqlglot** (a gate the financial
+rebuild could not have). Diversity asserted: 30 phrasings, 22 schemas, no family
+above 11.1%. Retrained 4:18, loss 1.527 -> 0.804.
+
+| arm | v1 | v2 |
+| :--- | ---: | ---: |
+| A base | 0.867 | 0.867 |
+| B oracle | 0.790 (−0.077) | **0.907 (+0.040)** |
+| C self | 0.790 (−0.077) | **0.907 (+0.040)** |
+
+`ann_method` 0.400 -> **1.000**, `cosine_opclass` 0.200 -> **1.000**. That part is
+categorical and consistent across all 15 steps.
+
+⚠️ **The net advantage is not significant**: 95% CI **[−0.0133, +0.1067]**, with
+**11 of 15 steps tied** because base already scores 1.000 on 8 of 10 checks.
+
+**Next step is the benchmark, not the model.** The tasks must be hard enough that
+base does not saturate them, or the gate cannot answer the blueprint's question
+however good the experts get.
+
+### Also settled: thinking mode is unusable on this stack
+
+Qwen3.5 never closes `</think>` here — measured at 512, 1024, 2048 and **6144**
+tokens. It is a degenerate loop ("Wait, I should check X... Yes." repeated), not
+test-time compute: **12-gram repetition 0.636 greedy**, and **0.410 under Qwen's
+own recommended temp 0.6 / top_p 0.95**. No token runway fixes it and sampling
+only softens it. `enable_thinking=False` is required, and our decoder is
+greedy-only anyway.
+
+`benchmarks/factory/agentic/handoff_gate/`, `scripts/build_postgresql_applied_examples.py`
