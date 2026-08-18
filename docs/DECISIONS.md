@@ -1734,3 +1734,73 @@ needs. The right instrument for choosing alpha is §31's held-out benchmark.
 demonstrated one. It may only improve answer quality. §31's gate decides.
 
 `results/adapters/m2_postgresql_r8a128_v3`
+
+---
+
+## §33 — Completion-only loss recovers HALF the held-out regression. Narrowing is real but was ~50% self-inflicted.
+
+**Status: MEASURED. The training defect was a major cause, not the only cause.**
+
+Both experts retrained under §32's completion-only loss (postgresql v3: 48.4% of
+batch masked; astral v3: 40.8%), then re-run through §31's held-out benchmark
+unchanged.
+
+| arm | v2 (prompt loss) | v3 (completion-only) |
+| :--- | ---: | ---: |
+| A base | 0.4667 | 0.4667 (identical — deterministic control) |
+| B oracle | 0.2333 | **0.3444** |
+| C self | 0.2333 | 0.3444 |
+| edge vs base | **−0.2333** | **−0.1222** |
+| 95% CI | [−0.3556, −0.1111] | [−0.2556, −0.0000] |
+
+**Half the regression was the trainer, not the method.** The ~48% recovery
+matches the ~48% of gradient that had been spent on prompt text — suggestive, not
+proof, but the magnitudes line up.
+
+### Per held-out construct
+
+| construct | base | v2 | v3 |
+| :--- | ---: | ---: | ---: |
+| `LATERAL` | 0.000 | 0.000 | **0.333** (beats base) |
+| `LEAD` | 0.500 | 0.000 | **0.500** (tied) |
+| `FILTER (WHERE)` | 0.250 | 0.000 | **0.250** (tied) |
+| `__slots__` | 1.000 | 0.000 | 0.667 |
+| `functools.partial` | 1.000 | 0.000 | 0.333 |
+| `DISTINCT ON` | 0.750 | 0.000 | 0.250 |
+| `Protocol` | 1.000 | 1.000 | 0.667 (regressed) |
+| `percentile_cont` | 0.500 | 1.000 | 0.500 (regressed) |
+
+### What still stands, and what it implies
+
+Experts remain BELOW base on held-out machinery, with the CI upper bound at
+exactly −0.0000 — marginal, not robust. So narrowing is real and only about half
+of it was the loss defect. Remaining suspects, in order:
+
+1. **alpha = 128 at r=8 (scaling 16)** — untested against capability retention
+2. **no retention/replay mixing** — the Factory has no general-data stage at all
+
+### ⚠️ Consequence for previously REJECTED work
+
+A defect worth half the held-out regression could have flipped any marginal
+adapter-training result. Rejections that trained adapters under the defective
+loss are now **suspect and cheap to re-test (~4-5 min each)**:
+
+| rejection | why suspect |
+| :--- | :--- |
+| **§5 domain-adapted MTP drafting** | verdict was "adapters LOWER tau, a draft head must AGREE with its backbone". An adapter spending ~half its gradient learning question text is exactly an adapter that disagrees with its backbone. **The measurement and the defect are the same phenomenon.** Highest priority. |
+| **§2 PiSSA / OLoRA / SVD init** | measured inert at matched alpha; an INITIALISATION advantage is what halved, diluted gradient would most easily mask |
+| **§4 adapter stacking** | ast+fin −10.96pp interference, measured on adapters each wasting ~half their capacity on question format |
+| **§13 orthogonalisation penalty** | penalised a subspace that was partly question-generation directions |
+| 2-stage identity-Kronecker (+DoRA) | both arms shared the defect, so the relative call is more robust — mild |
+
+**NOT affected** (timing/architecture, adapter-independent): AITER operators,
+zero-copy boundary, hybrid radix caching (§11), ROCm kernel router, fused
+non-linear ops, in-place swap kernel, APSP router and continuous batching (§6),
+multi-token verify loop and native MTP engine (§26), RoPE/GDN sizing (§14), and
+the 0.8B drafter (§27 — its verdict was depth-bound cost arithmetic).
+
+§3 (shared-basis/VeRA) weakly SURVIVES: if half of every adapter encoded
+question-format, which is shared across corpora, overlap should have been
+elevated; it measured near chance (1.10–1.28x).
+
+`results/adapters/m2_postgresql_r8a128_v3`, `results/adapters/m2_astral_r8a128_v3`
