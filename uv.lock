@@ -925,9 +925,13 @@ dependencies = [
     { name = "matplotlib" },
     { name = "pandas" },
     { name = "peft" },
+    { name = "pgvector" },
     { name = "protobuf" },
+    { name = "psycopg" },
+    { name = "py-pglite", extra = ["extensions"] },
     { name = "pyyaml" },
     { name = "sentencepiece" },
+    { name = "sqlglot" },
     { name = "torch" },
     { name = "torchvision" },
     { name = "transformers" },
@@ -959,9 +963,13 @@ requires-dist = [
     { name = "matplotlib", specifier = ">=3.11.1" },
     { name = "pandas", specifier = ">=2.0,<3" },
     { name = "peft", specifier = ">=0.20.0" },
+    { name = "pgvector", specifier = ">=0.5.0" },
     { name = "protobuf", specifier = ">=6.31.1,<7.0.0" },
+    { name = "psycopg", specifier = ">=3.3.4" },
+    { name = "py-pglite", extras = ["extensions"], specifier = ">=0.5.3" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "sentencepiece", specifier = ">=0.2.2" },
+    { name = "sqlglot", specifier = ">=30.17.0" },
     { name = "torch", specifier = ">=2.13.0", index = "https://download.pytorch.org/whl/rocm7.2" },
     { name = "torchvision", specifier = ">=0.28.0", index = "https://download.pytorch.org/whl/rocm7.2" },
     { name = "transformers", specifier = ">=5.14.1" },
@@ -2253,6 +2261,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pgvector"
+version = "0.5.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a7/ec/6eb80aebc728200f95229219882994c1b0585b956ca47da5edb9d062627a/pgvector-0.5.0.tar.gz", hash = "sha256:07a9dcf735696879406983afc6eba9a787cef7c0cf6c367ca1a5779f036dee74", size = 35170, upload-time = "2026-07-06T18:27:27.767Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5c/e4/a5573f2c579ca9ad133293bfb624148ba0893674ca4a6eeec85ced9a6a09/pgvector-0.5.0-py3-none-any.whl", hash = "sha256:fedc9800894e6da2be51358d7b7c574bf34f247ca741a5a09513622135f5964f", size = 30958, upload-time = "2026-07-06T18:27:26.797Z" },
+]
+
+[[package]]
 name = "pillow"
 version = "12.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2394,12 +2411,39 @@ wheels = [
 ]
 
 [[package]]
+name = "psycopg"
+version = "3.3.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/db/2f/cb91e5502ec9de1de6f1b76cfbf69531932725361168bb06963620c77e2e/psycopg-3.3.4.tar.gz", hash = "sha256:e21207764952cff81b6b8bdacad9a3939f2793367fdac2987b3aac36a651b5bc", size = 165799, upload-time = "2026-05-01T23:31:55.179Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5c/e0/7b3dee031daae7743609ce3c746565d4a3ed7c2c186479eb48e34e838c64/psycopg-3.3.4-py3-none-any.whl", hash = "sha256:b6bbc25ccf05c8fad3b061d9db2ef0909a555171b84b07f29458a447253d679a", size = 213001, upload-time = "2026-05-01T23:20:50.816Z" },
+]
+
+[[package]]
 name = "py-cpuinfo"
 version = "9.0.0"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/37/a8/d832f7293ebb21690860d2e01d8115e5ff6f2ae8bbdc953f0eb0fa4bd2c7/py-cpuinfo-9.0.0.tar.gz", hash = "sha256:3cdbbf3fac90dc6f118bfd64384f309edeadd902d7c8fb17f02ffa1fc3f49690", size = 104716, upload-time = "2022-10-25T20:38:06.303Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e0/a9/023730ba63db1e494a271cb018dcd361bd2c917ba7004c3e49d5daf795a2/py_cpuinfo-9.0.0-py3-none-any.whl", hash = "sha256:859625bc251f64e21f077d099d4162689c762b5d6a4c3c97553d56241c9674d5", size = 22335, upload-time = "2022-10-25T20:38:27.636Z" },
+]
+
+[[package]]
+name = "py-pglite"
+version = "0.5.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "psutil" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2a/12/fb2a0b898f0f34b4e98ea2a2158c1e91afbdfb2b4717a77d7840ae44fb9d/py_pglite-0.5.3.tar.gz", hash = "sha256:58c694602b48fa0562588d7d7c70dd05cc75d048b365ddf3e34d76833598194d", size = 32903, upload-time = "2025-09-17T04:03:51.561Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1b/e8/9265f8ffced326468dac06919a1ca1cc7cbf8c4267a4547cddf7ef887602/py_pglite-0.5.3-py3-none-any.whl", hash = "sha256:c0526d3f69de34bfab2073be43f83b5f023b1856af9623d491bda0de5bef3475", size = 42375, upload-time = "2025-09-17T04:03:49.892Z" },
+]
+
+[package.optional-dependencies]
+extensions = [
+    { name = "numpy" },
+    { name = "pgvector" },
 ]
 
 [[package]]
@@ -3235,6 +3279,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/69/99/a6ca3beb3ccacb41fb3321d8a60e5566f9e6467601ef8eba6a17e1b89778/soupsieve-2.9.2.tar.gz", hash = "sha256:4a55d8cf158a9c2e587fa4922f1bbb91d68ac829e2d6f25403a85747c71daf74", size = 122445, upload-time = "2026-08-07T00:57:24.801Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/eb/dc/ad025c1ee131eba60c69f4dd5779b18fcf1e6b21a343e2162a84d5d133c7/soupsieve-2.9.2-py3-none-any.whl", hash = "sha256:8089a26fd974ca7a1f30276d3d8492ab266ab15af581642dfe8aa162e0c1c823", size = 37370, upload-time = "2026-08-07T00:57:23.524Z" },
+]
+
+[[package]]
+name = "sqlglot"
+version = "30.17.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/56/d4/da49abcc81beebbb25f29ddf87f2980c63c949569d7f2da40c06d95fa415/sqlglot-30.17.0.tar.gz", hash = "sha256:2d6b8def93304fa300f4d20f48e3909e7f436fda56ca1fafd8975f6c561ef62c", size = 5999019, upload-time = "2026-08-12T19:36:50.587Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f3/bc/2a07cef49046e6cf5d1a8b1de553aaef8491b4170dbfe254c8687c764408/sqlglot-30.17.0-py3-none-any.whl", hash = "sha256:84435ac283a60173da31b5fd7d11a725037a1c3fd6ed1e21fb065de74ddb579f", size = 741795, upload-time = "2026-08-12T19:36:48.699Z" },
 ]
 
 [[package]]

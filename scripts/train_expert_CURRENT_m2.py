@@ -82,8 +82,15 @@ def load_dataset_records(path: Path):
     records = []
     with open(path) as f:
         for line in f:
-            if line.strip():
-                records.append({"text": json.loads(line)["text"]})
+            if not line.strip():
+                continue
+            d = json.loads(line)
+            if "text" in d:
+                records.append({"text": d["text"]})
+            elif "messages" in d:
+                u = d["messages"][0]["content"]
+                a = d["messages"][1]["content"]
+                records.append({"text": f"### Question:\n{u}\n\n### Answer:\n{a}"})
     return records
 
 
