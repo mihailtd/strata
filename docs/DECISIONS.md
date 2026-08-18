@@ -1491,3 +1491,64 @@ Net 0.927x and 0.706x. The tau loss costs several times the ~5 ms saved.
 and both were wrong; a third guess is not a plan.
 
 `benchmarks/runtime/speculative/step_budget/`
+
+---
+
+## §29 — Graphed draft head: bit-exact in isolation, diverges in the loop. PARKED with a known-good starting point.
+
+**Status: NOT ACHIEVED. Four hypotheses tested and refuted; the single-step
+formulation is verified correct and preserved so a fifth attempt starts warm.**
+
+§28 says the only thing that pays here is removing kernel launches, and
+`head_draft` is the most compressible target: ~20-25 ms/step for FOUR
+single-layer forwards against 34 ms for a full 32-layer graph replay.
+
+### The one number worth keeping
+
+Per-graph-replay cost is a hard floor, stable across three attempts:
+**3.94 / 3.86 / 3.83 ms**. Four replays cost ~15.4 ms, so an **unrolled K-step
+graph** (one replay for all K drafts) should land near **4 ms** — a ~4x cut on
+that phase. That is measured, not projected, and it is the case for unrolling.
+
+### Verified correct
+
+`_run_layer` hardcodes `attention_mask=None`. Correct over a tight DynamicCache,
+**wrong** over a 2048-slot StaticCache — it attends to unwritten slots
+(max|dlogit| **0.40625**). With an explicit additive mask the StaticCache path is
+**bit-exact (0.00000, argmax 4/4)**, and so is the captured graph, using a
+shape-(1,) position buffer, a materialised mask, and §26 counter pinning. The
+probe carries a numeric gate that must pass before generation runs, and it passes.
+
+### Not solved
+
+Across a generation tau collapses **1.803 -> 0.910** (0.694x) despite every step
+being exact in isolation. Lockstep localises it precisely:
+
+```
+step   pos  hfilled  prev_nacc  stale_tail  max|dlogit|
+   0    53       52         -1           0      0.00000
+   1    58       57          4          -1     14.78906
+```
+
+Immediate, large, on the **first full accept** — the one path where `new_h` comes
+from the verify replay rather than the commit re-forward. `stale_tail=-1` rules
+out live rejected speculative entries.
+
+### Refuted — do not repeat
+
+1. shared CUDA graph memory pool (private pools changed nothing)
+2. attending to unwritten StaticCache slots (true in isolation; masking made the
+   generation **worse**)
+3. graph wiring — 0-dim position scalar / in-graph mask (rewired to the bit-exact
+   form, gate passes, generation unchanged)
+4. stale speculative cache entries (`stale_tail=-1` at the divergence)
+
+### Judgement
+
+Five hypotheses in one session, four measured wrong, is the signal to stop
+guessing. The next attempt should **diff the head's K/V position-by-position at
+lockstep step 1**, not reason about it. Note also that tau is worth several times
+more than the milliseconds at stake: a 4 ms/step saving against a tau of 1.803 is
+worth ~4%, while getting tau wrong costs 30%.
+
+`benchmarks/runtime/speculative/graphed_draft_head/`
