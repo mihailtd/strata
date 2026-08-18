@@ -1379,3 +1379,68 @@ counter never overruns — so the benchmark measured the one regime where a brok
 unprofitable feature looks like a win.
 
 `benchmarks/runtime/speculative/cache_length_counter/`
+
+---
+
+## §27 — RETIRED: Qwen3.5-0.8B as a draft model. It is depth-bound, and it isolates the real bottleneck
+
+**Status: CLOSED. Do not fine-tune, distil, or re-tune a 0.8B drafter on this hardware.**
+
+`CURRENT.md` recorded this as FAILED, but only via a library refusal
+(`assisted generation is not supported with stateful models`), which our own
+snapshot/restore loop no longer hits. Reopened and measured properly.
+
+**Compatibility is fine.** Byte-identical tokenizer, `vocab_size=248320` both
+sides, 14.4 GB together under the 22 GB cap.
+
+**Acceptance is good.** tau = **2.323** with the astral expert folded (2.089
+base), alpha chain 0.776 / 0.630 / 0.505 / 0.411 — far better than the shipped
+MTP head's 1.65. The folded target is *easier* to draft for, not harder, which
+runs opposite to §23's matched-adapter reasoning.
+
+**Cost kills it.** Break-even tau is 2.64; we have 2.323. **Projected 0.913x.**
+K=3 -> 0.917x, K=2 -> 0.888x, K=6 -> 0.857x. Nothing rescues it.
+
+The reason is physics, not tuning: the 0.8B has **5.3x fewer parameters but only
+2.14x lower latency** (16.56 vs 35.51 ms/token, both graph-captured), because
+batch-1 decode here is **depth-bound** and the 0.8B is 24 layers against the 4B's
+32 — only 25% fewer sequential steps. Too deep to be a drafter at any weight size.
+
+### What it isolated, which is the point
+
+| component | ms | units |
+| :--- | ---: | ---: |
+| baseline width-1 graph replay | 35.51 | 1.00 |
+| verify, width-5 graph replay | 31.27 | **0.88** |
+| **commit re-forward, width-3** | **31.78** | **0.89** |
+
+**The chunked verify is nearly free** — 0.88 units for 5 tokens, because graph
+replay makes width almost costless. The hybrid tax was never the verify. It is
+the **commit re-forward**: a full forward, ~25–40% of every speculative step,
+producing zero new tokens, existing only to recover the recurrent state after
+`n_acc+1` tokens.
+
+Everything else it appears to provide is already in the verify output: attention
+KV for the accepted prefix is causally correct and needs no rewrite (§25 rewinds
+a counter, §26 pins it), and the hidden state at `n_acc` is already returned.
+**Only the SSM state is missing.**
+
+### Modelled prize, and the caveat that matters
+
+With the commit re-forward at zero, the arithmetic inverts — the *cheap* MTP head
+gains most, because its drafting is nearly free (~15 ms/step vs the 0.8B's 66):
+
+| drafter | with commit | commit at 0 (upper bound) |
+| :--- | ---: | ---: |
+| 0.8B graphed | 0.913x | ~1.21x |
+| MTP head | 0.78x measured | ~2.0x |
+
+⚠️ **Commit-at-zero is an upper bound, not a plan.** Removing it is not free and
+not untried: **§18 built recurrent state replay and measured 1.008x.** §18
+predates bucketed graph capture (§25), so its replacement cost was 24 eager
+per-layer launches — the same depth/launch physics that killed the 0.8B above.
+Graph-capturing the state-replay path (one bucket per `n_acc`, as §25 does for
+widths) is the untried variable. That is the reason to re-measure, not a
+prediction that it will work.
+
+`benchmarks/runtime/speculative/draft_model_0_8b/`
