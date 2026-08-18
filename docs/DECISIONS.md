@@ -1552,3 +1552,38 @@ more than the milliseconds at stake: a 4 ms/step saving against a tau of 1.803 i
 worth ~4%, while getting tau wrong costs 30%.
 
 `benchmarks/runtime/speculative/graphed_draft_head/`
+
+---
+
+## §30 — The streaming/serving path costs ~0. Production runs at 93% of the decoder ceiling.
+
+**Status: REFUTED as a target, by measurement.**
+
+§28's "host-bound" finding made the streaming path an obvious suspect: per token
+the server does a GPU sync, a Python BPE decode, three nested pydantic
+constructions, a `model_dump()`, a `json.dumps()` and an event-loop tick.
+
+Measured, it is nothing. Serialisation tail **13.8 us/token = 0.04%** of a
+35.51 ms token (`tokenizer.decode` 2.70 us, construct+dump+json 11.15 us).
+
+| arm | tok/s | vs decoder |
+| :--- | ---: | ---: |
+| decoder, batch | 28.98 | 1.000x |
+| decoder, streaming | 29.39 | 1.014x |
+| decoder, stream + pydantic + json | 30.01 | 1.036x |
+| live server, non-streaming | 26.90 | **0.928x** |
+| live server, streaming | 25.76 | 0.889x |
+
+TTFT 46 ms cold (45.98 = expert swap), **0 ms** warm.
+
+### The distinction §28 did not make explicit
+
+**Host-bound here means GPU kernel-DISPATCH bound, not Python-application bound.**
+Graph replay costs 3.85 ms (1 layer) to 34 ms (32 layers); tokenizer + JSON work
+costs ~14 us. Three orders of magnitude apart. `.item()` per token is free for the
+same reason — the CPU is blocked on the GPU anyway.
+
+**Do not optimise the tokenizer, pydantic models, or SSE framing.** The serving
+layer gives up 7%, and the decoder is at the hardware's graph-replay ceiling.
+
+`benchmarks/runtime/performance/serving_path/`
