@@ -1444,3 +1444,50 @@ widths) is the untried variable. That is the reason to re-measure, not a
 prediction that it will work.
 
 `benchmarks/runtime/speculative/draft_model_0_8b/`
+
+---
+
+## §28 — This rig is kernel-LAUNCH bound, not work bound. Optimise launches, never arithmetic.
+
+**Status: a design law, measured four independent ways.**
+
+| change | work removed | speed gained |
+| :--- | :--- | ---: |
+| 0.8B drafter instead of the 4B (§27) | 5.3x fewer parameters | **2.14x** |
+| §18 recurrent state replay instead of a forward | a whole forward | **1.008x** |
+| incremental head_prefill instead of full rebuild | **180x** less work | **1.001x** |
+| graph-capturing head_draft | none — identical math | **-34% on that phase** |
+
+Only the last removes *launches* rather than *work*, and it is the only one that
+moves. The sharpest statement of it: `head_draft` costs **23.91 ms for four
+SINGLE-layer forwards** against **34 ms for a full 32-layer graph-replayed
+forward**. One layer costing 18% of a 32-layer model is essentially all overhead.
+
+This retro-explains three earlier results that were each written up as their own
+puzzle: §18's repair being eaten by "24 sequential Python-driven kernel launches",
+§27's 0.8B being depth-bound rather than bandwidth-bound, and §25's bucketed
+capture paying at all.
+
+### The speculative step budget, 99.8% accounted
+
+512 tokens, tau=1.803, step 118.00 ms, 23.71 tok/s: verify 34.34 | commit 27.16 |
+head_draft 23.91 | head_prefill 11.69 | accept_sync 8.24 | bookkeep 7.04 |
+snapshot 4.71 | cat_hids 0.66.
+
+**The commit re-forward is 23% of the step, not the bottleneck it looked like.**
+Removing it entirely yields ~1.10x, not the 1.36-1.64x a component-level model
+predicts, because 56.5 ms/step is not model compute. Any plan that targets it
+alone is sized wrong.
+
+### Attempted, not achieved
+
+Graph-capturing the draft head delivered its predicted speed (head_draft
+24.02 -> 15.74 ms, step 114.48 -> 101.77) but **not equivalence**: tau fell
+1.803 -> 1.311 without an attention mask and 1.803 -> **0.910** with a
+device-built one, so "attends to unwritten static-cache slots" is refuted.
+Net 0.927x and 0.706x. The tau loss costs several times the ~5 ms saved.
+
+**Do not retry until the mechanism is understood.** Two hypotheses were tested
+and both were wrong; a third guess is not a plan.
+
+`benchmarks/runtime/speculative/step_budget/`
