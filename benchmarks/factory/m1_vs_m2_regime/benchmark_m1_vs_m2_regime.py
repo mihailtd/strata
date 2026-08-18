@@ -121,7 +121,7 @@ def ci(a, b, rng, B=10000):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--model-name", default="Qwen/Qwen3.5-4B")
-    ap.add_argument("--max-new-tokens", type=int, default=192)
+    ap.add_argument("--max-new-tokens", type=int, default=2048)
     ap.add_argument("--vram-cap-gb", type=float, default=22.0)
     ap.add_argument("--out", default="results/m1_vs_m2_regime.json")
     args = ap.parse_args()

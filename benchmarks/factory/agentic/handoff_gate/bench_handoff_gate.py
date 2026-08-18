@@ -61,7 +61,7 @@ MODEL = "Qwen/Qwen3.5-4B"
 ADAPTERS = {"postgresql": os.environ.get("PG_ADAPTER",
                                         "results/adapters/m2_postgresql_r8a128"),
             "astral": "results/adapters/m2_astral_r8a128"}
-MAX_NEW = int(os.environ.get("MAX_NEW", "384"))
+MAX_NEW = int(os.environ.get("MAX_NEW", "2048"))
 # THINKING=1 gives the model a test-time-compute runway. The gate's first run used
 # THINKING=0 for tractability; all arms shared it, so the A/B/C comparison was fair,
 # but it could not see whether EXPERTS benefit from deliberation differentially.

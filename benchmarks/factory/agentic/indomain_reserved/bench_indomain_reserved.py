@@ -78,7 +78,7 @@ RESERVED = {
 }
 N_SQL = int(os.environ.get("N_SQL", "40"))
 N_PY = int(os.environ.get("N_PY", "30"))
-MAX_NEW = int(os.environ.get("MAX_NEW", "448"))
+MAX_NEW = int(os.environ.get("MAX_NEW", "2048"))
 MAX_SEQ = 4096
 BLOCK = re.compile(r"```(?:sql|python|py)?\s*(.*?)```", re.S | re.I)
 

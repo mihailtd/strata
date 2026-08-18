@@ -148,7 +148,7 @@ def score(model, tok, questions, terms, max_new_tokens):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--model-name", default="Qwen/Qwen3.5-4B")
-    ap.add_argument("--max-new-tokens", type=int, default=192)
+    ap.add_argument("--max-new-tokens", type=int, default=2048)
     ap.add_argument("--vram-cap-gb", type=float, default=22.0)
     ap.add_argument("--experts", choices=["idkron", "stock", "bf16", "v4"], default="v4",
                     help="v4 = clean completion v4 set (DEFAULT). bf16/stock/idkron are legacy.")

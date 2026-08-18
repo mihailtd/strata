@@ -260,7 +260,7 @@ def main():
     sft_config = SFTConfig(
         output_dir=str(out_dir / "checkpoints"),
         completion_only_loss=completion_only,
-        max_length=512,
+        max_length=2048,
         per_device_train_batch_size=2,
         gradient_accumulation_steps=2,
         learning_rate=args.lr,

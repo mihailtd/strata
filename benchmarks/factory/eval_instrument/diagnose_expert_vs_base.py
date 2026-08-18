@@ -83,7 +83,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--domain", default="financial_planning", choices=sorted(DOMAINS))
     ap.add_argument("--model-name", default="Qwen/Qwen3.5-4B")
-    ap.add_argument("--max-new-tokens", type=int, default=256)
+    ap.add_argument("--max-new-tokens", type=int, default=2048)
     ap.add_argument("--vram-cap-gb", type=float, default=22.0)
     ap.add_argument("--questions", default=None, help="override the domain's eval file")
     ap.add_argument("--adapter", default=None, help="override the domain's adapter dir")

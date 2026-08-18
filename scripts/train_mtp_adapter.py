@@ -168,7 +168,7 @@ def main():
         enc = tokenizer(
             texts,
             truncation=True,
-            max_length=512,
+            max_length=2048,
             padding="max_length",
             return_tensors="pt",
         )

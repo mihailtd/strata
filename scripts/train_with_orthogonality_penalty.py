@@ -226,7 +226,7 @@ def main() -> None:
         model=model,
         args=SFTConfig(
             output_dir=str(out_dir / "checkpoints"), dataset_text_field="text",
-            max_length=512, per_device_train_batch_size=2, gradient_accumulation_steps=2,
+            max_length=2048, per_device_train_batch_size=2, gradient_accumulation_steps=2,
             learning_rate=args.lr, max_steps=args.max_steps, logging_steps=1,
             lr_scheduler_type="cosine", warmup_ratio=0.03, bf16=True,
             save_strategy="no", report_to="none",

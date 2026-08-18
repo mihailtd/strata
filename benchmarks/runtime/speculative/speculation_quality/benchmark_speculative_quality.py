@@ -282,7 +282,7 @@ def first_divergence(a: list[int], b: list[int]) -> int | None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--model-name", default="Qwen/Qwen3.5-4B")
-    ap.add_argument("--max-new-tokens", type=int, default=256)
+    ap.add_argument("--max-new-tokens", type=int, default=2048)
     ap.add_argument("--k", type=int, default=4)
     ap.add_argument("--vram-cap-gb", type=float, default=22.0)
     ap.add_argument("--domains", nargs="+", default=list(DOMAINS))
