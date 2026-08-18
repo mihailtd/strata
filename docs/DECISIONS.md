@@ -1310,3 +1310,72 @@ sharing one `StaticCache` and one CUDA graph memory pool.
 W=2 branching (§22) and the matched draft head (§23) both raise τ and should
 compound with this, but neither has been re-measured on the bucketed path. The
 +8.5% is the bucketed path alone.
+
+---
+
+## §26 — The captured graph owned the cache length counter; §25's +8.5% is withdrawn
+
+**Status: RESOLVED (bug), and the feature is REJECTED for serving.**
+
+A long request pinned the GPU at 100% for 4h20m with no progress and ignored
+`SIGINT`. Short requests were fine, which is why §25 never saw it.
+
+### Root cause
+
+`transformers`' `StaticLayer` holds its KV write offset in a **device tensor** and
+advances it in place — and both lines are captured into the graph:
+
+```python
+cache_position = torch.arange(kv_length, device=self.device) + self.cumulative_length
+self.cumulative_length.add_(kv_length)
+```
+
+Every replay advances the counter by `width` regardless of the `cache_position`
+the caller supplies; the attention layers compute their own offset and never read
+ours. Autoregressive decode is immune (one replay, one token, reset per request).
+**Speculation replays overlapping ranges** — a K+1 verify then a commit at the
+same position — so the counter never rewinds. Committed tokens were written at
+drifting offsets from the first partial accept, and past `max_cache_len` the
+attention kernel indexed out of range and hung the GPU.
+
+Wedge points match `2048/width` exactly: ~350–400 replays at width 5, ~1950–2000
+at width 1, step 300–303 in real decode. Position, the shared graph memory pool,
+the SSM snapshot/restore, and decode itself were each ruled out by measurement
+before this was found.
+
+**Fix:** pin the counter to the true position before a replay, only when drifted
+(after a verify it already sits where the next verify wants it, so only rollback
+pays). 5,200 replays clean vs 350 before; 1,400-token decode completes; costs 4%.
+
+### Why the feature is still rejected
+
+512 tokens, chat-template prompt, one process:
+
+| arm | tok/s | vs graph | tau |
+| :--- | ---: | ---: | ---: |
+| graph autoregressive (server today) | 25.51 | 1.000x | — |
+| bucketed speculative, pinned (correct) | 19.91 | **0.781x** | 1.65 |
+| bucketed speculative, unpinned (wrong) | 20.78 | 0.815x | 1.68 |
+
+**22% slower than what the server already runs**, correct or broken. tau is 2.5
+over the first ~60 tokens of predictable thinking preamble and 1.65 over a
+real-length answer, where a 5-token verify costs more than it saves.
+
+### What this invalidates
+
+§25's **+8.5%** and the **+20.6%** live-server figure are **withdrawn**. Both were
+measured at 64 `max_tokens` — inside the inflated-tau window — *and* on a decoder
+writing KV at wrong offsets. §22 (W=2 branching) and §23 (matched draft head) were
+measured on the same corrupted path and are now **unverified**.
+
+`SPECULATIVE_DECODE` stays `0`. The decoder and its repro stay in-tree as evidence.
+
+### The methodology failure
+
+A 64-token cap manufactured the entire result. This repo's own benchmarks default
+to 192–1024 tokens; the serving benchmarks used 64 and the gap was never checked.
+Short generations sit entirely inside the preamble, where tau is inflated and the
+counter never overruns — so the benchmark measured the one regime where a broken,
+unprofitable feature looks like a win.
+
+`benchmarks/runtime/speculative/cache_length_counter/`

@@ -32,7 +32,6 @@ from typing import Any
 
 import torch
 from fastapi import FastAPI
-
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
@@ -426,10 +425,51 @@ async def lifespan(app: FastAPI):
     graph_decoder.capture(dummy_tokens)
     print(f"[IMB Server] CUDA Graph captured successfully. Capture Count = {graph_decoder.capture_count}")
 
+    # --- optional: bucketed graph speculative decode (docs/DECISIONS.md §25) ---
+    # +8.5% over this graph path, measured, by capturing one graph per speculative
+    # chunk width so graph replay and speculation compose instead of competing.
+    #
+    # OFF by default and CONTEXT-CAPPED on purpose. The StaticCache above costs
+    # ~11.8 GB at max_seq_len=32768; a second one that size does not fit beside an
+    # 8 GB model on 24 GB. The speculative cache is therefore capped separately,
+    # and requests that exceed it fall back to `graph_decoder`. Streaming always
+    # falls back -- the bucketed decoder has no token-stream path yet.
+    spec_decoder = None
+    if os.environ.get("SPECULATIVE_DECODE", "0") == "1":
+        spec_max_len = int(os.environ.get("SPECULATIVE_MAX_SEQ_LEN", "4096"))
+        spec_k = int(os.environ.get("SPECULATIVE_K", "4"))
+        try:
+            from gnn_experiment.bucketed_speculative import BucketedSpeculativeDecoder
+            from gnn_experiment.mtp_draft import Qwen35MTPDraftHead
+
+            print(f"[IMB Server] Speculative decode ON: capturing {spec_k + 1} chunk "
+                  f"graphs (widths 1..{spec_k + 1}, max_seq_len={spec_max_len})...")
+            draft_head = Qwen35MTPDraftHead(base_model, model_id)
+            spec_decoder = BucketedSpeculativeDecoder(
+                base_model, tokenizer, draft_head, k=spec_k,
+                max_seq_len=spec_max_len, device=base_model.device,
+            )
+            spec_decoder.capture(dummy_tokens)
+            print(f"[IMB Server] Speculative buckets captured: {sorted(spec_decoder.buckets)}")
+        except Exception as exc:  # capture is the risky part; never break boot over it
+            print(f"[IMB Server] Speculative capture FAILED ({type(exc).__name__}: {exc}); "
+                  "falling back to autoregressive graph decode.")
+            spec_decoder = None
+
     model_state["base_model"] = base_model
     model_state["tokenizer"] = tokenizer
     model_state["folding_engine"] = folding_engine
     model_state["graph_decoder"] = graph_decoder
+    stop_token_ids = set()
+    if tokenizer.eos_token_id is not None:
+        stop_token_ids.add(tokenizer.eos_token_id)
+    for _t in ("<|im_end|>", "<|endoftext|>"):
+        _tid = tokenizer.convert_tokens_to_ids(_t)
+        if isinstance(_tid, int) and _tid > 0:
+            stop_token_ids.add(_tid)
+    model_state["stop_token_ids"] = stop_token_ids
+    model_state["spec_decoder"] = spec_decoder
+    model_state["spec_max_len"] = int(os.environ.get("SPECULATIVE_MAX_SEQ_LEN", "4096"))
     model_state["expert_registry"] = expert_registry
     model_state["max_prompt_len"] = max_seq_len
     model_state["gpu_state"] = VRAMState.single("financial_planning")  # matches final activate above
@@ -610,14 +650,38 @@ async def _execute_single_request(qr: QueuedRequest) -> Any:
 
     # Non-streaming: execute synchronously under lock
     _record_transition(target_state)
+    spec_decoder = model_state.get("spec_decoder")
+    spec_max = model_state.get("spec_max_len", 0)
+    # Speculation only where its capped cache can hold the whole turn; otherwise
+    # the autoregressive graph path, which owns the full max_seq_len cache.
+    use_spec = (
+        spec_decoder is not None
+        and prompt_tokens.shape[1] + max_new_tokens < spec_max
+    )
     async with engine_lock:
-        output_tokens, elapsed, tok_s, swap_ms = await asyncio.to_thread(
-            graph_decoder.generate_with_graph,
-            prompt_tokens,
-            engine=folding_engine,
-            expert=expert,
-            max_new_tokens=max_new_tokens,
-        )
+        if use_spec:
+            # Same stop set the graph decoder builds. Defaulting to eos alone let
+            # generation run PAST the assistant turn into a new <|im_start|> block,
+            # which extract_thinking_and_content then returned as empty content --
+            # the first integration emitted 0-length replies for every request
+            # after the first.
+            output_tokens, elapsed, st = await asyncio.to_thread(
+                spec_decoder.generate,
+                prompt_tokens,
+                max_new_tokens,
+                model_state["stop_token_ids"],
+                folding_engine,
+                expert,
+            )
+            tok_s, swap_ms = st["tok_s"], st["swap_ms"]
+        else:
+            output_tokens, elapsed, tok_s, swap_ms = await asyncio.to_thread(
+                graph_decoder.generate_with_graph,
+                prompt_tokens,
+                engine=folding_engine,
+                expert=expert,
+                max_new_tokens=max_new_tokens,
+            )
 
     raw_response_text = tokenizer.decode(output_tokens, skip_special_tokens=True).strip()
     reasoning_text, content_text = extract_thinking_and_content(raw_response_text)

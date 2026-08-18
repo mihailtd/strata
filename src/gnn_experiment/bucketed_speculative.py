@@ -50,6 +50,7 @@ capture either fails or records a timing path.
 
 from __future__ import annotations
 
+import os
 import time
 
 import torch
@@ -77,7 +78,14 @@ class BucketedSpeculativeDecoder:
         self.cache: StaticCache | None = None
         self.buckets: dict[int, dict] = {}
         self._pool = None
+        # Opt-in ONLY for A/B against the aliasing bug; the safe default is private
+        # pools. See _capture_width.
+        self._share_pool = os.environ.get("SPECULATIVE_SHARE_GRAPH_POOL", "0") == "1"
         self._ssm_snap: list[dict] | None = None
+        self._len_counters: list[torch.Tensor] = []
+        self._counter_pos = -1  # value the device counters currently hold
+        self._ctr_src: torch.Tensor | None = None
+        self._ctr_srcs: list[torch.Tensor] = []
         self._locked = False
 
     # ---------------------------------------------------------------- capture
@@ -112,6 +120,7 @@ class BucketedSpeculativeDecoder:
             cur += 0  # positions are set per-replay; capture position is arbitrary
 
         self._alloc_ssm_snapshot()
+        self._collect_length_counters()
         self._locked = True
 
     def _capture_width(self, width: int, start_pos: int, warmup_steps: int) -> None:
@@ -131,7 +140,19 @@ class BucketedSpeculativeDecoder:
         torch.cuda.current_stream(device=self.device).wait_stream(s)
 
         g = torch.cuda.CUDAGraph()
-        ctx = (torch.cuda.graph(g, stream=s, pool=self._pool) if self._pool
+        # PRIVATE POOL PER WIDTH. Sharing one pool across the bucket graphs is only
+        # safe when they are replayed in capture order; this decoder replays width
+        # K+1 every step and width n_acc+1 only on partial accepts, i.e. ARBITRARY
+        # order. Sharing then lets one graph's intermediate activations alias
+        # another's, and the corruption is silent for hundreds of steps before an
+        # fla Triton kernel with a data-dependent loop is fed garbage and spins on
+        # the GPU forever -- 100% utilisation, no completion, the host stuck on the
+        # first .item() after replay, SIGINT ignored. Measured: wedged at
+        # step 303/pos 891 (58-tok prompt) and step 244/pos 1193 (458-tok prompt),
+        # ~20s of generation either way. A private pool per width costs a little
+        # VRAM (each holds activations for <= K+1 tokens) and removes the aliasing.
+        ctx = (torch.cuda.graph(g, stream=s, pool=self._pool)
+               if (self._pool is not None and self._share_pool)
                else torch.cuda.graph(g, stream=s))
         with ctx, torch.no_grad():
             out = self.model(ids, attention_mask=self.attn_mask, position_ids=pos_ids,
@@ -140,7 +161,7 @@ class BucketedSpeculativeDecoder:
             logits = out.logits
             hidden = out.hidden_states[-1]
         torch.cuda.current_stream(device=self.device).wait_stream(s)
-        if self._pool is None:
+        if self._pool is None and self._share_pool:
             self._pool = g.pool()
 
         self.buckets[width] = {"graph": g, "ids": ids, "pos_ids": pos_ids,
@@ -177,24 +198,95 @@ class BucketedSpeculativeDecoder:
                         live[k].copy_(buf, non_blocking=True)
 
     # ------------------------------------------------------------------ replay
+    def _collect_length_counters(self) -> None:
+        """Grab the attention layers' DEVICE-SIDE cumulative_length tensors.
+
+        THIS IS THE BUG THAT WEDGED THE GPU. transformers' StaticLayer keeps its
+        write offset in a device tensor and advances it in place:
+
+            cache_position = torch.arange(kv_length, device=...) + cumulative_length
+            cumulative_length.add_(kv_length)
+
+        Both lines are CAPTURED INTO THE GRAPH, so every replay advances the counter
+        by `width` no matter what `cache_pos` we copy in -- the attention layers
+        derive their own offset and never read ours. Two consequences:
+
+          correctness  speculative decode replays OVERLAPPING ranges (a K+1 verify,
+                       then a n_acc+1 commit at the SAME position). The counter does
+                       not rewind, so committed tokens were written at drifting
+                       offsets.
+          stability    the counter grows without bound and runs past max_cache_len,
+                       the attention kernel indexes out of range, and the GPU wedges
+                       -- 100% busy, no completion, SIGINT ignored. Measured wedge
+                       points match 2048/width exactly: ~350-400 replays at width 5,
+                       ~1950-2000 at width 1, and step ~300 in real decode where a
+                       step costs ~7.7 tokens of counter.
+
+        The counters are `mark_static_address`-ed, so their storage never moves and
+        writing them before a replay is graph-safe.
+        """
+        self._len_counters = []
+        for layer in self.cache.layers:
+            c = getattr(layer, "cumulative_length", None)
+            if isinstance(c, torch.Tensor):
+                self._len_counters.append(c)
+        # Escape hatch for ATTRIBUTION ONLY: with pinning off the decoder is the
+        # old, incorrect one (drifting KV offsets, wedges past 2048/width replays).
+        # It exists so a benchmark can price the fix, never to serve traffic.
+        if os.environ.get("SPECULATIVE_PIN_CACHE_LEN", "1") != "1":
+            self._len_counters = []
+        if self._len_counters:
+            ref = self._len_counters[0]
+            self._ctr_src = torch.zeros_like(ref)
+            self._ctr_srcs = [self._ctr_src] * len(self._len_counters)
+
     def _replay(self, width: int, tokens: torch.Tensor, start_pos: int):
         b = self.buckets[width]
         b["ids"].copy_(tokens.view(1, width))
         p = torch.arange(start_pos, start_pos + width, device=self.device)
         b["pos_ids"].copy_(p.view(1, width))
         b["cache_pos"].copy_(p)
+        # Pin the captured counter to the TRUE position -- but ONLY when it has
+        # actually drifted. The graph leaves the counter at start_pos + width, which
+        # is exactly where the NEXT sequential replay wants it, so the common path
+        # (verify, then the following verify after a full accept) needs no write at
+        # all. Only a rollback rewinds, and only that pays.
+        #
+        # Writing all 8 counters unconditionally cost 8 tiny device writes per
+        # replay and dropped a 1400-token decode to 20.99 tok/s, BELOW the ~33 tok/s
+        # autoregressive graph baseline -- a correct decoder that is not worth
+        # running. _foreach_fill_ collapses the rewind into one fused multi-tensor
+        # op, and the tracked position removes it from the fast path entirely.
+        if self._counter_pos != start_pos and self._len_counters:
+            # torch 2.13+rocm7.2 has no _foreach_fill_, so stage the value in one
+            # pinned scalar and fan it out with a single fused _foreach_copy_:
+            # 2 kernel launches instead of one per attention layer.
+            self._ctr_src.fill_(start_pos)
+            torch._foreach_copy_(self._len_counters, self._ctr_srcs)
+        self._counter_pos = start_pos + width
         b["graph"].replay()
         return b["logits"], b["hidden"]
 
     # ---------------------------------------------------------------- generate
     @torch.no_grad()
     def generate(self, prompt_tokens: torch.Tensor, max_new_tokens: int = 64,
-                 stop_ids: set[int] | None = None) -> tuple[list[int], float, dict]:
-        """Speculative decode entirely on captured graphs."""
+                 stop_ids: set[int] | None = None, engine=None, expert=None
+                 ) -> tuple[list[int], float, dict]:
+        """Speculative decode entirely on captured graphs.
+
+        `engine`/`expert` mirror `FoldedCudaGraphDecoder.generate_with_graph`:
+        the expert is folded in place at static VRAM pointers before decoding, and
+        costs 0 ms when it is already resident. Folding mutates weights the
+        captured graphs read THROUGH, not the pointers they hold, so a swap does
+        not invalidate a capture.
+        """
         assert self._locked, "capture() first"
+        from gnn_experiment.cuda_graph import apply_expert_state
+
         k = self.k
         stop_ids = stop_ids or {self.tokenizer.eos_token_id}
         prompt_tokens = prompt_tokens.to(self.device)
+        swap_ms = apply_expert_state(engine, expert)
 
         self.cache.reset()
         cur = prompt_tokens.shape[1]
@@ -204,6 +296,7 @@ class BucketedSpeculativeDecoder:
                          cache_position=torch.arange(0, cur, device=self.device),
                          use_cache=True, output_hidden_states=True)
         nxt = torch.argmax(out.logits[:, -1, :], -1, keepdim=True)
+        self._counter_pos = cur  # reset() zeroed the counters; prefill advanced to cur
         hids = [out.hidden_states[-1]]
         seq = prompt_tokens
         toks = [nxt.item()]
@@ -260,4 +353,6 @@ class BucketedSpeculativeDecoder:
         torch.cuda.synchronize()
         elapsed = time.perf_counter() - t0
         st["tau"] = st["accepted"] / max(1, st["steps"])
+        st["swap_ms"] = swap_ms
+        st["tok_s"] = len(toks[:max_new_tokens]) / max(1e-9, elapsed)
         return toks[:max_new_tokens], elapsed, st
