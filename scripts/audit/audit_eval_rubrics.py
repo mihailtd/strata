@@ -58,11 +58,17 @@ LEADING = re.compile(
 
 
 def audit_domain(name: str, cfg: dict, questions_file: str | None = None) -> dict:
-    path = REPO_ROOT / (questions_file or cfg["questions"])
+    target = questions_file or cfg["questions"]
+    path = Path(target) if Path(target).is_absolute() else REPO_ROOT / target
     rows = [json.loads(x) for x in path.read_text().splitlines() if x.strip()]
     rubric = [r for r in rows if r.get("expects")]
 
-    out: dict = {"file": str(path.relative_to(REPO_ROOT)), "n": len(rows),
+    try:
+        rel_path = str(path.relative_to(REPO_ROOT))
+    except ValueError:
+        rel_path = str(path)
+
+    out: dict = {"file": rel_path, "n": len(rows),
                  "n_with_rubric": len(rubric)}
 
     if rubric:

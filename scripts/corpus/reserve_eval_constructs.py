@@ -27,6 +27,23 @@ and the corpus author cannot know which constructs are reserved. So invert it.
 lives next to the data.** Then contamination is impossible by construction rather
 than by scan, and adding new corpus material can never silently break the gate.
 
+WHICH KIND OF RESERVATION -- read this before adding a domain
+-------------------------------------------------------------
+    Reserve CONSTRUCTS when they are PERIPHERAL to the domain.
+    Reserve INSTANCES  when they ARE the domain.
+
+astral is peripheral: remove `TaskGroup` and `singledispatch` and a corpus about
+modern Python survives. Holding them out is a real generalization test.
+
+duckdb is central: `read_parquet` / `COLUMNS()` / `GROUP BY ALL` ARE DuckDB, spread
+across 11 of 14 families. Reserving them drops 90.3% of the corpus -- and it fights
+the goal, because we train that expert to REACH FOR DuckDB. Hiding the tool cannot
+teach a bias toward the tool. See docs/WHY_EXPERTS.md.
+
+Applying the construct rule to a central construct fails one of two ways:
+  1. silent no-op   -- names do not match, 0 dropped, verification says LEAKING
+  2. destroyed corpus -- names do match, 90% of the data disappears
+
 WHAT THIS DOES
 --------------
 1. Drops every record whose `meta.family` is in RESERVED from each v3 corpus.
@@ -103,21 +120,21 @@ RESERVED: dict[str, dict[str, list[str]]] = {
             r"cached_property",
         ],
     },
-    "duckdb": {
-        "families": [
-            "duckdb_eval_reserved_from_first",
-            "duckdb_eval_reserved_columns",
-            "duckdb_eval_reserved_arrow",
-        ],
-        "signatures": [
-            r"read_parquet\s*\(",
-            r"COLUMNS\s*\(",
-            r"GROUP\s+BY\s+ALL",
-            r"TYPE\s+POSTGRES",
-            r"hive_partitioning",
-            r"\.pl\s*\(\s*\)",
-        ],
-    },
+    # ------------------------------------------------------------------
+    # duckdb is DELIBERATELY ABSENT. Do not add it back.
+    #
+    # read_parquet / COLUMNS() / GROUP BY ALL / FROM-first ARE what DuckDB is.
+    # They are emitted by 11 of the corpus's 14 families; reserving them drops
+    # 1465 of 1622 records (90.3%), leaving 157 -- not a trainable corpus.
+    #
+    # More importantly it fights the goal. We train this expert to be BIASED
+    # toward DuckDB on problems where DuckDB is the right tool. You cannot bias a
+    # model toward a tool by hiding the tool from it. Construct-in-training is a
+    # PREREQUISITE for that bias, not a contamination of it.
+    #
+    # DuckDB uses INSTANCE reservation instead: hold out specific problems,
+    # schemas and table shapes, keep the constructs. See docs/WHY_EXPERTS.md.
+    # ------------------------------------------------------------------
 }
 
 CORPORA = {
@@ -140,12 +157,25 @@ def family_of(rec: dict) -> str:
 
 
 def main() -> None:
+    failures: list[str] = []
     ap = argparse.ArgumentParser()
     ap.add_argument("--write", action="store_true",
                     help="emit training_data_v4.jsonl (default: report only)")
     args = ap.parse_args()
 
     for domain, path in CORPORA.items():
+        if domain not in RESERVED:
+            # Not a bug and not an oversight: this domain uses INSTANCE
+            # reservation, not construct reservation. Printed rather than skipped
+            # silently so the policy stays visible in the output.
+            print("=" * 78)
+            print(f" {domain}: {path.name}")
+            print("=" * 78)
+            print("  INSTANCE-RESERVED, not construct-reserved -- intentionally skipped.")
+            print("  Its constructs ARE the domain; reserving them would drop ~90% of the")
+            print("  corpus AND defeat the purpose, since we train this expert to REACH FOR")
+            print("  the tool. Hold out problems/schemas instead. See docs/WHY_EXPERTS.md\n")
+            continue
         spec = RESERVED[domain]
         print("=" * 78)
         print(f" {domain}: {path.name}")
@@ -159,8 +189,17 @@ def main() -> None:
         reserved_set = set(spec["families"])
         missing_fams = reserved_set - set(fams)
         if missing_fams:
-            print(f"  ⚠ reserved families not present in corpus: {sorted(missing_fams)}")
-            print("    (family naming may differ -- reservation would silently do nothing)")
+            # HARD FAILURE, not a warning. A reserved family whose name does not
+            # match anything in the corpus drops zero records while the script
+            # still prints a reassuring summary -- which is exactly what happened
+            # to duckdb: three aspirational names, 0 records dropped, and every
+            # construct still present in the hundreds. A warning was not enough.
+            print(f"  ✗ FATAL: reserved families not present in corpus: {sorted(missing_fams)}")
+            print(f"    present families: {sorted(fams)}")
+            print("    The reservation would silently do NOTHING. Fix the names or")
+            print("    remove them. Never leave a reservation that cannot bind.")
+            failures.append(f"{domain}: unmatched reserved families {sorted(missing_fams)}")
+            continue
 
         kept = [r for r in rows if family_of(r) not in reserved_set]
         dropped = len(rows) - len(kept)
@@ -191,28 +230,87 @@ def main() -> None:
             print(f"  WROTE {out} ({len(kept)} records)")
         print()
 
-    # ---- CROSS-CORPUS LEAKAGE AUDIT (PostgreSQL vs DuckDB)
+    # ---- CROSS-CORPUS LEAKAGE AUDIT -- DIRECTIONAL
+    #
+    # The two directions are NOT equally bad, and treating them the same buries
+    # the real finding under noise.
+    #
+    #   DuckDB constructs in the POSTGRES corpus  -> BREAKS THINGS. Postgres has
+    #     no COLUMNS(), GROUP BY ALL, QUALIFY or EXCLUDE. A pg expert that learned
+    #     them emits SQL that does not parse.
+    #
+    #   Postgres constructs in the DUCKDB corpus  -> mostly harmless. DuckDB
+    #     deliberately targets PostgreSQL syntax compatibility: DISTINCT ON,
+    #     FILTER (WHERE), LATERAL, unnest, date_trunc, lag/lead all work there.
+    #
+    # So only flag a construct when it is INVALID in the receiving engine.
     print("=" * 78)
-    print(" CROSS-CORPUS LEAKAGE AUDIT: PostgreSQL <-> DuckDB")
+    print(" CROSS-CORPUS LEAKAGE AUDIT (directional: invalid-in-receiver only)")
     print("=" * 78)
-    pg_path = REPO / "data/postgresql/training_data_v4.jsonl" if (REPO / "data/postgresql/training_data_v4.jsonl").exists() else CORPORA["postgresql"]
-    duck_path = REPO / "data/duckdb/training_data_v4.jsonl"
-    
-    if pg_path.exists() and duck_path.exists():
-        pg_body = "\n".join(record_text(json.loads(l)) for l in pg_path.read_text().splitlines() if l.strip()).lower()
-        duck_body = "\n".join(record_text(json.loads(l)) for l in duck_path.read_text().splitlines() if l.strip()).lower()
-        
-        print("  1. Checking for DuckDB-specific constructs leaking into PostgreSQL corpus:")
-        duck_specific = [r"COLUMNS\s*\(", r"read_parquet", r"GROUP\s+BY\s+ALL", r"\.pl\s*\(\s*\)"]
-        for sig in duck_specific:
-            hits = len(re.findall(sig, pg_body, re.I))
-            print(f"     {sig:24s}: {hits:4d} hits in postgresql {'(CLEAN)' if hits == 0 else '(LEAK)'}")
-            
-        print("\n  2. Checking for PostgreSQL-reserved constructs leaking into DuckDB corpus:")
-        for sig in RESERVED["postgresql"]["signatures"]:
-            hits = len(re.findall(sig, duck_body, re.I))
-            print(f"     {sig:24s}: {hits:4d} hits in duckdb {'(CLEAN)' if hits == 0 else '(LEAK)'}")
+
+    # construct -> engines it is VALID in
+    VALIDITY = {
+        r"COLUMNS\s*\(":        {"duckdb"},
+        r"read_parquet":         {"duckdb"},
+        r"GROUP\s+BY\s+ALL":     {"duckdb"},
+        r"\bQUALIFY\b":          {"duckdb"},
+        r"\.pl\s*\(\s*\)":       {"duckdb"},
+        r"hive_partitioning":    {"duckdb"},
+        # valid in BOTH -- DuckDB implements these on purpose
+        r"distinct\s+on":        {"duckdb", "postgresql"},
+        r"\bfilter\s*\(\s*where": {"duckdb", "postgresql"},
+        r"\blateral\b":          {"duckdb", "postgresql"},
+        r"\bunnest\s*\(":        {"duckdb", "postgresql"},
+        r"date_trunc":           {"duckdb", "postgresql"},
+        r"\blag\s*\(":           {"duckdb", "postgresql"},
+        r"\blead\s*\(":          {"duckdb", "postgresql"},
+        # postgres-only
+        r"percentile_cont":      {"postgresql"},
+        r"\bcollate\b":          {"postgresql"},
+        r"with\s+ordinality":    {"postgresql"},
+    }
+    ENGINE_CORPORA = {
+        "postgresql": REPO / "data/postgresql/training_data_v4.jsonl",
+        "duckdb": REPO / "data/duckdb/training_data_v4.jsonl",
+    }
+
+    bodies = {}
+    for eng, path in ENGINE_CORPORA.items():
+        if path.exists():
+            bodies[eng] = "\n".join(
+                record_text(json.loads(l)) for l in path.read_text().splitlines() if l.strip()
+            ).lower()
+
+    real, benign = [], 0
+    for eng, body in bodies.items():
+        for sig, valid_in in VALIDITY.items():
+            if eng in valid_in:
+                continue                      # native here, not a leak
+            hits = len(re.findall(sig, body, re.I))
+            if hits:
+                if valid_in & set(bodies):    # belongs to another engine we track
+                    real.append((eng, sig, hits))
+                else:
+                    benign += 1
+
+    if real:
+        print("  INVALID-IN-RECEIVER (these produce output that will not run):")
+        for eng, sig, hits in sorted(real, key=lambda x: -x[2]):
+            print(f"     {sig:26s} {hits:5d} hits in {eng:12s} <- NOT VALID THERE")
+        print("\n  These are the ones to fix. An expert trained on them emits broken SQL.")
+    else:
+        print("  CLEAN: no corpus contains a construct invalid in its own engine.")
+
+    print("\n  (Constructs valid in BOTH engines are not reported. DuckDB implements")
+    print("   DISTINCT ON / FILTER / LATERAL / unnest / date_trunc / lag / lead by")
+    print("   design, so their presence in that corpus is correct, not leakage.)")
     print()
+
+    if failures:
+        print("\n" + "=" * 78)
+        for f in failures:
+            print(f"  FAILED  {f}")
+        raise SystemExit(1)
 
     print("Reserved-for-eval lists are the contract. Any future corpus revision must")
     print("re-run this script; a family added upstream that emits a reserved construct")

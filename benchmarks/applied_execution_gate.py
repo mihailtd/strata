@@ -29,7 +29,7 @@ import torch
 
 # Ensure ROCm HSA runtime is preloaded for AMD Radeon RX 7900 XTX
 rocm_hsa_lib = "/opt/rocm-7.2.0/lib/libhsa-runtime64.so"
-if os.path.exists(rocm_hsa_lib) and rocm_hsa_lib not in os.environ.get("LD_PRELOAD", ""):
+if __name__ == "__main__" and os.path.exists(rocm_hsa_lib) and rocm_hsa_lib not in os.environ.get("LD_PRELOAD", ""):
     current_preload = os.environ.get("LD_PRELOAD", "")
     os.environ["LD_PRELOAD"] = f"{rocm_hsa_lib}:{current_preload}".strip(":")
     os.execve(sys.executable, [sys.executable] + sys.argv, os.environ)

@@ -94,3 +94,19 @@ exclude = [
     "training",                           # separate uv project, own pyproject/venv/deps
     "tests/opencode_evals/runs",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "src"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+norecursedirs = [
+    "data",
+    "benchmarks",
+    "mlruns",
+    "training",
+    "tests/opencode_evals",
+    "serving",
+]
+addopts = "-v --tb=short"
+
