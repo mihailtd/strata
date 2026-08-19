@@ -1213,7 +1213,89 @@ class FoldableExpert:
         return cls(factors, scaling=scaling, name=name)
 
 
+def compute_surgical_notch_masks(
+    experts: list[FoldableExpert],
+    conflict_keys: list[str] | None = None,
+    top_k: int = 15,
+    max_conflict_modules: int = 2,
+) -> dict[str, torch.Tensor]:
+    """Computes surgical POET channel notch masks for identified multi-expert conflict modules.
+    
+    Theoretical Reference: DECISIONS.md §50, §51 & LV-GLasso/POET Chapter 7/9.
+    
+    Attention heads and clean MLP modules have S = 0 (100% conditionally orthogonal) and
+    are never masked. For identified or detected conflict modules (e.g. Layer 3 gate_proj),
+    zeros out the top-k conflicting output neurons to suppress localized cross-talk.
+    """
+    if len(experts) < 2:
+        return {}
+
+    keys = sorted(experts[0].factors.keys())
+    notch_masks: dict[str, torch.Tensor] = {}
+
+    # Target candidate conflict keys (MLP projections only; attention is conditionally orthogonal)
+    target_keys = conflict_keys if conflict_keys is not None else [
+        k for k in keys if any(p in k for p in ("gate_proj", "down_proj", "up_proj"))
+    ]
+
+    candidate_spikes: list[tuple[float, str, torch.Tensor]] = []
+
+    for key in target_keys:
+        deltas_u = []
+        deltas_v = []
+        scalings = []
+        for e in experts:
+            if key in e.factors:
+                u, v = e.factors[key]
+                deltas_u.append(u)
+                deltas_v.append(v)
+                scalings.append(float(e.scaling))
+
+        if len(deltas_u) < 2:
+            continue
+
+        d_out = deltas_u[0].shape[0]
+        # Fast cross-adapter row-wise correlation accumulation without full dW expansion
+        conflict_scores = torch.zeros(d_out, dtype=torch.float32, device=deltas_u[0].device)
+
+        for i in range(len(deltas_u)):
+            for j in range(i + 1, len(deltas_u)):
+                # (u_i @ v_i) * (u_j @ v_j) row-wise = sum((u_i @ (v_i @ v_j.T)) * u_j, dim=1)
+                VVt = deltas_v[i].float() @ deltas_v[j].float().T
+                u_i_VVt = deltas_u[i].float() @ VVt
+                row_dots = scalings[i] * scalings[j] * torch.sum(u_i_VVt * deltas_u[j].float(), dim=1)
+                abs_dots = torch.abs(row_dots)
+                conflict_scores += abs_dots
+
+        mean_val = torch.mean(conflict_scores).item()
+        max_val = torch.max(conflict_scores).item()
+        sharpness = max_val / (mean_val + 1e-6)
+
+        if conflict_keys is not None:
+            # Explicitly specified conflict keys
+            top_k_indices = torch.topk(conflict_scores, k=min(top_k, d_out)).indices
+            mask = torch.ones(d_out, dtype=torch.float32, device=deltas_u[0].device)
+            mask[top_k_indices] = 0.0
+            notch_masks[key] = mask
+        elif sharpness > 3.0:
+            candidate_spikes.append((sharpness, key, conflict_scores))
+
+    if conflict_keys is None and candidate_spikes:
+        # Rank by sharpness and only notch top outlier collision modules (e.g. 1-2 modules)
+        candidate_spikes.sort(key=lambda x: x[0], reverse=True)
+        for _, key, c_scores in candidate_spikes[:max_conflict_modules]:
+            d_out = c_scores.shape[0]
+            top_k_indices = torch.topk(c_scores, k=min(top_k, d_out)).indices
+            mask = torch.ones(d_out, dtype=torch.float32, device=c_scores.device)
+            mask[top_k_indices] = 0.0
+            notch_masks[key] = mask
+
+    return notch_masks
+
+
+
 class WeightFoldingEngine:
+
     """Folds experts into a plain (unwrapped) model's weights and back out.
 
     Holds a pristine copy of every weight any expert touches, so `activate`
@@ -1320,15 +1402,27 @@ class WeightFoldingEngine:
                 du, dv = df
                 torch.addmm(dw0, du, dv, beta=1.0, alpha=expert.scaling, out=dw)
 
+
         self.active = expert.name
 
+
+
     @torch.no_grad()
-    def activate_many(self, experts: Iterable[FoldableExpert], scale_mode: str = "none") -> None:
-        """W_live = W0 + sum_i scaling_i * (U_i @ V_i).
+    def activate_many(
+        self,
+        experts: Iterable[FoldableExpert],
+        scale_mode: str = "surgical",
+        notch_masks: dict[str, torch.Tensor] | None = None,
+    ) -> None:
+        """W_live = W0 + sum_i scaling_i * (U_i_eff @ V_i).
         
-        Empirical finding (2048-token 3-way scaling benchmark):
-        Unscaled (scale_mode="none", α=128) achieves highest domain retention (52.2% Astral, 55.0% Postgres).
-        Dividing by √K or K attenuates activation steering and causes adapters to regress toward base.
+        scale_mode:
+          - "surgical" (DEFAULT / RECOMMENDED, §50-§51): Attention and clean MLP run at 100%
+            full alpha (0% attenuation). Surgical POET channel notch masks are applied strictly
+            to conflicting MLP output neurons during folding.
+          - "none": Unscaled additive stacking with no channel notching.
+          - "sqrt": Classical 1/√K scaling (deprecated by §50 — destroys 74.6% clean capability).
+          - "linear": Classical 1/K scaling.
         """
         if not self.keep_pristine:
             raise RuntimeError("activate_many() requires keep_pristine=True")
@@ -1340,9 +1434,14 @@ class WeightFoldingEngine:
         k = len(experts)
         scale_mult = 1.0 / (math.sqrt(k) if scale_mode == "sqrt" and k > 1 else (k if scale_mode == "linear" and k > 1 else 1.0))
 
+        # Auto-compute surgical notch masks if in surgical mode and none provided
+        if scale_mode == "surgical" and notch_masks is None and k > 1:
+            notch_masks = compute_surgical_notch_masks(experts)
+
         # 1. Fold Backbone
         for key, w in self.slots.items():
             w0 = self.pristine[key]
+            mask = notch_masks.get(key) if (notch_masks and scale_mode == "surgical") else None
             first = True
             for e in experts:
                 f = e.factors.get(key)
@@ -1350,11 +1449,16 @@ class WeightFoldingEngine:
                     continue
                 u, v = f
                 eff_alpha = e.scaling * scale_mult
+                if mask is not None:
+                    u_eff = u * mask.unsqueeze(1).to(device=u.device, dtype=u.dtype)
+                else:
+                    u_eff = u
+
                 if first:
-                    torch.addmm(w0, u, v, beta=1.0, alpha=eff_alpha, out=w)
+                    torch.addmm(w0, u_eff, v, beta=1.0, alpha=eff_alpha, out=w)
                     first = False
                 else:
-                    w.addmm_(u, v, alpha=eff_alpha)
+                    w.addmm_(u_eff, v, alpha=eff_alpha)
             if first:
                 w.copy_(w0)
 
@@ -1379,10 +1483,12 @@ class WeightFoldingEngine:
 
         self.active = "+".join(e.name for e in experts)
 
+
     @torch.no_grad()
     def restore(self) -> None:
         """Exact: copies the pristine weights back for backbone and draft head."""
         for key, w in self.slots.items():
+
             w.copy_(self.pristine[key])
         if self.draft_head is not None and self.draft_slots:
             for dkey, dw in self.draft_slots.items():

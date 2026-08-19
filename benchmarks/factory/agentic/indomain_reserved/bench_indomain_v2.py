@@ -50,6 +50,7 @@ def stage(m): print(f"[{time.perf_counter() - T0:7.1f}s] {m}", flush=True)
 
 
 import psycopg  # noqa: E402
+from gnn_experiment.canon import adapter_path
 import torch  # noqa: E402
 
 torch.zeros(1, device="cuda"); torch.cuda.synchronize()
@@ -65,8 +66,8 @@ from gnn_experiment.novel_peft import (  # noqa: E402
 )
 
 MODEL = "Qwen/Qwen3.5-4B"
-ADAPTERS = {"postgresql": os.environ.get("PG_ADAPTER", "results/adapters/m2_postgresql_r8a128_v4"),
-            "astral": os.environ.get("ASTRAL_ADAPTER", "results/adapters/m2_astral_r8a128_v4")}
+ADAPTERS = {"postgresql": os.environ.get("PG_ADAPTER", str(adapter_path("postgresql"))),
+            "astral": os.environ.get("ASTRAL_ADAPTER", str(adapter_path("astral")))}
 RESERVED = {"postgresql": {"adv_distinct_on", "adv_filter_clause", "adv_ordinality_unnest",
                            "adv_lateral_join", "adv_percentiles"},
             "astral": {"func_partial_curry", "func_singledispatch", "py_protocol_slots",

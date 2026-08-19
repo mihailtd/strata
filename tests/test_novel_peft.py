@@ -121,3 +121,56 @@ def test_weight_folding_dimension_mismatch_error():
 
     with pytest.raises(ValueError, match="delta .* != weight"):
         WeightFoldingEngine(model, [bad_expert])
+
+
+def test_activate_many_surgical_stacking():
+    """Verify that activate_many(scale_mode='surgical') applies POET channel masks on conflict modules."""
+    from gnn_experiment.novel_peft import compute_surgical_notch_masks
+
+    # Create mock transformer with attention (q_proj) and MLP (down_proj)
+    class MockBlockWithMLP(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.q_proj = nn.Linear(32, 64, bias=False)
+            self.down_proj = nn.Linear(32, 64, bias=False)
+
+    model = MockBlockWithMLP()
+    q_orig = model.q_proj.weight.clone()
+    down_orig = model.down_proj.weight.clone()
+
+    # Create two experts with conflicting channel 7 in down_proj
+    u1_q, v1_q = torch.randn(64, 8), torch.randn(8, 32)
+    u2_q, v2_q = torch.randn(64, 8), torch.randn(8, 32)
+
+    u1_mlp, v1_mlp = torch.randn(64, 8), torch.randn(8, 32)
+    u2_mlp, v2_mlp = torch.randn(64, 8), torch.randn(8, 32)
+    # Inject collision at channel 7
+    u1_mlp[7, :] = u2_mlp[7, :] = 10.0
+
+    e1 = FoldableExpert({"q_proj.weight": (u1_q, v1_q), "down_proj.weight": (u1_mlp, v1_mlp)}, scaling=16.0, name="e1")
+    e2 = FoldableExpert({"q_proj.weight": (u2_q, v2_q), "down_proj.weight": (u2_mlp, v2_mlp)}, scaling=16.0, name="e2")
+
+    engine = WeightFoldingEngine(model, [e1, e2], keep_pristine=True)
+
+    # 1. Activate in surgical mode
+    engine.activate_many([e1, e2], scale_mode="surgical")
+    assert engine.active == "e1+e2"
+
+    # Attention must remain 100% full alpha without any notching
+    delta_q = 16.0 * (u1_q @ v1_q) + 16.0 * (u2_q @ v2_q)
+    assert torch.allclose(model.q_proj.weight, q_orig + delta_q, atol=1e-5)
+
+    # Conflict channel 7 in down_proj must have ZERO delta contribution (notched)
+    delta_down_row7 = model.down_proj.weight[7, :] - down_orig[7, :]
+    assert torch.allclose(delta_down_row7, torch.zeros_like(delta_down_row7), atol=1e-6), "Channel 7 must be zeroed by surgical notch mask"
+
+    # Non-conflicting channel 0 must have active non-zero delta
+    delta_down_row0 = model.down_proj.weight[0, :] - down_orig[0, :]
+    assert torch.norm(delta_down_row0) > 1e-3, "Clean channel 0 must be active"
+
+    # 2. Restore bit-exact
+    engine.restore()
+    assert torch.equal(model.q_proj.weight, q_orig)
+    assert torch.equal(model.down_proj.weight, down_orig)
+    assert engine.max_drift() == 0.0
+

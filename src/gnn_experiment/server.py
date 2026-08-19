@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from gnn_experiment.canon import adapter_path
 import torch
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -379,16 +380,12 @@ async def lifespan(app: FastAPI):
     #     postgresql  a64  74.67% vs base 49.67%  (+25.00pp)
     #     financial   a32  83.33% vs base 78.33%   (+5.00pp)
     # Load factor experts into host memory (prefer clean v4 completion-only adapters)
-    financial_dir = REPO_ROOT / "results" / "adapters" / "m2_financial_r8a128_v4"
-    if not financial_dir.exists():
-        financial_dir = REPO_ROOT / "results" / "adapters" / "m2_financial_r8a128"
-    postgres_dir = REPO_ROOT / "results" / "adapters" / "m2_postgresql_r8a128_v4"
-    if not postgres_dir.exists():
-        postgres_dir = REPO_ROOT / "results" / "adapters" / "m2_postgresql_r8a128"
-    astral_dir = REPO_ROOT / "results" / "adapters" / "m2_astral_r8a128_v4"
-    if not astral_dir.exists():
-        astral_dir = REPO_ROOT / "results" / "adapters" / "m2_astral_r8a128"
-    duckdb_dir = REPO_ROOT / "results" / "adapters" / "m2_duckdb_r8a128_v4"
+    # canon-driven, no fallback chain. A silent fallback is how m2_*_v2 stayed
+    # live for hours after v4 landed; adapter_path() raises instead.
+    financial_dir = adapter_path("financial")
+    postgres_dir = adapter_path("postgresql")
+    astral_dir = adapter_path("astral")
+    duckdb_dir = adapter_path("duckdb")
 
     exp_fin = FoldableExpert.from_dir(financial_dir, "financial_planning")
     exp_pg = FoldableExpert.from_dir(postgres_dir, "postgresql")

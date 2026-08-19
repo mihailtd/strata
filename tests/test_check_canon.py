@@ -73,7 +73,7 @@ def test_token_cap_regex_detection():
 
 
 def test_legacy_adapter_version_regex_detection():
-    """Verify ADAPTER_RE flags non-v4 legacy adapter strings in quality benchmarks."""
+    """Verify ADAPTER_RE flags legacy adapter strings in quality benchmarks."""
     legacy_lines = [
         "adapter_path = 'results/adapters/m2_astral_r8a128_v2'",
         "path = adapters_dir / 'm2_postgresql_r8a128_v3'",
@@ -85,7 +85,8 @@ def test_legacy_adapter_version_regex_detection():
         assert domain in ("astral", "postgresql")
         assert ver != CANON_ADAPTER_VERSION
 
-    v4_line = "adapter_path = 'results/adapters/m2_duckdb_r8a128_v4'"
-    m4 = ADAPTER_RE.search(v4_line)
+    # v6 is canonical now, so v4 is itself a legacy string the checker must flag.
+    v6_line = "adapter_path = 'results/adapters/m2_duckdb_r8a128_v6'"
+    m4 = ADAPTER_RE.search(v6_line)
     assert m4 is not None
     assert m4.group(2) == CANON_ADAPTER_VERSION

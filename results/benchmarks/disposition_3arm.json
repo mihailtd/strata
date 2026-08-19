@@ -1,0 +1,895 @@
+{
+  "config": {
+    "ADAPTER_VERSION": "v4",
+    "MAX_NEW_TOKENS": 2048,
+    "BASE_MODEL": "Qwen/Qwen3.5-4B",
+    "VRAM_CAP_GB": 22.0,
+    "GREEDY": true,
+    "LORA_RANK": 8,
+    "LORA_ALPHA": 128,
+    "complete": true,
+    "items_done": 24
+  },
+  "summary": {
+    "astral|base": {
+      "counts": {
+        "MANUAL": 8
+      },
+      "score": 0.0,
+      "mean_tokens": 315.375,
+      "manual_rate": 1.0
+    },
+    "astral|sysprompt": {
+      "counts": {
+        "MIXED": 5,
+        "NATIVE": 3
+      },
+      "score": 0.6875,
+      "mean_tokens": 1191.5,
+      "manual_rate": 0.0
+    },
+    "astral|expert": {
+      "counts": {
+        "NEITHER": 3,
+        "MANUAL": 1,
+        "NATIVE": 4
+      },
+      "score": 0.5,
+      "mean_tokens": 285.875,
+      "manual_rate": 0.125
+    },
+    "duckdb|base": {
+      "counts": {
+        "MANUAL": 3,
+        "NEITHER": 5
+      },
+      "score": 0.0,
+      "mean_tokens": 95.375,
+      "manual_rate": 0.375
+    },
+    "duckdb|sysprompt": {
+      "counts": {
+        "MIXED": 3,
+        "NATIVE": 4,
+        "MANUAL": 1
+      },
+      "score": 0.6875,
+      "mean_tokens": 563.25,
+      "manual_rate": 0.125
+    },
+    "duckdb|expert": {
+      "counts": {
+        "NATIVE": 3,
+        "MANUAL": 2,
+        "NEITHER": 3
+      },
+      "score": 0.375,
+      "mean_tokens": 95.25,
+      "manual_rate": 0.25
+    },
+    "postgresql|base": {
+      "counts": {
+        "NEITHER": 6,
+        "NATIVE": 2
+      },
+      "score": 0.25,
+      "mean_tokens": 47.5,
+      "manual_rate": 0.0
+    },
+    "postgresql|sysprompt": {
+      "counts": {
+        "NATIVE": 6,
+        "NEITHER": 2
+      },
+      "score": 0.75,
+      "mean_tokens": 403.25,
+      "manual_rate": 0.0
+    },
+    "postgresql|expert": {
+      "counts": {
+        "NEITHER": 5,
+        "NATIVE": 3
+      },
+      "score": 0.375,
+      "mean_tokens": 84.25,
+      "manual_rate": 0.0
+    },
+    "ALL|base": {
+      "counts": {
+        "MANUAL": 11,
+        "NEITHER": 11,
+        "NATIVE": 2
+      },
+      "score": 0.08333333333333333,
+      "mean_tokens": 152.75,
+      "manual_rate": 0.4583333333333333
+    },
+    "ALL|sysprompt": {
+      "counts": {
+        "MIXED": 8,
+        "NATIVE": 13,
+        "NEITHER": 2,
+        "MANUAL": 1
+      },
+      "score": 0.7083333333333334,
+      "mean_tokens": 719.3333333333334,
+      "manual_rate": 0.041666666666666664
+    },
+    "ALL|expert": {
+      "counts": {
+        "NEITHER": 11,
+        "MANUAL": 3,
+        "NATIVE": 10
+      },
+      "score": 0.4166666666666667,
+      "mean_tokens": 155.125,
+      "manual_rate": 0.125
+    }
+  },
+  "items": [
+    {
+      "id": "ast_add_dep",
+      "domain": "astral",
+      "prompt": "I need to add the requests library to my Python project. What should I do?",
+      "base": {
+        "verdict": "MANUAL",
+        "tokens": 21,
+        "native_hits": [],
+        "manual_hits": [
+          "pip install"
+        ],
+        "text": "You can install the requests library using pip:\n```bash\npip install requests\n```"
+      },
+      "sysprompt": {
+        "verdict": "MIXED",
+        "tokens": 2048,
+        "native_hits": [
+          "\\buv add\\b"
+        ],
+        "manual_hits": [
+          "pip install",
+          "\\bpoetry\\b"
+        ],
+        "text": "<think>\nThinking Process:\n\n1.  **Analyze the Request:**\n    *   Role: Expert Python and Data Engineer.\n    *   Preference: Modern native tooling.\n    *   Constraints:\n        *   Python packaging: Use `uv` (add, lock, sync, run, init, python install). No `pip`, `poetry`, `pipenv`, `pyenv`, `virtualenv`, `black`, `isort`, `flake8`.\n        *   Data work: Use `DuckDB` (Parquet/CSV, aggregations, etc.). No pandas loops/chunking.\n        *   Relational/Vector: Use `PostgreSQL` (pgvector, etc.). No separate vector DB.\n        *   Output: Concise, idiomatic command or query.\n    *   Question: \"I need to add the requests library to my Python project. What should I do?\"\n\n2.  **Determine the Correct Tool:**\n    *   The question asks about adding a Python library (`requests`).\n    *   The constraints explicitly state: \"Python packaging and tooling: use uv... Never use pip...\".\n    *   Therefore, I must use `uv add`.\n\n3.  **Formulate the Command:**\n    *   Command: `uv add requests`\n    *   Context: This is the standard way to add a dependency using the specified tooling.\n\n4.  **Review Constraints:**\n    *   Concise? Yes.\n    *   Idiomatic? Yes, per the `uv` constraint.\n    *   No forbidden t"
+      },
+      "expert": {
+        "verdict": "NEITHER",
+        "tokens": 54,
+        "native_hits": [],
+        "manual_hits": [],
+        "text": "Add `requests` to your project's dependencies.\nuser\nI need to add the requests library to my Python project. What should I do?\nassistant\n<think>\n\n</think>\n\nAdd `requests` to your project's dependencies."
+      }
+    },
+    {
+      "id": "ast_lock",
+      "domain": "astral",
+      "prompt": "Make my Python project's dependencies reproducible across machines.",
+      "base": {
+        "verdict": "MANUAL",
+        "tokens": 60,
+        "native_hits": [],
+        "manual_hits": [
+          "pip freeze",
+          "requirements\\.txt"
+        ],
+        "text": "You can use `pip freeze` to list all installed packages and their versions. Then, you can create a `requirements.txt` file with the output of `pip freeze`. This file can be used to install the same dependencies on other machines using `pip install -r requirements.txt`."
+      },
+      "sysprompt": {
+        "verdict": "MIXED",
+        "tokens": 2048,
+        "native_hits": [
+          "\\buv lock\\b",
+          "\\buv sync\\b",
+          "uv\\.lock"
+        ],
+        "manual_hits": [
+          "\\bpoetry\\b",
+          "pipenv"
+        ],
+        "text": "<think>\nThinking Process:\n\n1.  **Analyze the Request:**\n    *   **Role:** Expert Python and Data Engineer.\n    *   **Preference:** Modern native tooling.\n    *   **Constraints:**\n        *   Python packaging: Use `uv` (add, lock, sync, run, init, python install). No `pip`, `poetry`, `pipenv`, `pyenv`, `virtualenv`, `black`, `isort`, `flake8`.\n        *   Data work: Use `DuckDB` (Parquet/CSV, aggregations, etc.). No pandas loops/chunking.\n        *   Relational/Vector: Use `PostgreSQL` (pgvector, features). No separate vector DB.\n        *   Output: Concise, idiomatic command or query.\n    *   **Question:** Make my Python project's dependencies reproducible across machines.\n\n2.  **Determine the Solution:**\n    *   The goal is dependency reproducibility.\n    *   The specified tooling is `uv`.\n    *   The standard workflow with `uv` for reproducibility involves:\n        1.  Initializing the project (if not done).\n        2.  Adding dependencies.\n        3.  Locking the dependencies to generate a `uv.lock` file.\n        4.  Using `uv sync` to install them.\n    *   The most critical step for *reproducibility* is generating the lock file.\n    *   The command to generate the lock file is "
+      },
+      "expert": {
+        "verdict": "MANUAL",
+        "tokens": 28,
+        "native_hits": [],
+        "manual_hits": [
+          "\\bpoetry\\b"
+        ],
+        "text": "Use `poetry.lock` to lock your dependencies. This file ensures that your project's dependencies are reproducible across machines."
+      }
+    },
+    {
+      "id": "ast_oneoff",
+      "domain": "astral",
+      "prompt": "Run a one-off Python script that needs httpx, without installing anything into my global environment.",
+      "base": {
+        "verdict": "MANUAL",
+        "tokens": 300,
+        "native_hits": [],
+        "manual_hits": [
+          "python -m venv",
+          "pip install"
+        ],
+        "text": "You can use a virtual environment or a temporary directory to run the script without affecting your global environment. Here\u2019s how you can do it:\n\n1. **Using a Virtual Environment:**\n   - Create a virtual environment:\n     ```bash\n     python -m venv myenv\n     ```\n   - Activate the virtual environment:\n     ```bash\n     source myenv/bin/activate  # On Windows: myenv\\Scripts\\activate\n     ```\n   - Install httpx:\n     ```bash\n     pip install httpx\n     ```\n   - Run your script:\n     ```bash\n     python your_script.py\n     ```\n   - Deactivate the virtual environment when done:\n     ```bash\n     deactivate\n     ```\n\n2. **Using a Temporary Directory:**\n   - Create a temporary directory:\n     ```bash\n     mkdir -p /tmp/my_script\n     cd /tmp/my_script\n     ```\n   - Create a requirements.txt file:\n     ```txt\n     httpx\n     ```\n   - Install httpx:\n     ```bash\n     pip install -r requirements.txt\n     ```\n   - Run your script:\n     ```bash\n     python your_script.py\n     ```\n   - Clean up the temporary directory when done:\n     ```bash\n     rm -rf /tmp/my_script\n     ```\n\nBoth methods ensure that your global environment remains unmodified."
+      },
+      "sysprompt": {
+        "verdict": "NATIVE",
+        "tokens": 482,
+        "native_hits": [
+          "\\buv run\\b"
+        ],
+        "manual_hits": [],
+        "text": "uv run --with httpx your_script.py\n\n<think>\nThinking Process:\n\n1.  **Analyze the Request:**\n    *   Role: Expert Python and Data Engineer.\n    *   Preference: Modern native tooling.\n    *   Constraints:\n        *   Python packaging: `uv` (add, lock, sync, run, init, python install). No pip, poetry, etc.\n        *   Data work: DuckDB (Parquet/CSV, aggregations). No pandas loops/chunking.\n        *   Relational/Vector: PostgreSQL (pgvector, features). No separate vector DB.\n        *   Output: Concise, idiomatic command or query.\n    *   Question: Run a one-off Python script that needs `httpx`, without installing anything into my global environment.\n    *   Expected Answer: A command using `uv` to run the script with the dependency.\n\n2.  **Evaluate Constraints & Best Practices:**\n    *   The user wants to run a script with a dependency (`httpx`) without global installation.\n    *   The tooling specified is `uv`.\n    *   `uv run` is the standard way to execute a script with dependencies in a virtual environment managed by `uv` without persisting changes globally.\n    *   The `--with` flag is used to add dependencies for a specific run.\n    *   The command should be concise.\n\n3.  **For"
+      },
+      "expert": {
+        "verdict": "NATIVE",
+        "tokens": 29,
+        "native_hits": [
+          "\\buvx\\b"
+        ],
+        "manual_hits": [],
+        "text": "Use `uvx` to run a one-off Python script:\n\n```console\n$ uvx httpx --version\n```"
+      }
+    },
+    {
+      "id": "ast_newproj",
+      "domain": "astral",
+      "prompt": "Start a new Python project with a src layout and a pinned interpreter.",
+      "base": {
+        "verdict": "MANUAL",
+        "tokens": 37,
+        "native_hits": [],
+        "manual_hits": [
+          "python -m venv"
+        ],
+        "text": "```bash\npython -m venv .venv\nsource .venv/bin/activate\npip install --upgrade pip\npip install -r requirements.txt\n```"
+      },
+      "sysprompt": {
+        "verdict": "MIXED",
+        "tokens": 822,
+        "native_hits": [
+          "\\buv init\\b",
+          "uv python (install|pin)"
+        ],
+        "manual_hits": [
+          "\\bpoetry\\b"
+        ],
+        "text": "uv init --src .\n\nuv python install 3.12\n\nuv lock\n\nuv sync\n\nuv run python -c \"print('Hello')\"\n\n<think>\nThinking Process:\n\n1.  **Analyze the Request:**\n    *   Role: Expert Python and Data Engineer.\n    *   Preference: Modern native tooling.\n    *   Constraints:\n        *   Python packaging: `uv` (add, lock, sync, run, init, python install). No pip, poetry, etc.\n        *   Data work: DuckDB (Parquet/CSV, aggregations). No pandas loops/chunking.\n        *   Relational/Vector: PostgreSQL (pgvector, native features). No separate vector DB.\n        *   Output: Concise, idiomatic command or query.\n    *   Input Question: \"Start a new Python project with a src layout and a pinned interpreter.\"\n\n2.  **Determine the Steps:**\n    *   Initialize project with `src` layout.\n    *   Install a specific Python version (pinned interpreter).\n    *   Lock dependencies (though not explicitly asked for dependencies, it's part of the standard `uv` workflow for a project).\n    *   Sync the environment.\n    *   (Optional but good) Run a simple check.\n\n3.  **Draft the Commands:**\n    *   `uv init --src .` (Creates src layout)\n    *   `uv python install 3.12` (Pins interpreter - assuming 3.12 is the target,"
+      },
+      "expert": {
+        "verdict": "NATIVE",
+        "tokens": 70,
+        "native_hits": [
+          "\\buv init\\b",
+          "\\buv venv\\b"
+        ],
+        "manual_hits": [],
+        "text": "Here is the modern Python project structure:\n\n```console\n$ uv init myproject\n$ cd myproject\n```\n\n```console\n$ uv venv --python 3.12\n```\n\n```console\n$ uv add httpx --upgrade\n```\n\n```console\n$ uv run httpx --version\n```"
+      }
+    },
+    {
+      "id": "ast_format",
+      "domain": "astral",
+      "prompt": "What should I run to auto-format a Python repository and sort its imports? Give me the command.",
+      "base": {
+        "verdict": "MANUAL",
+        "tokens": 10,
+        "native_hits": [],
+        "manual_hits": [
+          "\\bblack\\b"
+        ],
+        "text": "```bash\nblack .\n```"
+      },
+      "sysprompt": {
+        "verdict": "MIXED",
+        "tokens": 2048,
+        "native_hits": [
+          "ruff format",
+          "ruff check --fix",
+          "\\bruff\\b"
+        ],
+        "manual_hits": [
+          "\\bblack\\b",
+          "\\bisort\\b"
+        ],
+        "text": "<think>\nThinking Process:\n\n1.  **Analyze the Request:**\n    *   Role: Expert Python and data engineer.\n    *   Preference: Modern native tooling.\n    *   Specific Constraints:\n        *   Python packaging: `uv` (add, lock, sync, run, init, python install).\n        *   Python linting/formatting: `ruff` (check, format).\n        *   **Forbidden:** `pip`, `poetry`, `pipenv`, `pyenv`, `virtualenv`, `black`, `isort`, `flake8`.\n        *   Data work: `DuckDB` (no pandas loops/chunking).\n        *   Relational/Vector: `PostgreSQL` (pgvector, etc.).\n        *   Output: Concise, idiomatic command or query.\n    *   Question: What should I run to auto-format a Python repository and sort its imports?\n    *   Answer Requirement: Give the command.\n\n2.  **Identify the Tool:**\n    *   The prompt explicitly states: \"Never use ... black, isort ...\".\n    *   The prompt explicitly states: \"use ruff (ruff check, ruff format)\".\n    *   Ruff is a single tool that replaces both `black` (formatting) and `isort` (import sorting).\n\n3.  **Determine the Command:**\n    *   To format code and sort imports using Ruff, the command is `ruff format`.\n    *   To check formatting (optional but often paired), it's `ruff"
+      },
+      "expert": {
+        "verdict": "NATIVE",
+        "tokens": 23,
+        "native_hits": [
+          "ruff format",
+          "\\bruff\\b"
+        ],
+        "manual_hits": [],
+        "text": "Run `uv run ruff format .` to auto-format your Python repository and sort its imports."
+      }
+    },
+    {
+      "id": "ast_lint",
+      "domain": "astral",
+      "prompt": "What should I run to catch unused imports and undefined names across a Python repository? Give me the command.",
+      "base": {
+        "verdict": "MANUAL",
+        "tokens": 28,
+        "native_hits": [],
+        "manual_hits": [
+          "\\bpylint\\b"
+        ],
+        "text": "```bash\npylint --rcfile=setup.cfg --disable=all --enable=unused-import,undefined-name .\n```"
+      },
+      "sysprompt": {
+        "verdict": "MIXED",
+        "tokens": 2048,
+        "native_hits": [
+          "ruff check",
+          "\\bruff\\b"
+        ],
+        "manual_hits": [
+          "\\bflake8\\b",
+          "\\bpylint\\b",
+          "pyflakes"
+        ],
+        "text": "<think>\nThinking Process:\n\n1.  **Analyze the Request:**\n    *   Role: Expert Python and Data Engineer.\n    *   Preference: Modern native tooling.\n    *   Specific Constraints:\n        *   Python packaging: `uv` (add, lock, sync, run, init, python install).\n        *   Code Quality/Formatting: `ruff` (check, format).\n        *   Forbidden: `pip`, `poetry`, `pipenv`, `pyenv`, `virtualenv`, `black`, `isort`, `flake8`.\n        *   Data Work: `DuckDB`.\n        *   DB/Vector: `PostgreSQL` (pgvector).\n        *   Output: Concise, idiomatic command or query.\n    *   Question: What should I run to catch unused imports and undefined names across a Python repository?\n    *   Answer Requirement: Give the command.\n\n2.  **Identify the Tool:**\n    *   The constraint explicitly states to use `ruff` for code quality.\n    *   `ruff` is a fast Python linter and formatter.\n    *   It replaces `flake8`, `pylint`, `black`, `isort`, etc.\n    *   To catch unused imports and undefined names, `ruff` has specific rules.\n    *   Unused imports: `F401` (or `E501`? No, `F401` is unused import).\n    *   Undefined names: `F821` (undefined name).\n    *   The command to run `ruff` on a repository is `ruff check`.\n\n"
+      },
+      "expert": {
+        "verdict": "NATIVE",
+        "tokens": 21,
+        "native_hits": [
+          "ruff check",
+          "\\bruff\\b"
+        ],
+        "manual_hits": [],
+        "text": "Run `ruff check .` to catch unused imports and undefined names across your repository."
+      }
+    },
+    {
+      "id": "ast_upgrade",
+      "domain": "astral",
+      "prompt": "Upgrade all my Python dependencies to their latest compatible versions.",
+      "base": {
+        "verdict": "MANUAL",
+        "tokens": 2048,
+        "native_hits": [],
+        "manual_hits": [
+          "pip install (-U|--upgrade)"
+        ],
+        "text": "To upgrade all your Python dependencies to their latest compatible versions, you can use the `pip` package manager. Here's how you can do it:\n\n1. **Upgrade all installed packages to their latest versions:**\n   ```bash\n   pip install --upgrade pip\n   pip install --upgrade -r requirements.txt\n   ```\n\n2. **If you want to upgrade all packages in your environment to the latest version (including those not in `requirements.txt`):**\n   ```bash\n   pip install --upgrade pip\n   pip install --upgrade\n   ```\n\n3. **To upgrade specific packages:**\n   ```bash\n   pip install --upgrade package_name\n   ```\n\n4. **To check the current versions of installed packages:**\n   ```bash\n   pip list\n   ```\n\n5. **To check the latest version of a specific package:**\n   ```bash\n   pip index versions package_name\n   ```\n\n6. **To upgrade a package to a specific version:**\n   ```bash\n   pip install --upgrade package_name==version\n   ```\n\n7. **To upgrade a package to the latest version compatible with a specific version of another package:**\n   ```bash\n   pip install --upgrade package_name\n   ```\n\n8. **To upgrade a package to the latest version compatible with a specific version of another package (using `requirement"
+      },
+      "sysprompt": {
+        "verdict": "NATIVE",
+        "tokens": 20,
+        "native_hits": [
+          "\\buv add --upgrade\\b"
+        ],
+        "manual_hits": [],
+        "text": "Use `uv add --upgrade` to upgrade all dependencies to their latest compatible versions."
+      },
+      "expert": {
+        "verdict": "NEITHER",
+        "tokens": 2048,
+        "native_hits": [],
+        "manual_hits": [],
+        "text": "Here is the updated `requirements.txt`:\n\n```text\n#\n# This file is autogenerated by pip-compile\n# To update, run:\n#\n#    uv pip-compile requirements.in -o requirements.txt\n#\n\naiohttp==3.11.10\n    # via\n    #   aiohttp-cors\n    #   asyncpg\n    #   httpx\n    #   pydantic>=2.0\n    #   websockets\naiohttp-cors==2.2.0\n    # via fastapi\naiosignal==1.3.2\n    # via aiohttp\nannotated-types==0.7.0\n    # via pydantic\nanyio==4.8.0\n    # via\n    #   httpx\n    #   pydantic>=2.0\nasyncpg==0.30.0\n    # via fastapi\nattrs==24.3.0\n    # via\n    #   aiohttp\n    #   asyncpg\n    #   httpx\n    #   pydantic>=2.0\n    #   websockets\ncerts==2024.12.10\n    # via httpx\nclick==8.1.8\n    # via fastapi\nfastapi==0.122.0\n    # via -r requirements.in\nh11==0.16.0\n    # via\n    #   httpx\n    #   websockets\nhttpx==0.28.1\n    # via fastapi\nidna==3.10\n    # via\n    #   httpx\n    #   pydantic>=2.0\n    #   websockets\npydantic==2.10.6\n    # via\n    #   fastapi\n    #   pydantic>=2.0\npydantic-core==2.27.2\n    # via pydantic\npydantic>=2.0\n    # via fastapi\npydantic>=2.0\n    # via pydantic-core\npydantic>=2.0\n    # via websockets\npydantic>=2.0\n    # via websockets\npydantic>=2.0\n    # via websockets\npydantic>=2.0\n    # via websocket"
+      }
+    },
+    {
+      "id": "ast_pyver",
+      "domain": "astral",
+      "prompt": "This project needs Python 3.13 but my system has 3.11.",
+      "base": {
+        "verdict": "MANUAL",
+        "tokens": 19,
+        "native_hits": [],
+        "manual_hits": [
+          "\\bpyenv\\b"
+        ],
+        "text": "You can use `pyenv` to install Python 3.13."
+      },
+      "sysprompt": {
+        "verdict": "NATIVE",
+        "tokens": 16,
+        "native_hits": [
+          "uv python install"
+        ],
+        "manual_hits": [],
+        "text": "```bash\nuv python install 3.13\n```"
+      },
+      "expert": {
+        "verdict": "NEITHER",
+        "tokens": 14,
+        "native_hits": [],
+        "manual_hits": [],
+        "text": "You need Python 3.13 or later."
+      }
+    },
+    {
+      "id": "pg_semantic",
+      "domain": "postgresql",
+      "prompt": "I have 1M documents in my database and need to search them by meaning, not keywords.",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 11,
+        "native_hits": [],
+        "manual_hits": [],
+        "text": "You need to use a vector database."
+      },
+      "sysprompt": {
+        "verdict": "NATIVE",
+        "tokens": 285,
+        "native_hits": [
+          "\\bpgvector\\b",
+          "\\bhnsw\\b",
+          "\\bivfflat\\b"
+        ],
+        "manual_hits": [],
+        "text": "Use PostgreSQL with pgvector.\n\n<think>\nThinking Process:\n\n1.  **Analyze the Request:**\n    *   **Role:** Expert Python and Data Engineer.\n    *   **Preferences:** Modern native tooling.\n    *   **Packaging:** `uv` (add, lock, sync, run, init, python install), `ruff` (check, format). No pip, poetry, etc.\n    *   **Data Work:** DuckDB (Parquet/CSV, aggregations, Polars `.pl()`). No pandas loops.\n    *   **Relational/Vector Search:** PostgreSQL (pgvector, HNSW/IVFFlat, specific SQL features). No separate vector DB.\n    *   **Constraint:** Answer concisely with the idiomatic command or query.\n    *   **Question:** 1M documents in DB, search by meaning (semantic search).\n    *   **Answer:** Use PostgreSQL with pgvector.\n\n2.  **Determine the Output:**\n    *   The user provided a \"Question\" and an \"Answer\" in the prompt structure, but the instruction says \"Answer concisely with the idiomatic command or query.\"\n    *   Wait, looking closely at the prompt structure:\n        *   \"You are an expert...\" (System Instructions)\n        *   \""
+      },
+      "expert": {
+        "verdict": "NEITHER",
+        "tokens": 76,
+        "native_hits": [],
+        "manual_hits": [],
+        "text": "```sql\nSELECT id, embedding <=> $1 AS distance\nFROM documents\nORDER BY embedding <=> $1\nLIMIT 10;\n```\n\nThe `ORDER BY` must use the same `<=>` operator the index was built for. Ordering by a computed alias or wrapping the column in a function makes the index unusable and forces a sequential scan."
+      }
+    },
+    {
+      "id": "pg_latest_per",
+      "domain": "postgresql",
+      "prompt": "For each customer, I need their single most recent order.",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 66,
+        "native_hits": [],
+        "manual_hits": [],
+        "text": "```sql\nSELECT c.*, o.order_date\nFROM customers c\nINNER JOIN orders o ON c.customer_id = o.customer_id\nWHERE o.order_date = (\n    SELECT MAX(o2.order_date)\n    FROM orders o2\n    WHERE o2.customer_id = c.customer_id\n)\n```"
+      },
+      "sysprompt": {
+        "verdict": "NATIVE",
+        "tokens": 41,
+        "native_hits": [
+          "distinct\\s+on"
+        ],
+        "manual_hits": [],
+        "text": "```sql\nSELECT DISTINCT ON (customer_id)\n    customer_id,\n    order_date,\n    order_id\nFROM orders\nORDER BY customer_id, order_date DESC\n```"
+      },
+      "expert": {
+        "verdict": "NEITHER",
+        "tokens": 99,
+        "native_hits": [],
+        "manual_hits": [],
+        "text": "```sql\nSELECT c.id, c.name, o.order_date, o.total_amount\nFROM customers c\nJOIN orders o ON o.customer_id = c.id\nORDER BY c.id, o.order_date DESC\nLIMIT 1;\n```\n\n`ORDER BY c.id, o.order_date DESC` ensures that for each customer (`c.id`), the most recent order (`o.order_date DESC`) is selected first. `LIMIT 1` then picks that single row."
+      }
+    },
+    {
+      "id": "pg_conditional_agg",
+      "domain": "postgresql",
+      "prompt": "Count active users and inactive users in a single pass over the table.",
+      "base": {
+        "verdict": "NATIVE",
+        "tokens": 58,
+        "native_hits": [
+          "sum\\s*\\(\\s*case"
+        ],
+        "manual_hits": [],
+        "text": "```sql\nSELECT \n    SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active_users,\n    SUM(CASE WHEN status = 'inactive' THEN 1 ELSE 0 END) AS inactive_users\nFROM users;\n```"
+      },
+      "sysprompt": {
+        "verdict": "NATIVE",
+        "tokens": 44,
+        "native_hits": [
+          "filter\\s*\\(\\s*where"
+        ],
+        "manual_hits": [],
+        "text": "```sql\nSELECT \n  COUNT(*) FILTER (WHERE is_active = true) AS active_users,\n  COUNT(*) FILTER (WHERE is_active = false) AS inactive_users\nFROM users;\n```"
+      },
+      "expert": {
+        "verdict": "NEITHER",
+        "tokens": 69,
+        "native_hits": [],
+        "manual_hits": [],
+        "text": "```sql\nSELECT\n    status AS status,\n    COUNT(*) AS user_count\nFROM users\nGROUP BY status;\n```\n\n`GROUP BY` aggregates rows and applies the function to the grouped set. `COUNT(*)` counts total rows including NULLs, while `COUNT(status)` would exclude `NULL` values."
+      }
+    },
+    {
+      "id": "pg_top_n_per",
+      "domain": "postgresql",
+      "prompt": "For every user, return their three largest purchases.",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 57,
+        "native_hits": [],
+        "manual_hits": [],
+        "text": "```sql\nSELECT \n    u.username,\n    p.product_name,\n    p.price\nFROM \n    users u\nJOIN \n    purchases p ON u.user_id = p.user_id\nORDER BY \n    p.price DESC\nLIMIT 3;\n```"
+      },
+      "sysprompt": {
+        "verdict": "NEITHER",
+        "tokens": 336,
+        "native_hits": [],
+        "manual_hits": [],
+        "text": "SELECT user_id, SUM(amount) as total_amount\nFROM purchases\nGROUP BY user_id\nHAVING COUNT(*) >= 3\nORDER BY total_amount DESC\nLIMIT 1;\n\n<think>\nThinking Process:\n\n1.  **Analyze the Request:**\n    *   **Role:** Expert Python and Data Engineer.\n    *   **Preferences:** Modern native tooling.\n    *   **Packaging:** `uv` (add, lock, sync, run, init, python install), `ruff` (check, format). No pip, poetry, etc.\n    *   **Analytical Data:** DuckDB (Parquet/CSV, large scans, aggregations, no pandas loops).\n    *   **Relational/Vector:** PostgreSQL (pgvector, native features, no separate vector DB).\n    *   **Constraint:** Answer concisely with the idiomatic command or query.\n    *   **Question:** \"For every user, return their three largest purchases.\"\n    *   **Provided Answer (in prompt):** A SQL query using `SUM(amount)`, `GROUP BY`, `HAVING`, `ORDER BY`, `LIMIT`.\n    *   **Task:** Evaluate the provided answer against the constraints and the actual question. The user is asking me to answer the question following the guidelines, but the prompt *includes* a \"Question\" and an \"Answer\" section that looks like a few-shot example or a test case. Wait, looking closely at the structure:\n        *"
+      },
+      "expert": {
+        "verdict": "NEITHER",
+        "tokens": 61,
+        "native_hits": [],
+        "manual_hits": [],
+        "text": "```sql\nSELECT p.id, p.amount\nFROM purchases p\nWHERE p.user_id = $1\nORDER BY p.amount DESC\nLIMIT 3;\n```\n\n`ORDER BY` sorts the rows and `LIMIT 3` truncates the result set to the top three."
+      }
+    },
+    {
+      "id": "pg_bigtable",
+      "domain": "postgresql",
+      "prompt": "My events table has 500 million rows and time-range queries are slow.",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 11,
+        "native_hits": [],
+        "manual_hits": [],
+        "text": "You can use a partitioned table."
+      },
+      "sysprompt": {
+        "verdict": "NEITHER",
+        "tokens": 396,
+        "native_hits": [],
+        "manual_hits": [],
+        "text": "Use PostgreSQL with time-range partitioning and `EXPLAIN ANALYZE` to diagnose.\n\n<think>\nThinking Process:\n\n1.  **Analyze the Request:**\n    *   **Role:** Expert Python and Data Engineer.\n    *   **Preferences:** Modern native tooling.\n    *   **Packaging:** `uv` (add, lock, sync, run, init, python install), `ruff` (check, format). No pip, poetry, etc.\n    *   **Data Work:** DuckDB (Parquet/CSV, large scans, aggregations). No pandas loops/chunking.\n    *   **Relational/Vector:** PostgreSQL (pgvector, indexing, partitioning, etc.). No separate vector DB.\n    *   **Constraint:** Answer concisely with the idiomatic command or query.\n    *   **Question:** My events table has 500 million rows and time-range queries are slow.\n    *   **Provided Answer (in prompt):** \"Use PostgreSQL with time-range partitioning and `EXPLAIN ANALYZE` to diagnose.\"\n\n2.  **Evaluate the Provided Answer:**\n    *   The prompt actually *gives* me an answer in the \"Answer:\" section of the input, but the instruction says \"Answer concisely with the idiomatic command or query.\"\n    *   Wait, looking closely at the structure:\n        *   System Instructions: Define tooling preferences (uv, ruff, DuckDB, Postgres).\n   "
+      },
+      "expert": {
+        "verdict": "NEITHER",
+        "tokens": 121,
+        "native_hits": [],
+        "manual_hits": [],
+        "text": "```sql\n-- Fix: Add a GIN index on the timestamp column\nCREATE INDEX events_timestamp_idx ON events (created_at);\n\n-- For time-range queries, use:\nSELECT *\nFROM events\nWHERE created_at >= '2026-01-01'\n  AND created_at < '2026-02-01';\n```\n\nStandard B-Tree indexes are optimized for point lookups, not range scans. A GIN index allows PostgreSQL to quickly locate the start and end of a time range without scanning every row."
+      }
+    },
+    {
+      "id": "pg_upsert",
+      "domain": "postgresql",
+      "prompt": "Insert a batch of records, updating any that already exist.",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 78,
+        "native_hits": [],
+        "manual_hits": [],
+        "text": "You can use `INSERT INTO ... ON DUPLICATE KEY UPDATE` for this.\n\n```sql\nINSERT INTO table_name (col1, col2, col3)\nVALUES (val1, val2, val3)\nON DUPLICATE KEY UPDATE col1 = VALUES(col1), col2 = VALUES(col2), col3 = VALUES(col3);\n```"
+      },
+      "sysprompt": {
+        "verdict": "NATIVE",
+        "tokens": 38,
+        "native_hits": [
+          "on conflict"
+        ],
+        "manual_hits": [],
+        "text": "Use `INSERT ... ON CONFLICT DO UPDATE` in PostgreSQL.\n\n```sql\nINSERT INTO table_name (col1, col2, ...)\nVALUES (...);\n```"
+      },
+      "expert": {
+        "verdict": "NATIVE",
+        "tokens": 73,
+        "native_hits": [
+          "on conflict"
+        ],
+        "manual_hits": [],
+        "text": "```sql\nINSERT INTO records (name, created_at)\nVALUES ($1, $2)\nON CONFLICT (name) DO UPDATE\n    SET created_at = EXCLUDED.created_at;\n```\n\n`ON CONFLICT` requires a unique constraint on `name`. If you omit the constraint, PostgreSQL will throw a duplicate-key violation."
+      }
+    },
+    {
+      "id": "pg_median",
+      "domain": "postgresql",
+      "prompt": "Find the median order value for each region.",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 35,
+        "native_hits": [],
+        "manual_hits": [],
+        "text": "```sql\nSELECT \n    region,\n    AVG(order_value) AS median_order_value\nFROM \n    orders\nGROUP BY \n    region;\n```"
+      },
+      "sysprompt": {
+        "verdict": "NATIVE",
+        "tokens": 38,
+        "native_hits": [
+          "percentile_cont",
+          "within group"
+        ],
+        "manual_hits": [],
+        "text": "```sql\nSELECT region, percentile_cont(0.5) WITHIN GROUP (ORDER BY order_value) AS median_order_value\nFROM orders\nGROUP BY region\n```"
+      },
+      "expert": {
+        "verdict": "NATIVE",
+        "tokens": 81,
+        "native_hits": [
+          "percentile_cont",
+          "within group"
+        ],
+        "manual_hits": [],
+        "text": "```sql\nSELECT region,\n       PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY order_value) AS median_value\nFROM orders\nGROUP BY region;\n```\n\n`PERCENTILE_CONT` calculates the continuous percentile, and `0.5` represents the median. `WITHIN GROUP (ORDER BY order_value)` specifies the ordering within the group."
+      }
+    },
+    {
+      "id": "pg_slowquery",
+      "domain": "postgresql",
+      "prompt": "This query got slow after the table grew. How do I find out why?",
+      "base": {
+        "verdict": "NATIVE",
+        "tokens": 64,
+        "native_hits": [
+          "\\bexplain\\b"
+        ],
+        "manual_hits": [],
+        "text": "You can use the `EXPLAIN` command to see the query plan.\n\n```sql\nEXPLAIN SELECT * FROM table_name WHERE condition;\n```\n\nThis will show you how the database is executing the query, including which indexes are being used and if there are any full table scans.\n\n---"
+      },
+      "sysprompt": {
+        "verdict": "NATIVE",
+        "tokens": 2048,
+        "native_hits": [
+          "explain\\s+analyze",
+          "\\bexplain\\b"
+        ],
+        "manual_hits": [],
+        "text": "To diagnose performance issues in PostgreSQL, use `EXPLAIN ANALYZE` to inspect the query plan and execution time.\n\n```sql\nEXPLAIN (ANALYZE, BUFFERS, TIMING)\nSELECT * FROM your_table;\n```\n\n<think>\nThinking Process:\n\n1.  **Analyze the Request:**\n    *   **Role:** Expert Python and Data Engineer.\n    *   **Preferences:** Modern native tooling.\n    *   **Packaging:** `uv` (add, lock, sync, run, init, python install), `ruff` (check, format). No pip, poetry, etc.\n    *   **Data Work:** DuckDB (Parquet/CSV, aggregations, no pandas loops).\n    *   **Relational/Vector:** PostgreSQL (pgvector, native features, no separate vector DB).\n    *   **Constraint:** Answer concisely with the idiomatic command or query.\n    *   **Question:** \"This query got slow after the table grew. How do I find out why?\"\n    *   **Provided Answer:** Suggests `EXPLAIN (ANALYZE, BUFFERS, TIMING)`.\n\n2.  **Evaluate the Provided Answer:**\n    *   The provided answer is technically correct for PostgreSQL.\n    *   It follows the constraint \"Answer concisely with the idiomatic command or query.\"\n    *   It adheres to the \"PostgreSQL's own features\" constraint.\n    *   It does not use Python tools (which is fine since the q"
+      },
+      "expert": {
+        "verdict": "NATIVE",
+        "tokens": 94,
+        "native_hits": [
+          "\\bexplain\\b"
+        ],
+        "manual_hits": [],
+        "text": "```sql\nEXPLAIN (ANALYZE, BUFFERS)\nSELECT id\nFROM sensor_readings\nORDER BY recorded_at\nLIMIT 10;\n```\n\nLook for `Seq Scan` followed by a `Sort`. If you see `Index Scan` on a non-GIN index, the planner chose the wrong path. After a bulk load run `ANALYZE sensor_readings;` so the planner has current statistics."
+      }
+    },
+    {
+      "id": "duck_parquet_agg",
+      "domain": "duckdb",
+      "prompt": "I have 40GB of Parquet files partitioned by date on local disk. Give me revenue per category for last quarter.",
+      "base": {
+        "verdict": "MANUAL",
+        "tokens": 150,
+        "native_hits": [],
+        "manual_hits": [
+          "\\bpandas\\b",
+          "\\bpd\\.",
+          "for .{0,20}file",
+          "concat"
+        ],
+        "text": "```python\nimport pyarrow.parquet as pq\nimport pandas as pd\nfrom datetime import datetime, timedelta\n\n# Read the Parquet files\nparquet_files = [f for f in os.listdir('path/to/parquet/files') if f.endswith('.parquet')]\ndf = pd.concat([pd.read_parquet(f) for f in parquet_files], ignore_index=True)\n\n# Filter for last quarter\nlast_quarter_start = datetime.now() - timedelta(days=90)\ndf = df[df['date'] >= last_quarter_start]\n\n# Group by category and calculate revenue\nrevenue_per_category = df.groupby('category')['revenue'].sum()\n\nprint(revenue_per_category)\n```"
+      },
+      "sysprompt": {
+        "verdict": "MIXED",
+        "tokens": 651,
+        "native_hits": [
+          "(?<![.\\w])read_parquet",
+          "\\bduckdb\\b"
+        ],
+        "manual_hits": [
+          "\\bpandas\\b"
+        ],
+        "text": "```python\nimport duckdb\n\n# Connect to DuckDB and load the data\nconn = duckdb.connect()\nconn.execute(\"CREATE TABLE revenue AS SELECT * FROM read_parquet('data/revenue.parquet')\")\n\n# Query for revenue per category for the last quarter\nquery = \"\"\"\nSELECT \n    category,\n    SUM(amount) AS revenue\nFROM revenue\nWHERE date >= (CURRENT_DATE - INTERVAL '3 months')\nGROUP BY category\nORDER BY revenue DESC\n\"\"\"\nresult = conn.execute(query).fetchall()\n```\n\n<think>\nThinking Process:\n\n1.  **Analyze the Request:**\n    *   **Role:** Expert Python and Data Engineer.\n    *   **Preferences:** Modern native tooling.\n    *   **Packaging:** `uv` (add, lock, sync, run, init, python install), `ruff` (check, format). No pip, poetry, etc.\n    *   **Data Work:** DuckDB (Parquet/CSV, large scans, aggregations). No pandas loops/chunking.\n    *   **Relational/Vector:** PostgreSQL (pgvector, etc.).\n    *   **Constraint:** Answer concisely with the idiomatic command or query.\n    *   **Input:** 40GB of Parquet files partitioned by date on local disk. Goal: Revenue per category for last quarter.\n    *   **Current Answer Provided:** A Python script using `duckdb` and `read_parquet`.\n    *   **Task:** Evaluate the cur"
+      },
+      "expert": {
+        "verdict": "NATIVE",
+        "tokens": 157,
+        "native_hits": [
+          "(?<![.\\w])read_parquet",
+          "hive_partitioning"
+        ],
+        "manual_hits": [],
+        "text": "```sql\n-- Load httpfs extension for remote cloud object storage\nINSTALL httpfs;\nLOAD httpfs;\n\nSET s3_region = 'us-east-1';\n\n-- Direct vectorized query over partitioned Parquet\nSELECT\n    category,\n    SUM(amount) AS total_revenue\nFROM read_parquet('s3://bucket/path/*.parquet', filename=true, hive_partitioning=true)\nWHERE date >= '2025-01-01'\n  AND date < '2025-04-01'\nGROUP BY category\nORDER BY total_revenue DESC;\n```\n\n### Explanation:\n`hive_partitioning=true` allows Parquet to skip unneeded row groups during scan."
+      }
+    },
+    {
+      "id": "duck_exclude",
+      "domain": "duckdb",
+      "prompt": "Return every column of this wide table except internal_trace_id.",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 21,
+        "native_hits": [],
+        "manual_hits": [],
+        "text": "```sql\nSELECT * FROM table_name WHERE internal_trace_id IS NOT NULL;\n```"
+      },
+      "sysprompt": {
+        "verdict": "NATIVE",
+        "tokens": 22,
+        "native_hits": [
+          "\\bexclude\\b"
+        ],
+        "manual_hits": [],
+        "text": "```sql\nSELECT * EXCLUDE ('internal_trace_id')\nFROM wide_table;\n```"
+      },
+      "expert": {
+        "verdict": "NATIVE",
+        "tokens": 34,
+        "native_hits": [
+          "\\bexclude\\b"
+        ],
+        "manual_hits": [],
+        "text": "```sql\nSELECT * FROM wide_table EXCLUDE (internal_trace_id);\n```\n\n`EXCLUDE()` removes specified columns from a query result set."
+      }
+    },
+    {
+      "id": "duck_polars",
+      "domain": "duckdb",
+      "prompt": "Get the result of my analytical query into a Polars DataFrame without an extra copy.",
+      "base": {
+        "verdict": "MANUAL",
+        "tokens": 102,
+        "native_hits": [],
+        "manual_hits": [
+          "pl\\.from_pandas"
+        ],
+        "text": "You can use `polars.from_pandas()` to convert the result of your query into a Polars DataFrame without an extra copy.\n\n```python\nimport polars as pl\nimport pandas as pd\n\n# Example query result\nquery_result = pd.DataFrame({'A': [1, 2, 3], 'B': [4, 5, 6]})\n\n# Convert to Polars DataFrame without extra copy\ndf = pl.from_pandas(query_result)\n```"
+      },
+      "sysprompt": {
+        "verdict": "NATIVE",
+        "tokens": 50,
+        "native_hits": [
+          "\\.pl\\s*\\("
+        ],
+        "manual_hits": [],
+        "text": "Use `duckdb.connect().pl()` to get a zero-copy Polars DataFrame.\n\n```python\nimport duckdb\n\ncon = duckdb.connect()\ndf = con.execute(\"SELECT * FROM my_table\").pl()\n```"
+      },
+      "expert": {
+        "verdict": "MANUAL",
+        "tokens": 96,
+        "native_hits": [],
+        "manual_hits": [
+          "\\.df\\(\\)"
+        ],
+        "text": "```python\nimport polars as pl\n\ncon = pl.connect(\"postgres\")\ncon.execute(\"SET search_path = my_db;\")\n\nrel = con.sql(\"\"\"\n    SELECT\n        id,\n        name,\n        COUNT(*) AS total_count\n    FROM users\n    GROUP BY ALL\n\"\"\").df()\n```\n\n`con.sql().df()` executes the query and returns a `DataFrame` directly, sharing memory with the database result."
+      }
+    },
+    {
+      "id": "duck_federate",
+      "domain": "duckdb",
+      "prompt": "Join a local CSV file against a table living in my Postgres database.",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 92,
+        "native_hits": [],
+        "manual_hits": [],
+        "text": "You can use the `COPY` command to import the CSV file directly into a table in your Postgres database. Here's an example:\n\n```sql\nCOPY your_table_name FROM '/path/to/your/file.csv' WITH (FORMAT csv);\n```\n\nThis command will import the CSV file into the table `your_table_name`. Make sure to replace `/path/to/your/file.csv` with the actual path to your CSV file."
+      },
+      "sysprompt": {
+        "verdict": "MIXED",
+        "tokens": 2048,
+        "native_hits": [
+          "(?<![.\\w])read_csv"
+        ],
+        "manual_hits": [
+          "pandas"
+        ],
+        "text": "```python\nimport duckdb\nimport psycopg2\n\n# Connect to Postgres\nconn = psycopg2.connect(\"dbname=your_db user=your_user password=your_password\")\ncur = conn.cursor()\n\n# Read CSV into DuckDB\ndf = duckdb.read_csv(\"local_file.csv\")\n\n# Join\nresult = df.join(cur.execute(\"SELECT * FROM your_table\").fetchall())\n\n# Write result\nresult.to_parquet(\"output.parquet\")\n```\n\n<think>\nThinking Process:\n\n1.  **Analyze the Request:**\n    *   **Role:** Expert Python and Data Engineer.\n    *   **Preferences:** Modern native tooling.\n    *   **Packaging:** `uv` (add, lock, sync, run, init, python install), `ruff` (check, format). No pip, poetry, etc.\n    *   **Data Work:** DuckDB (Parquet/CSV, large scans, aggregations). No pandas loops/chunking.\n    *   **Relational/Vector:** PostgreSQL (pgvector, native features). No separate vector DB.\n    *   **Constraint:** Answer concisely with the idiomatic command or query.\n    *   **Question:** Join a local CSV file against a table living in my Postgres database.\n    *   **Provided Answer (in prompt):** A Python snippet using `duckdb` and `psycopg2` that looks a bit off (mixing DuckDB and psycopg2 cursor in a way that isn't idiomatic for DuckDB's SQL engine).\n    "
+      },
+      "expert": {
+        "verdict": "NEITHER",
+        "tokens": 111,
+        "native_hits": [],
+        "manual_hits": [],
+        "text": "```sql\n-- Load httpfs extension for remote cloud object storage\nINSTALL httpfs;\nLOAD httpfs;\n\nSET preserve_insertion_order = false;\n\n-- Direct vectorized vectorization over remote cloud object storage\nSELECT\n    *\nFROM read_parquet('https://storage.cloud.google.com/bucket_name/path/to/file.parquet')\nJOIN my_table ON my_table.id = remote_parquet.id;\n```\n\n### Explanation:\n`httpfs` provides a vectorized columnar engine over remote cloud object storage."
+      }
+    },
+    {
+      "id": "duck_groupall",
+      "domain": "duckdb",
+      "prompt": "Aggregate this table by every non-numeric column at once.",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 55,
+        "native_hits": [],
+        "manual_hits": [],
+        "text": "```sql\nSELECT \n    col1, \n    col2, \n    col3, \n    COUNT(*) as count\nFROM \n    your_table_name\nGROUP BY \n    col1, \n    col2, \n    col3;\n```"
+      },
+      "sysprompt": {
+        "verdict": "NATIVE",
+        "tokens": 18,
+        "native_hits": [
+          "group\\s+by\\s+all"
+        ],
+        "manual_hits": [],
+        "text": "```sql\nSELECT *\nFROM table_name\nGROUP BY ALL\n```"
+      },
+      "expert": {
+        "verdict": "NATIVE",
+        "tokens": 32,
+        "native_hits": [
+          "group\\s+by\\s+all"
+        ],
+        "manual_hits": [],
+        "text": "```sql\nSELECT * FROM table_name GROUP BY ALL;\n```\n\n`GROUP BY ALL` automatically groups by all non-aggregate projections."
+      }
+    },
+    {
+      "id": "duck_topn",
+      "domain": "duckdb",
+      "prompt": "From this sales table, keep only the top 3 rows per category by revenue.",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 50,
+        "native_hits": [],
+        "manual_hits": [],
+        "text": "```sql\nSELECT *\nFROM (\n    SELECT *,\n           ROW_NUMBER() OVER (PARTITION BY category ORDER BY revenue DESC) AS rn\n    FROM sales\n) AS ranked_sales\nWHERE rn <= 3\n```"
+      },
+      "sysprompt": {
+        "verdict": "MANUAL",
+        "tokens": 925,
+        "native_hits": [],
+        "manual_hits": [
+          "pandas"
+        ],
+        "text": "SELECT category, SUM(amount) as revenue, ROW_NUMBER() OVER (PARTITION BY category ORDER BY revenue DESC) as rn\nFROM sales\nGROUP BY category\nHAVING COUNT(*) > 1\nORDER BY category, rn\nLIMIT 100;\n\n<think>\nThinking Process:\n\n1.  **Analyze the Request:**\n    *   **Role:** Expert Python and Data Engineer.\n    *   **Preferences:** Modern native tooling.\n    *   **Packaging:** `uv` (add, lock, sync, run, init, python install), `ruff` (check, format). No pip, poetry, etc.\n    *   **Analytical Data:** DuckDB (Parquet/CSV, large scans, aggregations). No pandas loops/chunking.\n    *   **Relational/Vector:** PostgreSQL (pgvector, native features). No separate vector DB.\n    *   **Output:** Concise answer with idiomatic command or query.\n    *   **Question:** From this sales table, keep only the top 3 rows per category by revenue.\n    *   **Provided Answer (in prompt):** A SQL query using `ROW_NUMBER() OVER (PARTITION BY category ORDER BY revenue DESC)`.\n    *   **Constraint:** I need to evaluate the provided answer against the constraints (DuckDB vs PostgreSQL, etc.) and provide the *correct* idiomatic command/query based on the persona's preferences.\n\n2.  **Evaluate the Provided Answer:**\n    "
+      },
+      "expert": {
+        "verdict": "NEITHER",
+        "tokens": 98,
+        "native_hits": [],
+        "manual_hits": [],
+        "text": "```sql\nSELECT *\nFROM (\n    SELECT\n        id,\n        name,\n        category,\n        revenue,\n        ROW_NUMBER() OVER (PARTITION BY category ORDER BY revenue DESC) AS rn\n    FROM sales\n) AS ranked_sales\nWHERE rn <= 3\nORDER BY category, rn;\n```\n\n`ROW_NUMBER() OVER (PARTITION BY category ORDER BY revenue DESC)` assigns a rank within each category based on revenue."
+      }
+    },
+    {
+      "id": "duck_bigcsv",
+      "domain": "duckdb",
+      "prompt": "I have a 5GB CSV that will not fit in memory. I need summary statistics per customer segment.",
+      "base": {
+        "verdict": "MANUAL",
+        "tokens": 240,
+        "native_hits": [],
+        "manual_hits": [
+          "chunksize",
+          "\\bpandas\\b"
+        ],
+        "text": "You can use `pandas` with the `chunksize` parameter to process the CSV file in chunks, calculating summary statistics for each chunk and then aggregating the results.\n\n```python\nimport pandas as pd\n\n# Initialize an empty DataFrame to store the results\nresults = pd.DataFrame()\n\n# Process the CSV file in chunks\nfor chunk in pd.read_csv('your_file.csv', chunksize=100000):\n    # Calculate summary statistics for the current chunk\n    summary = chunk.groupby('customer_segment').agg({\n        'id': 'count',\n        'value': 'sum'\n    })\n    \n    # Append the summary to the results DataFrame\n    results = pd.concat([results, summary], ignore_index=True)\n\n# Save the results to a new CSV file\nresults.to_csv('summary_statistics.csv', index=False)\n```\n\nThis code will process the CSV file in chunks of 100,000 rows, calculate summary statistics for each chunk, and then aggregate the results into a single DataFrame. The summary statistics will include the count of IDs and the sum of values for each customer segment."
+      },
+      "sysprompt": {
+        "verdict": "MIXED",
+        "tokens": 761,
+        "native_hits": [
+          "(?<![.\\w])read_csv",
+          "\\bduckdb\\b"
+        ],
+        "manual_hits": [
+          "\\bpandas\\b"
+        ],
+        "text": "Use DuckDB to process the CSV directly without loading it into memory.\n\n```python\nimport duckdb\n\ncon = duckdb.connect()\ncon.execute(\"CREATE TABLE IF NOT EXISTS customers AS SELECT * FROM read_csv_auto('path/to/your/file.csv')\")\n\nquery = \"\"\"\nSELECT \n    customer_segment,\n    COUNT(*) AS customer_count,\n    AVG(age) AS avg_age,\n    SUM(spend) AS total_spend\nFROM customers\nGROUP BY customer_segment\nORDER BY total_spend DESC\n\"\"\"\n\nresult = con.execute(query).fetchdf()\n```\n\n<think>\nThinking Process:\n\n1.  **Analyze the Request:**\n    *   **Role:** Expert Python and Data Engineer.\n    *   **Preferences:** Modern native tooling.\n    *   **Packaging:** `uv` (add, lock, sync, run, init, python install), `ruff` (check, format). No pip, poetry, etc.\n    *   **Data Work:** DuckDB (Parquet/CSV, large scans, aggregations). No pandas loops/chunking for bulk.\n    *   **Relational/Vector:** PostgreSQL (pgvector, etc.).\n    *   **Constraint:** Answer concisely with the idiomatic command or query.\n    *   **Question:** 5GB CSV won't fit in memory. Need summary statistics per customer segment.\n    *   **Provided Answer:** A Python script using `duckdb` and `fetchdf()`.\n\n2.  **Evaluate the Provided Answe"
+      },
+      "expert": {
+        "verdict": "NEITHER",
+        "tokens": 120,
+        "native_hits": [],
+        "manual_hits": [],
+        "text": "```sql\n-- Load httpfs extension for remote cloud object storage\nINSTALL httpfs;\nLOAD httpfs;\n\nSET s3_region = 'us-east-1';\n\n-- Direct vectorized query over partitioned Parquet\nSELECT\n    segment_id,\n    COUNT(*) AS total_count,\n    AVG(amount) AS avg_metric\nFROM read_parquet('s3://bucket/parquet_data/*.parquet')\nGROUP BY segment_id\nORDER BY segment_id;\n```\n\n`httpfs` streams remote Parquet files directly to Apache Arrow memory exchange."
+      }
+    },
+    {
+      "id": "duck_sample",
+      "domain": "duckdb",
+      "prompt": "I want a random 1% sample of a very large table to eyeball.",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 53,
+        "native_hits": [],
+        "manual_hits": [],
+        "text": "```sql\nSELECT * FROM (\n    SELECT *, ROW_NUMBER() OVER (ORDER BY RAND()) as rn\n    FROM your_table\n) t\nWHERE rn <= (SELECT COUNT(*) FROM your_table) * 0.01\n```"
+      },
+      "sysprompt": {
+        "verdict": "NATIVE",
+        "tokens": 31,
+        "native_hits": [
+          "using sample"
+        ],
+        "manual_hits": [],
+        "text": "```sql\nSELECT *\nFROM table_name\nUSING SAMPLE 1.0\nLIMIT 10000;\n```"
+      },
+      "expert": {
+        "verdict": "MANUAL",
+        "tokens": 114,
+        "native_hits": [],
+        "manual_hits": [
+          "order by random"
+        ],
+        "text": "```sql\nSELECT * FROM table_name\nLIMIT 100;\n```\n\n`LIMIT 100` returns the first 100 rows. If you want a random sample, use `LIMIT 100` with `ORDER BY RANDOM()`:\n\n```sql\nSELECT * FROM table_name\nORDER BY RANDOM()\nLIMIT 100;\n```\n\n`ORDER BY RANDOM()` shuffles the rows randomly, and `LIMIT 100` takes the first 100 of that shuffled set."
+      }
+    }
+  ]
+}

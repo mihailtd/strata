@@ -25,7 +25,7 @@ from gnn_experiment.canon import REPO_ROOT as REPO  # noqa: E402
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
 CANON_MAX_NEW_TOKENS = 2048
-CANON_ADAPTER_VERSION = "v4"
+CANON_ADAPTER_VERSION = "v6"
 
 # Signals that a script grades OUTPUT QUALITY rather than latency.
 QUALITY_MARKERS = (

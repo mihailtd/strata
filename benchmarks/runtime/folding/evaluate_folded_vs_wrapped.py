@@ -43,7 +43,7 @@ from pathlib import Path
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+from gnn_experiment.canon import REPO_ROOT, adapter_path  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
@@ -126,7 +126,7 @@ DOMAINS = {
         "bad": GENERAL_FILLER_TERMS,
     },
     "duckdb": {
-        "adapter": "results/adapters/m2_duckdb_r8a128_v4",
+        "adapter": str(adapter_path("duckdb").relative_to(REPO_ROOT)),
         "questions": "data/duckdb/evaluation_data.jsonl",
         "good": [],
         "bad": [],

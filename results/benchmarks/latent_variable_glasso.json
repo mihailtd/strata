@@ -1,0 +1,103 @@
+{
+  "metadata": {
+    "ADAPTER_VERSION": "v4",
+    "MAX_NEW_TOKENS": 2048,
+    "BASE_MODEL": "Qwen/Qwen3.5-4B",
+    "VRAM_CAP_GB": 22.0,
+    "GREEDY": true,
+    "LORA_RANK": 8,
+    "LORA_ALPHA": 128
+  },
+  "n_samples": 300,
+  "n_features": 512,
+  "latent_confounder_ratio": 0.4160346132310541,
+  "rank_latent_L": 299,
+  "glasso_sparsity_pct": 85.61477661132812,
+  "lv_glasso_sparsity_pct": 99.99923706054688,
+  "pairwise_results": {
+    "astral+postgresql": {
+      "mean_marginal_corr": 0.046385863457186455,
+      "mean_glasso_precision": 0.0036949106043313606,
+      "mean_lv_glasso_sparse": 0.0,
+      "active_conflict_edges": 0,
+      "verdict": "Conditionally Independent"
+    },
+    "astral+duckdb": {
+      "mean_marginal_corr": 0.04647806680836147,
+      "mean_glasso_precision": 0.0037971819298774495,
+      "mean_lv_glasso_sparse": 2.058056756525075e-05,
+      "active_conflict_edges": 1,
+      "verdict": "1 Direct Conflict Edges"
+    },
+    "astral+financial": {
+      "mean_marginal_corr": 0.04621313574693549,
+      "mean_glasso_precision": 0.003577839995099831,
+      "mean_lv_glasso_sparse": 0.0,
+      "active_conflict_edges": 0,
+      "verdict": "Conditionally Independent"
+    },
+    "postgresql+duckdb": {
+      "mean_marginal_corr": 0.046483454888006606,
+      "mean_glasso_precision": 0.0037753857032251557,
+      "mean_lv_glasso_sparse": 0.0,
+      "active_conflict_edges": 0,
+      "verdict": "Conditionally Independent"
+    },
+    "postgresql+financial": {
+      "mean_marginal_corr": 0.045887091209237695,
+      "mean_glasso_precision": 0.003598966225791574,
+      "mean_lv_glasso_sparse": 0.0,
+      "active_conflict_edges": 0,
+      "verdict": "Conditionally Independent"
+    },
+    "duckdb+financial": {
+      "mean_marginal_corr": 0.04633463203808652,
+      "mean_glasso_precision": 0.0036989900544043175,
+      "mean_lv_glasso_sparse": 0.0,
+      "active_conflict_edges": 0,
+      "verdict": "Conditionally Independent"
+    }
+  },
+  "layer_conflict_histogram": [
+    1,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "top_conflict_layers": [
+    0,
+    3,
+    1,
+    2,
+    4
+  ],
+  "elapsed_seconds": 25.791020154953003
+}

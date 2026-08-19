@@ -1,0 +1,101 @@
+{
+  "metadata": {
+    "ADAPTER_VERSION": "v6",
+    "MAX_NEW_TOKENS": 2048,
+    "BASE_MODEL": "Qwen/Qwen3.5-4B",
+    "VRAM_CAP_GB": 22.0,
+    "GREEDY": true,
+    "LORA_RANK": 8,
+    "LORA_ALPHA": 128
+  },
+  "device": "cuda:0",
+  "device_name": "AMD Radeon RX 7900 XTX",
+  "peak_vram_gb": 13.974790144,
+  "total_tokens_generated": 909,
+  "total_pipeline_time": 30.147960424423218,
+  "phase_results": [
+    {
+      "phase_id": 1,
+      "title": "Packaging & Project Setup",
+      "selected_team": [
+        "astral",
+        "python_modern"
+      ],
+      "intra_team_distance": 0.26155691395979375,
+      "routing_latency_ms": 0.05650520324707031,
+      "morph_latency_ms": 702.9058933258057,
+      "tokens_generated": 55,
+      "tokens_per_second": 8.962289356107329,
+      "adherence_percentage": 75.0,
+      "syntax_markers_audit": {
+        "[project]": false,
+        "dependencies": true,
+        "fastapi": true,
+        "duckdb": true
+      },
+      "generated_snippet": "```python\nfrom __future__ import annotations\n\nimport ruff"
+    },
+    {
+      "phase_id": 2,
+      "title": "Type-Safe FastAPI Web Application",
+      "selected_team": [
+        "python_web",
+        "python_modern"
+      ],
+      "intra_team_distance": 0.26229098241310567,
+      "routing_latency_ms": 0.03147125244140625,
+      "morph_latency_ms": 52.28090286254883,
+      "tokens_generated": 517,
+      "tokens_per_second": 36.96308694538712,
+      "adherence_percentage": 100.0,
+      "syntax_markers_audit": {
+        "FastAPI": true,
+        "APIRouter": true,
+        "BaseModel": true,
+        "async def": true
+      },
+      "generated_snippet": "```python\nfrom __future__ import annotations\n\nfrom dataclasses import dataclass"
+    },
+    {
+      "phase_id": 3,
+      "title": "PostgreSQL & pgvector Search",
+      "selected_team": [
+        "postgresql",
+        "python_modern"
+      ],
+      "intra_team_distance": 0.2600797323975712,
+      "routing_latency_ms": 0.025987625122070312,
+      "morph_latency_ms": 45.66621780395508,
+      "tokens_generated": 191,
+      "tokens_per_second": 36.64514407920868,
+      "adherence_percentage": 100.0,
+      "syntax_markers_audit": {
+        "asyncpg": true,
+        "CREATE EXTENSION": true,
+        "vector": true,
+        "<=>": true
+      },
+      "generated_snippet": "```sql\nCREATE EXTENSION vector;\nSELECT id, embedding <=> $1 AS distance FROM products WHERE embedding <=> $1;\n```"
+    },
+    {
+      "phase_id": 4,
+      "title": "DuckDB In-Memory OLAP Analytics",
+      "selected_team": [
+        "duckdb",
+        "postgresql"
+      ],
+      "intra_team_distance": 0.2681057187728584,
+      "routing_latency_ms": 0.06389617919921875,
+      "morph_latency_ms": 47.49131202697754,
+      "tokens_generated": 146,
+      "tokens_per_second": 37.69199715239617,
+      "adherence_percentage": 66.66666666666667,
+      "syntax_markers_audit": {
+        "duckdb.connect": false,
+        "read_parquet": true,
+        "GROUP BY": true
+      },
+      "generated_snippet": "```sql\n-- Load remote parquet files into DuckDB\nINSTALL httpfs; LOAD httpfs;\nSET s3_region = 'eu-west';"
+    }
+  ]
+}

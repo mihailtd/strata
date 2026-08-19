@@ -17,7 +17,7 @@ if torch.cuda.is_available():
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+from gnn_experiment.canon import REPO_ROOT, adapter_path  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
@@ -27,7 +27,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 from gnn_experiment.novel_peft import FoldableExpert, WeightFoldingEngine, set_hard_vram_cap
 
 EVAL_FILE = REPO_ROOT / "data/duckdb/evaluation_data.jsonl"
-DUCKDB_ADAPTER_DIR = REPO_ROOT / "results/adapters/m2_duckdb_r8a128_v4"
+DUCKDB_ADAPTER_DIR = adapter_path("duckdb")
 
 
 def score_question(q: dict, generated_text: str) -> float:

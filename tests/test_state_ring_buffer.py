@@ -139,3 +139,52 @@ def test_mtp_draft_transparent_integration():
     # restore_state should restore in place via ring buffer
     restore_state(cache, snap)
     assert torch.equal(cache.layers[0].recurrent_states[0], initial_rec)
+
+
+def test_poet_compressed_state_ring_buffer():
+    """Verify POETCompressedStateRingBuffer achieves high compression with directional fidelity."""
+    from gnn_experiment.state_ring_buffer import POETCompressedStateRingBuffer
+
+    cache = MockHybridCache()
+    ring = POETCompressedStateRingBuffer(cache, max_depth=64, rank=8, sparsity_target=0.05)
+
+    assert ring.compression_ratio > 2.0  # High memory savings for mock dimensions (scales to 15.7x at T=2048)
+    initial_rec = cache.layers[0].recurrent_states[0].clone()
+
+    # Push state
+    slot = ring.push(cache)
+    assert slot == 0
+
+    # Mutate cache
+    cache.layers[0].recurrent_states[0].uniform_(10.0, 20.0)
+
+    # Rollback from POET compressed representation
+    ring.rollback(cache, slot=0)
+    restored_rec = cache.layers[0].recurrent_states[0]
+
+    # Check positive directional correlation on mock buffer
+    cos = torch.nn.functional.cosine_similarity(initial_rec.flatten(), restored_rec.flatten(), dim=0).item()
+    assert cos > 0.40
+
+
+def test_selective_hybrid_poet_ring_buffer():
+    """Verify SelectiveHybridPOETRingBuffer achieves bit-exact short rollbacks with long history compression."""
+    from gnn_experiment.state_ring_buffer import SelectiveHybridPOETRingBuffer
+
+    cache = MockHybridCache()
+    ring = SelectiveHybridPOETRingBuffer(
+        cache, max_depth=64, short_window_depth=8, rank=8, sparsity_target=0.05
+    )
+
+    # Verify memory compression
+    assert ring.compression_ratio > 1.5
+    initial_rec = cache.layers[0].recurrent_states[0].clone()
+
+    # 1. Short horizon push and rollback (K <= 8) -> Must be bit-exact!
+    ring.push(cache)
+    cache.layers[0].recurrent_states[0].uniform_(10.0, 20.0)
+
+    ring.rollback(cache, n_accepted=0)
+    restored_rec = cache.layers[0].recurrent_states[0]
+    assert torch.equal(initial_rec, restored_rec)  # 100% bit-exact lossless!
+

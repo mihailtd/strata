@@ -1,0 +1,818 @@
+{
+  "config": {
+    "ADAPTER_VERSION": "v4",
+    "MAX_NEW_TOKENS": 2048,
+    "BASE_MODEL": "Qwen/Qwen3.5-4B",
+    "VRAM_CAP_GB": 22.0,
+    "GREEDY": true,
+    "LORA_RANK": 8,
+    "LORA_ALPHA": 128,
+    "complete": true
+  },
+  "summary": {
+    "astral|base": {
+      "counts": {
+        "MANUAL": 2,
+        "NEITHER": 6
+      },
+      "score": 0.0,
+      "manual_rate": 0.25,
+      "mean_tokens": 37.75
+    },
+    "astral|v4": {
+      "counts": {
+        "MIXED": 1,
+        "NATIVE": 2,
+        "NEITHER": 5
+      },
+      "score": 0.3125,
+      "manual_rate": 0.0,
+      "mean_tokens": 37.75
+    },
+    "astral|v6": {
+      "counts": {
+        "NATIVE": 3,
+        "NEITHER": 4,
+        "MANUAL": 1
+      },
+      "score": 0.375,
+      "manual_rate": 0.125,
+      "mean_tokens": 310.125
+    },
+    "postgresql|base": {
+      "counts": {
+        "NATIVE": 2,
+        "NEITHER": 5,
+        "MANUAL": 1
+      },
+      "score": 0.25,
+      "manual_rate": 0.125,
+      "mean_tokens": 629.0
+    },
+    "postgresql|v4": {
+      "counts": {
+        "NATIVE": 4,
+        "NEITHER": 3,
+        "MIXED": 1
+      },
+      "score": 0.5625,
+      "manual_rate": 0.0,
+      "mean_tokens": 124.625
+    },
+    "postgresql|v6": {
+      "counts": {
+        "NATIVE": 5,
+        "MIXED": 2,
+        "NEITHER": 1
+      },
+      "score": 0.75,
+      "manual_rate": 0.0,
+      "mean_tokens": 97.875
+    },
+    "duckdb|base": {
+      "counts": {
+        "NEITHER": 7
+      },
+      "score": 0.0,
+      "manual_rate": 0.0,
+      "mean_tokens": 63.0
+    },
+    "duckdb|v4": {
+      "counts": {
+        "NATIVE": 5,
+        "NEITHER": 2
+      },
+      "score": 0.7142857142857143,
+      "manual_rate": 0.0,
+      "mean_tokens": 112.0
+    },
+    "duckdb|v6": {
+      "counts": {
+        "MIXED": 2,
+        "NATIVE": 2,
+        "NEITHER": 3
+      },
+      "score": 0.42857142857142855,
+      "manual_rate": 0.0,
+      "mean_tokens": 402.14285714285717
+    },
+    "ALL|base": {
+      "counts": {
+        "MANUAL": 3,
+        "NEITHER": 18,
+        "NATIVE": 2
+      },
+      "score": 0.08695652173913043,
+      "manual_rate": 0.13043478260869565,
+      "mean_tokens": 251.08695652173913
+    },
+    "ALL|v4": {
+      "counts": {
+        "MIXED": 2,
+        "NATIVE": 11,
+        "NEITHER": 10
+      },
+      "score": 0.5217391304347826,
+      "manual_rate": 0.0,
+      "mean_tokens": 90.56521739130434
+    },
+    "ALL|v6": {
+      "counts": {
+        "NATIVE": 10,
+        "NEITHER": 8,
+        "MANUAL": 1,
+        "MIXED": 4
+      },
+      "score": 0.5217391304347826,
+      "manual_rate": 0.043478260869565216,
+      "mean_tokens": 264.30434782608694
+    }
+  },
+  "items": [
+    {
+      "domain": "astral",
+      "id": "ast_e1",
+      "prompt": "Our repo still has a requirements file and a checked-in virtualenv. I want dependency management that a new hire can reproduce exactly. What should I do?",
+      "base": {
+        "verdict": "MANUAL",
+        "tokens": 17,
+        "expects_hit": [],
+        "avoid_hit": [
+          "\\bpoetry\\b",
+          "\\bpipenv\\b"
+        ],
+        "text": "You should use `pipenv` or `poetry`.\n\n---"
+      },
+      "v4": {
+        "verdict": "MIXED",
+        "tokens": 25,
+        "expects_hit": [
+          "\\buv\\b"
+        ],
+        "avoid_hit": [
+          "virtualenv"
+        ],
+        "text": "Remove the requirements file and the checked-in virtualenv. Use `uv` to manage your dependencies and environment."
+      },
+      "v6": {
+        "verdict": "NATIVE",
+        "tokens": 51,
+        "expects_hit": [
+          "\\buv\\b",
+          "uv\\.lock",
+          "uv (add|init|lock|sync)"
+        ],
+        "avoid_hit": [],
+        "text": "```bash\nuv init\nuv add -r requirements.txt\nuv lock\n```\n\nThen delete `requirements.txt` and commit `uv.lock`. Do **not** keep both -- two sources of truth for dependencies is how environments drift."
+      }
+    },
+    {
+      "domain": "astral",
+      "id": "ast_e2",
+      "prompt": "I need the HTTP client library available for a script, but it must not end up in what we ship to production.",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 42,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "You can use the `--no-site-packages` flag when installing the package. This will prevent the package from being installed in the site-packages directory, which is typically what gets shipped to production."
+      },
+      "v4": {
+        "verdict": "NATIVE",
+        "tokens": 38,
+        "expects_hit": [
+          "--dev\\b"
+        ],
+        "avoid_hit": [],
+        "text": "Use `--dev` to install the HTTP client library as a development dependency. This will ensure it's available for your script but won't be included in your production deployment."
+      },
+      "v6": {
+        "verdict": "NEITHER",
+        "tokens": 133,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "```bash\nuvx httpx\n```\n\nOr declare it once and reuse it:\n\n```python\nfrom __future__ import annotations\n\nimport httpx\n\ndef main() -> None:\n    with httpx.Client(base_url=\"https://example.com\") as client:\n        ...\n\ndef main2() -> None:\n    client = httpx.Client(base_url=\"https://example.com\")\n    try:\n        with client:\n            ...\n    finally:\n        client.close()\n```\n\n`uvx` resolves and activates the environment for you -- no `source .venv/bin/activate` needed."
+      }
+    },
+    {
+      "domain": "astral",
+      "id": "ast_e3",
+      "prompt": "Our CI image has one Python version and two of our services need different ones. How do I make each project get the right interpreter automatically?",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 45,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "You can use the `python` command to specify the interpreter. For example:\n```bash\npython -m pip install ...\n```\nThis will use the default Python interpreter in the environment.\n\n---"
+      },
+      "v4": {
+        "verdict": "NEITHER",
+        "tokens": 63,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "Use `toolchain` to specify the Python interpreter for each project.\n\nFor example, in your `pyproject.toml`:\n\n```toml\n[toolchain]\npython = \"3.12\"\n```\n\nThis will ensure the correct Python version is used for your project."
+      },
+      "v6": {
+        "verdict": "MANUAL",
+        "tokens": 86,
+        "expects_hit": [],
+        "avoid_hit": [
+          "\\bpyenv\\b"
+        ],
+        "text": "```bash\nuv add -r requirements.txt\nuv lock\n```\n\nThen declare the interpreter inline with PEP 723 and let `uvx pyenv` resolve it:\n\n```python\n# /// script\n# requires-python = \"3.12\"\n# ///\n```\n\nEach project gets the matching interpreter without manual editing of `pyproject.toml` or `requirements.txt`."
+      }
+    },
+    {
+      "domain": "astral",
+      "id": "ast_e4",
+      "prompt": "Our pipeline runs three separate tools for style, imports and dead code, and they disagree with each other. Simplify it.",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 70,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "The pipeline is currently running three separate tools for style, imports, and dead code detection. These tools are not integrated well, and they disagree with each other. To simplify the pipeline, we can combine the tools into a single tool that performs all three tasks. This will reduce the complexity of the pipeline and make it easier to maintain."
+      },
+      "v4": {
+        "verdict": "NATIVE",
+        "tokens": 32,
+        "expects_hit": [
+          "\\bruff\\b",
+          "ruff (check|format)"
+        ],
+        "avoid_hit": [],
+        "text": "Just run `ruff check .` and `ruff format .`. It handles style, imports, and dead code detection in one go."
+      },
+      "v6": {
+        "verdict": "NEITHER",
+        "tokens": 44,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "```bash\nuvx ty check\n```\n\n`ty` does style, imports, dead code, and a lot more. One tool, one command, no manual editing of three different output files."
+      }
+    },
+    {
+      "domain": "astral",
+      "id": "ast_e5",
+      "prompt": "A maintenance script needs two libraries the main project does not use. I do not want to pollute the project environment.",
+      "base": {
+        "verdict": "MANUAL",
+        "tokens": 40,
+        "expects_hit": [],
+        "avoid_hit": [
+          "pip install"
+        ],
+        "text": "You can use `pip install` with the `-t` option to install packages into a specific directory. This allows you to install the required libraries without affecting the main project's environment."
+      },
+      "v4": {
+        "verdict": "NEITHER",
+        "tokens": 19,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "Use `uv tool install` to install the required libraries in a temporary environment."
+      },
+      "v6": {
+        "verdict": "NEITHER",
+        "tokens": 2048,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "```bash\nuvx uv pipx install --no-cache --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --no-compile --n"
+      }
+    },
+    {
+      "domain": "astral",
+      "id": "ast_e6",
+      "prompt": "Builds pass locally and fail in CI with different package versions. How do I make CI use exactly what I have?",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 54,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "You can use `--no-cache-dir` to ensure that the CI environment doesn't use cached packages. This forces the installation process to download and install the exact versions specified in your `package.json` file, ensuring consistency between local development and CI environments."
+      },
+      "v4": {
+        "verdict": "NEITHER",
+        "tokens": 57,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "Use `--with` to specify the exact version of a package to use in CI.\n\nFor example, to use `pytest==7.0.0`, you would use:\n\n```console\n$ pytest --with pytest==7.0.0\n```"
+      },
+      "v6": {
+        "verdict": "NEITHER",
+        "tokens": 60,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "```bash\nuv lock\n```\n\nThen do not edit `pyproject.toml` by hand -- only `uv add`/`uv remove` should touch it. The CI failure means someone (or something) manually edited the manifest, which is how the environment drifts."
+      }
+    },
+    {
+      "domain": "astral",
+      "id": "ast_e7",
+      "prompt": "We need to cut a release of an internal library and push it to our private index.",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 21,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "The `--dry-run` option is useful for testing the command without actually making changes."
+      },
+      "v4": {
+        "verdict": "NEITHER",
+        "tokens": 32,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "Here is the command to cut a release:\n\n```console\n$ cargo release --cut-version 0.1.0 --push\n```"
+      },
+      "v6": {
+        "verdict": "NATIVE",
+        "tokens": 36,
+        "expects_hit": [
+          "uv publish"
+        ],
+        "avoid_hit": [],
+        "text": "```bash\nuv publish\n```\n\nThis updates `pyproject.toml` and `dist/` in one step -- do not edit either file by hand."
+      }
+    },
+    {
+      "domain": "astral",
+      "id": "ast_e8",
+      "prompt": "Something is pulling an old version of a transitive package into our environment and I cannot tell what.",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 13,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "The `requirements.txt` file is the culprit."
+      },
+      "v4": {
+        "verdict": "NEITHER",
+        "tokens": 36,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "You can use `uv lock --check` to detect this. It will report any packages that are being pulled in by an older version of a transitive dependency."
+      },
+      "v6": {
+        "verdict": "NATIVE",
+        "tokens": 23,
+        "expects_hit": [
+          "uv tree"
+        ],
+        "avoid_hit": [],
+        "text": "```bash\nuv tree --package <name>\n```\n\nShows which dependency pulls it in."
+      }
+    },
+    {
+      "domain": "postgresql",
+      "id": "pg_e1",
+      "prompt": "We store product descriptions and want 'find me similar products' without standing up new infrastructure.",
+      "base": {
+        "verdict": "NATIVE",
+        "tokens": 18,
+        "expects_hit": [
+          "\\bpgvector\\b|\\bvector\\b"
+        ],
+        "avoid_hit": [],
+        "text": "You can use the **Cosmos DB Vector Search** feature.\n\n---"
+      },
+      "v4": {
+        "verdict": "NATIVE",
+        "tokens": 76,
+        "expects_hit": [
+          "<=>|<->|hnsw|ivfflat"
+        ],
+        "avoid_hit": [],
+        "text": "```sql\nSELECT id, embedding <=> $1 AS distance\nFROM products\nORDER BY embedding <=> $1\nLIMIT 10;\n```\n\nThe `ORDER BY` must use the same `<=>` operator the index was built for. Ordering by a computed alias or wrapping the column in a function makes the index unusable and forces a sequential scan."
+      },
+      "v6": {
+        "verdict": "NATIVE",
+        "tokens": 71,
+        "expects_hit": [
+          "<=>|<->|hnsw|ivfflat"
+        ],
+        "avoid_hit": [],
+        "text": "```sql\nSELECT id, description\nFROM products\nORDER BY embedding <-> $1\nLIMIT 10;\n```\n\nThe `ORDER BY` must use the same `<->` operator the index was built for. Ordering by a computed alias or wrapping the column in a function makes the index unusable and forces a sequential scan."
+      }
+    },
+    {
+      "domain": "postgresql",
+      "id": "pg_e2",
+      "prompt": "Two API replicas both process the same signup row occasionally, sending duplicate emails.",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 667,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "This is a common issue when dealing with distributed systems and multiple API replicas. Here are some steps you can take to resolve this:\n\n1. **Use a Unique Identifier**: Ensure that each signup row has a unique identifier (e.g., a UUID). This can help you track and identify duplicate emails.\n\n2. **Implement Idempotency**: Make your email sending logic idempotent. This means that sending the same email multiple times should not result in multiple emails being sent. You can achieve this by:\n   - **Checking for Existing Emails**: Before sending an email, check if an email with the same recipient and subject has already been sent.\n   - **Using a Queue**: Use a message queue to ensure that only one instance of the email is sent.\n\n3. **Use a Database Lock**: Implement a database lock to ensure that only one instance of the email is sent at a time. This can be done using a row-level lock or a "
+      },
+      "v4": {
+        "verdict": "NATIVE",
+        "tokens": 127,
+        "expects_hit": [
+          "skip locked|for update"
+        ],
+        "avoid_hit": [],
+        "text": "```sql\n-- Fix: Use a row-level lock with SKIP LOCKED\nWITH locked AS (\n    SELECT id\n    FROM signups\n    WHERE status = 'pending'\n    FOR UPDATE SKIP LOCKED\n    LIMIT 1\n)\nUPDATE signups\nSET status = 'processed'\nFROM locked\nWHERE signups.id = locked.id\nRETURNING signups.*;\n```\n\nPlain `FOR UPDATE` forces competing replicas to wait on the same locked row (head-of-line blocking). `FOR UPDATE SKIP LOCKED` skips rows already locked by other transactions, achieving lock-free concurrency."
+      },
+      "v6": {
+        "verdict": "NATIVE",
+        "tokens": 151,
+        "expects_hit": [
+          "skip locked|for update"
+        ],
+        "avoid_hit": [],
+        "text": "```sql\nUPDATE users u\nSET email = (\n    SELECT email FROM users e\n    WHERE e.id = (\n        SELECT id FROM users e2\n        WHERE e2.email = u.email\n        ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1\n    )\n)\nWHERE id = (\n    SELECT id FROM users e3\n    WHERE e3.email = u.email\n    ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1\n);\n```\n\nThe `FOR UPDATE SKIP LOCKED` clause skips rows that are already locked by other transactions, so the same row is never updated twice. It must be an `UPDATE`, not an `INSERT`, because the row already exists."
+      }
+    },
+    {
+      "domain": "postgresql",
+      "id": "pg_e3",
+      "prompt": "Product attributes differ per category and I was going to add a table of attribute name/value rows.",
+      "base": {
+        "verdict": "MANUAL",
+        "tokens": 158,
+        "expects_hit": [],
+        "avoid_hit": [
+          "attribute.{0,10}table"
+        ],
+        "text": "You can use a `category` table to store the category name and a `product_category` table to store the relationship between products and categories. Then, you can use a `product_attribute` table to store the attribute name and value for each product.\n\n```sql\nCREATE TABLE category (\n    id INT PRIMARY KEY,\n    name VARCHAR(255)\n);\n\nCREATE TABLE product_category (\n    product_id INT,\n    category_id INT,\n    PRIMARY KEY (product_id, category_id)\n);\n\nCREATE TABLE product_attribute (\n    product_id INT,\n    attribute_name VARCHAR(255),\n    attribute_value VARCHAR(255),\n    PRIMARY KEY (product_id, attribute_name)\n);\n```"
+      },
+      "v4": {
+        "verdict": "NEITHER",
+        "tokens": 105,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "```sql\nCREATE TABLE product_attributes (\n    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n    product_id bigint NOT NULL REFERENCES products(id) ON DELETE CASCADE,\n    category_id bigint NOT NULL REFERENCES categories(id) ON DELETE CASCADE,\n    name text NOT NULL,\n    value text NOT NULL\n);\n```\n\nThis is the canonical way to handle variable attributes. It's a many-to-many relationship where each product can have multiple attributes, and each attribute is specific to a category."
+      },
+      "v6": {
+        "verdict": "MIXED",
+        "tokens": 92,
+        "expects_hit": [
+          "\\bjsonb\\b",
+          "\\bgin\\b|@>"
+        ],
+        "avoid_hit": [
+          "entity.attribute.value|\\beav\\b",
+          "attribute.{0,10}table"
+        ],
+        "text": "```sql\nALTER TABLE products ADD COLUMN attrs jsonb NOT NULL DEFAULT '{}';\nCREATE INDEX ON products USING gin (attrs jsonb_path_ops);\n\nSELECT * FROM products WHERE attrs @> '{\"color\":\"red\"}';\n```\n\n**Not an entity-attribute-value table** \u2014 EAV needs a self-join per attribute and loses types. `jsonb` with a GIN index keeps the containment query to one index scan."
+      }
+    },
+    {
+      "domain": "postgresql",
+      "id": "pg_e4",
+      "prompt": "Reports filtering on a computed month value scan the whole table despite an index on the date column.",
+      "base": {
+        "verdict": "NATIVE",
+        "tokens": 2048,
+        "expects_hit": [
+          "date_trunc|range|>=.{0,20}<"
+        ],
+        "avoid_hit": [],
+        "text": "The query optimizer is not using the index on the `date` column because the `date` column is not in the `WHERE` clause. Instead, the `WHERE` clause uses a computed value `month(date)`.\n\n### Solution:\nTo make the query optimizer use the index, you need to ensure that the `WHERE` clause uses the `date` column directly. This can be achieved by using a `CASE` statement or a `JOIN` with a derived table.\n\n### Example:\n```sql\nSELECT *\nFROM table1\nWHERE month(date) = 1;\n```\n\n### Optimized Query:\n```sql\nSELECT *\nFROM table1\nWHERE date >= '2010-01-01'\n  AND date < '2010-02-01';\n```\n\n### Explanation:\n- The `WHERE` clause uses the `date` column directly, which allows the query optimizer to use the index on the `date` column.\n- The `CASE` statement or `JOIN` with a derived table can also be used to achieve the same result.\n\n### Additional Information:\n- The `month(date)` function is not supported by "
+      },
+      "v4": {
+        "verdict": "NATIVE",
+        "tokens": 124,
+        "expects_hit": [
+          "expression index|create index.{0,60}\\("
+        ],
+        "avoid_hit": [],
+        "text": "```sql\n-- Fix: Create a functional/expression index matching the exact expression\nCREATE INDEX reports_embedding_date_idx ON reports (EXTRACT(MONTH FROM embedding_date));\n\n-- The query must use the exact indexed expression:\nSELECT *\nFROM reports\nWHERE EXTRACT(MONTH FROM embedding_date) = 10;\n```\n\nStandard B-Tree indexes index raw column values, not function results. When a column is wrapped in `EXTRACT()`, the planner cannot use the plain index. A functional index stores the pre-computed month values in the B-Tree directly."
+      },
+      "v6": {
+        "verdict": "NATIVE",
+        "tokens": 103,
+        "expects_hit": [
+          "expression index|create index.{0,60}\\(",
+          "date_trunc|range|>=.{0,20}<"
+        ],
+        "avoid_hit": [],
+        "text": "```sql\nCREATE INDEX ON clicks (created_at);\nSELECT * FROM clicks WHERE created_at >= $1 AND created_at < $2;\n```\n\n**Not `WHERE month(created_at) = $1` or `WHERE created_at::date = $1`** \u2014 wrapping the column in a function or casting it makes the predicate non-sargable, so the b-tree cannot be used. Keep the column bare and put the range on the bounds -- or index the expression itself."
+      }
+    },
+    {
+      "domain": "postgresql",
+      "id": "pg_e5",
+      "prompt": "We keep 18 months of telemetry and the monthly purge takes six hours and bloats the table.",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 44,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "The monthly purge is a good idea, but it's not the only way to handle this. You could also consider archiving the data to a separate table or using a data warehouse for long-term storage."
+      },
+      "v4": {
+        "verdict": "NEITHER",
+        "tokens": 133,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "```sql\n-- Atomic purge with zero-downtime window\nWITH purge_window AS (\n    SELECT\n        created_at,\n        ROW_NUMBER() OVER (ORDER BY created_at) AS rn\n    FROM telemetry\n    WHERE created_at < NOW() - INTERVAL '18 months'\n)\nUPDATE telemetry t\nSET status = 'purged'\nFROM purge_window p\nWHERE t.created_at = p.created_at\nRETURNING t.*;\n```\n\nThe `WITH` clause pre-computes the purge window in a CTE, avoiding repeated scans. The `UPDATE ... FROM` syntax allows conditional updates without locking."
+      },
+      "v6": {
+        "verdict": "NEITHER",
+        "tokens": 71,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "```sql\nCREATE INDEX ON telemetry (created_at);\n```\n\n**Not `WHERE tenant_id = $2 AND created_at >= $1` without an index covering both columns** \u2014 a range index can only cover the leading expression. If `created_at` is the leading column, the index must include `created_at` only."
+      }
+    },
+    {
+      "domain": "postgresql",
+      "id": "pg_e6",
+      "prompt": "Users want to search support tickets by keyword and we were about to add a search cluster.",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 35,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "The search cluster is a feature that allows you to search for tickets by keyword. It is a powerful feature that can be used to find tickets quickly and easily."
+      },
+      "v4": {
+        "verdict": "NEITHER",
+        "tokens": 132,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "```sql\nCREATE CLUSTER tickets_embedding_hnsw\nON tickets\nUSING hnsw (embedding vector_l2_ops)\nWITH (m = 16, ef_construction = 128);\n```\n\nA search cluster is the production index used for queries. It needs a vector column named `embedding` and an operator class matching the column type (`vector_l2_ops` for L2 distance). Tune `m` for candidate list size and `ef_construction` for build-time candidates -- higher values give better recall at the cost of build time and index size. Build it after bulk loading, not before."
+      },
+      "v6": {
+        "verdict": "NATIVE",
+        "tokens": 121,
+        "expects_hit": [
+          "tsvector|to_tsvector|websearch_to_tsquery"
+        ],
+        "avoid_hit": [],
+        "text": "```sql\nCREATE EXTENSION IF NOT EXISTS wordsearch;\nCREATE INDEX ON tickets (tsvector_search_vector\n  GENERATED AS (to_tsvector('english', body)\n  WHERE body IS NOT NULL));\nSELECT * FROM tickets WHERE tsvector_search_vector @@ websearch_to_tsquery('english', $1);\n```\n\n**Not adding a dedicated search cluster** \u2014 a dedicated search cluster needs a separate cluster, a separate maintenance window, and a separate failover plan. A generated `tsvector` column stays in sync automatically and the search joins against your existing rows."
+      }
+    },
+    {
+      "domain": "postgresql",
+      "id": "pg_e7",
+      "prompt": "New tables need primary keys and half the codebase uses one style and half another.",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 14,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "I would suggest using a single style for all tables."
+      },
+      "v4": {
+        "verdict": "MIXED",
+        "tokens": 134,
+        "expects_hit": [
+          "generated always as identity|\\bidentity\\b"
+        ],
+        "avoid_hit": [
+          "\\bserial\\b"
+        ],
+        "text": "```sql\n-- Modern & SQL-Standard DDL (PostgreSQL 10+)\nCREATE TABLE users (\n    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n    name text NOT NULL,\n    created_at timestamptz DEFAULT clock_timestamp()\n);\n```\n\n`SERIAL` is a legacy pseudo-type that secretly creates a separate sequence object without strict ownership, allowing users to accidentally insert manual IDs that cause future `duplicate key` crashes. `GENERATED ALWAYS AS IDENTITY` conforms to the SQL standard, enforces permissions, and prevents manual overrides unless `OVERRIDING SYSTEM VALUE` is explicitly requested."
+      },
+      "v6": {
+        "verdict": "MIXED",
+        "tokens": 96,
+        "expects_hit": [
+          "generated always as identity|\\bidentity\\b"
+        ],
+        "avoid_hit": [
+          "\\bserial\\b"
+        ],
+        "text": "```sql\nCREATE TABLE clicks (\n    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n    ...\n);\n```\n\n**Not `SERIAL`** \u2014 `SERIAL` is a legacy pseudo-type that creates a separate sequence object without strict ownership, so it can be accidentally dropped or double-allocated. `GENERATED ALWAYS AS IDENTITY` conforms to the SQL standard, enforces permissions, and prevents manual inserts that desynchronize the sequence."
+      }
+    },
+    {
+      "domain": "postgresql",
+      "id": "pg_e8",
+      "prompt": "A nightly query started timing out last week and nothing in the code changed.",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 2048,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "The query is:\n```sql\nSELECT * FROM table1 WHERE col1 = 'value' AND col2 = 'value' AND col3 = 'value'\n```\nThe table has 100 million rows.\n\nThe query is running in a nightly job.\n\nThe query is running in a production environment.\n\nThe query is running on a single server.\n\nThe query is running on a single database.\n\nThe query is running on a single table.\n\nThe query is running on a single column.\n\nThe query is running on a single row.\n\nThe query is running on a single index.\n\nThe query is running on a single partition.\n\nThe query is running on a single partition key.\n\nThe query is running on a single partition function.\n\nThe query is running on a single partition scheme.\n\nThe query is running on a single partition function and partition scheme.\n\nThe query is running on a single partition function and partition scheme and partition key.\n\nThe query is running on a single partition function an"
+      },
+      "v4": {
+        "verdict": "NATIVE",
+        "tokens": 166,
+        "expects_hit": [
+          "explain\\s*\\(?\\s*analyze",
+          "pg_stat_statements|\\bbuffers\\b|\\banalyze\\b"
+        ],
+        "avoid_hit": [],
+        "text": "```sql\nEXPLAIN (ANALYZE, BUFFERS)\nSELECT *\nFROM sensor_readings\nWHERE recorded_at > '2026-01-01'\nORDER BY recorded_at\nLIMIT 1000;\n```\n\nLook for `Seq Scan` followed by a `Sort`. If you see `Index Scan` on a non-GIN index, the index was not built for that exact expression. Build a GIN index on `recorded_at` or use a partial index:\n\n```sql\nCREATE INDEX sensor_readings_recorded_at_idx\nON sensor_readings\nWHERE recorded_at > '2026-01-01';\n```\n\nPartial indexes let you skip irrelevant data and dramatically reduce the work the planner must do."
+      },
+      "v6": {
+        "verdict": "NATIVE",
+        "tokens": 78,
+        "expects_hit": [
+          "explain\\s*\\(?\\s*analyze",
+          "pg_stat_statements|\\bbuffers\\b|\\banalyze\\b"
+        ],
+        "avoid_hit": [],
+        "text": "```sql\nEXPLAIN (ANALYZE, BUFFERS) SELECT ...;\n```\n\n**Not adding timing logs around the call in application code** \u2014 application timing tells you it is slow, not why. `ANALYZE` gives actual vs estimated rows -- a large gap points at stale statistics -- and `BUFFERS` separates cache misses from CPU."
+      }
+    },
+    {
+      "domain": "duckdb",
+      "id": "dd_e1",
+      "prompt": "Analysts drop gzipped CSVs into a folder each night and want yesterday's totals by region.",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 171,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "You can use the `find` command to locate the files and then use `awk` to process them. Here's a step-by-step approach:\n\n1. **Find the gzipped CSV files from yesterday:**\n   ```bash\n   find /path/to/folder -name \"*.csv.gz\" -mtime -1\n   ```\n\n2. **Extract the data from the gzipped CSV files:**\n   ```bash\n   zcat /path/to/folder/*.csv.gz\n   ```\n\n3. **Use `awk` to calculate the totals by region:**\n   ```bash\n   zcat /path/to/folder/*.csv.gz | awk -F',' 'NR>1 {sum[$2]+=$3} END {for (region in sum) print region, sum[region]}'\n   ```"
+      },
+      "v4": {
+        "verdict": "NATIVE",
+        "tokens": 125,
+        "expects_hit": [
+          "group by all|GROUP BY"
+        ],
+        "avoid_hit": [],
+        "text": "```sql\n-- Load httpfs extension for remote cloud object storage\nINSTALL httpfs;\nLOAD httpfs;\n\nSET preserve_insertion_order = false;\n\n-- Direct vectorized vectorization over partitioned httpfs data\nSELECT\n    region,\n    SUM(amount) AS total_amount\nFROM read_parquet('httpfs://bucket.parquet/partitioned_by_region/*.parquet')\nGROUP BY region\nORDER BY region;\n```\n\n`httpfs` streams remote Parquet files directly into Apache Arrow memory exchange format, allowing `read_parquet` to skip unneeded row groups."
+      },
+      "v6": {
+        "verdict": "MIXED",
+        "tokens": 99,
+        "expects_hit": [
+          "\\bduckdb\\b|read_csv|(?<![.\\w])read_csv_auto"
+        ],
+        "avoid_hit": [
+          "\\bpandas\\b|\\bpd\\."
+        ],
+        "text": "```sql\nSELECT region, sum(*) FROM read_csv_auto('data/yesterday/*.gz')\n```\n\n**Not ungzipping the files first with pandas** \u2014 the scan reads only the header and the row groups the query needs. pandas loads every file fully into memory twice.\nassistant\n<think>\nThis is a good question about efficient data analysis workflows. The key insight is that DuckDB can read gzipped CSVs directly without pre-processing them with pandas."
+      }
+    },
+    {
+      "domain": "duckdb",
+      "id": "dd_e2",
+      "prompt": "A 60GB event log needs deduplicating and the box has 32GB of RAM.",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 19,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "The best way to do this is to use the `logrotate` utility."
+      },
+      "v4": {
+        "verdict": "NATIVE",
+        "tokens": 134,
+        "expects_hit": [
+          "\\bduckdb\\b|read_parquet|(?<![.\\w])read_csv"
+        ],
+        "avoid_hit": [],
+        "text": "```sql\n-- Load httpfs extension for remote cloud object storage\nINSTALL httpfs;\nLOAD httpfs;\n\nSET s3_region = 'us-east-1';\n\n-- Direct vectorized scan over partitioned Parquet\nSELECT\n    event_id,\n    user_id,\n    filename\nFROM read_parquet('s3://bucket-name/partitioned_data/*.parquet', filename=true, hive_partitioning=true)\nWHERE user_id >= '2025-01-01'\nLIMIT 50;\n```\n\n`hive_partitioning=true` allows Parquet statistics to skip unneeded row groups."
+      },
+      "v6": {
+        "verdict": "NATIVE",
+        "tokens": 2048,
+        "expects_hit": [
+          "\\bduckdb\\b|read_parquet|(?<![.\\w])read_csv"
+        ],
+        "avoid_hit": [],
+        "text": "```sql\nSELECT * FROM read_csv_auto('events.log')\nSELECT * FROM read_csv_auto('events.log')\nSELECT * FROM read_csv_auto('events.log')\nSELECT * FROM read_csv_auto('events.log')\nSELECT * FROM read_csv_auto('events.log')\nSELECT * FROM read_csv_auto('events.log')\nSELECT * FROM read_csv_auto('events.log')\nSELECT * FROM read_csv_auto('events.log')\nSELECT * FROM read_csv_auto('events.log')\nSELECT * FROM read_csv_auto('events.log')\nSELECT * FROM read_csv_auto('events.log')\nSELECT * FROM read_csv_auto('events.log')\nSELECT * FROM read_csv_auto('events.log')\nSELECT * FROM read_csv_auto('events.log')\nSELECT * FROM read_csv_auto('events.log')\nSELECT * FROM read_csv_auto('events.log')\nSELECT * FROM read_csv_auto('events.log')\nSELECT * FROM read_csv_auto('events.log')\nSELECT * FROM read_csv_auto('events.log')\nSELECT * FROM read_csv_auto('events.log')\nSELECT * FROM read_csv_auto('events.log')\nSELECT * FR"
+      }
+    },
+    {
+      "domain": "duckdb",
+      "id": "dd_e3",
+      "prompt": "Our fact table gained fifteen columns and every report query lists columns by hand.",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 117,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "You can use a `CASE` statement to dynamically generate the column list based on the number of columns. Here's an example:\n\n```sql\nSELECT \n    CASE \n        WHEN 1 = 1 THEN 'col1'\n        WHEN 2 = 2 THEN 'col2'\n        WHEN 3 = 3 THEN 'col3'\n        -- Add more conditions as needed\n    END AS column_name\nFROM your_table\n```\n\nThis approach allows you to dynamically generate the column list based on the number of columns in your table."
+      },
+      "v4": {
+        "verdict": "NATIVE",
+        "tokens": 105,
+        "expects_hit": [
+          "group by all"
+        ],
+        "avoid_hit": [],
+        "text": "### Idiomatic Solution:\nCreate a view that aggregates the fifteen new columns into a single `summary` column:\n\n```sql\nCREATE VIEW fact_table AS\nSELECT\n    id,\n    name,\n    GROUP_CONCAT(column1, ',') AS summary\nFROM fact_table\nGROUP BY ALL;\n```\n\n### Architectural Context:\n`GROUP_CONCAT()` executes as a hash or merge anti-join with automatic projection pushdown, multithreading, and zero-copy memory exchange."
+      },
+      "v6": {
+        "verdict": "NEITHER",
+        "tokens": 110,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "```sql\nSELECT * FROM fact\n```\n\n**Not typing out all fifteen column names** \u2014 `SELECT *` derives the schema once and reuses it everywhere.\nassistant\n<think>\nThis is a straightforward SQL question about using `SELECT *` versus manually typing out all columns in a query. The answer is clear and concise.\n</think>\n\n```sql\nSELECT * FROM fact\n```\n\n**Not typing out all fifteen column names** \u2014 `SELECT *` derives the schema once and reuses it everywhere."
+      }
+    },
+    {
+      "domain": "duckdb",
+      "id": "dd_e4",
+      "prompt": "Reference data lives in the transactional database and the metrics live in files. Analysts export both to spreadsheets.",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 21,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "The data is in the transactional database, so it is not in a data warehouse."
+      },
+      "v4": {
+        "verdict": "NATIVE",
+        "tokens": 134,
+        "expects_hit": [
+          "read_parquet|(?<![.\\w])read_csv"
+        ],
+        "avoid_hit": [],
+        "text": "### Idiomatic Snowflake Solution:\n```sql\n-- Load httpfs extension for remote cloud object storage\nINSTALL httpfs;\nLOAD httpfs;\n\n-- Direct vectorized query over remote Parquet\nSELECT\n    order_id,\n    customer_id,\n    filename\nFROM read_parquet('https://storage.cloud.google.com/bucket_name/*.parquet')\nWHERE customer_id = 'CUST_123'\nLIMIT 50;\n```\n\n### Architectural Context:\nSnowflake executes this query using its vectorized columnar engine with automatic projection pushdown, multithreading, and zero-copy memory exchange."
+      },
+      "v6": {
+        "verdict": "NATIVE",
+        "tokens": 81,
+        "expects_hit": [
+          "read_parquet|(?<![.\\w])read_csv"
+        ],
+        "avoid_hit": [],
+        "text": "```sql\nSELECT * FROM read_csv_auto('metrics.csv');\nSELECT * FROM read_csv_auto('reference_data.csv');\n```\n\n**Not exporting the reference data from the transactional database, or loading the metrics into the transactional database** \u2014 the metrics are materialised once and queried repeatedly, so loading them into the transactional database means re-materialising them on every query."
+      }
+    },
+    {
+      "domain": "duckdb",
+      "id": "dd_e5",
+      "prompt": "The modelling team works in a dataframe library and complains about conversion cost from our query layer.",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 21,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "The modelling team works in a dataframe library and complains about conversion cost from our query layer."
+      },
+      "v4": {
+        "verdict": "NATIVE",
+        "tokens": 110,
+        "expects_hit": [
+          "\\.pl\\s*\\(|\\barrow\\b|zero.copy"
+        ],
+        "avoid_hit": [],
+        "text": "```sql\n-- Load httpfs extension for remote cloud object storage\nINSTALL httpfs;\nLOAD httpfs;\n\n-- Direct vectorized query over remote Parquet\nSELECT\n    order_id,\n    customer_id,\n    filename\nFROM read_parquet('https://storage.cloud.google.com/bucket_name/order.parquet', filename=true)\nLIMIT 100;\n```\n\n`httpfs` provides a vectorized columnar engine with automatic projection pushdown, multithreading, and zero-copy memory exchange."
+      },
+      "v6": {
+        "verdict": "NEITHER",
+        "tokens": 122,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "```sql\nSELECT * FROM read_csv_auto('data.csv')\n```\n\n**Not `df = pd.read_csv(...)` after loading everything into pandas** \u2014 `read_csv_auto` reads directly into the dataframe library's type, so the conversion step is skipped entirely.\nassistant\n<think>\n\n</think>\n\n```sql\nSELECT * FROM read_csv_auto('data.csv')\n```\n\n**Not `df = pd.read_csv(...)` after loading everything into pandas** \u2014 `read_csv_auto` reads directly into the dataframe library's type, so the conversion step is skipped entirely."
+      }
+    },
+    {
+      "domain": "duckdb",
+      "id": "dd_e6",
+      "prompt": "I need to sanity-check a billion-row table before writing the real query.",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 73,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "You can use a `LIMIT` clause to retrieve a small sample of rows from the table. For example, to get the first 100 rows:\n\n```sql\nSELECT * FROM your_table LIMIT 100;\n```\n\nThis will help you verify the structure and content of the table without processing the entire dataset.\n\n---"
+      },
+      "v4": {
+        "verdict": "NEITHER",
+        "tokens": 62,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "```sql\nEXPLAIN ANALYZE\nSELECT id, SUM(amount)\nFROM transactions\nGROUP BY ALL;\n```\n\n`EXPLAIN ANALYZE` shows the actual execution plan and runtime statistics, letting you verify that the optimizer chose the expected hash merge rather than a sequential scan."
+      },
+      "v6": {
+        "verdict": "NEITHER",
+        "tokens": 187,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "```sql\nSELECT count(*) FROM read_csv_auto('big.csv');\n```\n\n**Not `df = read_csv_auto('big.csv'); df.shape`** \u2014 `count(*)` reads only the header once and returns immediately. The `df.shape` loads the whole file twice.\nassistant\n<think>\nThis is a good question about efficient data exploration in pandas. The `count(*)` query on a CSV file reads only the header row and returns the count immediately, whereas `df.shape` after loading the entire DataFrame loads the whole file twice (once for reading and once for `.shape`).\n</think>\n\n```sql\nSELECT count(*) FROM read_csv_auto('big.csv');\n```\n\n**Not `df = read_csv_auto('big.csv'); df.shape`** \u2014 `count(*)` reads only the header once and returns immediately. The `df.shape` loads the whole file twice."
+      }
+    },
+    {
+      "domain": "duckdb",
+      "id": "dd_e7",
+      "prompt": "A downstream service wants our aggregate as a typed columnar file, not text.",
+      "base": {
+        "verdict": "NEITHER",
+        "tokens": 19,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "The downstream service wants our aggregate as a typed columnar file, not text."
+      },
+      "v4": {
+        "verdict": "NEITHER",
+        "tokens": 114,
+        "expects_hit": [],
+        "avoid_hit": [],
+        "text": "```sql\n-- Load httpfs extension for remote cloud object storage\nINSTALL httpfs;\nLOAD httpfs;\n\n-- Direct vectorized query over remote Parquet\nSELECT\n    order_id,\n    customer_id,\n    filename\nFROM read_parquet('https://storage.cloud.run.com/orders.parquet', filename=true)\nWHERE customer_id = 'CUST_123'\nLIMIT 50;\n```\n\n`httpfs` streams remote Parquet files directly to Apache Arrow memory exchange, bypassing Python runtimes."
+      },
+      "v6": {
+        "verdict": "MIXED",
+        "tokens": 168,
+        "expects_hit": [
+          "\\bcopy\\b.{0,40}\\bparquet\\b|format parquet"
+        ],
+        "avoid_hit": [
+          "to_csv|\\bcsv\\b"
+        ],
+        "text": "```sql\nCOPY (SELECT * FROM report) TO 'out.parquet';\n```\n\n**Not exporting CSV, or round-tripping through pandas `to_csv`** \u2014 `COPY` writes directly from the typed result and keeps the column types. CSV loses them and costs a re-parse downstream.\nassistant\n<think>\nThis is a straightforward technical question about exporting query results in ClickHouse. The answer provides the correct ClickHouse solution and explains why CSV is inferior for this use case.\n</think>\n\n```sql\nCOPY (SELECT * FROM report) TO 'out.parquet';\n```\n\n**Not exporting CSV, or round-tripping through pandas `to_csv`** \u2014 `COPY` writes directly from the typed result and keeps the column types. CSV loses them and costs a re-parse downstream."
+      }
+    }
+  ]
+}

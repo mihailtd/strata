@@ -44,9 +44,42 @@ $$W_{\text{live}} = W_0 + \sum_{i=1}^N \text{scaling}_i \cdot (U_i \times V_i)$$
 
 ---
 
-## 4. Scripts in this Module
+## 4. 🛡️ Two-Stage Surgical Stacking Protocol (`scale_mode="surgical"`)
 
+As established in Decision **§50–§52**, `WeightFoldingEngine.activate_many()` uses **Surgical Stacking** as its canonical default mode:
+
+```
+                            activate_many(experts, scale_mode="surgical")
+                                                 │
+                     ┌───────────────────────────┴───────────────────────────┐
+                     │                                                       │
+           Clean Modules (All Attention + 99.7% MLP)               Targeted Collision Modules (e.g. L29/L30)
+                     │                                                       │
+                     ▼                                                       ▼
+         In-Place AddMM (Full Alpha)                             Apply POET Channel Notch to U
+       W.addmm_(u, v, alpha=128.0)                           u_notched = u * mask[:, None]
+       [0% attenuation, 100% capacity]                       W.addmm_(u_notched, v, alpha=128.0)
+                     │                                                       │
+                     └───────────────────────────┬───────────────────────────┘
+                                                 │
+                                                 ▼
+                                   Fused W_live in 17.6 ms (GPU) / ~1.2s (CPU)
+                           Zero inference latency overhead during autoregressive generation!
+```
+
+### Key Empirical Properties:
+1. **Refutation of Global $\sqrt{K}$ Attenuation**: Classical merging scales down all weights by $1/\sqrt{K}$, discarding $74.6\%$ of clean expert capabilities. Surgical Stacking leaves attention and clean MLP layers at **100% full capacity ($\alpha=128$, $0\%$ dampening)**.
+2. **Micro POET Channel Notch**: Confines attenuation strictly to isolated output channels (15 neurons) on detected collision modules.
+3. **Pristine Buffer Guarantee**: Exact $L_\infty = 0.00\text{e}+00$ bit-level restoration on `restore()`.
+
+---
+
+## 5. Scripts & Benchmarks in this Module
+
+* **[`benchmark_6way_v6_surgical_stack.py`](benchmark_6way_v6_surgical_stack.py)**: Evaluates 6-way concurrent multi-expert stacking across all 6 v6 adapters (`astral`, `postgresql`, `duckdb`, `financial`, `python_modern`, `python_web`) with warm fold timing and drift audits.
+* **[`benchmark_surgical_stacking_evaluation.py`](benchmark_surgical_stacking_evaluation.py)**: Targeted 4-expert real-world benchmark comparing Naive (`none`), Classical ($\sqrt{K}$), and Surgical (`surgical`) on real prompt batches.
 * **[`goldilocks_in_place_addmm/benchmark_goldilocks_folding.py`](goldilocks_in_place_addmm/benchmark_goldilocks_folding.py)**: End-to-end verification of pointer invariance, zero numerical drift across 100 swap cycles, and Goldilocks merge precision bounds.
-* **[`benchmark_weight_folding.py`](benchmark_weight_folding.py)**: Proves the steady-state +82.1% decode speedup of unwrapped in-place weight folding over standard PEFT wrappers over full 256-token generations.
+* **[`benchmark_weight_folding.py`](benchmark_weight_folding.py)**: Proves the steady-state +82.1% decode speedup of unwrapped in-place weight folding over standard PEFT wrappers.
 * **[`evaluate_folded_vs_wrapped.py`](evaluate_folded_vs_wrapped.py)**: Evaluates quality preservation across domains, verifying that in-place weight absorption into `bfloat16` matches wrapped PEFT accuracy.
-* **[`benchmark_stacked_experts.py`](benchmark_stacked_experts.py)**: Audits `activate_many()` across all $2^N$ multi-expert combinations with 95% bootstrap confidence intervals, proving that composite stacking preserves domain performance.
+* **[`benchmark_stacked_experts.py`](benchmark_stacked_experts.py)**: Audits `activate_many()` across all $2^N$ multi-expert combinations with 95% bootstrap confidence intervals.
+

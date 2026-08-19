@@ -56,6 +56,7 @@ from pathlib import Path
 import torch
 from peft import LoraConfig, get_peft_model
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import TrainerCallback
 from trl import SFTConfig, SFTTrainer
 
 from gnn_experiment.canon import REPO_ROOT  # noqa: E402
@@ -78,7 +79,32 @@ DOMAINS = {
         "results/adapters/m2_financial_r8a128_v4",
     ),
     "duckdb": ("data/duckdb/training_data_v4.jsonl", "results/adapters/m2_duckdb_r8a128_v4"),
+    # Merged corpora. NOTE the step counts below -- a merged corpus trained for
+    # the same 150 steps as a solo one gives each domain a FRACTION of the
+    # exposure (merged_all: 14% of an epoch vs solo's 43%), which would make
+    # merging look bad for reasons that have nothing to do with merging.
+    "merged_sql": ("data/merged_sql/training_data_v4.jsonl",
+                   "results/adapters/m2_merged_sql_r8a128_v4"),
+    "merged_all": ("data/merged_all/training_data_v4.jsonl",
+                   "results/adapters/m2_merged_all_r8a128_v4"),
 }
+
+# v6 = corpus v5 + geometric stopping. NOT v5: adapter v5/v5b/v5c are the failed
+# L_inert experiments and corpus v5 is the merged disposition corpus -- two
+# unrelated meanings. Adapter version != corpus version from here on; CHANGELOG.md
+# records which corpus each adapter used.
+# data dir != adapter stem for financial: the corpus lives in
+# data/financial_planning/ but every adapter since v1 is m2_financial_*. Keep the
+# stem canonical so adapter_path("financial") resolves.
+_V6_STEM = {"financial_planning": "financial"}
+DOMAINS_V6 = {
+    d: (f"data/{d}/training_data_v5.jsonl",
+        f"results/adapters/m2_{_V6_STEM.get(d, d)}_r8a128_v6")
+    for d in ("astral", "postgresql", "duckdb", "financial_planning",
+              "python_modern", "python_web")
+}
+
+FAIR_STEPS = {"merged_sql": 326, "merged_all": 481}
 
 
 ANSWER_MARKER = "\n\n### Answer:\n"
@@ -120,6 +146,123 @@ def load_dataset_records(path: Path, completion_only: bool = True):
             else:
                 records.append({"text": f"### Question:\n{u}{ANSWER_MARKER}{a}"})
     return records
+
+
+
+class GoldilocksStoppingCallback(TrainerCallback):
+    """Stop when the adapter's geometry reaches the Goldilocks band, not at a
+    step count someone guessed.
+
+    THE IDEA
+    --------
+    docs/THE_FACTORY_FINE_TUNING_AND_GEOMETRY.md Ch.4 defines the operating window
+    on ||dW||/||W||, a quantity that STARTS AT ZERO (lora_B is zero-initialised) and
+    grows as training proceeds:
+
+        < 0.035   precision floor    -- bf16 mantissa truncation, merge err > 5%
+        0.035-0.100  Goldilocks      -- merge err < 2.5%, peak measured quality
+        > 0.150   retention ceiling  -- base representations overwritten
+
+    So steps are only the vehicle. Training until the geometry lands in the band
+    makes the stopping point independent of corpus size, duplication rate and
+    learning rate -- those change how FAST you arrive, not where.
+
+    This removes a real confound. At the fixed 150-step default the corpora were
+    getting wildly different amounts of training:
+
+        astral v5      0.37 epochs      python_modern v5   0.88 (3.24 effective)
+        postgresql v5  0.44             python_web v5      0.99 (2.96 effective)
+
+    and every cross-domain comparison silently inherited that spread.
+
+    IT VALIDATES AGAINST WHAT WE ALREADY HAVE
+    -----------------------------------------
+    v4 recorded 0.0758 (postgres) and 0.0754 (astral) at 150 steps -- both
+    mid-band. 150 was right for those two corpora by luck, not design.
+
+    ⚠️ HONEST LIMIT
+    ---------------
+    The V-curve that places peak quality at ||dW||/||W|| ~= 0.045 was measured by
+    SCALING ALPHA on a fixed trained adapter: direction constant, magnitude varied.
+    Reaching the same ratio by training longer also changes the DIRECTION. The
+    scalar is the same; the path is not. Treat the band as a well-grounded stopping
+    heuristic, not as a proven quality optimum along the training-length axis --
+    that transfer is worth measuring once rather than assuming.
+    """
+
+    def __init__(self, model, alpha: int, rank: int, target: float | None,
+                 hard_ceiling: float = 0.100, every: int = 10,
+                 plateau: float | None = None, floor: float = 0.035):
+        self.model, self.alpha, self.rank = model, alpha, rank
+        self.target, self.hard_ceiling, self.every = target, hard_ceiling, every
+        # floor: never call it "converged" below the precision floor, where bf16
+        # truncation dominates and merge error exceeds 5%.
+        self.plateau, self.floor = plateau, floor
+        self.trace: list[dict] = []
+
+    @torch.no_grad()
+    def _ratio(self) -> float:
+        num = den = 0.0
+        for mod in self.model.modules():
+            A, B, W = (getattr(mod, "lora_A", None), getattr(mod, "lora_B", None),
+                       getattr(mod, "base_layer", None))
+            if A is None or B is None or W is None:
+                continue
+            try:
+                a = A["default"].weight.detach().float()
+                b = B["default"].weight.detach().float()
+                w = W.weight.detach().float()
+            except Exception:
+                continue
+            num += float(((b @ a) * (self.alpha / self.rank)).norm() ** 2)
+            den += float(w.norm() ** 2)
+        return (num ** 0.5) / max(1e-30, den ** 0.5)
+
+    def on_step_end(self, args, state, control, **kwargs):
+        if state.global_step % self.every:
+            return control
+        r = self._ratio()
+        prev = self.trace[-1]["dw_over_w"] if self.trace else 0.0
+        rel = (r - prev) / r if r > 0 else 1.0
+        self.trace.append({"step": int(state.global_step), "dw_over_w": round(r, 6),
+                           "rel_growth": round(rel, 5),
+                           "merge_err_pct": round(0.167 / max(1e-9, r), 3)})
+        if state.global_step % (self.every * 5) == 0:
+            print(f"  [geometry] step {state.global_step:4d}  |dW|/|W|={r:.4f}  "
+                  f"rel_growth={rel*100:.1f}%  merge_err~{0.167 / max(1e-9, r):.2f}%",
+                  flush=True)
+
+        # DUAL CRITERION -- whichever fires first.
+        #
+        # 1. PLATEAU. Relative growth (increment / current) is the on-the-fly
+        #    convergence signal, and it is genuinely per-corpus: at step 80 the
+        #    609-681 record corpora sat at 3.6-4.0% while the 1184-1610 record
+        #    ones sat at 7.8-8.4%. A fixed |dW|/|W| target discards that and stops
+        #    everything at the same place regardless of how converged it is.
+        #
+        # 2. CEILING. Plateau alone is not safe: extrapolated, the big corpora
+        #    reach 2% relative growth at |dW|/|W| ~= 0.100-0.106, i.e. AT or ABOVE
+        #    the retention ceiling where the measured V-curve turns down. The band
+        #    bound has to win when they conflict.
+        #
+        # Both are needed. Plateau stops the small corpora early (they are done);
+        # the ceiling stops the large ones (they would keep climbing).
+        if r >= self.hard_ceiling:
+            print(f"  [geometry] STOP step {state.global_step}: |dW|/|W|={r:.4f} "
+                  f"reached band ceiling {self.hard_ceiling} "
+                  f"(merge_err~{0.167 / max(1e-9, r):.2f}%)", flush=True)
+            control.should_training_stop = True
+        elif self.plateau and len(self.trace) >= 4 and rel < self.plateau and r >= self.floor:
+            print(f"  [geometry] STOP step {state.global_step}: converged -- "
+                  f"rel_growth {rel*100:.2f}% < {self.plateau*100:.1f}% at "
+                  f"|dW|/|W|={r:.4f} (in band, merge_err~"
+                  f"{0.167 / max(1e-9, r):.2f}%)", flush=True)
+            control.should_training_stop = True
+        elif self.target and r >= self.target:
+            print(f"  [geometry] STOP step {state.global_step}: |dW|/|W|={r:.4f} "
+                  f">= fixed target {self.target}", flush=True)
+            control.should_training_stop = True
+        return control
 
 
 class InertiaSFTTrainer(SFTTrainer):
@@ -347,7 +490,11 @@ def main():
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    ap.add_argument("--domain", choices=sorted(DOMAINS), required=True)
+    # union of both tables: --v6 swaps DOMAINS for DOMAINS_V6, but argparse
+    # validates BEFORE that happens, so restricting to the v4 keys rejected
+    # python_modern/python_web with exit 2 before the model ever loaded.
+    ap.add_argument("--domain", required=True,
+                    choices=sorted(set(DOMAINS) | set(DOMAINS_V6)))
     ap.add_argument("--model-id", default="Qwen/Qwen3.5-4B")
     ap.add_argument("--rank", type=int, default=8)
     ap.add_argument("--alpha", type=int, default=128)
@@ -370,7 +517,31 @@ def main():
         help="override the domain's training file (e.g. a corpus revision). Recorded in "
              "regime.json so an adapter never loses track of what it was trained on.",
     )
-    ap.add_argument("--max-steps", type=int, default=150)
+    ap.add_argument("--max-steps", type=int, default=150,
+                    help="SAFETY CAP when --stop-at-dw-over-w is set, not a target. "
+                         "A fixed step count gave the v5 corpora 0.37-0.99 epochs "
+                         "depending on size -- a confound in every cross-domain "
+                         "comparison. Prefer the geometric stop.")
+    ap.add_argument("--v6", action="store_true",
+                    help="train the v6 generation: corpus v5 (disposition + command "
+                         "data, deduplicated) -> results/adapters/*_v6. See "
+                         "CHANGELOG.md for what v6 adds and what it deliberately "
+                         "omits (L_inert is NOT in v6).")
+    ap.add_argument("--stop-at-dw-over-w", type=float, default=None,
+                    help="Stop when ||dW||/||W|| reaches this. 0.075 matches what the "
+                         "v4 adapters landed on (0.0754-0.0758) and sits mid-band with "
+                         "~2.2%% predicted merge error. The Goldilocks band is "
+                         "[0.035, 0.100]; below it bf16 truncates the delta, above "
+                         "0.150 base representations are overwritten. See "
+                         "docs/THE_FACTORY_FINE_TUNING_AND_GEOMETRY.md Ch.4.")
+    ap.add_argument("--stop-at-plateau", type=float, default=None,
+                    help="Stop when relative growth (increment/current) falls below "
+                         "this, i.e. training has converged -- 0.02 is a reasonable "
+                         "start. This is the ON-THE-FLY criterion: it adapts per "
+                         "corpus, where a fixed |dW|/|W| target does not. Combined "
+                         "with the 0.100 band ceiling, whichever fires first wins.")
+    ap.add_argument("--geometry-every", type=int, default=10,
+                    help="steps between ||dW||/||W|| checks")
     ap.add_argument("--lr", type=float, default=2e-4)
     ap.add_argument("--vram-cap-gb", type=float, default=22.0)
     ap.add_argument("--no-liger", action="store_true", help="disable Liger fused kernels (A/B baseline)")
@@ -411,7 +582,15 @@ def main():
     )
     args = ap.parse_args()
 
-    data_rel, out_rel = DOMAINS[args.domain]
+    table = DOMAINS_V6 if args.v6 else DOMAINS
+    if args.domain not in table:
+        raise SystemExit(f"domain {args.domain!r} not available in "
+                         f"{'v6' if args.v6 else 'v4'} table: {sorted(table)}")
+    data_rel, out_rel = table[args.domain]
+    if args.domain in FAIR_STEPS and args.max_steps == 150:
+        args.max_steps = FAIR_STEPS[args.domain]
+        print(f"  [fair-steps] {args.domain}: 150 -> {args.max_steps} steps so each "
+              f"merged domain gets the same exposure a solo adapter gets")
     if args.dataset:
         data_rel = args.dataset
     dataset_path = REPO_ROOT / data_rel
@@ -533,6 +712,15 @@ def main():
         lambda_inert=args.lambda_inert,
         replay_batches=replay_batches,
     )
+
+    geom_cb = None
+    if args.stop_at_dw_over_w or args.stop_at_plateau:
+        geom_cb = GoldilocksStoppingCallback(
+            model, args.alpha, args.rank, args.stop_at_dw_over_w,
+            every=args.geometry_every, plateau=args.stop_at_plateau)
+        trainer.add_callback(geom_cb)
+        print(f"  [geometry] geometric stop ACTIVE: train until |dW|/|W| >= "
+              f"{args.stop_at_dw_over_w} (safety cap {args.max_steps} steps)")
 
     # VERIFY THE MASK IS REAL, do not assume it.
     # §13 in docs/DECISIONS.md records an entire training run whose
@@ -669,6 +857,21 @@ def main():
     # not interchangeable with one trained without it, and "did selectivity
     # actually move?" must be answerable from the artifact rather than from a log
     # that scrolled away.
+    if geom_cb is not None and geom_cb.trace:
+        # The trace lives next to the adapter: "what geometry did this stop at, and
+        # after how many steps" must be answerable from the artifact, not from a
+        # log that scrolled away.
+        (out_dir / "geometry_trace.json").write_text(json.dumps({
+            "target_dw_over_w": args.stop_at_dw_over_w,
+            "stopped_at_step": geom_cb.trace[-1]["step"],
+            "final": geom_cb.trace[-1],
+            "goldilocks_band": [0.035, 0.100],
+            "trace": geom_cb.trace,
+        }, indent=2))
+        f = geom_cb.trace[-1]
+        print(f"  [geometry] FINAL |dW|/|W|={f['dw_over_w']} at step {f['step']} "
+              f"(merge_err~{f['merge_err_pct']}%) -> geometry_trace.json")
+
     if trainer.inert_log:
         (out_dir / "inert_trace.json").write_text(json.dumps({
             "lambda_inert": args.lambda_inert,

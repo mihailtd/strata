@@ -9,3 +9,16 @@ W20260819 12:01:03.207522 126409796931648 agent.cpp:608] sysfs nodes path '/sys/
 ========================================================================================
  Condition           financial_planning       astral   postgresql       duckdb
 ----------------------------------------------------------------------------------------
+ Base Model                 85.00%        6.25%       42.44%       66.67%
+ Solo Astral                77.50%       57.14%       54.37%       58.00%
+ Solo PostgreSQL            84.17%       17.71%       62.96%       54.67%
+ Solo DuckDB                48.33%        5.42%       47.19%       78.00%
+ ast+pg   [SHIP A]          83.33%       58.33%       65.42%       46.00%
+ ast+duck [SHIP B]          75.00%       54.17%       65.05%       79.33%
+ pg+duck  [collide]         63.33%       13.33%       88.76%       80.00%
+ ast+pg+duck                75.83%       59.29%       72.75%       74.67%
+========================================================================================
+
+Wrote full benchmark report to: /home/mihai/gnn-experiment/results/benchmarks/stacked_4expert_matrix_2048.json
+
+Warning: Resource leak detected by SharedSignalPool, 2 Signals leaked.

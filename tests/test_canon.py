@@ -13,7 +13,7 @@ from gnn_experiment.canon import (
 def test_canon_invariants():
     """Verify canonical defaults are strictly pinned to preventing regression to legacy caps."""
     assert CANON.MAX_NEW_TOKENS == 2048
-    assert CANON.ADAPTER_VERSION == "v4"
+    assert CANON.ADAPTER_VERSION == "v6"
     assert CANON.LORA_RANK == 8
     assert CANON.LORA_ALPHA == 128
     assert CANON.BASE_MODEL == "Qwen/Qwen3.5-4B"
@@ -25,10 +25,10 @@ def test_canon_invariants():
 @pytest.mark.parametrize(
     "domain,expected_stem",
     [
-        ("astral", "m2_astral_r8a128_v4"),
-        ("postgresql", "m2_postgresql_r8a128_v4"),
-        ("duckdb", "m2_duckdb_r8a128_v4"),
-        ("financial", "m2_financial_r8a128_v4"),
+        ("astral", "m2_astral_r8a128_v6"),
+        ("postgresql", "m2_postgresql_r8a128_v6"),
+        ("duckdb", "m2_duckdb_r8a128_v6"),
+        ("financial", "m2_financial_r8a128_v6"),
     ],
 )
 def test_adapter_path_valid_domains(domain: str, expected_stem: str):
@@ -58,7 +58,7 @@ def test_canon_stamp_metadata():
     stamp = CANON.stamp()
     assert isinstance(stamp, dict)
     assert stamp["MAX_NEW_TOKENS"] == 2048
-    assert stamp["ADAPTER_VERSION"] == "v4"
+    assert stamp["ADAPTER_VERSION"] == "v6"
     assert stamp["BASE_MODEL"] == "Qwen/Qwen3.5-4B"
     assert stamp["LORA_RANK"] == 8
     assert stamp["LORA_ALPHA"] == 128

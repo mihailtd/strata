@@ -20,7 +20,7 @@ if torch.cuda.is_available():
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+from gnn_experiment.canon import REPO_ROOT, adapter_path  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
@@ -49,10 +49,15 @@ DOMAINS = {
 }
 
 EXPERTS_V4 = {
-    "fin": "results/adapters/m2_financial_r8a128_v4",
-    "ast": "results/adapters/m2_astral_r8a128_v4",
-    "pg": "results/adapters/m2_postgresql_r8a128_v4",
-    "duck": "results/adapters/m2_duckdb_r8a128_v4",
+    "fin": str(adapter_path("financial").relative_to(REPO_ROOT)),
+    "ast": str(adapter_path("astral").relative_to(REPO_ROOT)),
+    "pg": str(adapter_path("postgresql").relative_to(REPO_ROOT)),
+    "duck": str(adapter_path("duckdb").relative_to(REPO_ROOT)),
+    # DELIBERATE v4: these are the merged-corpus adapters from the
+    # stacking-vs-merging experiment (DECISIONS.md §42). They are a fixed
+    # historical control, not a generation that tracks canon.
+    "msql": "results/adapters/m2_merged_sql_r8a128_v4",
+    "mall": "results/adapters/m2_merged_all_r8a128_v4",
 }
 
 
@@ -87,10 +92,38 @@ def score(model, tok, questions, terms, max_new_tokens):
     return out
 
 
+# Two presets over ONE script -- duplicating it into a second file is how a
+# 192-token default once shipped alongside a 2048 one.
+PRESETS = {
+    "matrix": [
+        ("Base Model", []),
+        ("Solo Astral", [("ast", 1.0)]),
+        ("Solo PostgreSQL", [("pg", 1.0)]),
+        ("Solo DuckDB", [("duck", 1.0)]),
+        ("ast+pg   [SHIP A]", [("ast", 1.0), ("pg", 1.0)]),
+        ("ast+duck [SHIP B]", [("ast", 1.0), ("duck", 1.0)]),
+        ("pg+duck  [collide]", [("pg", 1.0), ("duck", 1.0)]),
+        ("ast+pg+duck", [("ast", 1.0), ("pg", 1.0), ("duck", 1.0)]),
+    ],
+    # Does STACKING earn its complexity? One adapter trained on the union vs
+    # the stacked equivalent. Only the two merged rows are new -- base, the
+    # solos and the stacked rows are already measured, and the harness is
+    # greedy/deterministic so they carry over. Base is kept purely as a
+    # control: it must reproduce 85.00 / 6.25 / 42.44 / 66.67 exactly, or
+    # something changed and the carried-over rows are not comparable.
+    "merged": [
+        ("Base Model [control]", []),
+        ("merged_sql  = pg+duck corpora", [("msql", 1.0)]),
+        ("merged_all  = +astral corpus", [("mall", 1.0)]),
+    ],
+}
+
+
 def main():
     parser = argparse.ArgumentParser(description="Targeted 3-Way Stacking Scaling Benchmark")
     parser.add_argument("--model-name", default="Qwen/Qwen3.5-4B")
     parser.add_argument("--max-new-tokens", type=int, default=2048)
+    parser.add_argument("--preset", choices=["matrix", "merged"], default="matrix")
     parser.add_argument("--out", default="results/benchmarks/stacked_3way_scaling_comparison.json")
     args = parser.parse_args()
 
@@ -103,7 +136,9 @@ def main():
     )
     model.eval()
 
-    experts = {n: FoldableExpert.from_dir(REPO_ROOT / p, n) for n, p in EXPERTS_V4.items()}
+    needed = {n for _lbl, spec in PRESETS[args.preset] for n, _m in spec}
+    experts = {n: FoldableExpert.from_dir(REPO_ROOT / p, n)
+               for n, p in EXPERTS_V4.items() if n in needed}
     engine = WeightFoldingEngine(model, experts.values(), keep_pristine=True)
 
     qs = {
@@ -111,22 +146,7 @@ def main():
         for d, (f, _) in DOMAINS.items()
     }
 
-    conditions = [
-        ("Base Model", []),
-        ("Solo Astral", [("ast", 1.0)]),
-        ("Solo PostgreSQL", [("pg", 1.0)]),
-        ("Solo DuckDB", [("duck", 1.0)]),
-        # --- the two SHIPPABLE configs. You never mix two SQL dialects in
-        # production; you pick one per problem and pair it with Python.
-        ("ast+pg   [SHIP A]", [("ast", 1.0), ("pg", 1.0)]),
-        ("ast+duck [SHIP B]", [("ast", 1.0), ("duck", 1.0)]),
-        # --- diagnostics, not products ---
-        # pg+duck: two SQL experts that DISAGREE on the same prompt (QUALIFY and
-        # EXCLUDE are duckdb-only). Not a config anyone would ship -- it measures
-        # what happens when routing picks WRONG, i.e. the robustness floor.
-        ("pg+duck  [collide]", [("pg", 1.0), ("duck", 1.0)]),
-        ("ast+pg+duck", [("ast", 1.0), ("pg", 1.0), ("duck", 1.0)]),
-    ]
+    conditions = PRESETS[args.preset]
 
     print("=" * 88)
     print(f" max_new_tokens={args.max_new_tokens}   greedy   experts=v4")

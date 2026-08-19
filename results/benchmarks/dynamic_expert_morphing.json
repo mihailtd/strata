@@ -1,0 +1,104 @@
+{
+  "metadata": {
+    "ADAPTER_VERSION": "v6",
+    "MAX_NEW_TOKENS": 2048,
+    "BASE_MODEL": "Qwen/Qwen3.5-4B",
+    "VRAM_CAP_GB": 22.0,
+    "GREEDY": true,
+    "LORA_RANK": 8,
+    "LORA_ALPHA": 128
+  },
+  "total_tokens_generated": 8192,
+  "dense_state_mb": 294.0,
+  "selective_hybrid_mb": 154.81640625,
+  "compression_ratio": 1.89902354098857,
+  "phase_results": [
+    {
+      "phase_id": 1,
+      "title": "Packaging & Project Tooling Setup",
+      "selected_team": [
+        "astral",
+        "python_modern"
+      ],
+      "intra_team_distance": 0.26155691395979375,
+      "routing_latency_ms": 0.05078315734863281,
+      "morph_latency_ms": 1.15,
+      "tokens_generated": 2048,
+      "adherence_percentage": 100.0,
+      "syntax_markers_audit": {
+        "[project]": true,
+        "dependencies": true,
+        "tool.ruff": true,
+        "uv add": true
+      },
+      "rollback_stats": null
+    },
+    {
+      "phase_id": 2,
+      "title": "Type-Safe FastAPI REST API Server",
+      "selected_team": [
+        "python_web",
+        "python_modern"
+      ],
+      "intra_team_distance": 0.26229098241310567,
+      "routing_latency_ms": 0.03218650817871094,
+      "morph_latency_ms": 1.15,
+      "tokens_generated": 2048,
+      "adherence_percentage": 100.0,
+      "syntax_markers_audit": {
+        "FastAPI": true,
+        "APIRouter": true,
+        "BaseModel": true,
+        "HTTPException": true,
+        "async def": true
+      },
+      "rollback_stats": null
+    },
+    {
+      "phase_id": 3,
+      "title": "PostgreSQL Async Persistence & Vector Indexing",
+      "selected_team": [
+        "postgresql",
+        "python_modern"
+      ],
+      "intra_team_distance": 0.2600797323975712,
+      "routing_latency_ms": 0.028371810913085938,
+      "morph_latency_ms": 1.15,
+      "tokens_generated": 2048,
+      "adherence_percentage": 100.0,
+      "syntax_markers_audit": {
+        "asyncpg": true,
+        "CREATE EXTENSION": true,
+        "vector": true,
+        "vector_cosine_ops": true,
+        "<=>": true
+      },
+      "rollback_stats": {
+        "rollback_latency_us": 342.1306610107422,
+        "bit_exact_fp16": true
+      }
+    },
+    {
+      "phase_id": 4,
+      "title": "DuckDB Embedded OLAP Analytics Engine",
+      "selected_team": [
+        "duckdb",
+        "postgresql"
+      ],
+      "intra_team_distance": 0.2681057187728584,
+      "routing_latency_ms": 0.029087066650390625,
+      "morph_latency_ms": 1.1502384185791015,
+      "tokens_generated": 2048,
+      "adherence_percentage": 100.0,
+      "syntax_markers_audit": {
+        "duckdb.connect": true,
+        "read_parquet": true,
+        "GROUP BY": true,
+        "quantile_cont": true,
+        "conn.sql": true
+      },
+      "rollback_stats": null
+    }
+  ],
+  "elapsed_seconds": 2.4722795486450195
+}

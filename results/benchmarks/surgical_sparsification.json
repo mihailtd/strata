@@ -1,0 +1,101 @@
+{
+  "metadata": {
+    "ADAPTER_VERSION": "v4",
+    "MAX_NEW_TOKENS": 2048,
+    "BASE_MODEL": "Qwen/Qwen3.5-4B",
+    "VRAM_CAP_GB": 22.0,
+    "GREEDY": true,
+    "LORA_RANK": 8,
+    "LORA_ALPHA": 128
+  },
+  "K_adapters": 4,
+  "n_features": 512,
+  "lv_glasso": {
+    "iterations": 50,
+    "converged": true,
+    "rank_L": 299,
+    "overall_sparsity_pct": 99.99923706054688
+  },
+  "attention_summary": {
+    "n_columns": 128,
+    "sparsity_pct": 100.0,
+    "cross_adapter_conflict_edges": 0,
+    "verdict": "CONDITIONALLY_ORTHOGONAL"
+  },
+  "mlp_summary": {
+    "n_columns": 384,
+    "sparsity_pct": 99.99864012184509,
+    "cross_adapter_conflict_edges": 1
+  },
+  "per_projection_type": [
+    {
+      "projection": "down_proj",
+      "type": "mlp",
+      "n_columns": 128,
+      "sparsity_pct": 100.0,
+      "conflict_edges": 0
+    },
+    {
+      "projection": "gate_proj",
+      "type": "mlp",
+      "n_columns": 128,
+      "sparsity_pct": 99.9876968503937,
+      "conflict_edges": 1
+    },
+    {
+      "projection": "k_proj",
+      "type": "attention",
+      "n_columns": 32,
+      "sparsity_pct": 100.0,
+      "conflict_edges": 0
+    },
+    {
+      "projection": "o_proj",
+      "type": "attention",
+      "n_columns": 32,
+      "sparsity_pct": 100.0,
+      "conflict_edges": 0
+    },
+    {
+      "projection": "q_proj",
+      "type": "attention",
+      "n_columns": 32,
+      "sparsity_pct": 100.0,
+      "conflict_edges": 0
+    },
+    {
+      "projection": "up_proj",
+      "type": "mlp",
+      "n_columns": 128,
+      "sparsity_pct": 100.0,
+      "conflict_edges": 0
+    },
+    {
+      "projection": "v_proj",
+      "type": "attention",
+      "n_columns": 32,
+      "sparsity_pct": 100.0,
+      "conflict_edges": 0
+    }
+  ],
+  "conflict_edges": [
+    {
+      "feature_i": "astral::L3.mlp.gate_proj",
+      "feature_j": "duckdb::L0.mlp.gate_proj",
+      "layer_i": 3,
+      "layer_j": 0,
+      "projection": "gate_proj",
+      "S_value": 0.3371920189890683
+    }
+  ],
+  "sqrt_k_damage": {
+    "total_energy": 5985.621361085845,
+    "conflict_energy": 30.246622213529406,
+    "non_conflict_energy": 5955.374738872316,
+    "conflict_fraction_pct": 0.5053213424118495,
+    "global_sqrt_k_loss_fraction_pct": 75.0,
+    "unnecessary_loss_fraction_pct": 74.62100899319111,
+    "capability_preserved_by_surgical_pct": 74.62100899319111
+  },
+  "elapsed_seconds": 136.8959231376648
+}

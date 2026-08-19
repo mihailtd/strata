@@ -1,0 +1,106 @@
+{
+  "metadata": {
+    "ADAPTER_VERSION": "v6",
+    "MAX_NEW_TOKENS": 2048,
+    "BASE_MODEL": "Qwen/Qwen3.5-4B",
+    "VRAM_CAP_GB": 22.0,
+    "GREEDY": true,
+    "LORA_RANK": 8,
+    "LORA_ALPHA": 128
+  },
+  "macro_scan": {
+    "n_features": 512,
+    "rank_L": 299,
+    "overall_sparsity_pct": 99.99923706054688,
+    "clean_modules_count": 511,
+    "conflict_modules_count": 1,
+    "conflict_details": [
+      {
+        "key": "model.layers.3.mlp.gate_proj.weight",
+        "ad_i": "astral",
+        "ad_j": "duckdb",
+        "short": "L3.mlp.gate_proj",
+        "S_value": 0.3371920189890683
+      }
+    ]
+  },
+  "micro_poet": {
+    "model.layers.3.mlp.gate_proj.weight": {
+      "d_out": 9216,
+      "notched_neurons": 15,
+      "raw_collision_energy": 7.651083751907548e-06,
+      "filtered_collision_energy": 7.3346052249976764e-06,
+      "collision_reduction_factor": 1.0431485368404998,
+      "top_neuron_indices": [
+        5908,
+        8070,
+        3089,
+        4059,
+        3791
+      ]
+    }
+  },
+  "comparative_evaluation": {
+    "K_adapters": 4,
+    "total_modules": 128,
+    "conflict_modules_identified": [
+      "model.layers.3.mlp.gate_proj.weight"
+    ],
+    "poet_micro_details": {
+      "model.layers.3.mlp.gate_proj.weight": {
+        "d_out": 9216,
+        "notched_neurons": 15,
+        "raw_collision_energy": 7.651083751907548e-06,
+        "filtered_collision_energy": 7.3346052249976764e-06,
+        "collision_reduction_factor": 1.0431485368404998,
+        "top_neuron_indices": [
+          5908,
+          8070,
+          3089,
+          4059,
+          3791
+        ]
+      }
+    },
+    "regimes": {
+      "regime_1_naive_unscaled": {
+        "name": "Naive Unscaled Stacking",
+        "alpha_multiplier": 1.0,
+        "filtering": "None",
+        "signal_energy": 5985.619387745857,
+        "signal_retention_pct": 100.0,
+        "collision_energy": 0.006579427915610184,
+        "sir_db": 59.58920964350181
+      },
+      "regime_2_global_sqrt_k": {
+        "name": "Classical Global \u221aK Scaling",
+        "alpha_multiplier": 0.5,
+        "filtering": "Global 50% attenuation",
+        "signal_energy": 1496.4048469364643,
+        "signal_retention_pct": 25.0,
+        "collision_energy": 0.0004112142447256365,
+        "sir_db": 65.60980954688024
+      },
+      "regime_3_blind_poet": {
+        "name": "Blind Whole-Model POET Notching",
+        "alpha_multiplier": 1.0,
+        "filtering": "Notch top-15 channels across all 128 layers",
+        "signal_energy": 5975.877168690282,
+        "signal_retention_pct": 99.83723958333334,
+        "collision_energy": 0.002631771166244074,
+        "sir_db": 63.561535375462185
+      },
+      "regime_4_surgical_lv_glasso_poet": {
+        "name": "Two-Stage Surgical LV-GLasso + POET Stacking",
+        "alpha_multiplier": 1.0,
+        "filtering": "Full power on 511 clean modules + POET notch only on 1 conflict module(s)",
+        "signal_energy": 5985.522902193169,
+        "signal_retention_pct": 99.99838804396943,
+        "collision_energy": 0.0065769725696560415,
+        "sir_db": 59.59076066234652,
+        "advantage_over_sqrt_k_energy_pct": 74.99838804396943
+      }
+    }
+  },
+  "elapsed_seconds": 17.61974549293518
+}

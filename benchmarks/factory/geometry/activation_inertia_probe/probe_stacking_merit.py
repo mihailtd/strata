@@ -60,7 +60,7 @@ if torch.cuda.is_available():
     torch.zeros(1, device="cuda")
     torch.cuda.synchronize()
 
-from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+from gnn_experiment.canon import REPO_ROOT, adapter_path  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
@@ -70,14 +70,16 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 from gnn_experiment.novel_peft import set_hard_vram_cap  # noqa: E402
 
 ADAPTERS = {
-    "ast": "results/adapters/m2_astral_r8a128_v4",
-    "pg": "results/adapters/m2_postgresql_r8a128_v4",
-    "duck": "results/adapters/m2_duckdb_r8a128_v4",
-    "fin": "results/adapters/m2_financial_r8a128_v4",
-    "ast_v5": "results/adapters/m2_astral_r8a128_v5",
-    # v5b = L_inert on OUT-OF-DOMAIN replay (v5 penalised in-domain prompt
-    # tokens and produced a uniform 0.843x with ASR unchanged at 0.96).
-    "ast_v5b": "results/adapters/m2_astral_r8a128_v5b",
+    "ast": str(adapter_path("astral").relative_to(REPO_ROOT)),
+    "pg": str(adapter_path("postgresql").relative_to(REPO_ROOT)),
+    "duck": str(adapter_path("duckdb").relative_to(REPO_ROOT)),
+    "fin": str(adapter_path("financial").relative_to(REPO_ROOT)),
+    # The L_inert adapters (v5 / v5b / v5c) were DELETED. All three failed and the
+    # findings are recorded in CHANGELOG.md and DECISIONS.md §46 -- v5 produced a
+    # uniform 0.843x energy shrink with ASR unchanged at 0.96, v5b learned to
+    # silence <pad>, v5c was lost to a host crash. The measurements survive; the
+    # weights had no further use. The loader below skips missing paths, so adding
+    # a future L_inert adapter here is a one-line change.
 }
 
 # Per-domain prompt sets. Financial gets its OWN bucket rather than being folded

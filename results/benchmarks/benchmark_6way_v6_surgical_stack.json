@@ -1,0 +1,69 @@
+{
+  "metadata": {
+    "ADAPTER_VERSION": "v6",
+    "MAX_NEW_TOKENS": 2048,
+    "BASE_MODEL": "Qwen/Qwen3.5-4B",
+    "VRAM_CAP_GB": 22.0,
+    "GREEDY": true,
+    "LORA_RANK": 8,
+    "LORA_ALPHA": 128
+  },
+  "adapter_version": "v6",
+  "domains": [
+    "astral",
+    "postgresql",
+    "duckdb",
+    "financial",
+    "python_modern",
+    "python_web"
+  ],
+  "n_experts": 6,
+  "regime_results": {
+    "none": {
+      "scale_mode": "none",
+      "warm_fold_time_ms": 1249.4269576673105,
+      "restore_time_ms": 208.26230800230405,
+      "max_drift": 0.0,
+      "target_cross_entropy": 4.161458333333333,
+      "per_domain_cross_entropy": {
+        "astral": 5.09375,
+        "postgresql": 4.34375,
+        "duckdb": 2.875,
+        "financial": 2.71875,
+        "python_modern": 6.21875,
+        "python_web": 3.71875
+      }
+    },
+    "sqrt": {
+      "scale_mode": "sqrt",
+      "warm_fold_time_ms": 1268.1977723344364,
+      "restore_time_ms": 222.87783600040711,
+      "max_drift": 0.0,
+      "target_cross_entropy": 2.6822916666666665,
+      "per_domain_cross_entropy": {
+        "astral": 4.625,
+        "postgresql": 2.96875,
+        "duckdb": 2.359375,
+        "financial": 1.015625,
+        "python_modern": 3.234375,
+        "python_web": 1.890625
+      }
+    },
+    "surgical": {
+      "scale_mode": "surgical",
+      "warm_fold_time_ms": 1334.5048763342977,
+      "restore_time_ms": 214.07741100119893,
+      "max_drift": 0.0,
+      "target_cross_entropy": 4.166666666666667,
+      "per_domain_cross_entropy": {
+        "astral": 5.15625,
+        "postgresql": 4.3125,
+        "duckdb": 2.875,
+        "financial": 2.71875,
+        "python_modern": 6.25,
+        "python_web": 3.6875
+      }
+    }
+  },
+  "elapsed_seconds": 51.179659366607666
+}

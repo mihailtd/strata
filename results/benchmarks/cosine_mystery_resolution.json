@@ -1,0 +1,74 @@
+{
+  "metadata": {
+    "ADAPTER_VERSION": "v4",
+    "MAX_NEW_TOKENS": 2048,
+    "BASE_MODEL": "Qwen/Qwen3.5-4B",
+    "VRAM_CAP_GB": 22.0,
+    "GREEDY": true,
+    "LORA_RANK": 8,
+    "LORA_ALPHA": 128
+  },
+  "summary": {
+    "mean_weight_cosine_s38": 4.190345359500838e-05,
+    "std_weight_cosine_s38": 3.28194905734689e-05,
+    "mean_activation_sigma": 0.04629704069130238,
+    "mean_precision_theta": 0.0036905457521216145,
+    "mean_lv_glasso_S": 3.4300945942084587e-06,
+    "sigma_to_theta_reduction_x": 12.544767778643699,
+    "theta_to_S_reduction_x": 1075.899821646484,
+    "total_sigma_to_S_reduction_x": 13496.913781355237,
+    "rank_latent_L": 299,
+    "lv_glasso_sparsity_pct": 99.99923706054688
+  },
+  "per_pair": [
+    {
+      "pair": "astral+postgresql",
+      "stage1_weight_cosine": 2.915672458029116e-05,
+      "stage2_activation_sigma": 0.046385863457186455,
+      "stage2_precision_theta": 0.0036949106043313606,
+      "stage3_lv_glasso_S": 0.0,
+      "stage3_conflict_edges": 0
+    },
+    {
+      "pair": "astral+duckdb",
+      "stage1_weight_cosine": 1.2117663463363207e-05,
+      "stage2_activation_sigma": 0.04647806680836147,
+      "stage2_precision_theta": 0.0037971819298774495,
+      "stage3_lv_glasso_S": 2.058056756525075e-05,
+      "stage3_conflict_edges": 1
+    },
+    {
+      "pair": "astral+financial",
+      "stage1_weight_cosine": 0.00010248245871832377,
+      "stage2_activation_sigma": 0.04621313574693549,
+      "stage2_precision_theta": 0.003577839995099831,
+      "stage3_lv_glasso_S": 0.0,
+      "stage3_conflict_edges": 0
+    },
+    {
+      "pair": "postgresql+duckdb",
+      "stage1_weight_cosine": 2.7889932508927417e-05,
+      "stage2_activation_sigma": 0.046483454888006606,
+      "stage2_precision_theta": 0.0037753857032251557,
+      "stage3_lv_glasso_S": 0.0,
+      "stage3_conflict_edges": 0
+    },
+    {
+      "pair": "postgresql+financial",
+      "stage1_weight_cosine": 6.762425956070611e-05,
+      "stage2_activation_sigma": 0.045887091209237695,
+      "stage2_precision_theta": 0.003598966225791574,
+      "stage3_lv_glasso_S": 0.0,
+      "stage3_conflict_edges": 0
+    },
+    {
+      "pair": "duckdb+financial",
+      "stage1_weight_cosine": 1.2149682738438635e-05,
+      "stage2_activation_sigma": 0.04633463203808652,
+      "stage2_precision_theta": 0.0036989900544043175,
+      "stage3_lv_glasso_S": 0.0,
+      "stage3_conflict_edges": 0
+    }
+  ],
+  "elapsed_seconds": 38.39873123168945
+}

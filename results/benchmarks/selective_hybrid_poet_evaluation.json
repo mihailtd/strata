@@ -1,0 +1,46 @@
+{
+  "metadata": {
+    "ADAPTER_VERSION": "v6",
+    "MAX_NEW_TOKENS": 2048,
+    "BASE_MODEL": "Qwen/Qwen3.5-4B",
+    "VRAM_CAP_GB": 22.0,
+    "GREEDY": true,
+    "LORA_RANK": 8,
+    "LORA_ALPHA": 128
+  },
+  "horizon_depth": 64,
+  "active_adapters": [
+    "astral",
+    "postgresql"
+  ],
+  "regime_results": {
+    "dense": {
+      "vram_kb": 303104.0,
+      "compression_ratio": 1.0,
+      "mean_push_latency_us": 1096.3900623058482,
+      "mean_rollback_latency_us": 343.0319993640296,
+      "token_agreement": 1.0,
+      "domain_keyword_adherence": 0.5,
+      "syntax_validity_rate": 0.0
+    },
+    "poet": {
+      "vram_kb": 89480.0,
+      "compression_ratio": 3.3873938310236924,
+      "mean_push_latency_us": 8316.082625090834,
+      "mean_rollback_latency_us": 3337.392998219002,
+      "token_agreement": 1.0,
+      "domain_keyword_adherence": 0.5,
+      "syntax_validity_rate": 0.0
+    },
+    "selective_hybrid": {
+      "vram_kb": 127368.0,
+      "compression_ratio": 2.6772187676653476,
+      "mean_push_latency_us": 9087.296625314897,
+      "mean_rollback_latency_us": 333.46449890814256,
+      "token_agreement": 1.0,
+      "domain_keyword_adherence": 0.5,
+      "syntax_validity_rate": 0.0
+    }
+  },
+  "elapsed_seconds": 176.24576830863953
+}

@@ -1,0 +1,52 @@
+{
+  "metadata": {
+    "ADAPTER_VERSION": "v6",
+    "MAX_NEW_TOKENS": 2048,
+    "BASE_MODEL": "Qwen/Qwen3.5-4B",
+    "VRAM_CAP_GB": 22.0,
+    "GREEDY": true,
+    "LORA_RANK": 8,
+    "LORA_ALPHA": 128
+  },
+  "dimension": 2560,
+  "sequence_length": 512,
+  "benchmark_results": {
+    "rank_2": {
+      "rank": 2,
+      "mean_update_us": 9.7071971044269,
+      "p99_update_us": 64.65839134762064,
+      "min_update_us": 7.340000593103468,
+      "batch_svd_ms": 100.48229599851766,
+      "speedup_vs_batch_svd": 10351.31922403156,
+      "subspace_alignment": NaN
+    },
+    "rank_4": {
+      "rank": 4,
+      "mean_update_us": 10.196800736239089,
+      "p99_update_us": 46.21019957994576,
+      "min_update_us": 8.006998541532084,
+      "batch_svd_ms": 97.06504299902008,
+      "speedup_vs_batch_svd": 9519.16640422855,
+      "subspace_alignment": NaN
+    },
+    "rank_8": {
+      "rank": 8,
+      "mean_update_us": 11.192715350986644,
+      "p99_update_us": 46.49137164960846,
+      "min_update_us": 9.088998922379687,
+      "batch_svd_ms": 110.52085800110945,
+      "speedup_vs_batch_svd": 9874.356180367526,
+      "subspace_alignment": NaN
+    },
+    "rank_16": {
+      "rank": 16,
+      "mean_update_us": 19.91026820769918,
+      "p99_update_us": 94.96422077063467,
+      "min_update_us": 11.405998520785943,
+      "batch_svd_ms": 94.80748799978755,
+      "speedup_vs_batch_svd": 4761.738365891329,
+      "subspace_alignment": NaN
+    }
+  },
+  "elapsed_seconds": 0.4530611038208008
+}

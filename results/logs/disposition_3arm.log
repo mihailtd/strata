@@ -1,0 +1,69 @@
+W20260819 19:10:47.295352 128544320061504 agent.cpp:608] sysfs nodes path '/sys/class/kfd/kfd/topology/nodes' does not exist
+[safety] Hard VRAM cap: 22.0 GB (91.9% of 23.9 GB total) on device 0
+Fetching 2 files:   0%|          | 0/2 [00:00<?, ?it/s]Fetching 2 files: 100%|██████████| 2/2 [00:00<00:00, 3226.39it/s]
+[transformers] The fast path is not available because one of the required library is not installed. Falling back to torch implementation. To install follow https://github.com/fla-org/flash-linear-attention#installation and https://github.com/Dao-AILab/causal-conv1d
+Loading weights:   0%|          | 0/426 [00:00<?, ?it/s]Loading weights:   0%|          | 1/426 [00:04<32:06,  4.53s/it]Loading weights:   3%|▎         | 11/426 [00:04<02:07,  3.26it/s]Loading weights:   4%|▍         | 17/426 [00:04<01:14,  5.50it/s]Loading weights:   5%|▌         | 22/426 [00:04<00:51,  7.85it/s]Loading weights:   6%|▋         | 27/426 [00:05<00:38, 10.46it/s]Loading weights:   8%|▊         | 36/426 [00:05<00:22, 17.37it/s]Loading weights:  10%|▉         | 42/426 [00:05<00:19, 19.42it/s]Loading weights:  11%|█         | 47/426 [00:05<00:18, 20.86it/s]Loading weights:  12%|█▏        | 52/426 [00:05<00:15, 24.46it/s]Loading weights:  15%|█▌        | 64/426 [00:05<00:09, 39.16it/s]Loading weights:  17%|█▋        | 71/426 [00:06<00:09, 36.93it/s]Loading weights:  18%|█▊        | 77/426 [00:06<00:09, 38.11it/s]Loading weights:  19%|█▉        | 82/426 [00:06<00:08, 38.54it/s]Loading weights:  21%|██        | 90/426 [00:06<00:07, 47.08it/s]Loading weights:  23%|██▎       | 96/426 [00:06<00:08, 39.65it/s]Loading weights:  24%|██▎       | 101/426 [00:06<00:08, 36.29it/s]Loading weights:  25%|██▌       | 108/426 [00:06<00:07, 42.55it/s]Loading weights:  27%|██▋       | 117/426 [00:07<00:08, 37.62it/s]Loading weights:  30%|██▉       | 126/426 [00:07<00:07, 41.18it/s]Loading weights:  31%|███▏      | 134/426 [00:07<00:06, 44.71it/s]Loading weights:  34%|███▍      | 146/426 [00:07<00:05, 54.03it/s]Loading weights:  36%|███▌      | 152/426 [00:08<00:08, 31.16it/s]Loading weights:  38%|███▊      | 164/426 [00:08<00:06, 43.30it/s]Loading weights:  40%|████      | 172/426 [00:08<00:05, 42.81it/s]Loading weights:  42%|████▏     | 180/426 [00:08<00:05, 48.56it/s]Loading weights:  44%|████▍     | 187/426 [00:08<00:05, 43.80it/s]Loading weights:  46%|████▌     | 195/426 [00:08<00:04, 47.56it/s]Loading weights:  47%|████▋     | 201/426 [00:09<00:07, 30.00it/s]Loading weights:  48%|████▊     | 206/426 [00:10<00:15, 14.10it/s]Loading weights:  50%|████▉     | 212/426 [00:10<00:14, 14.33it/s]Loading weights:  50%|█████     | 215/426 [00:10<00:15, 13.88it/s]Loading weights:  52%|█████▏    | 220/426 [00:11<00:14, 13.87it/s]Loading weights:  53%|█████▎    | 224/426 [00:11<00:13, 14.69it/s]Loading weights:  53%|█████▎    | 226/426 [00:12<00:22,  8.92it/s]Loading weights:  54%|█████▍    | 231/426 [00:12<00:16, 11.93it/s]Loading weights:  55%|█████▌    | 235/426 [00:12<00:13, 14.40it/s]Loading weights:  56%|█████▌    | 238/426 [00:12<00:11, 16.35it/s]Loading weights:  57%|█████▋    | 241/426 [00:12<00:12, 14.84it/s]Loading weights:  57%|█████▋    | 244/426 [00:13<00:11, 16.08it/s]Loading weights:  58%|█████▊    | 249/426 [00:13<00:09, 19.19it/s]Loading weights:  59%|█████▉    | 252/426 [00:13<00:10, 17.37it/s]Loading weights:  60%|██████    | 257/426 [00:13<00:07, 21.22it/s]Loading weights:  61%|██████    | 260/426 [00:13<00:07, 22.37it/s]Loading weights:  64%|██████▍   | 274/426 [00:13<00:03, 38.89it/s]Loading weights:  67%|██████▋   | 286/426 [00:14<00:03, 46.29it/s]Loading weights:  69%|██████▉   | 295/426 [00:14<00:02, 49.03it/s]Loading weights:  70%|███████   | 300/426 [00:14<00:03, 34.80it/s]Loading weights:  72%|███████▏  | 307/426 [00:14<00:03, 39.29it/s]Loading weights:  73%|███████▎  | 312/426 [00:14<00:03, 37.91it/s]Loading weights:  75%|███████▍  | 318/426 [00:14<00:02, 42.22it/s]Loading weights:  77%|███████▋  | 329/426 [00:15<00:01, 56.07it/s]Loading weights:  79%|███████▉  | 336/426 [00:15<00:02, 43.51it/s]Loading weights:  80%|████████  | 342/426 [00:15<00:02, 36.15it/s]Loading weights:  81%|████████▏ | 347/426 [00:15<00:02, 35.84it/s]Loading weights:  83%|████████▎ | 354/426 [00:15<00:02, 35.38it/s]Loading weights:  84%|████████▍ | 359/426 [00:16<00:02, 28.59it/s]Loading weights:  86%|████████▌ | 365/426 [00:16<00:01, 31.39it/s]Loading weights:  88%|████████▊ | 376/426 [00:16<00:01, 42.51it/s]Loading weights:  89%|████████▉ | 381/426 [00:16<00:01, 36.15it/s]Loading weights:  91%|█████████ | 386/426 [00:17<00:01, 28.91it/s]Loading weights:  92%|█████████▏| 390/426 [00:17<00:01, 27.04it/s]Loading weights:  94%|█████████▍| 401/426 [00:17<00:00, 39.09it/s]Loading weights:  96%|█████████▌| 410/426 [00:17<00:00, 41.21it/s]Loading weights:  98%|█████████▊| 418/426 [00:17<00:00, 43.81it/s]Loading weights: 100%|██████████| 426/426 [00:17<00:00, 24.07it/s]
+============================================================================================
+ DISPOSITION BENCHMARK -- max_new_tokens=2048 greedy experts=v4
+ does the model REACH FOR the native tool when the prompt names none?
+============================================================================================
+ [ 1/24] ast_add_dep          base=MANUAL   sys=MIXED    expert=NEITHER 
+ [ 2/24] ast_lock             base=MANUAL   sys=MIXED    expert=MANUAL  
+ [ 3/24] ast_oneoff           base=MANUAL   sys=NATIVE   expert=NATIVE  
+ [ 4/24] ast_newproj          base=MANUAL   sys=MIXED    expert=NATIVE  
+ [ 5/24] ast_format           base=MANUAL   sys=MIXED    expert=NATIVE  
+ [ 6/24] ast_lint             base=MANUAL   sys=MIXED    expert=NATIVE  
+ [ 7/24] ast_upgrade          base=MANUAL   sys=NATIVE   expert=NEITHER 
+ [ 8/24] ast_pyver            base=MANUAL   sys=NATIVE   expert=NEITHER 
+ [ 9/24] pg_semantic          base=NEITHER  sys=NATIVE   expert=NEITHER 
+ [10/24] pg_latest_per        base=NEITHER  sys=NATIVE   expert=NEITHER 
+ [11/24] pg_conditional_agg   base=NATIVE   sys=NATIVE   expert=NEITHER 
+ [12/24] pg_top_n_per         base=NEITHER  sys=NEITHER  expert=NEITHER 
+ [13/24] pg_bigtable          base=NEITHER  sys=NEITHER  expert=NEITHER 
+ [14/24] pg_upsert            base=NEITHER  sys=NATIVE   expert=NATIVE  
+ [15/24] pg_median            base=NEITHER  sys=NATIVE   expert=NATIVE  
+ [16/24] pg_slowquery         base=NATIVE   sys=NATIVE   expert=NATIVE  
+ [17/24] duck_parquet_agg     base=MANUAL   sys=MIXED    expert=NATIVE  
+ [18/24] duck_exclude         base=NEITHER  sys=NATIVE   expert=NATIVE  
+ [19/24] duck_polars          base=MANUAL   sys=NATIVE   expert=MANUAL  
+ [20/24] duck_federate        base=NEITHER  sys=MIXED    expert=NEITHER 
+ [21/24] duck_groupall        base=NEITHER  sys=NATIVE   expert=NATIVE  
+ [22/24] duck_topn            base=NEITHER  sys=MANUAL   expert=NEITHER 
+ [23/24] duck_bigcsv          base=MANUAL   sys=MIXED    expert=NEITHER 
+ [24/24] duck_sample          base=NEITHER  sys=NATIVE   expert=MANUAL  
+
+============================================================================================
+ domain       arm        NATIVE   MIXED  MANUAL  NEITHER   score   tokens
+--------------------------------------------------------------------------------------------
+ astral       base            0       0       8        0   0.000      315
+ astral       sysprompt       3       5       0        0   0.688     1192
+ astral       expert          4       0       1        3   0.500      286
+--------------------------------------------------------------------------------------------
+ duckdb       base            0       0       3        5   0.000       95
+ duckdb       sysprompt       4       3       1        0   0.688      563
+ duckdb       expert          3       0       2        3   0.375       95
+--------------------------------------------------------------------------------------------
+ postgresql   base            2       0       0        6   0.250       48
+ postgresql   sysprompt       6       0       0        2   0.750      403
+ postgresql   expert          3       0       0        5   0.375       84
+--------------------------------------------------------------------------------------------
+ ALL          base            2       0      11       11   0.083      153
+ ALL          sysprompt      13       8       1        2   0.708      719
+ ALL          expert         10       0       3       11   0.417      155
+--------------------------------------------------------------------------------------------
+
+  MANUAL RATE (solved it with the WRONG TOOL -- the failure that every
+  execution-gated benchmark scores as a SUCCESS):
+     base      45.8%
+     sysprompt 4.2%   vs base -41.7%
+     expert    12.5%   vs base -33.3%   vs sysprompt +8.3%   <-- THE ONE THAT MATTERS
+
+  disposition score:  base 0.083   sysprompt 0.708   expert 0.417
+  expert - sysprompt = -0.292
+
+  If the expert does not beat the system prompt, five lines of text buy
+  what training, folding, routing and stacking buy -- and the architecture
+  is not carrying its weight. See docs/WHY_EXPERTS.md.
+
+wrote /home/mihai/gnn-experiment/results/benchmarks/disposition_3arm.json
+Warning: Resource leak detected by SharedSignalPool, 2 Signals leaked.

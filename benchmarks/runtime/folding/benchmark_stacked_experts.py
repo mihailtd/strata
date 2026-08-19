@@ -53,7 +53,7 @@ if torch.cuda.is_available():  # fla's device probe is @cache'd at import
 
 from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 
-from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+from gnn_experiment.canon import REPO_ROOT, adapter_path  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
@@ -90,9 +90,9 @@ EXPERTS_BF16 = {
     "pg": "results/adapters/m2_postgresql_r8a128",
 }
 EXPERTS_V4 = {
-    "fin": "results/adapters/m2_financial_r8a128_v4",
-    "ast": "results/adapters/m2_astral_r8a128_v4",
-    "pg": "results/adapters/m2_postgresql_r8a128_v4",
+    "fin": str(adapter_path("financial").relative_to(REPO_ROOT)),
+    "ast": str(adapter_path("astral").relative_to(REPO_ROOT)),
+    "pg": str(adapter_path("postgresql").relative_to(REPO_ROOT)),
 }
 EXPERTS = EXPERTS_V4  # default: the v4 clean completion set
 # which expert "owns" each domain, for the retention comparison

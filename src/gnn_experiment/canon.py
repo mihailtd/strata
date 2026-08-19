@@ -47,7 +47,7 @@ HOW TO USE
     from gnn_experiment.canon import CANON, adapter_path
 
     MAX_NEW_TOKENS = CANON.MAX_NEW_TOKENS       # 2048. Not 64. Not 192. Not 768.
-    ast = adapter_path("astral")                # -> results/adapters/m2_astral_r8a128_v4
+    ast = adapter_path("astral")                # -> results/adapters/m2_astral_r8a128_v6
 
     results["config"] = CANON.stamp()           # ALWAYS stamp the artifact
 
@@ -66,14 +66,19 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 @dataclass(frozen=True)
 class _Canon:
     # -------------------------------------------------------------------------
-    # ADAPTER VERSION -- LATEST IS v4.
-    # v4 = clean corpora (reserved eval constructs removed AND verified),
-    #      completion-only loss, retention mixing.
-    # v2/v3 are LEGACY. They predate the completion-only-loss fix (48.4% of every
+    # ADAPTER VERSION -- LATEST IS v6.
+    # v6 = v4's corpora rebuilt as DISPOSITION data (situation -> right approach +
+    #      the rejected alternative named), the uv/ruff/ty command corpus, the
+    #      python_modern / python_web split, deduplication, and dual-criterion
+    #      geometric stopping. Measured 0.581 vs v4's 0.532 on the held-out
+    #      disposition evals (n=31) -- and that understates it, see CHANGELOG.
+    # There is no v5 adapter: that number belongs to the failed L_inert line,
+    #      whose weights were deleted. Version numbers are a record, not an
+    #      inventory. v2/v3 are LEGACY. They predate the completion-only-loss fix (48.4% of every
     # v2 batch was prompt tokens) and the contamination removal. Never benchmark
     # against them except as an explicit, labelled ablation.
     # -------------------------------------------------------------------------
-    ADAPTER_VERSION: str = "v4"
+    ADAPTER_VERSION: str = "v6"
 
     # -------------------------------------------------------------------------
     # DECODE BUDGET -- 2048. TWO THOUSAND FORTY EIGHT.
@@ -108,7 +113,18 @@ class _Canon:
 CANON = _Canon()
 
 # Domains that have a canonical expert. Keep in sync with results/adapters/.
-DOMAINS = ("astral", "postgresql", "duckdb", "financial")
+DOMAINS = ("astral", "postgresql", "duckdb", "financial",
+           # NOTE: the financial CORPUS lives in data/financial_planning/
+           # while every adapter is m2_financial_* -- legacy, normalised in
+           # the trainer rather than by renaming v1-v4 adapters.
+           # split out of astral: 88% of its generated half was generic Python /
+           # FastAPI, which taught style and syntax, never Astral tooling. See
+           # scripts/corpus/split_astral_domain.py and DECISIONS.md §44.
+           "python_modern", "python_web",
+           # merged corpora -- these exist to test whether STACKING earns its
+           # complexity. If one adapter trained on the union matches the stacked
+           # ast+pg+duck row, the router and folding engine are unnecessary at N=3.
+           "merged_sql", "merged_all")
 
 
 def adapter_path(domain: str, version: str | None = None) -> Path:

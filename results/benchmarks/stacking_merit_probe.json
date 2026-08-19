@@ -6,7 +6,8 @@
       "pg": "results/adapters/m2_postgresql_r8a128_v4",
       "duck": "results/adapters/m2_duckdb_r8a128_v4",
       "fin": "results/adapters/m2_financial_r8a128_v4",
-      "ast_v5": "results/adapters/m2_astral_r8a128_v5"
+      "ast_v5": "results/adapters/m2_astral_r8a128_v5",
+      "ast_v5b": "results/adapters/m2_astral_r8a128_v5b"
     },
     "n_modules": 128,
     "prompts": {
@@ -77,6 +78,13 @@
       "duckdb": 0.05369564050306508,
       "financial": 0.053438267848832766,
       "general": 0.05369909477303736
+    },
+    "ast_v5b": {
+      "astral": 0.06080822273725062,
+      "postgresql": 0.0637622175654542,
+      "duckdb": 0.0626357835772069,
+      "financial": 0.061955491084518144,
+      "general": 0.06364425331776147
     }
   },
   "conflict": {
@@ -108,6 +116,13 @@
       "financial": 0.11824124385793766,
       "general": 0.1243338480813918
     },
+    "ast|ast_v5b": {
+      "astral": 0.12207271457793922,
+      "postgresql": 0.13925029802371114,
+      "duckdb": 0.1317264282938595,
+      "financial": 0.11961831746214102,
+      "general": 0.13002621783181212
+    },
     "pg|duck": {
       "astral": 0.02096608159376956,
       "postgresql": 0.020637504540211182,
@@ -129,6 +144,13 @@
       "financial": 0.01847552384151907,
       "general": 0.019218023389541372
     },
+    "pg|ast_v5b": {
+      "astral": 0.016029219919943216,
+      "postgresql": 0.01738562103184904,
+      "duckdb": 0.016868704815372837,
+      "financial": 0.017891721760451063,
+      "general": 0.018091865197453316
+    },
     "duck|fin": {
       "astral": 0.010789633586314018,
       "postgresql": 0.011385131679542582,
@@ -143,12 +165,33 @@
       "financial": 0.013598425247707269,
       "general": 0.014151083237432971
     },
+    "duck|ast_v5b": {
+      "astral": 0.011899870750525565,
+      "postgresql": 0.012344632561227087,
+      "duckdb": 0.012067989153035086,
+      "financial": 0.012842942919650824,
+      "general": 0.014440712201889028
+    },
     "fin|ast_v5": {
       "astral": 0.013381342647850403,
       "postgresql": 0.016218245720665436,
       "duckdb": 0.015396067239635158,
       "financial": 0.015311651209637844,
       "general": 0.016820482475242926
+    },
+    "fin|ast_v5b": {
+      "astral": 0.012118719134754485,
+      "postgresql": 0.014311840931782172,
+      "duckdb": 0.013536004710154259,
+      "financial": 0.014017386434716173,
+      "general": 0.015693983330750783
+    },
+    "ast_v5|ast_v5b": {
+      "astral": 0.10951722800439256,
+      "postgresql": 0.1269376124126893,
+      "duckdb": 0.1213895987551723,
+      "financial": 0.12018541142185768,
+      "general": 0.12984334532956154
     }
   }
 }

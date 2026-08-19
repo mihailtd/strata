@@ -1,0 +1,1351 @@
+{
+  "metadata": {
+    "ADAPTER_VERSION": "v4",
+    "MAX_NEW_TOKENS": 2048,
+    "BASE_MODEL": "Qwen/Qwen3.5-4B",
+    "VRAM_CAP_GB": 22.0,
+    "GREEDY": true,
+    "LORA_RANK": 8,
+    "LORA_ALPHA": 128
+  },
+  "elapsed_seconds": 27.357280015945435,
+  "benchmark": "poet_activation_crosstalk",
+  "pairs": {
+    "astral_vs_postgresql": {
+      "summary": {
+        "mean_raw_crosstalk_cosine": -0.00026920771209836897,
+        "mean_filtered_crosstalk_cosine": -0.0001894741169804626,
+        "crosstalk_reduction_factor": 1.4208152352868755,
+        "mean_pervasive_L_share": 0.10719413064211093,
+        "mean_sparse_S_share": 0.0006437245797784982,
+        "evaluated_projections_count": 23
+      },
+      "details": [
+        {
+          "layer": 0,
+          "projection": "mlp.down_proj",
+          "shape": [
+            2560,
+            9216
+          ],
+          "raw_crosstalk_cosine": -0.002082118997350335,
+          "poet_L_share": 0.0886885604742332,
+          "poet_S_share": 0.0008496572529634929,
+          "filtered_crosstalk_cosine": -0.0011467491276562214,
+          "in_domain_energy_retention": 0.9944028854370117,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 0,
+          "projection": "mlp.gate_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.0033984407782554626,
+          "poet_L_share": 0.09359291302482295,
+          "poet_S_share": 0.0005031559750562135,
+          "filtered_crosstalk_cosine": -0.003079424612224102,
+          "in_domain_energy_retention": 0.9980119466781616,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 0,
+          "projection": "mlp.up_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.004878866486251354,
+          "poet_L_share": 0.10979948632638559,
+          "poet_S_share": 0.000541320731878141,
+          "filtered_crosstalk_cosine": -0.004547799937427044,
+          "in_domain_energy_retention": 0.9981810450553894,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 7,
+          "projection": "mlp.down_proj",
+          "shape": [
+            2560,
+            9216
+          ],
+          "raw_crosstalk_cosine": 0.0008177721174433827,
+          "poet_L_share": 0.09755370999350818,
+          "poet_S_share": 0.0007659965312939438,
+          "filtered_crosstalk_cosine": 0.0009268753929063678,
+          "in_domain_energy_retention": 0.9942684173583984,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 7,
+          "projection": "mlp.gate_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": 0.000708670006133616,
+          "poet_L_share": 0.1026620415939841,
+          "poet_S_share": 0.0004914231747059451,
+          "filtered_crosstalk_cosine": 0.0008686790824867785,
+          "in_domain_energy_retention": 0.9978657364845276,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 7,
+          "projection": "mlp.up_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": 0.0018164997454732656,
+          "poet_L_share": 0.08702427135952585,
+          "poet_S_share": 0.00048443962854086115,
+          "filtered_crosstalk_cosine": 0.0015934917610138655,
+          "in_domain_energy_retention": 0.9983175992965698,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 7,
+          "projection": "self_attn.o_proj",
+          "shape": [
+            2560,
+            4096
+          ],
+          "raw_crosstalk_cosine": 0.0017628032946959138,
+          "poet_L_share": 0.10098338757225224,
+          "poet_S_share": 0.0007517388955729108,
+          "filtered_crosstalk_cosine": 0.0018504855688661337,
+          "in_domain_energy_retention": 0.9942816495895386,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 7,
+          "projection": "self_attn.q_proj",
+          "shape": [
+            8192,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.0022906737867742777,
+          "poet_L_share": 0.11193968246069642,
+          "poet_S_share": 0.0003704248683100118,
+          "filtered_crosstalk_cosine": -0.0021099818404763937,
+          "in_domain_energy_retention": 0.9975488185882568,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 15,
+          "projection": "mlp.down_proj",
+          "shape": [
+            2560,
+            9216
+          ],
+          "raw_crosstalk_cosine": 0.0017109239706769586,
+          "poet_L_share": 0.10148901644978034,
+          "poet_S_share": 0.0010351975685080716,
+          "filtered_crosstalk_cosine": 0.0014277719892561436,
+          "in_domain_energy_retention": 0.993653416633606,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 15,
+          "projection": "mlp.gate_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": 0.001912508043460548,
+          "poet_L_share": 0.12484302534044361,
+          "poet_S_share": 0.0003920758578467379,
+          "filtered_crosstalk_cosine": 0.00171582808252424,
+          "in_domain_energy_retention": 0.9977909326553345,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 15,
+          "projection": "mlp.up_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": 0.004605644848197699,
+          "poet_L_share": 0.12157887100468522,
+          "poet_S_share": 0.00036831756505345217,
+          "filtered_crosstalk_cosine": 0.004376518074423075,
+          "in_domain_energy_retention": 0.9970303773880005,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 15,
+          "projection": "self_attn.o_proj",
+          "shape": [
+            2560,
+            4096
+          ],
+          "raw_crosstalk_cosine": -0.0006341983680613339,
+          "poet_L_share": 0.1004966385839811,
+          "poet_S_share": 0.001061724355371557,
+          "filtered_crosstalk_cosine": -0.0012191173154860735,
+          "in_domain_energy_retention": 0.9932968020439148,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 15,
+          "projection": "self_attn.q_proj",
+          "shape": [
+            8192,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.001640880829654634,
+          "poet_L_share": 0.08605085687120553,
+          "poet_S_share": 0.00045545969908686437,
+          "filtered_crosstalk_cosine": -0.0015659286873415112,
+          "in_domain_energy_retention": 0.9976367950439453,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 23,
+          "projection": "mlp.down_proj",
+          "shape": [
+            2560,
+            9216
+          ],
+          "raw_crosstalk_cosine": 0.0024445948656648397,
+          "poet_L_share": 0.12117729911348514,
+          "poet_S_share": 0.0012221794091537767,
+          "filtered_crosstalk_cosine": 0.0023259089794009924,
+          "in_domain_energy_retention": 0.9914268255233765,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 23,
+          "projection": "mlp.gate_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": 0.0008567982004024088,
+          "poet_L_share": 0.1077247982788463,
+          "poet_S_share": 0.0005019583305006967,
+          "filtered_crosstalk_cosine": 0.0009595873416401446,
+          "in_domain_energy_retention": 0.9971793293952942,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 23,
+          "projection": "mlp.up_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": 0.0022029050160199404,
+          "poet_L_share": 0.10123247577882953,
+          "poet_S_share": 0.0005329487954279966,
+          "filtered_crosstalk_cosine": 0.002105781575664878,
+          "in_domain_energy_retention": 0.9977440237998962,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 23,
+          "projection": "self_attn.o_proj",
+          "shape": [
+            2560,
+            4096
+          ],
+          "raw_crosstalk_cosine": -0.003591221058741212,
+          "poet_L_share": 0.17506977901837076,
+          "poet_S_share": 0.0007838756106528298,
+          "filtered_crosstalk_cosine": -0.003163335146382451,
+          "in_domain_energy_retention": 0.9912928342819214,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 23,
+          "projection": "self_attn.q_proj",
+          "shape": [
+            8192,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.0006524251657538116,
+          "poet_L_share": 0.11396596584439407,
+          "poet_S_share": 0.0004966843647633228,
+          "filtered_crosstalk_cosine": -0.0008686749497428536,
+          "in_domain_energy_retention": 0.9973289966583252,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 31,
+          "projection": "mlp.down_proj",
+          "shape": [
+            2560,
+            9216
+          ],
+          "raw_crosstalk_cosine": -0.004608336370438337,
+          "poet_L_share": 0.11165583073473673,
+          "poet_S_share": 0.0009660073798918617,
+          "filtered_crosstalk_cosine": -0.002868611365556717,
+          "in_domain_energy_retention": 0.9920812845230103,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 31,
+          "projection": "mlp.gate_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.0002828837314154953,
+          "poet_L_share": 0.09120772418163549,
+          "poet_S_share": 0.00047391722340686313,
+          "filtered_crosstalk_cosine": -0.00033846619771793485,
+          "in_domain_energy_retention": 0.9975529313087463,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 31,
+          "projection": "mlp.up_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": 0.0001834866270655766,
+          "poet_L_share": 0.09718677310401007,
+          "poet_S_share": 0.0005664211182593249,
+          "filtered_crosstalk_cosine": 0.00026039054500870407,
+          "in_domain_energy_retention": 0.9981710910797119,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 31,
+          "projection": "self_attn.o_proj",
+          "shape": [
+            2560,
+            4096
+          ],
+          "raw_crosstalk_cosine": 9.877018601400778e-05,
+          "poet_L_share": 0.09967269096183554,
+          "poet_S_share": 0.0007300690997487598,
+          "filtered_crosstalk_cosine": -0.0007577136275358498,
+          "in_domain_energy_retention": 0.9924864172935486,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 31,
+          "projection": "self_attn.q_proj",
+          "shape": [
+            8192,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.0012531087268143892,
+          "poet_L_share": 0.11986920669690315,
+          "poet_S_share": 0.000460671898911824,
+          "filtered_crosstalk_cosine": -0.0011034202761948109,
+          "in_domain_energy_retention": 0.9972391128540039,
+          "top_conflict_channels_count": 20
+        }
+      ]
+    },
+    "postgresql_vs_duckdb": {
+      "summary": {
+        "mean_raw_crosstalk_cosine": -0.0007753505481599385,
+        "mean_filtered_crosstalk_cosine": -0.0007457152235514039,
+        "crosstalk_reduction_factor": 1.0397408067752714,
+        "mean_pervasive_L_share": 0.10796960648553382,
+        "mean_sparse_S_share": 0.0006659270453245149,
+        "evaluated_projections_count": 23
+      },
+      "details": [
+        {
+          "layer": 0,
+          "projection": "mlp.down_proj",
+          "shape": [
+            2560,
+            9216
+          ],
+          "raw_crosstalk_cosine": 0.00021560046297963709,
+          "poet_L_share": 0.09993157535431575,
+          "poet_S_share": 0.0008318145632956841,
+          "filtered_crosstalk_cosine": 0.00016306595352943987,
+          "in_domain_energy_retention": 0.9934352040290833,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 0,
+          "projection": "mlp.gate_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.0002465384895913303,
+          "poet_L_share": 0.11443796727162905,
+          "poet_S_share": 0.0006040721167794238,
+          "filtered_crosstalk_cosine": -0.00032455194741487503,
+          "in_domain_energy_retention": 0.9978082180023193,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 0,
+          "projection": "mlp.up_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.0015213945880532265,
+          "poet_L_share": 0.1061006333900531,
+          "poet_S_share": 0.0005681902981296453,
+          "filtered_crosstalk_cosine": -0.0014557065442204475,
+          "in_domain_energy_retention": 0.9976643919944763,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 7,
+          "projection": "mlp.down_proj",
+          "shape": [
+            2560,
+            9216
+          ],
+          "raw_crosstalk_cosine": -0.0003270839515607804,
+          "poet_L_share": 0.09545000149306641,
+          "poet_S_share": 0.0009366419071179507,
+          "filtered_crosstalk_cosine": -0.0011930024484172463,
+          "in_domain_energy_retention": 0.9936806559562683,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 7,
+          "projection": "mlp.gate_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.002065117470920086,
+          "poet_L_share": 0.0963212847121377,
+          "poet_S_share": 0.00044517292977263597,
+          "filtered_crosstalk_cosine": -0.001576190465129912,
+          "in_domain_energy_retention": 0.9973530173301697,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 7,
+          "projection": "mlp.up_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": 0.0007368597434833646,
+          "poet_L_share": 0.08561825296463092,
+          "poet_S_share": 0.0004220713604189457,
+          "filtered_crosstalk_cosine": 0.0007241871207952499,
+          "in_domain_energy_retention": 0.9981828927993774,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 7,
+          "projection": "self_attn.o_proj",
+          "shape": [
+            2560,
+            4096
+          ],
+          "raw_crosstalk_cosine": -0.0006380241247825325,
+          "poet_L_share": 0.11161480633189114,
+          "poet_S_share": 0.0010382754812507172,
+          "filtered_crosstalk_cosine": -0.0014981068670749664,
+          "in_domain_energy_retention": 0.9924881458282471,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 7,
+          "projection": "self_attn.q_proj",
+          "shape": [
+            8192,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.0012083842884749174,
+          "poet_L_share": 0.12499408662558334,
+          "poet_S_share": 0.0005325869427307617,
+          "filtered_crosstalk_cosine": -0.0010669203475117683,
+          "in_domain_energy_retention": 0.9974983930587769,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 15,
+          "projection": "mlp.down_proj",
+          "shape": [
+            2560,
+            9216
+          ],
+          "raw_crosstalk_cosine": 0.00022431748220697045,
+          "poet_L_share": 0.09617429877111366,
+          "poet_S_share": 0.0007866927080437431,
+          "filtered_crosstalk_cosine": 0.0008806748082861304,
+          "in_domain_energy_retention": 0.9929779171943665,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 15,
+          "projection": "mlp.gate_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.0004686774918809533,
+          "poet_L_share": 0.11662158701202946,
+          "poet_S_share": 0.0004818684319913544,
+          "filtered_crosstalk_cosine": -0.00048241036711260676,
+          "in_domain_energy_retention": 0.9972693920135498,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 15,
+          "projection": "mlp.up_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.006609755102545023,
+          "poet_L_share": 0.10141077486939333,
+          "poet_S_share": 0.0005501390843541412,
+          "filtered_crosstalk_cosine": -0.006330784410238266,
+          "in_domain_energy_retention": 0.9978765249252319,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 15,
+          "projection": "self_attn.o_proj",
+          "shape": [
+            2560,
+            4096
+          ],
+          "raw_crosstalk_cosine": 0.0001383526250720024,
+          "poet_L_share": 0.1308216424724011,
+          "poet_S_share": 0.0006995366848490115,
+          "filtered_crosstalk_cosine": 0.0007000116165727377,
+          "in_domain_energy_retention": 0.9920176267623901,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 15,
+          "projection": "self_attn.q_proj",
+          "shape": [
+            8192,
+            2560
+          ],
+          "raw_crosstalk_cosine": 0.001814938266761601,
+          "poet_L_share": 0.08111457513409363,
+          "poet_S_share": 0.0003884817388598959,
+          "filtered_crosstalk_cosine": 0.0019068234832957387,
+          "in_domain_energy_retention": 0.997373640537262,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 23,
+          "projection": "mlp.down_proj",
+          "shape": [
+            2560,
+            9216
+          ],
+          "raw_crosstalk_cosine": -0.001226232503540814,
+          "poet_L_share": 0.12135544613199682,
+          "poet_S_share": 0.0010271100806117884,
+          "filtered_crosstalk_cosine": -0.0013922060607001185,
+          "in_domain_energy_retention": 0.9921653270721436,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 23,
+          "projection": "mlp.gate_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": 0.001580534502863884,
+          "poet_L_share": 0.09440664047484366,
+          "poet_S_share": 0.0004592802027303792,
+          "filtered_crosstalk_cosine": 0.0013567946152761579,
+          "in_domain_energy_retention": 0.9978744983673096,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 23,
+          "projection": "mlp.up_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": 0.0026301397010684013,
+          "poet_L_share": 0.11066463505630789,
+          "poet_S_share": 0.000609545789200533,
+          "filtered_crosstalk_cosine": 0.0027123456820845604,
+          "in_domain_energy_retention": 0.9978854060173035,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 23,
+          "projection": "self_attn.o_proj",
+          "shape": [
+            2560,
+            4096
+          ],
+          "raw_crosstalk_cosine": -0.0009303918341174722,
+          "poet_L_share": 0.12059108212364326,
+          "poet_S_share": 0.0010144310016313317,
+          "filtered_crosstalk_cosine": 0.0001382688933517784,
+          "in_domain_energy_retention": 0.9928387999534607,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 23,
+          "projection": "self_attn.q_proj",
+          "shape": [
+            8192,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.004927853588014841,
+          "poet_L_share": 0.11104073154226854,
+          "poet_S_share": 0.00035873044831150053,
+          "filtered_crosstalk_cosine": -0.004949080292135477,
+          "in_domain_energy_retention": 0.997812807559967,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 31,
+          "projection": "mlp.down_proj",
+          "shape": [
+            2560,
+            9216
+          ],
+          "raw_crosstalk_cosine": 0.001866329344920814,
+          "poet_L_share": 0.10846050637084977,
+          "poet_S_share": 0.0008728212290479565,
+          "filtered_crosstalk_cosine": 0.0020169022027403116,
+          "in_domain_energy_retention": 0.9921227693557739,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 31,
+          "projection": "mlp.gate_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": 0.0012008677003905177,
+          "poet_L_share": 0.11286166947528938,
+          "poet_S_share": 0.00051343093093343,
+          "filtered_crosstalk_cosine": 0.0009908215142786503,
+          "in_domain_energy_retention": 0.9969437122344971,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 31,
+          "projection": "mlp.up_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.0034369011409580708,
+          "poet_L_share": 0.12375631914585354,
+          "poet_S_share": 0.0005782158246385711,
+          "filtered_crosstalk_cosine": -0.0036561761517077684,
+          "in_domain_energy_retention": 0.9977682828903198,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 31,
+          "projection": "self_attn.o_proj",
+          "shape": [
+            2560,
+            4096
+          ],
+          "raw_crosstalk_cosine": -0.0016753836534917355,
+          "poet_L_share": 0.10846589375457166,
+          "poet_S_share": 0.0010367164259351982,
+          "filtered_crosstalk_cosine": -0.002008177572861314,
+          "in_domain_energy_retention": 0.9932090640068054,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 31,
+          "projection": "self_attn.q_proj",
+          "shape": [
+            8192,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.0029592642094939947,
+          "poet_L_share": 0.11108653868931474,
+          "poet_S_share": 0.0005604958618292427,
+          "filtered_crosstalk_cosine": -0.0028080325573682785,
+          "in_domain_energy_retention": 0.9973921775817871,
+          "top_conflict_channels_count": 20
+        }
+      ]
+    },
+    "financial_vs_postgresql": {
+      "summary": {
+        "mean_raw_crosstalk_cosine": 7.288666118098342e-05,
+        "mean_filtered_crosstalk_cosine": 1.3481530122985335e-05,
+        "crosstalk_reduction_factor": 5.406408658073263,
+        "mean_pervasive_L_share": 0.10423614199633534,
+        "mean_sparse_S_share": 0.0006488238004733497,
+        "evaluated_projections_count": 23
+      },
+      "details": [
+        {
+          "layer": 0,
+          "projection": "mlp.down_proj",
+          "shape": [
+            2560,
+            9216
+          ],
+          "raw_crosstalk_cosine": -0.00032452092273160815,
+          "poet_L_share": 0.09416605302576433,
+          "poet_S_share": 0.0008583444874562709,
+          "filtered_crosstalk_cosine": -0.0013164437841624022,
+          "in_domain_energy_retention": 0.9945230484008789,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 0,
+          "projection": "mlp.gate_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.00026977306697517633,
+          "poet_L_share": 0.09202043842764934,
+          "poet_S_share": 0.00048375716210839796,
+          "filtered_crosstalk_cosine": -0.00010866449156310409,
+          "in_domain_energy_retention": 0.9978939890861511,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 0,
+          "projection": "mlp.up_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.000491084239911288,
+          "poet_L_share": 0.08717643076220234,
+          "poet_S_share": 0.0005714250963913349,
+          "filtered_crosstalk_cosine": -0.0005173768731765449,
+          "in_domain_energy_retention": 0.9976311922073364,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 7,
+          "projection": "mlp.down_proj",
+          "shape": [
+            2560,
+            9216
+          ],
+          "raw_crosstalk_cosine": -0.0004186179721727967,
+          "poet_L_share": 0.11672508993469437,
+          "poet_S_share": 0.0010030102784137967,
+          "filtered_crosstalk_cosine": 0.00042238528840243816,
+          "in_domain_energy_retention": 0.9933122992515564,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 7,
+          "projection": "mlp.gate_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.0003723822592291981,
+          "poet_L_share": 0.08214314555048557,
+          "poet_S_share": 0.00047025795867957916,
+          "filtered_crosstalk_cosine": -0.00027522986056283116,
+          "in_domain_energy_retention": 0.9969577789306641,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 7,
+          "projection": "mlp.up_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": 0.000784163421485573,
+          "poet_L_share": 0.09814497395879802,
+          "poet_S_share": 0.0005454354761441093,
+          "filtered_crosstalk_cosine": 0.000529585755430162,
+          "in_domain_energy_retention": 0.9979625344276428,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 7,
+          "projection": "self_attn.o_proj",
+          "shape": [
+            2560,
+            4096
+          ],
+          "raw_crosstalk_cosine": -0.00043564813677221537,
+          "poet_L_share": 0.10654770154363133,
+          "poet_S_share": 0.0007174379638184077,
+          "filtered_crosstalk_cosine": -0.0002980791905429214,
+          "in_domain_energy_retention": 0.9911854863166809,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 7,
+          "projection": "self_attn.q_proj",
+          "shape": [
+            8192,
+            2560
+          ],
+          "raw_crosstalk_cosine": 0.008352624252438545,
+          "poet_L_share": 0.13433918945600945,
+          "poet_S_share": 0.000465414917325238,
+          "filtered_crosstalk_cosine": 0.007515218108892441,
+          "in_domain_energy_retention": 0.9966738820075989,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 15,
+          "projection": "mlp.down_proj",
+          "shape": [
+            2560,
+            9216
+          ],
+          "raw_crosstalk_cosine": -0.00044619536492973566,
+          "poet_L_share": 0.10508175437887092,
+          "poet_S_share": 0.0010218469695811206,
+          "filtered_crosstalk_cosine": -0.0008603851892985404,
+          "in_domain_energy_retention": 0.9939398169517517,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 15,
+          "projection": "mlp.gate_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": 0.0032472501043230295,
+          "poet_L_share": 0.11795877900121322,
+          "poet_S_share": 0.00046439440118307556,
+          "filtered_crosstalk_cosine": 0.003042659256607294,
+          "in_domain_energy_retention": 0.996305525302887,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 15,
+          "projection": "mlp.up_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.004322655498981476,
+          "poet_L_share": 0.10924954001143396,
+          "poet_S_share": 0.0005142193169097529,
+          "filtered_crosstalk_cosine": -0.004256715066730976,
+          "in_domain_energy_retention": 0.997772216796875,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 15,
+          "projection": "self_attn.o_proj",
+          "shape": [
+            2560,
+            4096
+          ],
+          "raw_crosstalk_cosine": 0.0037844746839255095,
+          "poet_L_share": 0.10063637584229125,
+          "poet_S_share": 0.0006488943136062827,
+          "filtered_crosstalk_cosine": 0.003941322676837444,
+          "in_domain_energy_retention": 0.9922258257865906,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 15,
+          "projection": "self_attn.q_proj",
+          "shape": [
+            8192,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.0011645280756056309,
+          "poet_L_share": 0.12224552697257535,
+          "poet_S_share": 0.0005223525325697405,
+          "filtered_crosstalk_cosine": -0.0009373886277899146,
+          "in_domain_energy_retention": 0.9965381026268005,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 23,
+          "projection": "mlp.down_proj",
+          "shape": [
+            2560,
+            9216
+          ],
+          "raw_crosstalk_cosine": -0.002314701909199357,
+          "poet_L_share": 0.10592616804890259,
+          "poet_S_share": 0.0009733383517343823,
+          "filtered_crosstalk_cosine": -0.002736259950324893,
+          "in_domain_energy_retention": 0.9929603934288025,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 23,
+          "projection": "mlp.gate_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": 0.00044618509127758443,
+          "poet_L_share": 0.1124493557543488,
+          "poet_S_share": 0.0005240989359569159,
+          "filtered_crosstalk_cosine": 0.0007683373987674713,
+          "in_domain_energy_retention": 0.997589111328125,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 23,
+          "projection": "mlp.up_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.002085937187075615,
+          "poet_L_share": 0.09861358025203534,
+          "poet_S_share": 0.00040120086567134607,
+          "filtered_crosstalk_cosine": -0.0023854554165154696,
+          "in_domain_energy_retention": 0.9980194568634033,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 23,
+          "projection": "self_attn.o_proj",
+          "shape": [
+            2560,
+            4096
+          ],
+          "raw_crosstalk_cosine": 0.0008508603787049651,
+          "poet_L_share": 0.07864470456347526,
+          "poet_S_share": 0.0006812722810985073,
+          "filtered_crosstalk_cosine": 0.0003887142229359597,
+          "in_domain_energy_retention": 0.9926732778549194,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 23,
+          "projection": "self_attn.q_proj",
+          "shape": [
+            8192,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.00038697212585248053,
+          "poet_L_share": 0.10130649043185662,
+          "poet_S_share": 0.0005162587447053379,
+          "filtered_crosstalk_cosine": -0.0004951255396008492,
+          "in_domain_energy_retention": 0.9973914623260498,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 31,
+          "projection": "mlp.down_proj",
+          "shape": [
+            2560,
+            9216
+          ],
+          "raw_crosstalk_cosine": -0.0034564482048153877,
+          "poet_L_share": 0.1031000453177877,
+          "poet_S_share": 0.001128471185903062,
+          "filtered_crosstalk_cosine": -0.0034929048269987106,
+          "in_domain_energy_retention": 0.9932034611701965,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 31,
+          "projection": "mlp.gate_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": 0.0012864228338003159,
+          "poet_L_share": 0.08212973340826465,
+          "poet_S_share": 0.0004321781990030923,
+          "filtered_crosstalk_cosine": 0.0011210303055122495,
+          "in_domain_energy_retention": 0.9982247948646545,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 31,
+          "projection": "mlp.up_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": 0.0004502750525716692,
+          "poet_L_share": 0.09074803249638864,
+          "poet_S_share": 0.0005048512477982397,
+          "filtered_crosstalk_cosine": 0.0003833010559901595,
+          "in_domain_energy_retention": 0.998265266418457,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 31,
+          "projection": "self_attn.o_proj",
+          "shape": [
+            2560,
+            4096
+          ],
+          "raw_crosstalk_cosine": -0.0046680946834385395,
+          "poet_L_share": 0.1386531135351507,
+          "poet_S_share": 0.0009459862201733186,
+          "filtered_crosstalk_cosine": -0.0031928864773362875,
+          "in_domain_energy_retention": 0.9931748509407043,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 31,
+          "projection": "self_attn.q_proj",
+          "shape": [
+            8192,
+            2560
+          ],
+          "raw_crosstalk_cosine": 0.0036316970363259315,
+          "poet_L_share": 0.11942504324188319,
+          "poet_S_share": 0.0005285005046557345,
+          "filtered_crosstalk_cosine": 0.003070436418056488,
+          "in_domain_energy_retention": 0.9970211982727051,
+          "top_conflict_channels_count": 20
+        }
+      ]
+    },
+    "astral_vs_financial": {
+      "summary": {
+        "mean_raw_crosstalk_cosine": -0.0007367961595224662,
+        "mean_filtered_crosstalk_cosine": -0.0007706248943577521,
+        "crosstalk_reduction_factor": 0.9561022034416898,
+        "mean_pervasive_L_share": 0.10353297733619707,
+        "mean_sparse_S_share": 0.0006522236935385016,
+        "evaluated_projections_count": 23
+      },
+      "details": [
+        {
+          "layer": 0,
+          "projection": "mlp.down_proj",
+          "shape": [
+            2560,
+            9216
+          ],
+          "raw_crosstalk_cosine": 0.0004243893490638584,
+          "poet_L_share": 0.11787759525366395,
+          "poet_S_share": 0.0010131639967430786,
+          "filtered_crosstalk_cosine": -0.000788724806625396,
+          "in_domain_energy_retention": 0.9936792850494385,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 0,
+          "projection": "mlp.gate_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.0022835894487798214,
+          "poet_L_share": 0.1096959935046096,
+          "poet_S_share": 0.0005333856130262957,
+          "filtered_crosstalk_cosine": -0.0022641438990831375,
+          "in_domain_energy_retention": 0.9980359077453613,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 0,
+          "projection": "mlp.up_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.0012221363140270114,
+          "poet_L_share": 0.0921700194303172,
+          "poet_S_share": 0.000540734402105031,
+          "filtered_crosstalk_cosine": -0.0015036638360470533,
+          "in_domain_energy_retention": 0.9980214834213257,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 7,
+          "projection": "mlp.down_proj",
+          "shape": [
+            2560,
+            9216
+          ],
+          "raw_crosstalk_cosine": 0.001844969461672008,
+          "poet_L_share": 0.09947408749581707,
+          "poet_S_share": 0.001113486588317818,
+          "filtered_crosstalk_cosine": 0.0014056586660444736,
+          "in_domain_energy_retention": 0.9926744103431702,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 7,
+          "projection": "mlp.gate_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": 5.829730798723176e-05,
+          "poet_L_share": 0.09981782815730705,
+          "poet_S_share": 0.0004129650440210176,
+          "filtered_crosstalk_cosine": 4.929686110699549e-05,
+          "in_domain_energy_retention": 0.9982261061668396,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 7,
+          "projection": "mlp.up_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.0024834582582116127,
+          "poet_L_share": 0.09674597629828212,
+          "poet_S_share": 0.000499509423442966,
+          "filtered_crosstalk_cosine": -0.0027112558018416166,
+          "in_domain_energy_retention": 0.9979946613311768,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 7,
+          "projection": "self_attn.o_proj",
+          "shape": [
+            2560,
+            4096
+          ],
+          "raw_crosstalk_cosine": -0.003735372330993414,
+          "poet_L_share": 0.07932287979627557,
+          "poet_S_share": 0.0006722935212854671,
+          "filtered_crosstalk_cosine": -0.002992974128574133,
+          "in_domain_energy_retention": 0.9925802946090698,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 7,
+          "projection": "self_attn.q_proj",
+          "shape": [
+            8192,
+            2560
+          ],
+          "raw_crosstalk_cosine": 0.00046538282185792923,
+          "poet_L_share": 0.10279699302880253,
+          "poet_S_share": 0.0004394552009034555,
+          "filtered_crosstalk_cosine": 0.00047074936446733773,
+          "in_domain_energy_retention": 0.9974144697189331,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 15,
+          "projection": "mlp.down_proj",
+          "shape": [
+            2560,
+            9216
+          ],
+          "raw_crosstalk_cosine": -0.0010751966619864106,
+          "poet_L_share": 0.10873168087039131,
+          "poet_S_share": 0.0011110391250770141,
+          "filtered_crosstalk_cosine": -0.001624085707589984,
+          "in_domain_energy_retention": 0.9910688996315002,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 15,
+          "projection": "mlp.gate_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.0011408005375415087,
+          "poet_L_share": 0.10593746845962158,
+          "poet_S_share": 0.0004776261720121709,
+          "filtered_crosstalk_cosine": -0.0009498277795501053,
+          "in_domain_energy_retention": 0.9977739453315735,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 15,
+          "projection": "mlp.up_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": 0.004521433729678392,
+          "poet_L_share": 0.1063339262337203,
+          "poet_S_share": 0.0004433156288067731,
+          "filtered_crosstalk_cosine": 0.004457185976207256,
+          "in_domain_energy_retention": 0.9978054761886597,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 15,
+          "projection": "self_attn.o_proj",
+          "shape": [
+            2560,
+            4096
+          ],
+          "raw_crosstalk_cosine": -0.0011501644039526582,
+          "poet_L_share": 0.11038432092493461,
+          "poet_S_share": 0.0008255536471218569,
+          "filtered_crosstalk_cosine": -0.0016483126673847437,
+          "in_domain_energy_retention": 0.9948059320449829,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 15,
+          "projection": "self_attn.q_proj",
+          "shape": [
+            8192,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.0005882334662601352,
+          "poet_L_share": 0.07518043752048899,
+          "poet_S_share": 0.00037905539645549473,
+          "filtered_crosstalk_cosine": -0.0004536133201327175,
+          "in_domain_energy_retention": 0.9976274967193604,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 23,
+          "projection": "mlp.down_proj",
+          "shape": [
+            2560,
+            9216
+          ],
+          "raw_crosstalk_cosine": -0.003768886672332883,
+          "poet_L_share": 0.11328026203237511,
+          "poet_S_share": 0.0008180752547295696,
+          "filtered_crosstalk_cosine": -0.003798299003392458,
+          "in_domain_energy_retention": 0.9916359782218933,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 23,
+          "projection": "mlp.gate_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": 0.0005095616797916591,
+          "poet_L_share": 0.1099005019626862,
+          "poet_S_share": 0.0005186901738894893,
+          "filtered_crosstalk_cosine": 0.000290368014248088,
+          "in_domain_energy_retention": 0.9974905848503113,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 23,
+          "projection": "mlp.up_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.0017731419065967202,
+          "poet_L_share": 0.09137438241478117,
+          "poet_S_share": 0.0004477803809098298,
+          "filtered_crosstalk_cosine": -0.0018965104827657342,
+          "in_domain_energy_retention": 0.9975253939628601,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 23,
+          "projection": "self_attn.o_proj",
+          "shape": [
+            2560,
+            4096
+          ],
+          "raw_crosstalk_cosine": -0.0022540504578500986,
+          "poet_L_share": 0.1305443963489132,
+          "poet_S_share": 0.0007898929358243986,
+          "filtered_crosstalk_cosine": -0.0020571812056005,
+          "in_domain_energy_retention": 0.991128146648407,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 23,
+          "projection": "self_attn.q_proj",
+          "shape": [
+            8192,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.0018689758144319057,
+          "poet_L_share": 0.1041338143578142,
+          "poet_S_share": 0.0005844624133696134,
+          "filtered_crosstalk_cosine": -0.0017005131812766194,
+          "in_domain_energy_retention": 0.9974110126495361,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 31,
+          "projection": "mlp.down_proj",
+          "shape": [
+            2560,
+            9216
+          ],
+          "raw_crosstalk_cosine": 0.0005623875767923892,
+          "poet_L_share": 0.11213243112799862,
+          "poet_S_share": 0.0008260500309827982,
+          "filtered_crosstalk_cosine": 0.0006330902106128633,
+          "in_domain_energy_retention": 0.9914419651031494,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 31,
+          "projection": "mlp.gate_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": 0.00017120227857958525,
+          "poet_L_share": 0.12605415171480466,
+          "poet_S_share": 0.0005284368945995946,
+          "filtered_crosstalk_cosine": 0.0005129696801304817,
+          "in_domain_energy_retention": 0.9976071715354919,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 31,
+          "projection": "mlp.up_proj",
+          "shape": [
+            9216,
+            2560
+          ],
+          "raw_crosstalk_cosine": 0.00276622804813087,
+          "poet_L_share": 0.11236981410453556,
+          "poet_S_share": 0.0006645003898590813,
+          "filtered_crosstalk_cosine": 0.002861808519810438,
+          "in_domain_energy_retention": 0.997767984867096,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 31,
+          "projection": "self_attn.o_proj",
+          "shape": [
+            2560,
+            4096
+          ],
+          "raw_crosstalk_cosine": -0.004576248582452536,
+          "poet_L_share": 0.09879332765415462,
+          "poet_S_share": 0.0009220633707054611,
+          "filtered_crosstalk_cosine": -0.0037848521023988724,
+          "in_domain_energy_retention": 0.9938293099403381,
+          "top_conflict_channels_count": 20
+        },
+        {
+          "layer": 31,
+          "projection": "self_attn.q_proj",
+          "shape": [
+            8192,
+            2560
+          ],
+          "raw_crosstalk_cosine": -0.00034990906715393066,
+          "poet_L_share": 0.07820619004023746,
+          "poet_S_share": 0.0004396093471972652,
+          "filtered_crosstalk_cosine": -0.0002315419405931607,
+          "in_domain_energy_retention": 0.9974574446678162,
+          "top_conflict_channels_count": 20
+        }
+      ]
+    }
+  }
+}
