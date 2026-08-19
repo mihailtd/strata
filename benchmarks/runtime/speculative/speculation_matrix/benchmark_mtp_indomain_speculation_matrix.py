@@ -53,7 +53,10 @@ if torch.cuda.is_available():
 
 from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
+from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+# REPO_ROOT comes from the installed package, never from __file__ arithmetic:
+# `.parent.parent` silently resolves to the WRONG directory the moment a file
+# is moved, and it broke all 31 scripts during the scripts/ reorg.
 sys.path.append(str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
@@ -84,7 +87,7 @@ EXPERT_ADAPTERS = {
 # run had astral 40 / postgresql 40 / financial_planning 20, and the only
 # production change it produced (disabling speculation for financial_planning)
 # came from the half-powered column. financial_planning reads a dedicated file
-# built by `scripts/build_financial_speculation_prompts.py`, which pads the 20
+# built by `scripts/corpus/build_financial_speculation_prompts.py`, which pads the 20
 # curated prompts with 20 held-out generated ones; extending
 # `evaluation_data.jsonl` itself would have changed keyword accuracy scoring in
 # every other benchmark that reads its `expects` field.
@@ -266,7 +269,7 @@ def main():
             filepath = PROMPT_FILE_FALLBACKS[domain]
             print(
                 f"  ⚠️  {domain}: dedicated prompt file missing; falling back to {filepath}. "
-                "Run scripts/build_financial_speculation_prompts.py to level the sets."
+                "Run scripts/corpus/build_financial_speculation_prompts.py to level the sets."
             )
         prompts, sources = load_domain_prompts(filepath)
         datasets[domain] = prompts

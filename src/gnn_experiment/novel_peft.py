@@ -1,5 +1,5 @@
 """Two novel training-time techniques for LoRA fine-tuning, benchmarked against
-the existing QLoRA baseline in `scripts/export_adapter.py`:
+the existing QLoRA baseline in `scripts/train/export_adapter.py`:
 
 1. Cross-Layer Tucker Factorization ("tucker" mode): instead of each target
    Linear owning an independent (A, B) pair, every layer sharing a given
@@ -171,7 +171,7 @@ class MasterBasisBank(nn.Module):
         train_bank: bool = False,
         preloaded: dict[str, dict[str, torch.Tensor]] | None = None,
     ) -> tuple[nn.Parameter, nn.Parameter]:
-        """`preloaded` supplies a precomputed bank (see scripts/extract_svd_basis.py)
+        """`preloaded` supplies a precomputed bank (see scripts/old/extract_svd_basis.py)
         keyed the same way, i.e. {key: {"basis_u": (k,in,rb), "basis_v": (k,rb,out)}}.
         A random bank spans nothing task-relevant (measured: 12.4-13.4% adherence,
         flat across a 16x alpha sweep), so a preloaded basis is the only
@@ -1221,10 +1221,19 @@ class WeightFoldingEngine:
     That makes activations order-independent and `restore` bit-exact.
     """
 
-    def __init__(self, model: nn.Module, experts: Iterable[FoldableExpert], keep_pristine: bool = True):
+    def __init__(
+        self,
+        model: nn.Module,
+        experts: Iterable[FoldableExpert],
+        keep_pristine: bool = True,
+        draft_head: nn.Module | None = None,
+    ):
         params = dict(model.named_parameters())
         self.experts = list(experts)
         self.keep_pristine = keep_pristine
+        self.draft_head = None
+        self.draft_slots: dict[str, torch.Tensor] = {}
+        self.draft_pristine: dict[str, torch.Tensor] = {}
 
         touched: set[str] = set()
         for e in self.experts:
@@ -1245,13 +1254,50 @@ class WeightFoldingEngine:
         self.pristine = {k: v.detach().clone() for k, v in self.slots.items()} if keep_pristine else {}
         self.active: str | None = None
 
+        if draft_head is not None:
+            self.register_draft_head(draft_head)
+
+    def register_draft_head(self, draft_head: nn.Module) -> None:
+        """Registers an MTP draft head for matched co-mutation folding (§23)."""
+        self.draft_head = draft_head
+        draft_params = dict(draft_head.named_parameters())
+        self.draft_slots = {}
+        
+        # Layer 31 is the last shape-compatible backbone layer folded into draft_head.layer
+        for k, p in draft_params.items():
+            if "layer." in k and k.endswith(".weight"):
+                self.draft_slots[k] = p
+                
+        if self.keep_pristine and self.draft_slots:
+            self.draft_pristine = {k: v.detach().clone() for k, v in self.draft_slots.items()}
+
+    def _get_draft_factor(self, expert: FoldableExpert, draft_key: str) -> tuple[torch.Tensor, torch.Tensor] | None:
+        """Maps draft head key (layer.*.weight) to layer 31 factor (model.layers.31.*.weight)."""
+        # Look for layer 31 counterpart
+        suffix = draft_key.replace("layer.", "")
+        candidates = [
+            f"model.layers.31.{suffix}",
+            f"layers.31.{suffix}",
+            f"model.layers.31.{suffix}.weight",
+        ]
+        for c in candidates:
+            if c in expert.factors:
+                return expert.factors[c]
+        # fallback search
+        for fk, factor in expert.factors.items():
+            if "31." in fk and fk.endswith(suffix):
+                return factor
+        return None
+
     @property
     def pristine_bytes(self) -> int:
-        return sum(t.numel() * t.element_size() for t in self.pristine.values())
+        b = sum(t.numel() * t.element_size() for t in self.pristine.values())
+        b += sum(t.numel() * t.element_size() for t in self.draft_pristine.values())
+        return b
 
     @torch.no_grad()
     def activate(self, expert: FoldableExpert) -> None:
-        """W_live = W0 + scaling * (U @ V), one fused addmm per module."""
+        """W_live = W0 + scaling * (U @ V), one fused addmm per module on backbone and draft head."""
         if not self.keep_pristine:
             raise RuntimeError("activate() requires keep_pristine=True; use activate_delta() otherwise")
         for key, w in self.slots.items():
@@ -1262,21 +1308,27 @@ class WeightFoldingEngine:
                 continue
             u, v = f
             torch.addmm(w0, u, v, beta=1.0, alpha=expert.scaling, out=w)
+
+        # Matched Draft Head Co-Mutation (§23)
+        if self.draft_head is not None and self.draft_slots:
+            for dkey, dw in self.draft_slots.items():
+                df = self._get_draft_factor(expert, dkey)
+                dw0 = self.draft_pristine[dkey]
+                if df is None:
+                    dw.copy_(dw0)
+                    continue
+                du, dv = df
+                torch.addmm(dw0, du, dv, beta=1.0, alpha=expert.scaling, out=dw)
+
         self.active = expert.name
 
     @torch.no_grad()
-    def activate_many(self, experts: Iterable[FoldableExpert]) -> None:
-        """W_live = W0 + sum_i scaling_i * (U_i @ V_i) -- several experts at once.
-
-        Motivated by a prediction, not a hunch: the subspace probe measured every
-        cross-task adapter pair at 1.10-1.28x chance, i.e. statistically
-        orthogonal. Orthogonal deltas should compose additively with little
-        interference, so stacking ought to preserve each domain's behaviour.
-        That is a falsifiable claim and this is what tests it.
-
-        Note the absorption law works in stacking's favour: summing deltas raises
-        |dW|/|W|, and merge error scales as ~0.167/(|dW|/|W|), so a stacked delta
-        is represented MORE faithfully in bf16 than either part alone.
+    def activate_many(self, experts: Iterable[FoldableExpert], scale_mode: str = "none") -> None:
+        """W_live = W0 + sum_i scaling_i * (U_i @ V_i).
+        
+        Empirical finding (2048-token 3-way scaling benchmark):
+        Unscaled (scale_mode="none", α=128) achieves highest domain retention (52.2% Astral, 55.0% Postgres).
+        Dividing by √K or K attenuates activation steering and causes adapters to regress toward base.
         """
         if not self.keep_pristine:
             raise RuntimeError("activate_many() requires keep_pristine=True")
@@ -1284,6 +1336,11 @@ class WeightFoldingEngine:
         if not experts:
             self.restore()
             return
+            
+        k = len(experts)
+        scale_mult = 1.0 / (math.sqrt(k) if scale_mode == "sqrt" and k > 1 else (k if scale_mode == "linear" and k > 1 else 1.0))
+
+        # 1. Fold Backbone
         for key, w in self.slots.items():
             w0 = self.pristine[key]
             first = True
@@ -1292,20 +1349,44 @@ class WeightFoldingEngine:
                 if f is None:
                     continue
                 u, v = f
+                eff_alpha = e.scaling * scale_mult
                 if first:
-                    torch.addmm(w0, u, v, beta=1.0, alpha=e.scaling, out=w)
+                    torch.addmm(w0, u, v, beta=1.0, alpha=eff_alpha, out=w)
                     first = False
                 else:
-                    w.addmm_(u, v, alpha=e.scaling)
-            if first:  # no expert touched this slot
+                    w.addmm_(u, v, alpha=eff_alpha)
+            if first:
                 w.copy_(w0)
+
+        # 2. Fold Matched Draft Head Co-Mutation (§23)
+        if self.draft_head is not None and self.draft_slots:
+            for dkey, dw in self.draft_slots.items():
+                dw0 = self.draft_pristine[dkey]
+                first = True
+                for e in experts:
+                    df = self._get_draft_factor(e, dkey)
+                    if df is None:
+                        continue
+                    du, dv = df
+                    eff_alpha = e.scaling * scale_mult
+                    if first:
+                        torch.addmm(dw0, du, dv, beta=1.0, alpha=eff_alpha, out=dw)
+                        first = False
+                    else:
+                        dw.addmm_(du, dv, alpha=eff_alpha)
+                if first:
+                    dw.copy_(dw0)
+
         self.active = "+".join(e.name for e in experts)
 
     @torch.no_grad()
     def restore(self) -> None:
-        """Exact: copies the pristine weights back, no arithmetic involved."""
+        """Exact: copies the pristine weights back for backbone and draft head."""
         for key, w in self.slots.items():
             w.copy_(self.pristine[key])
+        if self.draft_head is not None and self.draft_slots:
+            for dkey, dw in self.draft_slots.items():
+                dw.copy_(self.draft_pristine[dkey])
         self.active = None
 
     @torch.no_grad()

@@ -650,7 +650,7 @@ sequences, so real serving loses some of it to padding waste.
 To launch the production OpenAI-compatible REST server daemon on `http://127.0.0.1:8000`:
 
 ```bash
-uv run --env-file .env python3 scripts/run_openai_api_server.py --host 127.0.0.1 --port 8000
+uv run --env-file .env python3 scripts/serve/run_openai_api_server.py --host 127.0.0.1 --port 8000
 ```
 
 The server initializes `Qwen/Qwen3.5-4B`, swaps in exact PyTorch RMSNorm stand-ins (CUDA-graph friendly; not a speedup), pre-loads the factor micro-experts, captures the CUDA/HIP graph once, and listens for HTTP requests.
@@ -744,7 +744,7 @@ Run the full GPU integration test suite:
 
 ```bash
 # Full REST API server integration test suite
-uv run --env-file .env python3 scripts/test_openai_api_server.py
+uv run --env-file .env python3 scripts/serve/test_openai_api_server.py
 
 
 # Zero-recapture expert swapping synergy benchmark

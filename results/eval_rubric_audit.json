@@ -35,5 +35,22 @@
     ],
     "n_fully_given_away": 9,
     "n_leading": 9
+  },
+  "duckdb": {
+    "file": "data/duckdb/evaluation_data.jsonl",
+    "n": 50,
+    "n_with_rubric": 50,
+    "rubric_terms_total": 150,
+    "rubric_terms_in_question": 50,
+    "giveaway_pct": 33.333333333333336,
+    "fully_given_away_ids": [
+      "duckdb_eval_05_v0",
+      "duckdb_eval_05_v1",
+      "duckdb_eval_05_v2",
+      "duckdb_eval_05_v3",
+      "duckdb_eval_05_v4"
+    ],
+    "n_fully_given_away": 5,
+    "n_leading": 5
   }
 }

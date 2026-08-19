@@ -21,11 +21,11 @@ Last updated: 2026-08-13
 | **m2** | bf16 | Liger (`fused_linear_cross_entropy`, `rms_norm`, `swiglu`; rope off) | **CURRENT** |
 | m1 | 4-bit NF4 | none | legacy — do not use |
 
-**Use `scripts/train_expert_CURRENT_m2.py` for all new expert training.**
+**Use `scripts/train/train_expert.py` for all new expert training.**
 Exactly one trainer is CURRENT at a time and its filename says so.
 
 ```bash
-uv run --env-file .env scripts/train_expert_CURRENT_m2.py --domain astral
+uv run --env-file .env scripts/train/train_expert.py --domain astral
 ```
 
 Fixed hyperparameters across every domain, so experts stay comparable:
@@ -55,38 +55,25 @@ run (1.941→0.859 vs 1.943→0.868). Speedup: ~130 s for a 150-step run.
 
 ## Current adapters
 
-`m2_<domain>_r8a128` is the live expert set — **verified methodology-matched**
-across methodology, liger, precision, rank, alpha, max_steps and lr:
+`m2_<domain>_r8a128_v4` is the live expert set — **verified methodology-matched**
+across methodology, liger, precision, rank (8), alpha (128), completion-only loss masking, and contamination removal:
 
-| adapter | methodology | liger | scaling | steps | records |
+| adapter | methodology | liger | scaling | loss mode | records |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| `m2_astral_r8a128` | m2 | yes | 16.0 | 150 | 815 |
-| `m2_postgresql_r8a128` | m2 | yes | 16.0 | 150 | 411 |
-| `m2_financial_r8a128` | m2 | yes | 16.0 | 150 | 304 |
+| `m2_astral_r8a128_v4` | m2 | yes | 16.0 | completion-only | 1,433 |
+| `m2_postgresql_r8a128_v4` | m2 | yes | 16.0 | completion-only | 1,385 |
+| `m2_duckdb_r8a128_v4` | m2 | yes | 16.0 | completion-only | 1,622 |
+| `m2_financial_r8a128_v4` | m2 | yes | 16.0 | completion-only | 304 |
 
 Verify before use:
 
 ```bash
-uv run python scripts/audit_adapters.py          # drift check + current roles
-uv run python scripts/audit_adapters.py --write  # re-record after training
+uv run python scripts/audit/audit_adapters.py          # drift check + current roles
+uv run python scripts/audit/audit_adapters.py --write  # re-record after training
 ```
 
-**Every benchmark now DEFAULTS to the m2 set.** m1 adapters remain reachable as
-explicit options (`--experts idkron`, `--target-4bit`) for reproducing older
-runs, but nothing loads them unless asked. Scripts whose m1 adapters are the
-*subject* of study keep them by design: `benchmark_m1_vs_m2_regime.py`,
-`benchmark_mtp_head_adapter_acceptance.py`, `benchmark_alpha_absorption_sweep.py`,
-`benchmark_adapter_swap.py`, `build_orthogonality_map.py`.
-
-`ADAPTER_MANIFEST.json` (repo root, tracked) records a content hash per adapter.
-If an adapter changed under a published result, the drift check says so — this is
-the mechanism that was missing when `ctl_lora_fin_a128` was overwritten three
-times in one day while the README kept describing the second version.
-
-Legacy adapters are kept for reproducibility of committed findings:
-`ctl_lora_r8_a*` / `ctl_idk_*` back the controlled head-to-head; `*_sweep_a*`
-back the absorption law. **All are m1 (4-bit).** Do not mix them with m2 experts
-in one comparison.
+**Every quality benchmark imports canonical defaults from `gnn_experiment.canon`.**
+Run `uv run python scripts/audit/check_canon.py` to audit compliance.
 
 ---
 

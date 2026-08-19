@@ -33,7 +33,7 @@
 | **PostgreSQL** | 6.04% | 83.89% | **87.25%** | **+3.36 pp** | `[+0.67, +6.04]` | **RESOLVED WIN ✅** |
 
 * **Quantization Seam Conclusion**: Training adapters directly in the target serving precision (`bfloat16`) yields a consistent **+3.25 to +3.36 pp improvement** over training in 4-bit NF4. 
-* **Repository Standard**: All modern adapters (`m2_*_r8a128`) are standardized on the M2 unified pipeline (`train_expert_CURRENT_m2.py`).
+* **Repository Standard**: All modern adapters (`m2_*_r8a128`) are standardized on the M2 unified pipeline (`train/train_expert.py`).
 
 ---
 

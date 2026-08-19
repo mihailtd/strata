@@ -1,0 +1,154 @@
+{
+  "config": {
+    "model": "Qwen/Qwen3.5-4B",
+    "adapters": {
+      "ast": "results/adapters/m2_astral_r8a128_v4",
+      "pg": "results/adapters/m2_postgresql_r8a128_v4",
+      "duck": "results/adapters/m2_duckdb_r8a128_v4",
+      "fin": "results/adapters/m2_financial_r8a128_v4",
+      "ast_v5": "results/adapters/m2_astral_r8a128_v5"
+    },
+    "n_modules": 128,
+    "prompts": {
+      "astral": [
+        "How do I configure workspace dependencies and lockfiles using uv and pyproject.toml in Python 3.12?",
+        "Write an async coroutine using asyncio.TaskGroup and type hints with ruff formatting rules.",
+        "Demonstrate how to run isolated Python scripts with inline script metadata PEP 723 using uv run.",
+        "Replace my pip + requirements.txt workflow with uv, and format the project with ruff."
+      ],
+      "postgresql": [
+        "How do I create an HNSW vector index in pgvector with cosine distance ops and query nearest neighbors?",
+        "Write a query using DISTINCT ON with window functions and explain the plan with EXPLAIN ANALYZE.",
+        "Demonstrate how to partition a PostgreSQL 17 table by range with BRIN indexing on timestamp columns.",
+        "Return the top 3 products per category by revenue."
+      ],
+      "duckdb": [
+        "How do I query partitioned Parquet files from S3 with projection pushdown and hive_partitioning in DuckDB?",
+        "Write a DuckDB query using FROM-first syntax, COLUMNS(*) regex aggregation, and EXCLUDE.",
+        "Demonstrate zero-copy export from a DuckDB query to a Polars DataFrame using PyArrow record batches.",
+        "Return the top 3 products per category by revenue."
+      ],
+      "financial": [
+        "Explain the difference between traditional Roth IRA contributions, 401(k) rollovers, and tax brackets.",
+        "Calculate the net present value of a multi-period capital investment with inflation-adjusted cash flows.",
+        "What asset allocation should a 45-year-old use for retirement in 20 years?",
+        "Compare term life insurance against whole life for a family with two young children."
+      ],
+      "general": [
+        "Discuss the history of the Byzantine Empire and the architectural design of the Hagia Sophia.",
+        "Write a short essay analyzing the themes of existentialism in Franz Kafka's The Metamorphosis.",
+        "Explain how photosynthesis converts light energy into chemical energy in plants.",
+        "Summarize the causes and consequences of the 1929 Wall Street crash."
+      ]
+    }
+  },
+  "energy": {
+    "ast": {
+      "astral": 0.06154647628136445,
+      "postgresql": 0.06491823163378285,
+      "duckdb": 0.06377185183009715,
+      "financial": 0.06294175522998557,
+      "general": 0.06349926986149512
+    },
+    "pg": {
+      "astral": 0.06312963313393993,
+      "postgresql": 0.06333765204544761,
+      "duckdb": 0.06305266393974307,
+      "financial": 0.0614137396987644,
+      "general": 0.06147284278267762
+    },
+    "duck": {
+      "astral": 0.06939658182818675,
+      "postgresql": 0.069218183925841,
+      "duckdb": 0.07170182633490185,
+      "financial": 0.06511381999735022,
+      "general": 0.06586538597184699
+    },
+    "fin": {
+      "astral": 0.06494787305200589,
+      "postgresql": 0.06556509845540859,
+      "duckdb": 0.06573386394666159,
+      "financial": 0.07078696776079596,
+      "general": 0.0662407553572848
+    },
+    "ast_v5": {
+      "astral": 0.05187028060754528,
+      "postgresql": 0.05431806122214766,
+      "duckdb": 0.05369564050306508,
+      "financial": 0.053438267848832766,
+      "general": 0.05369909477303736
+    }
+  },
+  "conflict": {
+    "ast|pg": {
+      "astral": 0.015217634943468283,
+      "postgresql": 0.01650171486919305,
+      "duckdb": 0.015974134918508298,
+      "financial": 0.015362076543141256,
+      "general": 0.016247355492460258
+    },
+    "ast|duck": {
+      "astral": 0.011599848336651064,
+      "postgresql": 0.01287422629292223,
+      "duckdb": 0.011971955548510493,
+      "financial": 0.012171417692882436,
+      "general": 0.012895101935299635
+    },
+    "ast|fin": {
+      "astral": 0.012232696568418078,
+      "postgresql": 0.01434365163978768,
+      "duckdb": 0.013652797848457965,
+      "financial": 0.014475113359925018,
+      "general": 0.015360744408305038
+    },
+    "ast|ast_v5": {
+      "astral": 0.11137961961924248,
+      "postgresql": 0.12894204422658007,
+      "duckdb": 0.12186906001434039,
+      "financial": 0.11824124385793766,
+      "general": 0.1243338480813918
+    },
+    "pg|duck": {
+      "astral": 0.02096608159376956,
+      "postgresql": 0.020637504540211182,
+      "duckdb": 0.020299168683393987,
+      "financial": 0.019650113606275,
+      "general": 0.018544446332469988
+    },
+    "pg|fin": {
+      "astral": 0.014203427850091543,
+      "postgresql": 0.014073570717442863,
+      "duckdb": 0.014193852580802968,
+      "financial": 0.013300194489971773,
+      "general": 0.01314636668199931
+    },
+    "pg|ast_v5": {
+      "astral": 0.01722752005118977,
+      "postgresql": 0.01857048685695517,
+      "duckdb": 0.017799743549544722,
+      "financial": 0.01847552384151907,
+      "general": 0.019218023389541372
+    },
+    "duck|fin": {
+      "astral": 0.010789633586314018,
+      "postgresql": 0.011385131679542582,
+      "duckdb": 0.010780564501022383,
+      "financial": 0.01099339749530337,
+      "general": 0.01149188647361754
+    },
+    "duck|ast_v5": {
+      "astral": 0.012721507987322411,
+      "postgresql": 0.013410012097970103,
+      "duckdb": 0.012238279347161374,
+      "financial": 0.013598425247707269,
+      "general": 0.014151083237432971
+    },
+    "fin|ast_v5": {
+      "astral": 0.013381342647850403,
+      "postgresql": 0.016218245720665436,
+      "duckdb": 0.015396067239635158,
+      "financial": 0.015311651209637844,
+      "general": 0.016820482475242926
+    }
+  }
+}

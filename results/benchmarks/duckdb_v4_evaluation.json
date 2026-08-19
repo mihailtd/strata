@@ -1,0 +1,609 @@
+{
+  "base_score": 66.66666666666666,
+  "base_per_q": [
+    {
+      "id": "duckdb_eval_00_v0",
+      "category": "duckdb_from_first_exclude",
+      "score": 66.66666666666666,
+      "generated": "```sql\nSELECT *\nFROM server_telemetry\nWHERE error_rate > 0.05\nEXCEPT SELECT internal_trace_id;\n```"
+    },
+    {
+      "id": "duckdb_eval_00_v1",
+      "category": "duckdb_from_first_exclude",
+      "score": 66.66666666666666,
+      "generated": "```sql\nSELECT *\nFROM server_telemetry\nWHERE error_rate > 0.05\nEXCEPT SELECT * FROM server_telemetry WHERE internal_trace_id IS NOT NULL;\n```\n\n---"
+    },
+    {
+      "id": "duckdb_eval_00_v2",
+      "category": "duckdb_from_first_exclude",
+      "score": 66.66666666666666,
+      "generated": "```sql\nSELECT *\nFROM server_telemetry\nWHERE error_rate > 0.05\nEXCEPT SELECT internal_trace_id\n```\n\n---"
+    },
+    {
+      "id": "duckdb_eval_00_v3",
+      "category": "duckdb_from_first_exclude",
+      "score": 66.66666666666666,
+      "generated": "```sql\nSELECT *\nFROM server_telemetry\nWHERE error_rate > 0.05\nEXCEPT SELECT * FROM server_telemetry WHERE internal_trace_id IS NOT NULL;\n```\n\n---"
+    },
+    {
+      "id": "duckdb_eval_00_v4",
+      "category": "duckdb_from_first_exclude",
+      "score": 66.66666666666666,
+      "generated": "```sql\nSELECT *\nFROM server_telemetry\nWHERE error_rate > 0.05\nEXCEPT SELECT * FROM server_telemetry WHERE internal_trace_id IS NOT NULL;\n```\n\n---"
+    },
+    {
+      "id": "duckdb_eval_01_v0",
+      "category": "duckdb_parquet_s3_pushdown",
+      "score": 100.0,
+      "generated": "```sql\nSELECT *\nFROM read_parquet('s3://data-warehouse/sales/*/*.parquet',\n    hive_partitioning = true,\n    httpfs = true);\n```"
+    },
+    {
+      "id": "duckdb_eval_01_v1",
+      "category": "duckdb_parquet_s3_pushdown",
+      "score": 100.0,
+      "generated": "```sql\nSELECT *\nFROM read_parquet('s3://data-warehouse/sales/*/*.parquet',\n    hive_partitioning = true,\n    httpfs = true);\n```"
+    },
+    {
+      "id": "duckdb_eval_01_v2",
+      "category": "duckdb_parquet_s3_pushdown",
+      "score": 100.0,
+      "generated": "```sql\nSELECT *\nFROM read_parquet('s3://data-warehouse/sales/*/*.parquet',\n    hive_partitioning = true,\n    httpfs = true);\n```\n\n---"
+    },
+    {
+      "id": "duckdb_eval_01_v3",
+      "category": "duckdb_parquet_s3_pushdown",
+      "score": 100.0,
+      "generated": "```sql\nSELECT *\nFROM read_parquet('s3://data-warehouse/sales/*/*.parquet',\n    hive_partitioning = true,\n    httpfs = true);\n```\n\n---"
+    },
+    {
+      "id": "duckdb_eval_01_v4",
+      "category": "duckdb_parquet_s3_pushdown",
+      "score": 100.0,
+      "generated": "```sql\nSELECT *\nFROM read_parquet('s3://data-warehouse/sales/*/*.parquet',\n    hive_partitioning = true,\n    httpfs = true);\n```\n\n---"
+    },
+    {
+      "id": "duckdb_eval_02_v0",
+      "category": "duckdb_columns_regex_aggregation",
+      "score": 100.0,
+      "generated": "```sql\nSELECT AVG(CAST(COLUMNS(device_readings, col)[1] AS DOUBLE)) AS avg_metric\nFROM device_readings\nWHERE col ~ '^metric_'\n```"
+    },
+    {
+      "id": "duckdb_eval_02_v1",
+      "category": "duckdb_columns_regex_aggregation",
+      "score": 100.0,
+      "generated": "```sql\nSELECT AVG(CAST(COLUMNS(device_readings, col)[1] AS DOUBLE)) AS avg_metric\nFROM device_readings\n```"
+    },
+    {
+      "id": "duckdb_eval_02_v2",
+      "category": "duckdb_columns_regex_aggregation",
+      "score": 100.0,
+      "generated": "```sql\nSELECT AVG(CAST(COLUMNS(device_readings, col)[1] AS DOUBLE)) AS avg_metric\nFROM device_readings\nWHERE col ~ '^metric_'\n```"
+    },
+    {
+      "id": "duckdb_eval_02_v3",
+      "category": "duckdb_columns_regex_aggregation",
+      "score": 100.0,
+      "generated": "```sql\nSELECT AVG(CAST(COLUMNS(device_readings, col)[1] AS DOUBLE)) AS avg_metric\nFROM device_readings\nWHERE col ~ '^metric_'\n```"
+    },
+    {
+      "id": "duckdb_eval_02_v4",
+      "category": "duckdb_columns_regex_aggregation",
+      "score": 100.0,
+      "generated": "```sql\nSELECT AVG(CAST(COLUMNS(device_readings, col)[1] AS DOUBLE)) AS avg_metric\nFROM device_readings\nWHERE col ~ '^metric_'\n```"
+    },
+    {
+      "id": "duckdb_eval_03_v0",
+      "category": "duckdb_python_arrow_zerocopy",
+      "score": 100.0,
+      "generated": "```python\nimport duckdb\nimport polars as pl\n\ndef aggregate_customer_metrics(parquet_path: str) -> pl.DataFrame:\n    \"\"\"\n    Aggregates metrics grouped by customer from a Parquet file using DuckDB.\n   "
+    },
+    {
+      "id": "duckdb_eval_03_v1",
+      "category": "duckdb_python_arrow_zerocopy",
+      "score": 100.0,
+      "generated": "```python\nimport duckdb\nimport polars as pl\n\ndef aggregate_customer_metrics(parquet_path: str) -> pl.DataFrame:\n    \"\"\"\n    Aggregates metrics grouped by customer from a Parquet file using DuckDB.\n   "
+    },
+    {
+      "id": "duckdb_eval_03_v2",
+      "category": "duckdb_python_arrow_zerocopy",
+      "score": 100.0,
+      "generated": "```python\nimport duckdb\nimport polars as pl\n\ndef aggregate_customer_metrics(parquet_path: str) -> pl.DataFrame:\n    \"\"\"\n    Aggregates metrics grouped by customer from a Parquet file using DuckDB.\n   "
+    },
+    {
+      "id": "duckdb_eval_03_v3",
+      "category": "duckdb_python_arrow_zerocopy",
+      "score": 100.0,
+      "generated": "```python\nimport duckdb\nimport polars as pl\n\ndef aggregate_customer_metrics(parquet_path: str) -> pl.DataFrame:\n    \"\"\"\n    Aggregates metrics grouped by customer from a Parquet file using DuckDB.\n   "
+    },
+    {
+      "id": "duckdb_eval_03_v4",
+      "category": "duckdb_python_arrow_zerocopy",
+      "score": 100.0,
+      "generated": "```python\nimport duckdb\nimport polars as pl\n\ndef aggregate_customer_metrics(parquet_path: str) -> pl.DataFrame:\n    \"\"\"\n    Aggregates metrics grouped by customer from a Parquet file using DuckDB.\n   "
+    },
+    {
+      "id": "duckdb_eval_04_v0",
+      "category": "duckdb_attach_postgres_federation",
+      "score": 33.33333333333333,
+      "generated": "```python\nimport duckdb\n\n# Connect to DuckDB\ncon = duckdb.connect()\n\n# Attach PostgreSQL database\ncon.execute(\"ATTACH 'postgresql://user:password@host:5432/pg_dw' AS pg_dw\")\n\n# Query the joined table\n"
+    },
+    {
+      "id": "duckdb_eval_04_v1",
+      "category": "duckdb_attach_postgres_federation",
+      "score": 33.33333333333333,
+      "generated": "```python\nimport duckdb\nimport pandas as pd\n\n# Connect to DuckDB\ncon = duckdb.connect()\n\n# Attach PostgreSQL database\ncon.execute(\"ATTACH 'postgresql://user:password@host:port/dbname' AS pg_dw\")\n\n# Qu"
+    },
+    {
+      "id": "duckdb_eval_04_v2",
+      "category": "duckdb_attach_postgres_federation",
+      "score": 33.33333333333333,
+      "generated": "```python\nimport duckdb\nimport pandas as pd\n\n# Connect to DuckDB\ncon = duckdb.connect()\n\n# Attach PostgreSQL database\ncon.execute(\"ATTACH 'postgresql://user:password@host:port/dbname' AS pg_dw\")\n\n# Qu"
+    },
+    {
+      "id": "duckdb_eval_04_v3",
+      "category": "duckdb_attach_postgres_federation",
+      "score": 33.33333333333333,
+      "generated": "```sql\nCREATE EXTENSION IF NOT EXISTS postgres;\nATTACH 'postgresql://postgres:postgres@localhost:5432/pg_dw' AS pg_dw;\nSELECT * FROM pg_dw.customers JOIN targets.csv ON customers.id = targets.id;\n```"
+    },
+    {
+      "id": "duckdb_eval_04_v4",
+      "category": "duckdb_attach_postgres_federation",
+      "score": 33.33333333333333,
+      "generated": "```sql\nCREATE EXTENSION IF NOT EXISTS postgres;\nATTACH 'postgresql://postgres:postgres@localhost:5432/pg_dw' AS pg_dw;\nSELECT * FROM pg_dw.customers JOIN targets.csv ON customers.id = targets.id;\n```"
+    },
+    {
+      "id": "duckdb_eval_05_v0",
+      "category": "duckdb_group_by_all_replace",
+      "score": 100.0,
+      "generated": "```sql\nSELECT \n    REPLACE(CAST(amount AS VARCHAR), '.', '') AS amount_rounded,\n    COUNT(*) AS txn_count\nFROM finance_txns\nGROUP BY ALL\n```"
+    },
+    {
+      "id": "duckdb_eval_05_v1",
+      "category": "duckdb_group_by_all_replace",
+      "score": 100.0,
+      "generated": "```sql\nSELECT \n    REPLACE(CAST(amount AS VARCHAR), '.', '') AS amount_rounded,\n    COUNT(*) AS txn_count\nFROM finance_txns\nGROUP BY ALL\n```"
+    },
+    {
+      "id": "duckdb_eval_05_v2",
+      "category": "duckdb_group_by_all_replace",
+      "score": 100.0,
+      "generated": "```sql\nSELECT \n    REPLACE(CAST(amount AS VARCHAR), '.', '') AS amount_rounded,\n    COUNT(*) AS txn_count\nFROM finance_txns\nGROUP BY ALL\n```"
+    },
+    {
+      "id": "duckdb_eval_05_v3",
+      "category": "duckdb_group_by_all_replace",
+      "score": 100.0,
+      "generated": "```sql\nSELECT \n    REPLACE(CAST(amount AS VARCHAR), '.', '') AS amount_rounded,\n    COUNT(*) AS txn_count\nFROM finance_txns\nGROUP BY ALL\n```\n\n---"
+    },
+    {
+      "id": "duckdb_eval_05_v4",
+      "category": "duckdb_group_by_all_replace",
+      "score": 100.0,
+      "generated": "```sql\nSELECT \n    REPLACE(CAST(amount AS VARCHAR), '.', '') AS amount_rounded,\n    COUNT(*) AS txn_count\nFROM finance_txns\nGROUP BY ALL\n```\n\n---"
+    },
+    {
+      "id": "duckdb_eval_06_v0",
+      "category": "duckdb_json_shred_extract",
+      "score": 33.33333333333333,
+      "generated": "```sql\nSELECT \n    json_extract_scalar(log, '$.meta.user_id') AS user_id\nFROM read_csv_auto('logs/*.json', format='newline_delimited_json') AS log;\n```"
+    },
+    {
+      "id": "duckdb_eval_06_v1",
+      "category": "duckdb_json_shred_extract",
+      "score": 33.33333333333333,
+      "generated": "```sql\nSELECT \n    json_extract_scalar(log, '$.meta.user_id') AS user_id\nFROM read_csv_auto('logs/*.json', format='newline_delimited_json') AS log;\n```"
+    },
+    {
+      "id": "duckdb_eval_06_v2",
+      "category": "duckdb_json_shred_extract",
+      "score": 33.33333333333333,
+      "generated": "```sql\nSELECT \n    json_extract_scalar(log, '$.meta.user_id') AS user_id\nFROM read_csv_auto('logs/*.json', format='newline_delimited_json') AS log;\n```\n\n---"
+    },
+    {
+      "id": "duckdb_eval_06_v3",
+      "category": "duckdb_json_shred_extract",
+      "score": 33.33333333333333,
+      "generated": "```sql\nSELECT \n    json_extract_scalar(log, '$.meta.user_id') AS user_id\nFROM read_csv_auto('logs/*.json', format='newline_delimited_json') AS log;\n```\n\n---"
+    },
+    {
+      "id": "duckdb_eval_06_v4",
+      "category": "duckdb_json_shred_extract",
+      "score": 33.33333333333333,
+      "generated": "```sql\nSELECT \n    json_extract_scalar(log, '$.meta.user_id') AS user_id\nFROM read_csv_auto('logs/*.json', format='newline_delimited_json') AS log;\n```\n\n---"
+    },
+    {
+      "id": "duckdb_eval_07_v0",
+      "category": "duckdb_list_comprehension_filter",
+      "score": 33.33333333333333,
+      "generated": "```python\nimport duckdb\n\n# Create a DuckDB connection\ncon = duckdb.connect()\n\n# Create a table with the list of integers\ncon.execute(\"CREATE TABLE numbers (value INTEGER)\")\ncon.execute(\"INSERT INTO nu"
+    },
+    {
+      "id": "duckdb_eval_07_v1",
+      "category": "duckdb_list_comprehension_filter",
+      "score": 33.33333333333333,
+      "generated": "```python\nimport duckdb\n\n# Create a DuckDB connection\ncon = duckdb.connect()\n\n# Create a table with the list of integers\ncon.execute(\"CREATE TABLE numbers (value INTEGER)\")\ncon.execute(\"INSERT INTO nu"
+    },
+    {
+      "id": "duckdb_eval_07_v2",
+      "category": "duckdb_list_comprehension_filter",
+      "score": 33.33333333333333,
+      "generated": "```python\nimport duckdb\n\n# Create a DuckDB connection\ncon = duckdb.connect()\n\n# Create a table with the list of integers\ncon.execute(\"CREATE TABLE numbers (value INTEGER)\")\ncon.execute(\"INSERT INTO nu"
+    },
+    {
+      "id": "duckdb_eval_07_v3",
+      "category": "duckdb_list_comprehension_filter",
+      "score": 33.33333333333333,
+      "generated": "```python\nimport duckdb\n\n# Create a DuckDB connection\nconn = duckdb.connect()\n\n# Create a table with the list of integers\nconn.execute(\"CREATE TABLE integers (value INTEGER)\")\nconn.execute(\"INSERT INT"
+    },
+    {
+      "id": "duckdb_eval_07_v4",
+      "category": "duckdb_list_comprehension_filter",
+      "score": 33.33333333333333,
+      "generated": "```python\nimport duckdb\n\n# Create a DuckDB connection\ncon = duckdb.connect()\n\n# Create a table with the list of integers\ncon.execute(\"CREATE TABLE numbers (value INTEGER)\")\ncon.execute(\"INSERT INTO nu"
+    },
+    {
+      "id": "duckdb_eval_08_v0",
+      "category": "duckdb_out_of_core_spill_config",
+      "score": 66.66666666666666,
+      "generated": "```sql\nSET memory_limit = '16GB';\nSET max_workers = 8;\nSET temp_directory = '/fast_ssd/duck_spill';\n```\n\n---"
+    },
+    {
+      "id": "duckdb_eval_08_v1",
+      "category": "duckdb_out_of_core_spill_config",
+      "score": 66.66666666666666,
+      "generated": "```sql\nSET memory_limit = '16GB';\nSET max_workers = 8;\nSET temp_directory = '/fast_ssd/duck_spill';\n```\n\n---"
+    },
+    {
+      "id": "duckdb_eval_08_v2",
+      "category": "duckdb_out_of_core_spill_config",
+      "score": 66.66666666666666,
+      "generated": "```sql\nSET memory_limit = '16GB';\nSET max_workers = 8;\nSET temp_directory = '/fast_ssd/duck_spill';\n```\n\n---"
+    },
+    {
+      "id": "duckdb_eval_08_v3",
+      "category": "duckdb_out_of_core_spill_config",
+      "score": 66.66666666666666,
+      "generated": "```sql\nSET memory_limit = '16GB';\nSET max_workers = 8;\nSET temp_directory = '/fast_ssd/duck_spill';\n```\n\n---"
+    },
+    {
+      "id": "duckdb_eval_08_v4",
+      "category": "duckdb_out_of_core_spill_config",
+      "score": 66.66666666666666,
+      "generated": "```sql\nSET memory_limit = '16GB';\nSET max_workers = 8;\nSET temp_directory = '/fast_ssd/duck_spill';\n```\n\n---"
+    },
+    {
+      "id": "duckdb_eval_09_v0",
+      "category": "duckdb_union_by_name_csv",
+      "score": 33.33333333333333,
+      "generated": "```sql\nSELECT * FROM read_csv_auto('data/sales_*.csv');\n```"
+    },
+    {
+      "id": "duckdb_eval_09_v1",
+      "category": "duckdb_union_by_name_csv",
+      "score": 33.33333333333333,
+      "generated": "```sql\nSELECT * FROM read_csv_auto('data/sales_*.csv')\n```"
+    },
+    {
+      "id": "duckdb_eval_09_v2",
+      "category": "duckdb_union_by_name_csv",
+      "score": 33.33333333333333,
+      "generated": "```sql\nSELECT * FROM read_csv_auto('data/sales_*.csv')\nUNION ALL\nSELECT * FROM read_csv_auto('data/sales_*.csv')\nUNION ALL\nSELECT * FROM read_csv_auto('data/sales_*.csv')\n```"
+    },
+    {
+      "id": "duckdb_eval_09_v3",
+      "category": "duckdb_union_by_name_csv",
+      "score": 33.33333333333333,
+      "generated": "```sql\nSELECT * FROM read_csv_auto('data/sales_*.csv', name='sales')\n```"
+    },
+    {
+      "id": "duckdb_eval_09_v4",
+      "category": "duckdb_union_by_name_csv",
+      "score": 33.33333333333333,
+      "generated": "```sql\nSELECT * FROM read_csv_auto('data/sales_*.csv', name='sales')\n```"
+    }
+  ],
+  "duckdb_v4_score": 78.0,
+  "delta_pp": 11.333333333333343,
+  "expert_per_q": [
+    {
+      "id": "duckdb_eval_00_v0",
+      "category": "duckdb_from_first_exclude",
+      "score": 100.0,
+      "generated": "```sql\n-- Select all columns except internal_trace_id, filtering for error rates > 0.05\nSELECT * EXCLUDE (internal_trace_id)\nFROM server_telemetry\nWHERE error_rate > 0.05\nORDER BY error_rate DESC;\n```"
+    },
+    {
+      "id": "duckdb_eval_00_v1",
+      "category": "duckdb_from_first_exclude",
+      "score": 100.0,
+      "generated": "```sql\n-- Select all columns except internal_trace_id, filtering for error rates > 0.05\nSELECT * EXCLUDE (internal_trace_id)\nFROM server_telemetry\nWHERE error_rate > 0.05\nORDER BY error_rate DESC\nLIMI"
+    },
+    {
+      "id": "duckdb_eval_00_v2",
+      "category": "duckdb_from_first_exclude",
+      "score": 100.0,
+      "generated": "```sql\n-- Select all columns except internal_trace_id, filtering for error rates > 0.05\nSELECT * EXCLUDE (internal_trace_id)\nFROM server_telemetry\nWHERE error_rate > 0.05\nORDER BY error_rate DESC\nLIMI"
+    },
+    {
+      "id": "duckdb_eval_00_v3",
+      "category": "duckdb_from_first_exclude",
+      "score": 100.0,
+      "generated": "```sql\n-- Select all columns except internal_trace_id, filtering for error rates > 0.05\nSELECT * EXCLUDE (internal_trace_id)\nFROM server_telemetry\nWHERE error_rate > 0.05\nORDER BY error_rate DESC\nLIMI"
+    },
+    {
+      "id": "duckdb_eval_00_v4",
+      "category": "duckdb_from_first_exclude",
+      "score": 100.0,
+      "generated": "```sql\n-- Select all columns except internal_trace_id, filtering for error rates > 0.05\nSELECT * EXCLUDE (internal_trace_id)\nFROM server_telemetry\nWHERE error_rate > 0.05\nORDER BY error_rate DESC\nLIMI"
+    },
+    {
+      "id": "duckdb_eval_01_v0",
+      "category": "duckdb_parquet_s3_pushdown",
+      "score": 100.0,
+      "generated": "```sql\n-- Enable httpfs extension for remote cloud object storage\nINSTALL httpfs;\nLOAD httpfs;\n\nSET s3_region = 'us-east-1';\n\n-- Direct vectorized query over partitioned Parquet\nSELECT\n    order_id,\n "
+    },
+    {
+      "id": "duckdb_eval_01_v1",
+      "category": "duckdb_parquet_s3_pushdown",
+      "score": 100.0,
+      "generated": "```sql\n-- Enable httpfs extension for remote cloud object storage\nINSTALL httpfs;\nLOAD httpfs;\n\nSET s3_region = 'us-east-1';\n\n-- Direct vectorized query over partitioned Parquet\nSELECT\n    order_id,\n "
+    },
+    {
+      "id": "duckdb_eval_01_v2",
+      "category": "duckdb_parquet_s3_pushdown",
+      "score": 100.0,
+      "generated": "```sql\n-- Enable httpfs extension for remote cloud object storage\nINSTALL httpfs;\nLOAD httpfs;\n\nSET s3_region = 'us-east-1';\n\n-- Direct vectorized query over partitioned Parquet\nSELECT\n    order_id,\n "
+    },
+    {
+      "id": "duckdb_eval_01_v3",
+      "category": "duckdb_parquet_s3_pushdown",
+      "score": 100.0,
+      "generated": "```sql\n-- Enable httpfs extension for remote cloud object storage\nINSTALL httpfs;\nLOAD httpfs;\n\nSET s3_region = 'us-east-1';\n\n-- Direct vectorized query over partitioned Parquet\nSELECT\n    order_id,\n "
+    },
+    {
+      "id": "duckdb_eval_01_v4",
+      "category": "duckdb_parquet_s3_pushdown",
+      "score": 100.0,
+      "generated": "```sql\n-- Enable httpfs extension for remote cloud object storage\nINSTALL httpfs;\nLOAD httpfs;\n\nSET s3_region = 'us-east-1';\n\n-- Direct vectorized query over partitioned Parquet\nSELECT\n    order_id,\n "
+    },
+    {
+      "id": "duckdb_eval_02_v0",
+      "category": "duckdb_columns_regex_aggregation",
+      "score": 66.66666666666666,
+      "generated": "```sql\n-- Load httpfs extension for remote cloud object storage\nINSTALL httpfs;\nLOAD httpfs;\n\nSET preserve_insertion_order = false;\n\n-- Direct vectorized query over remote Parquet file\nSELECT * FROM r"
+    },
+    {
+      "id": "duckdb_eval_02_v1",
+      "category": "duckdb_columns_regex_aggregation",
+      "score": 100.0,
+      "generated": "```sql\n-- Use COLUMNS() expression to dynamically aggregate matching columns\nSELECT\n    COLUMNS('metric_').avg() AS 'avg_\\0'\nFROM device_readings;\n```\n\n### Explanation:\nDuckDB's `COLUMNS()` expression"
+    },
+    {
+      "id": "duckdb_eval_02_v2",
+      "category": "duckdb_columns_regex_aggregation",
+      "score": 100.0,
+      "generated": "```sql\n-- Use COLUMNS() expression to dynamically aggregate matching columns\nSELECT\n    COLUMNS('metric_').avg() AS 'avg_\\0'\nFROM device_readings;\n```\n\n### Explanation:\nDuckDB's `COLUMNS()` expression"
+    },
+    {
+      "id": "duckdb_eval_02_v3",
+      "category": "duckdb_columns_regex_aggregation",
+      "score": 66.66666666666666,
+      "generated": "```sql\n-- Load httpfs extension for remote cloud object storage\nINSTALL httpfs;\nLOAD httpfs;\n\nSET preserve_insertion_order = false;\n\n-- Direct vectorized query over remote Parquet file\nSELECT * FROM r"
+    },
+    {
+      "id": "duckdb_eval_02_v4",
+      "category": "duckdb_columns_regex_aggregation",
+      "score": 66.66666666666666,
+      "generated": "```sql\n-- Load httpfs extension for remote cloud object storage\nINSTALL httpfs;\nLOAD httpfs;\n\nSET preserve_insertion_order = false;\n\n-- Direct vectorized query over remote Parquet file\nSELECT * FROM r"
+    },
+    {
+      "id": "duckdb_eval_03_v0",
+      "category": "duckdb_python_arrow_zerocopy",
+      "score": 100.0,
+      "generated": "```python\nimport duckdb\nimport polars as pl\n\ndef aggregate_customer_metrics(parquet_path: str) -> pl.DataFrame:\n    con = duckdb.connect(database=\":memory:\")\n    con.execute(\"SET memory_limit = '16GB'"
+    },
+    {
+      "id": "duckdb_eval_03_v1",
+      "category": "duckdb_python_arrow_zerocopy",
+      "score": 100.0,
+      "generated": "```python\nimport duckdb\nimport polars as pl\n\ndef aggregate_customer_metrics(parquet_path: str) -> pl.DataFrame:\n    con = duckdb.connect(database=\":memory:\")\n    con.execute(\"SET memory_limit = '16GB'"
+    },
+    {
+      "id": "duckdb_eval_03_v2",
+      "category": "duckdb_python_arrow_zerocopy",
+      "score": 100.0,
+      "generated": "```python\nimport duckdb\nimport polars as pl\n\ndef aggregate_customer_metrics(parquet_path: str) -> pl.DataFrame:\n    con = duckdb.connect(database=\":memory:\")\n    con.execute(\"SET memory_limit = '16GB'"
+    },
+    {
+      "id": "duckdb_eval_03_v3",
+      "category": "duckdb_python_arrow_zerocopy",
+      "score": 100.0,
+      "generated": "```python\nimport duckdb\nimport polars as pl\n\ndef aggregate_customer_metrics(parquet_path: str) -> pl.DataFrame:\n    con = duckdb.connect(database=\":memory:\")\n    con.execute(\"SET memory_limit = '16GB'"
+    },
+    {
+      "id": "duckdb_eval_03_v4",
+      "category": "duckdb_python_arrow_zerocopy",
+      "score": 100.0,
+      "generated": "```python\nimport duckdb\nimport polars as pl\n\ndef aggregate_customer_metrics(parquet_path: str) -> pl.DataFrame:\n    con = duckdb.connect(database=\":memory:\")\n    con.execute(\"SET memory_limit = '16GB'"
+    },
+    {
+      "id": "duckdb_eval_04_v0",
+      "category": "duckdb_attach_postgres_federation",
+      "score": 100.0,
+      "generated": "```sql\nINSTALL postgres;\nLOAD postgres;\n\nATTACH 'dbname=prod_db host=postgres.internal user=postgres port=5432' AS pg_prod (TYPE POSTGRES, READ_ONLY);\n\nSELECT\n    p.customer_id,\n    p.name,\n    l.enri"
+    },
+    {
+      "id": "duckdb_eval_04_v1",
+      "category": "duckdb_attach_postgres_federation",
+      "score": 100.0,
+      "generated": "```sql\nINSTALL postgres;\nLOAD postgres;\n\nATTACH 'dbname=prod_db host=postgres.internal user=postgres port=5432' AS pg_prod (TYPE POSTGRES, READ_ONLY);\n\nSELECT\n    p.customer_id,\n    p.name,\n    l.enri"
+    },
+    {
+      "id": "duckdb_eval_04_v2",
+      "category": "duckdb_attach_postgres_federation",
+      "score": 100.0,
+      "generated": "```sql\nINSTALL postgres;\nLOAD postgres;\n\nATTACH 'dbname=prod_db host=postgres.internal user=postgres port=5432' AS pg_prod (TYPE POSTGRES, READ_ONLY);\n\nSELECT\n    p.customer_id,\n    p.name,\n    l.enri"
+    },
+    {
+      "id": "duckdb_eval_04_v3",
+      "category": "duckdb_attach_postgres_federation",
+      "score": 100.0,
+      "generated": "```sql\nINSTALL postgres;\nLOAD postgres;\n\nATTACH 'dbname=prod_db host=postgres.internal user=postgres port=5432' AS pg_prod (TYPE POSTGRES, READ_ONLY);\n\nSELECT\n    p.customer_id,\n    p.name,\n    l.enri"
+    },
+    {
+      "id": "duckdb_eval_04_v4",
+      "category": "duckdb_attach_postgres_federation",
+      "score": 100.0,
+      "generated": "```sql\nINSTALL postgres;\nLOAD postgres;\n\nATTACH 'dbname=prod_db host=postgres.internal user=postgres port=5432' AS pg_prod (TYPE POSTGRES, READ_ONLY);\n\nSELECT\n    p.customer_id,\n    p.name,\n    l.enri"
+    },
+    {
+      "id": "duckdb_eval_05_v0",
+      "category": "duckdb_group_by_all_replace",
+      "score": 100.0,
+      "generated": "```sql\n-- GROUP BY ALL automatically groups by all non-aggregate projections\nSELECT\n    * REPLACE (ROUND(amount, 2) AS amount),\n    COUNT(*) AS record_count\nFROM finance_txns\nGROUP BY ALL;\n```\n\n### Ex"
+    },
+    {
+      "id": "duckdb_eval_05_v1",
+      "category": "duckdb_group_by_all_replace",
+      "score": 100.0,
+      "generated": "```sql\n-- GROUP BY ALL automatically groups by all non-aggregate projections\nSELECT\n    * REPLACE (ROUND(amount, 2) AS amount),\n    COUNT(*) AS record_count\nFROM finance_txns\nGROUP BY ALL;\n```\n\n### Ex"
+    },
+    {
+      "id": "duckdb_eval_05_v2",
+      "category": "duckdb_group_by_all_replace",
+      "score": 100.0,
+      "generated": "```sql\n-- GROUP BY ALL automatically groups by all non-aggregate projections\nSELECT\n    * REPLACE (ROUND(amount, 2) AS amount),\n    COUNT(*) AS record_count\nFROM finance_txns\nGROUP BY ALL;\n```\n\n### Ex"
+    },
+    {
+      "id": "duckdb_eval_05_v3",
+      "category": "duckdb_group_by_all_replace",
+      "score": 100.0,
+      "generated": "```sql\n-- GROUP BY ALL automatically groups by all non-aggregate projections\nSELECT\n    * REPLACE (ROUND(amount, 2) AS amount),\n    COUNT(*) AS record_count\nFROM finance_txns\nGROUP BY ALL;\n```\n\n### Ex"
+    },
+    {
+      "id": "duckdb_eval_05_v4",
+      "category": "duckdb_group_by_all_replace",
+      "score": 100.0,
+      "generated": "```sql\n-- GROUP BY ALL automatically groups by all non-aggregate projections\nSELECT\n    * REPLACE (ROUND(amount, 2) AS amount),\n    COUNT(*) AS record_count\nFROM finance_txns\nGROUP BY ALL;\n```\n\n### Ex"
+    },
+    {
+      "id": "duckdb_eval_06_v0",
+      "category": "duckdb_json_shred_extract",
+      "score": 33.33333333333333,
+      "generated": "```sql\n-- Load httpfs extension for remote cloud object storage\nINSTALL httpfs;\nLOAD httpfs;\n\nSET preserve_insertion_order = false;\n\n-- Direct vectorized vectorized read over partitioned Parquet\nSELEC"
+    },
+    {
+      "id": "duckdb_eval_06_v1",
+      "category": "duckdb_json_shred_extract",
+      "score": 33.33333333333333,
+      "generated": "```sql\n-- Load httpfs extension for remote cloud object storage\nINSTALL httpfs;\nLOAD httpfs;\n\nSET preserve_insertion_order = false;\n\n-- Direct vectorized vectorized read over partitioned Parquet\nSELEC"
+    },
+    {
+      "id": "duckdb_eval_06_v2",
+      "category": "duckdb_json_shred_extract",
+      "score": 33.33333333333333,
+      "generated": "```sql\n-- Load httpfs extension for remote cloud object storage\nINSTALL httpfs;\nLOAD httpfs;\n\nSET preserve_insertion_order = false;\n\n-- Direct vectorized vectorized read over partitioned Parquet\nSELEC"
+    },
+    {
+      "id": "duckdb_eval_06_v3",
+      "category": "duckdb_json_shred_extract",
+      "score": 33.33333333333333,
+      "generated": "```sql\n-- Load httpfs extension for remote cloud object storage\nINSTALL httpfs;\nLOAD httpfs;\n\nSET preserve_insertion_order = false;\n\n-- Direct vectorized vectorized read over partitioned Parquet\nSELEC"
+    },
+    {
+      "id": "duckdb_eval_06_v4",
+      "category": "duckdb_json_shred_extract",
+      "score": 33.33333333333333,
+      "generated": "```sql\n-- Load httpfs extension for remote cloud object storage\nINSTALL httpfs;\nLOAD httpfs;\n\nSET preserve_insertion_order = false;\n\n-- Direct vectorized vectorized read over partitioned Parquet\nSELEC"
+    },
+    {
+      "id": "duckdb_eval_07_v0",
+      "category": "duckdb_list_comprehension_filter",
+      "score": 33.33333333333333,
+      "generated": "```sql\n-- Using DuckDB's native list comprehension\nSELECT [x FOR x IN [10, 25, 30, 45, 50] WHERE x > 25];\n\n-- Using DuckDB's lambda function\nSELECT [x FOR x IN [10, 25, 30, 45, 50] WHERE x > 25] AS fi"
+    },
+    {
+      "id": "duckdb_eval_07_v1",
+      "category": "duckdb_list_comprehension_filter",
+      "score": 33.33333333333333,
+      "generated": "```sql\n-- Use DuckDB's native list comprehension for filtering\nSELECT list_comprehension([x for x in [10, 25, 30, 45, 50] if x > 25])\n-- Result: [30, 45, 50]\n\n-- Or use DuckDB's lambda function with m"
+    },
+    {
+      "id": "duckdb_eval_07_v2",
+      "category": "duckdb_list_comprehension_filter",
+      "score": 66.66666666666666,
+      "generated": "```sql\n-- Use DuckDB's native list comprehension for concise transformation\nSELECT list_comp([x for x in [10, 25, 30, 45, 50] if x > 25]) AS filtered_list;\n\n-- Or use DuckDB's vectorized lambda functi"
+    },
+    {
+      "id": "duckdb_eval_07_v3",
+      "category": "duckdb_list_comprehension_filter",
+      "score": 33.33333333333333,
+      "generated": "```sql\n-- Use DuckDB's native list comprehension for filtering\nSELECT list_comprehension([x for x in [10, 25, 30, 45, 50] if x > 25])\n-- Result: [30, 45, 50]\n\n-- Or use DuckDB's lambda function with a"
+    },
+    {
+      "id": "duckdb_eval_07_v4",
+      "category": "duckdb_list_comprehension_filter",
+      "score": 33.33333333333333,
+      "generated": "```sql\n-- Use DuckDB's native list comprehension for filtering\nSELECT list_comprehension([x for x in [10, 25, 30, 45, 50] if x > 25])\n-- Result: [30, 45, 50]\n\n-- Or use DuckDB's lambda function with a"
+    },
+    {
+      "id": "duckdb_eval_08_v0",
+      "category": "duckdb_out_of_core_spill_config",
+      "score": 100.0,
+      "generated": "```sql\nSET memory_limit = '16GB';\nSET threads = 8;\nSET temp_directory = '/fast_ssd/duck_spill';\nSET preserve_insertion_order = false;\n```\n\n### Explanation:\nDuckDB handles workloads exceeding RAM by st"
+    },
+    {
+      "id": "duckdb_eval_08_v1",
+      "category": "duckdb_out_of_core_spill_config",
+      "score": 100.0,
+      "generated": "```sql\nSET memory_limit = '16GB';\nSET threads = 8;\nSET temp_directory = '/fast_ssd/duck_spill';\nSET preserve_insertion_order = false;\n```\n\n### Explanation:\nDuckDB handles workloads exceeding RAM by st"
+    },
+    {
+      "id": "duckdb_eval_08_v2",
+      "category": "duckdb_out_of_core_spill_config",
+      "score": 100.0,
+      "generated": "```sql\nSET memory_limit = '16GB';\nSET threads = 8;\nSET temp_directory = '/fast_ssd/duck_spill';\nSET preserve_insertion_order = false;\n```\n\n### Explanation:\nDuckDB handles workloads exceeding RAM by st"
+    },
+    {
+      "id": "duckdb_eval_08_v3",
+      "category": "duckdb_out_of_core_spill_config",
+      "score": 100.0,
+      "generated": "```sql\nSET memory_limit = '16GB';\nSET threads = 8;\nSET temp_directory = '/fast_ssd/duck_spill';\nSET preserve_insertion_order = false;\n```\n\n### Explanation:\nDuckDB handles workloads exceeding RAM by st"
+    },
+    {
+      "id": "duckdb_eval_08_v4",
+      "category": "duckdb_out_of_core_spill_config",
+      "score": 100.0,
+      "generated": "```sql\nSET memory_limit = '16GB';\nSET threads = 8;\nSET temp_directory = '/fast_ssd/duck_spill';\nSET preserve_insertion_order = false;\n```\n\n### Explanation:\nDuckDB handles workloads exceeding RAM by st"
+    },
+    {
+      "id": "duckdb_eval_09_v0",
+      "category": "duckdb_union_by_name_csv",
+      "score": 0.0,
+      "generated": "```sql\n-- Load httpfs extension for remote cloud object storage\nINSTALL httpfs;\nLOAD httpfs;\n\nSET preserve_insertion_order = false;\n\n-- Direct vectorized vectorized vectorized vectorized vectorized ve"
+    },
+    {
+      "id": "duckdb_eval_09_v1",
+      "category": "duckdb_union_by_name_csv",
+      "score": 33.33333333333333,
+      "generated": "```sql\n-- Load httpfs extension for remote cloud object storage\nINSTALL httpfs;\nLOAD httpfs;\n\nSET preserve_insertion_order = false;\n\n-- Direct vectorized bulk import over partitioned Parquet\nSELECT *\n"
+    },
+    {
+      "id": "duckdb_eval_09_v2",
+      "category": "duckdb_union_by_name_csv",
+      "score": 33.33333333333333,
+      "generated": "```sql\n-- Load httpfs extension for remote cloud object storage\nINSTALL httpfs;\nLOAD httpfs;\n\nSET preserve_insertion_order = false;\n\n-- Direct vectorized bulk import over partitioned Parquet\nSELECT *\n"
+    },
+    {
+      "id": "duckdb_eval_09_v3",
+      "category": "duckdb_union_by_name_csv",
+      "score": 33.33333333333333,
+      "generated": "```sql\n-- Load httpfs extension for remote cloud object storage\nINSTALL httpfs;\nLOAD httpfs;\n\nSET preserve_insertion_order = false;\n\n-- Direct vectorized bulk import over partitioned Parquet\nSELECT *\n"
+    },
+    {
+      "id": "duckdb_eval_09_v4",
+      "category": "duckdb_union_by_name_csv",
+      "score": 33.33333333333333,
+      "generated": "```sql\n-- Load httpfs extension for remote cloud object storage\nINSTALL httpfs;\nLOAD httpfs;\n\nSET preserve_insertion_order = false;\n\n-- Direct vectorized bulk import over partitioned Parquet\nSELECT *\n"
+    }
+  ]
+}

@@ -1,0 +1,1429 @@
+{
+  "results": {
+    "A base": {
+      "t01_latest_per_author": [
+        {
+          "task": "t01_latest_per_author",
+          "step": 0,
+          "construct": "DISTINCT ON",
+          "kind": "sql",
+          "ok": true,
+          "err": null
+        },
+        {
+          "task": "t01_latest_per_author",
+          "step": 1,
+          "construct": "FILTER (WHERE)",
+          "kind": "sql",
+          "ok": true,
+          "err": null
+        },
+        {
+          "task": "t01_latest_per_author",
+          "step": 2,
+          "construct": "cached_property",
+          "kind": "python",
+          "ok": false,
+          "err": "SyntaxError: no binding for nonlocal '_counter' found"
+        }
+      ],
+      "t02_tag_explode": [
+        {
+          "task": "t02_tag_explode",
+          "step": 0,
+          "construct": "unnest",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedTable: relation \"tags\" does not exist\nLINE 2: FROM articles, tags\n                       ^"
+        },
+        {
+          "task": "t02_tag_explode",
+          "step": 1,
+          "construct": "array_agg",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedTable: relation \"tags\" does not exist\nLINE 2: FROM articles, tags\n                       ^"
+        },
+        {
+          "task": "t02_tag_explode",
+          "step": 2,
+          "construct": "singledispatch",
+          "kind": "python",
+          "ok": true,
+          "err": null
+        }
+      ],
+      "t03_position_in_array": [
+        {
+          "task": "t03_position_in_array",
+          "step": 0,
+          "construct": "WITH ORDINALITY",
+          "kind": "sql",
+          "ok": false,
+          "err": null
+        },
+        {
+          "task": "t03_position_in_array",
+          "step": 1,
+          "construct": "LATERAL",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedColumn: column top1.max_views does not exist\nLINE 11: ...op1 ON a.author_id = top1.author_id AND a.views = top1.max_v...\n       "
+        },
+        {
+          "task": "t03_position_in_array",
+          "step": 2,
+          "construct": "__slots__",
+          "kind": "python",
+          "ok": true,
+          "err": null
+        }
+      ],
+      "t04_time_buckets": [
+        {
+          "task": "t04_time_buckets",
+          "step": 0,
+          "construct": "date_trunc",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedColumn: column \"day\" does not exist\nLINE 2:     day::timestamptz AS day,\n            ^"
+        },
+        {
+          "task": "t04_time_buckets",
+          "step": 1,
+          "construct": "FILTER (WHERE)",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedColumn: column \"day\" does not exist\nLINE 2:     day::timestamptz AS day,\n            ^"
+        },
+        {
+          "task": "t04_time_buckets",
+          "step": 2,
+          "construct": "functools.partial",
+          "kind": "python",
+          "ok": true,
+          "err": null
+        }
+      ],
+      "t05_percentiles": [
+        {
+          "task": "t05_percentiles",
+          "step": 0,
+          "construct": "percentile_cont",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedTable: relation \"your_table_name\" does not exist\nLINE 2: FROM your_table_name\n             ^"
+        },
+        {
+          "task": "t05_percentiles",
+          "step": 1,
+          "construct": "LAG",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedTable: relation \"your_table_name\" does not exist\nLINE 6: FROM your_table_name\n             ^"
+        },
+        {
+          "task": "t05_percentiles",
+          "step": 2,
+          "construct": "asyncio.TaskGroup",
+          "kind": "python",
+          "ok": false,
+          "err": "asyncio.exceptions.CancelledError"
+        }
+      ],
+      "t06_collation": [
+        {
+          "task": "t06_collation",
+          "step": 1,
+          "construct": "DISTINCT ON",
+          "kind": "sql",
+          "ok": true,
+          "err": null
+        },
+        {
+          "task": "t06_collation",
+          "step": 2,
+          "construct": "cached_property",
+          "kind": "python",
+          "ok": false,
+          "err": "SyntaxError: no binding for nonlocal '_counter' found"
+        }
+      ],
+      "t07_running_delta": [
+        {
+          "task": "t07_running_delta",
+          "step": 0,
+          "construct": "LAG",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedColumn: column \"placed\" does not exist\nLINE 18: ORDER BY customer_id, placed\n                               ^"
+        },
+        {
+          "task": "t07_running_delta",
+          "step": 1,
+          "construct": "LATERAL",
+          "kind": "sql",
+          "ok": false,
+          "err": null
+        },
+        {
+          "task": "t07_running_delta",
+          "step": 2,
+          "construct": "singledispatch",
+          "kind": "python",
+          "ok": true,
+          "err": null
+        }
+      ],
+      "t08_monthly": [
+        {
+          "task": "t08_monthly",
+          "step": 0,
+          "construct": "date_trunc",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedColumn: column \"order_date\" does not exist\nLINE 2:     DATE_TRUNC('month', order_date) AS month,\n                               "
+        },
+        {
+          "task": "t08_monthly",
+          "step": 1,
+          "construct": "array_agg",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedColumn: column \"order_id\" does not exist\nLINE 3:     ARRAY_AGG(order_id ORDER BY order_id) AS ids\n                      ^"
+        },
+        {
+          "task": "t08_monthly",
+          "step": 2,
+          "construct": "functools.partial",
+          "kind": "python",
+          "ok": true,
+          "err": null
+        }
+      ],
+      "t09_quartiles": [
+        {
+          "task": "t09_quartiles",
+          "step": 0,
+          "construct": "percentile_cont",
+          "kind": "sql",
+          "ok": true,
+          "err": null
+        },
+        {
+          "task": "t09_quartiles",
+          "step": 1,
+          "construct": "FILTER (WHERE)",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedColumn: column \"published_date\" does not exist\nLINE 3:     SUM(CASE WHEN published_date > '2024-03-31' THEN 1 ELSE ...\n         "
+        },
+        {
+          "task": "t09_quartiles",
+          "step": 2,
+          "construct": "__slots__",
+          "kind": "python",
+          "ok": true,
+          "err": null
+        }
+      ],
+      "t10_lead": [
+        {
+          "task": "t10_lead",
+          "step": 0,
+          "construct": "LEAD",
+          "kind": "sql",
+          "ok": true,
+          "err": null
+        },
+        {
+          "task": "t10_lead",
+          "step": 1,
+          "construct": "unnest",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedColumn: column \"tag\" does not exist\nLINE 1: SELECT tag, COUNT(*) AS n\n               ^\nHINT:  Perhaps you meant to reference the"
+        },
+        {
+          "task": "t10_lead",
+          "step": 2,
+          "construct": "asyncio.TaskGroup",
+          "kind": "python",
+          "ok": false,
+          "err": "asyncio.exceptions.CancelledError"
+        }
+      ],
+      "t11_join_filter": [
+        {
+          "task": "t11_join_filter",
+          "step": 0,
+          "construct": "FILTER (WHERE)",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedColumn: column \"nationality\" does not exist\nLINE 1: SELECT country, COUNT(*) AS n, SUM(CASE WHEN nationality = '...\n            "
+        },
+        {
+          "task": "t11_join_filter",
+          "step": 1,
+          "construct": "DISTINCT ON",
+          "kind": "sql",
+          "ok": true,
+          "err": null
+        },
+        {
+          "task": "t11_join_filter",
+          "step": 2,
+          "construct": "cached_property",
+          "kind": "python",
+          "ok": false,
+          "err": "SyntaxError: no binding for nonlocal '_counter' found"
+        }
+      ],
+      "t12_ordinality_join": [
+        {
+          "task": "t12_ordinality_join",
+          "step": 0,
+          "construct": "WITH ORDINALITY",
+          "kind": "sql",
+          "ok": true,
+          "err": null
+        },
+        {
+          "task": "t12_ordinality_join",
+          "step": 1,
+          "construct": "LAG",
+          "kind": "sql",
+          "ok": true,
+          "err": null
+        },
+        {
+          "task": "t12_ordinality_join",
+          "step": 2,
+          "construct": "singledispatch",
+          "kind": "python",
+          "ok": true,
+          "err": null
+        }
+      ],
+      "t13_daily_median": [
+        {
+          "task": "t13_daily_median",
+          "step": 0,
+          "construct": "date_trunc+percentile",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedTable: relation \"your_table_name\" does not exist\nLINE 4: FROM your_table_name\n             ^"
+        },
+        {
+          "task": "t13_daily_median",
+          "step": 1,
+          "construct": "LATERAL",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedTable: relation \"your_table_name\" does not exist\nLINE 7:     FROM your_table_name\n                 ^"
+        },
+        {
+          "task": "t13_daily_median",
+          "step": 2,
+          "construct": "functools.partial",
+          "kind": "python",
+          "ok": true,
+          "err": null
+        }
+      ],
+      "t14_array_roundtrip": [
+        {
+          "task": "t14_array_roundtrip",
+          "step": 0,
+          "construct": "array_agg",
+          "kind": "sql",
+          "ok": false,
+          "err": "SyntaxError: syntax error at or near \"SEPARATOR\"\nLINE 1: ...thor_id, GROUP_CONCAT(title ORDER BY pub_date ASC SEPARATOR ...\n         "
+        },
+        {
+          "task": "t14_array_roundtrip",
+          "step": 1,
+          "construct": "LEAD",
+          "kind": "sql",
+          "ok": false,
+          "err": null
+        },
+        {
+          "task": "t14_array_roundtrip",
+          "step": 2,
+          "construct": "__slots__",
+          "kind": "python",
+          "ok": true,
+          "err": null
+        }
+      ],
+      "t15_mixed": [
+        {
+          "task": "t15_mixed",
+          "step": 0,
+          "construct": "DISTINCT ON",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedTable: relation \"your_table_name\" does not exist\nLINE 4:     FROM your_table_name\n                 ^"
+        },
+        {
+          "task": "t15_mixed",
+          "step": 1,
+          "construct": "array_agg",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedTable: relation \"your_table_name\" does not exist\nLINE 2: FROM your_table_name\n             ^"
+        },
+        {
+          "task": "t15_mixed",
+          "step": 2,
+          "construct": "asyncio.TaskGroup",
+          "kind": "python",
+          "ok": false,
+          "err": "SyntaxError: invalid syntax"
+        }
+      ]
+    },
+    "B oracle": {
+      "t01_latest_per_author": [
+        {
+          "task": "t01_latest_per_author",
+          "step": 0,
+          "construct": "DISTINCT ON",
+          "kind": "sql",
+          "ok": false,
+          "err": null
+        },
+        {
+          "task": "t01_latest_per_author",
+          "step": 1,
+          "construct": "FILTER (WHERE)",
+          "kind": "sql",
+          "ok": true,
+          "err": null
+        },
+        {
+          "task": "t01_latest_per_author",
+          "step": 2,
+          "construct": "cached_property",
+          "kind": "python",
+          "ok": false,
+          "err": "TypeError: unhashable type: 'list'"
+        }
+      ],
+      "t02_tag_explode": [
+        {
+          "task": "t02_tag_explode",
+          "step": 0,
+          "construct": "unnest",
+          "kind": "sql",
+          "ok": true,
+          "err": null
+        },
+        {
+          "task": "t02_tag_explode",
+          "step": 1,
+          "construct": "array_agg",
+          "kind": "sql",
+          "ok": false,
+          "err": null
+        },
+        {
+          "task": "t02_tag_explode",
+          "step": 2,
+          "construct": "singledispatch",
+          "kind": "python",
+          "ok": true,
+          "err": null
+        }
+      ],
+      "t03_position_in_array": [
+        {
+          "task": "t03_position_in_array",
+          "step": 0,
+          "construct": "WITH ORDINALITY",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedTable: relation \"article_1_tags\" does not exist\nLINE 2: FROM article_1_tags\n             ^"
+        },
+        {
+          "task": "t03_position_in_array",
+          "step": 1,
+          "construct": "LATERAL",
+          "kind": "sql",
+          "ok": false,
+          "err": null
+        },
+        {
+          "task": "t03_position_in_array",
+          "step": 2,
+          "construct": "__slots__",
+          "kind": "python",
+          "ok": true,
+          "err": null
+        }
+      ],
+      "t04_time_buckets": [
+        {
+          "task": "t04_time_buckets",
+          "step": 0,
+          "construct": "date_trunc",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedColumn: column \"day\" does not exist\nLINE 2:     day::timestamptz AS day,\n            ^"
+        },
+        {
+          "task": "t04_time_buckets",
+          "step": 1,
+          "construct": "FILTER (WHERE)",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedColumn: column \"day\" does not exist\nLINE 2:     day::timestamptz AS day,\n            ^"
+        },
+        {
+          "task": "t04_time_buckets",
+          "step": 2,
+          "construct": "functools.partial",
+          "kind": "python",
+          "ok": false,
+          "err": "TypeError: scale() got multiple values for argument 'factor'"
+        }
+      ],
+      "t05_percentiles": [
+        {
+          "task": "t05_percentiles",
+          "step": 0,
+          "construct": "percentile_cont",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedTable: relation \"sensors\" does not exist\nLINE 2: FROM sensors\n             ^"
+        },
+        {
+          "task": "t05_percentiles",
+          "step": 1,
+          "construct": "LAG",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedTable: relation \"sensors\" does not exist\nLINE 6: FROM sensors\n             ^"
+        },
+        {
+          "task": "t05_percentiles",
+          "step": 2,
+          "construct": "asyncio.TaskGroup",
+          "kind": "python",
+          "ok": true,
+          "err": null
+        }
+      ],
+      "t06_collation": [
+        {
+          "task": "t06_collation",
+          "step": 1,
+          "construct": "DISTINCT ON",
+          "kind": "sql",
+          "ok": false,
+          "err": null
+        },
+        {
+          "task": "t06_collation",
+          "step": 2,
+          "construct": "cached_property",
+          "kind": "python",
+          "ok": false,
+          "err": null
+        }
+      ],
+      "t07_running_delta": [
+        {
+          "task": "t07_running_delta",
+          "step": 0,
+          "construct": "LAG",
+          "kind": "sql",
+          "ok": true,
+          "err": null
+        },
+        {
+          "task": "t07_running_delta",
+          "step": 1,
+          "construct": "LATERAL",
+          "kind": "sql",
+          "ok": false,
+          "err": null
+        },
+        {
+          "task": "t07_running_delta",
+          "step": 2,
+          "construct": "singledispatch",
+          "kind": "python",
+          "ok": true,
+          "err": null
+        }
+      ],
+      "t08_monthly": [
+        {
+          "task": "t08_monthly",
+          "step": 0,
+          "construct": "date_trunc",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedColumn: column \"order_date\" does not exist\nLINE 2:     DATE_TRUNC('month', order_date) AS month,\n                               "
+        },
+        {
+          "task": "t08_monthly",
+          "step": 1,
+          "construct": "array_agg",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedColumn: column \"order_id\" does not exist\nLINE 3:     ARRAY_AGG(order_id ORDER BY order_id) AS ids\n                      ^"
+        },
+        {
+          "task": "t08_monthly",
+          "step": 2,
+          "construct": "functools.partial",
+          "kind": "python",
+          "ok": false,
+          "err": null
+        }
+      ],
+      "t09_quartiles": [
+        {
+          "task": "t09_quartiles",
+          "step": 0,
+          "construct": "percentile_cont",
+          "kind": "sql",
+          "ok": true,
+          "err": null
+        },
+        {
+          "task": "t09_quartiles",
+          "step": 1,
+          "construct": "FILTER (WHERE)",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedColumn: column \"published_at\" does not exist\nLINE 3:     COUNT(published_at > '2024-03-31') AS recent_n\n                  ^\nHINT"
+        },
+        {
+          "task": "t09_quartiles",
+          "step": 2,
+          "construct": "__slots__",
+          "kind": "python",
+          "ok": true,
+          "err": null
+        }
+      ],
+      "t10_lead": [
+        {
+          "task": "t10_lead",
+          "step": 0,
+          "construct": "LEAD",
+          "kind": "sql",
+          "ok": false,
+          "err": null
+        },
+        {
+          "task": "t10_lead",
+          "step": 1,
+          "construct": "unnest",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedColumn: column \"tag\" does not exist\nLINE 1: SELECT tag, COUNT(*) AS n\n               ^\nHINT:  Perhaps you meant to reference the"
+        },
+        {
+          "task": "t10_lead",
+          "step": 2,
+          "construct": "asyncio.TaskGroup",
+          "kind": "python",
+          "ok": false,
+          "err": "when serializing concurrent.futures.process._CallItem object"
+        }
+      ],
+      "t11_join_filter": [
+        {
+          "task": "t11_join_filter",
+          "step": 0,
+          "construct": "FILTER (WHERE)",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedColumn: column \"nationality\" does not exist\nLINE 1: SELECT country, COUNT(*) AS n, SUM(CASE WHEN nationality = '...\n            "
+        },
+        {
+          "task": "t11_join_filter",
+          "step": 1,
+          "construct": "DISTINCT ON",
+          "kind": "sql",
+          "ok": true,
+          "err": null
+        },
+        {
+          "task": "t11_join_filter",
+          "step": 2,
+          "construct": "cached_property",
+          "kind": "python",
+          "ok": false,
+          "err": null
+        }
+      ],
+      "t12_ordinality_join": [
+        {
+          "task": "t12_ordinality_join",
+          "step": 0,
+          "construct": "WITH ORDINALITY",
+          "kind": "sql",
+          "ok": true,
+          "err": null
+        },
+        {
+          "task": "t12_ordinality_join",
+          "step": 1,
+          "construct": "LAG",
+          "kind": "sql",
+          "ok": true,
+          "err": null
+        },
+        {
+          "task": "t12_ordinality_join",
+          "step": 2,
+          "construct": "singledispatch",
+          "kind": "python",
+          "ok": true,
+          "err": null
+        }
+      ],
+      "t13_daily_median": [
+        {
+          "task": "t13_daily_median",
+          "step": 0,
+          "construct": "date_trunc+percentile",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedTable: relation \"your_table_name\" does not exist\nLINE 4: FROM your_table_name\n             ^"
+        },
+        {
+          "task": "t13_daily_median",
+          "step": 1,
+          "construct": "LATERAL",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedTable: relation \"your_table_name\" does not exist\nLINE 4:     FROM your_table_name\n                 ^"
+        },
+        {
+          "task": "t13_daily_median",
+          "step": 2,
+          "construct": "functools.partial",
+          "kind": "python",
+          "ok": false,
+          "err": "TypeError: scale() got multiple values for argument 'factor'"
+        }
+      ],
+      "t14_array_roundtrip": [
+        {
+          "task": "t14_array_roundtrip",
+          "step": 0,
+          "construct": "array_agg",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedColumn: column \"published_at\" does not exist\nLINE 1: SELECT author_id, array_agg(title ORDER BY published_at) AS ...\n           "
+        },
+        {
+          "task": "t14_array_roundtrip",
+          "step": 1,
+          "construct": "LEAD",
+          "kind": "sql",
+          "ok": true,
+          "err": null
+        },
+        {
+          "task": "t14_array_roundtrip",
+          "step": 2,
+          "construct": "__slots__",
+          "kind": "python",
+          "ok": true,
+          "err": null
+        }
+      ],
+      "t15_mixed": [
+        {
+          "task": "t15_mixed",
+          "step": 0,
+          "construct": "DISTINCT ON",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedTable: relation \"sensor_readings\" does not exist\nLINE 4:     FROM sensor_readings\n                 ^"
+        },
+        {
+          "task": "t15_mixed",
+          "step": 1,
+          "construct": "array_agg",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedTable: relation \"sensor_readings\" does not exist\nLINE 2: FROM sensor_readings\n             ^"
+        },
+        {
+          "task": "t15_mixed",
+          "step": 2,
+          "construct": "asyncio.TaskGroup",
+          "kind": "python",
+          "ok": true,
+          "err": null
+        }
+      ]
+    },
+    "C self": {
+      "t01_latest_per_author": [
+        {
+          "task": "t01_latest_per_author",
+          "step": 0,
+          "construct": "DISTINCT ON",
+          "kind": "sql",
+          "ok": false,
+          "err": null
+        },
+        {
+          "task": "t01_latest_per_author",
+          "step": 1,
+          "construct": "FILTER (WHERE)",
+          "kind": "sql",
+          "ok": true,
+          "err": null
+        },
+        {
+          "task": "t01_latest_per_author",
+          "step": 2,
+          "construct": "cached_property",
+          "kind": "python",
+          "ok": false,
+          "err": "TypeError: unhashable type: 'list'"
+        }
+      ],
+      "t02_tag_explode": [
+        {
+          "task": "t02_tag_explode",
+          "step": 0,
+          "construct": "unnest",
+          "kind": "sql",
+          "ok": true,
+          "err": null
+        },
+        {
+          "task": "t02_tag_explode",
+          "step": 1,
+          "construct": "array_agg",
+          "kind": "sql",
+          "ok": false,
+          "err": null
+        },
+        {
+          "task": "t02_tag_explode",
+          "step": 2,
+          "construct": "singledispatch",
+          "kind": "python",
+          "ok": true,
+          "err": null
+        }
+      ],
+      "t03_position_in_array": [
+        {
+          "task": "t03_position_in_array",
+          "step": 0,
+          "construct": "WITH ORDINALITY",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedTable: relation \"article_1_tags\" does not exist\nLINE 2: FROM article_1_tags\n             ^"
+        },
+        {
+          "task": "t03_position_in_array",
+          "step": 1,
+          "construct": "LATERAL",
+          "kind": "sql",
+          "ok": false,
+          "err": null
+        },
+        {
+          "task": "t03_position_in_array",
+          "step": 2,
+          "construct": "__slots__",
+          "kind": "python",
+          "ok": true,
+          "err": null
+        }
+      ],
+      "t04_time_buckets": [
+        {
+          "task": "t04_time_buckets",
+          "step": 0,
+          "construct": "date_trunc",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedColumn: column \"day\" does not exist\nLINE 2:     day::timestamptz AS day,\n            ^"
+        },
+        {
+          "task": "t04_time_buckets",
+          "step": 1,
+          "construct": "FILTER (WHERE)",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedColumn: column \"day\" does not exist\nLINE 2:     day::timestamptz AS day,\n            ^"
+        },
+        {
+          "task": "t04_time_buckets",
+          "step": 2,
+          "construct": "functools.partial",
+          "kind": "python",
+          "ok": false,
+          "err": "TypeError: scale() got multiple values for argument 'factor'"
+        }
+      ],
+      "t05_percentiles": [
+        {
+          "task": "t05_percentiles",
+          "step": 0,
+          "construct": "percentile_cont",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedTable: relation \"sensors\" does not exist\nLINE 2: FROM sensors\n             ^"
+        },
+        {
+          "task": "t05_percentiles",
+          "step": 1,
+          "construct": "LAG",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedTable: relation \"sensors\" does not exist\nLINE 6: FROM sensors\n             ^"
+        },
+        {
+          "task": "t05_percentiles",
+          "step": 2,
+          "construct": "asyncio.TaskGroup",
+          "kind": "python",
+          "ok": true,
+          "err": null
+        }
+      ],
+      "t06_collation": [
+        {
+          "task": "t06_collation",
+          "step": 1,
+          "construct": "DISTINCT ON",
+          "kind": "sql",
+          "ok": false,
+          "err": null
+        },
+        {
+          "task": "t06_collation",
+          "step": 2,
+          "construct": "cached_property",
+          "kind": "python",
+          "ok": false,
+          "err": null
+        }
+      ],
+      "t07_running_delta": [
+        {
+          "task": "t07_running_delta",
+          "step": 0,
+          "construct": "LAG",
+          "kind": "sql",
+          "ok": true,
+          "err": null
+        },
+        {
+          "task": "t07_running_delta",
+          "step": 1,
+          "construct": "LATERAL",
+          "kind": "sql",
+          "ok": false,
+          "err": null
+        },
+        {
+          "task": "t07_running_delta",
+          "step": 2,
+          "construct": "singledispatch",
+          "kind": "python",
+          "ok": true,
+          "err": null
+        }
+      ],
+      "t08_monthly": [
+        {
+          "task": "t08_monthly",
+          "step": 0,
+          "construct": "date_trunc",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedColumn: column \"order_date\" does not exist\nLINE 2:     DATE_TRUNC('month', order_date) AS month,\n                               "
+        },
+        {
+          "task": "t08_monthly",
+          "step": 1,
+          "construct": "array_agg",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedColumn: column \"order_id\" does not exist\nLINE 3:     ARRAY_AGG(order_id ORDER BY order_id) AS ids\n                      ^"
+        },
+        {
+          "task": "t08_monthly",
+          "step": 2,
+          "construct": "functools.partial",
+          "kind": "python",
+          "ok": false,
+          "err": null
+        }
+      ],
+      "t09_quartiles": [
+        {
+          "task": "t09_quartiles",
+          "step": 0,
+          "construct": "percentile_cont",
+          "kind": "sql",
+          "ok": true,
+          "err": null
+        },
+        {
+          "task": "t09_quartiles",
+          "step": 1,
+          "construct": "FILTER (WHERE)",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedColumn: column \"published_at\" does not exist\nLINE 3:     COUNT(published_at > '2024-03-31') AS recent_n\n                  ^\nHINT"
+        },
+        {
+          "task": "t09_quartiles",
+          "step": 2,
+          "construct": "__slots__",
+          "kind": "python",
+          "ok": true,
+          "err": null
+        }
+      ],
+      "t10_lead": [
+        {
+          "task": "t10_lead",
+          "step": 0,
+          "construct": "LEAD",
+          "kind": "sql",
+          "ok": false,
+          "err": null
+        },
+        {
+          "task": "t10_lead",
+          "step": 1,
+          "construct": "unnest",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedColumn: column \"tag\" does not exist\nLINE 1: SELECT tag, COUNT(*) AS n\n               ^\nHINT:  Perhaps you meant to reference the"
+        },
+        {
+          "task": "t10_lead",
+          "step": 2,
+          "construct": "asyncio.TaskGroup",
+          "kind": "python",
+          "ok": false,
+          "err": "when serializing concurrent.futures.process._CallItem object"
+        }
+      ],
+      "t11_join_filter": [
+        {
+          "task": "t11_join_filter",
+          "step": 0,
+          "construct": "FILTER (WHERE)",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedColumn: column \"nationality\" does not exist\nLINE 1: SELECT country, COUNT(*) AS n, SUM(CASE WHEN nationality = '...\n            "
+        },
+        {
+          "task": "t11_join_filter",
+          "step": 1,
+          "construct": "DISTINCT ON",
+          "kind": "sql",
+          "ok": true,
+          "err": null
+        },
+        {
+          "task": "t11_join_filter",
+          "step": 2,
+          "construct": "cached_property",
+          "kind": "python",
+          "ok": false,
+          "err": null
+        }
+      ],
+      "t12_ordinality_join": [
+        {
+          "task": "t12_ordinality_join",
+          "step": 0,
+          "construct": "WITH ORDINALITY",
+          "kind": "sql",
+          "ok": true,
+          "err": null
+        },
+        {
+          "task": "t12_ordinality_join",
+          "step": 1,
+          "construct": "LAG",
+          "kind": "sql",
+          "ok": true,
+          "err": null
+        },
+        {
+          "task": "t12_ordinality_join",
+          "step": 2,
+          "construct": "singledispatch",
+          "kind": "python",
+          "ok": true,
+          "err": null
+        }
+      ],
+      "t13_daily_median": [
+        {
+          "task": "t13_daily_median",
+          "step": 0,
+          "construct": "date_trunc+percentile",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedTable: relation \"your_table_name\" does not exist\nLINE 4: FROM your_table_name\n             ^"
+        },
+        {
+          "task": "t13_daily_median",
+          "step": 1,
+          "construct": "LATERAL",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedTable: relation \"your_table_name\" does not exist\nLINE 4:     FROM your_table_name\n                 ^"
+        },
+        {
+          "task": "t13_daily_median",
+          "step": 2,
+          "construct": "functools.partial",
+          "kind": "python",
+          "ok": false,
+          "err": "TypeError: scale() got multiple values for argument 'factor'"
+        }
+      ],
+      "t14_array_roundtrip": [
+        {
+          "task": "t14_array_roundtrip",
+          "step": 0,
+          "construct": "array_agg",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedColumn: column \"published_at\" does not exist\nLINE 1: SELECT author_id, array_agg(title ORDER BY published_at) AS ...\n           "
+        },
+        {
+          "task": "t14_array_roundtrip",
+          "step": 1,
+          "construct": "LEAD",
+          "kind": "sql",
+          "ok": true,
+          "err": null
+        },
+        {
+          "task": "t14_array_roundtrip",
+          "step": 2,
+          "construct": "__slots__",
+          "kind": "python",
+          "ok": true,
+          "err": null
+        }
+      ],
+      "t15_mixed": [
+        {
+          "task": "t15_mixed",
+          "step": 0,
+          "construct": "DISTINCT ON",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedTable: relation \"sensor_readings\" does not exist\nLINE 4:     FROM sensor_readings\n                 ^"
+        },
+        {
+          "task": "t15_mixed",
+          "step": 1,
+          "construct": "array_agg",
+          "kind": "sql",
+          "ok": false,
+          "err": "UndefinedTable: relation \"sensor_readings\" does not exist\nLINE 2: FROM sensor_readings\n             ^"
+        },
+        {
+          "task": "t15_mixed",
+          "step": 2,
+          "construct": "asyncio.TaskGroup",
+          "kind": "python",
+          "ok": true,
+          "err": null
+        }
+      ]
+    }
+  },
+  "routes": [
+    {
+      "task": "t01_latest_per_author",
+      "step": 0,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t01_latest_per_author",
+      "step": 1,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t01_latest_per_author",
+      "step": 2,
+      "true": "astral",
+      "picked": "astral"
+    },
+    {
+      "task": "t02_tag_explode",
+      "step": 0,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t02_tag_explode",
+      "step": 1,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t02_tag_explode",
+      "step": 2,
+      "true": "astral",
+      "picked": "astral"
+    },
+    {
+      "task": "t03_position_in_array",
+      "step": 0,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t03_position_in_array",
+      "step": 1,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t03_position_in_array",
+      "step": 2,
+      "true": "astral",
+      "picked": "astral"
+    },
+    {
+      "task": "t04_time_buckets",
+      "step": 0,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t04_time_buckets",
+      "step": 1,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t04_time_buckets",
+      "step": 2,
+      "true": "astral",
+      "picked": "astral"
+    },
+    {
+      "task": "t05_percentiles",
+      "step": 0,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t05_percentiles",
+      "step": 1,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t05_percentiles",
+      "step": 2,
+      "true": "astral",
+      "picked": "astral"
+    },
+    {
+      "task": "t06_collation",
+      "step": 1,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t06_collation",
+      "step": 2,
+      "true": "astral",
+      "picked": "astral"
+    },
+    {
+      "task": "t07_running_delta",
+      "step": 0,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t07_running_delta",
+      "step": 1,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t07_running_delta",
+      "step": 2,
+      "true": "astral",
+      "picked": "astral"
+    },
+    {
+      "task": "t08_monthly",
+      "step": 0,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t08_monthly",
+      "step": 1,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t08_monthly",
+      "step": 2,
+      "true": "astral",
+      "picked": "astral"
+    },
+    {
+      "task": "t09_quartiles",
+      "step": 0,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t09_quartiles",
+      "step": 1,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t09_quartiles",
+      "step": 2,
+      "true": "astral",
+      "picked": "astral"
+    },
+    {
+      "task": "t10_lead",
+      "step": 0,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t10_lead",
+      "step": 1,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t10_lead",
+      "step": 2,
+      "true": "astral",
+      "picked": "astral"
+    },
+    {
+      "task": "t11_join_filter",
+      "step": 0,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t11_join_filter",
+      "step": 1,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t11_join_filter",
+      "step": 2,
+      "true": "astral",
+      "picked": "astral"
+    },
+    {
+      "task": "t12_ordinality_join",
+      "step": 0,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t12_ordinality_join",
+      "step": 1,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t12_ordinality_join",
+      "step": 2,
+      "true": "astral",
+      "picked": "astral"
+    },
+    {
+      "task": "t13_daily_median",
+      "step": 0,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t13_daily_median",
+      "step": 1,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t13_daily_median",
+      "step": 2,
+      "true": "astral",
+      "picked": "astral"
+    },
+    {
+      "task": "t14_array_roundtrip",
+      "step": 0,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t14_array_roundtrip",
+      "step": 1,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t14_array_roundtrip",
+      "step": 2,
+      "true": "astral",
+      "picked": "astral"
+    },
+    {
+      "task": "t15_mixed",
+      "step": 0,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t15_mixed",
+      "step": 1,
+      "true": "postgresql",
+      "picked": "postgresql"
+    },
+    {
+      "task": "t15_mixed",
+      "step": 2,
+      "true": "astral",
+      "picked": "astral"
+    }
+  ],
+  "adapters": {
+    "postgresql": "/tmp/claude-1000/-home-mihai-gnn-experiment/e1416be8-5f2b-4f25-8921-27360ecd3639/scratchpad/a96/m2_postgresql_v4_a96",
+    "astral": "/tmp/claude-1000/-home-mihai-gnn-experiment/e1416be8-5f2b-4f25-8921-27360ecd3639/scratchpad/a96/m2_astral_v4_a96"
+  },
+  "dropped": [
+    "(('t06_collation', 0), 'UndefinedObject: collation \"und-x-icu\" for encoding \"UTF8\" does not exist\\nLINE 1: SELECT label FROM customers ORDER BY label COLLATE \"und')"
+  ]
+}

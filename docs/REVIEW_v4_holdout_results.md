@@ -13,7 +13,7 @@ never written down anywhere the corpus author could see it.
 
 ## 2. The fix — reserve by REMOVAL, then verify
 
-`scripts/reserve_eval_constructs.py` holds an explicit reserved-family list,
+`scripts/corpus/reserve_eval_constructs.py` holds an explicit reserved-family list,
 strips those families from training, and **verifies zero residual occurrences**.
 Verification is the load-bearing part: removal alone proves nothing, because an
 unreserved generator can emit the same construct.

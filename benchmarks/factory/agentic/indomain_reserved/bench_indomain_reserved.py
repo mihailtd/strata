@@ -11,7 +11,7 @@ This uses the RESERVED FAMILIES THEMSELVES as the test set. They are ideal:
 
   * squarely IN-DOMAIN -- advanced PostgreSQL features, functional Python idioms
   * verified correct at build time (sqlglot / py_compile + ruff)
-  * PROVABLY never trained on -- `scripts/reserve_eval_constructs.py` removed them
+  * PROVABLY never trained on -- `scripts/corpus/reserve_eval_constructs.py` removed them
     from v4 and verified zero residual occurrences
 
 So a win here is in-domain capability, not memorisation.

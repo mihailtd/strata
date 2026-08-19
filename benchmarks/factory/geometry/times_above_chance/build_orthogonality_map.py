@@ -25,12 +25,15 @@ import json
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
+from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+# REPO_ROOT comes from the installed package, never from __file__ arithmetic:
+# `.parent.parent` silently resolves to the WRONG directory the moment a file
+# is moved, and it broke all 31 scripts during the scripts/ reorg.
 sys.path.insert(0, str(REPO_ROOT))
 
 # the probes live under benchmarks/, not scripts/ -- the old path silently
 # broke this module (ModuleNotFoundError) when it moved
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'preflight_svd_probe'))
+sys.path.insert(0, str(REPO_ROOT / 'benchmarks/factory/geometry/preflight_svd_probe'))
 from probe_subspace_overlap import evaluate_subspace_overlap  # noqa: E402
 
 # One representative peft-format LoRA per domain (the probe reads peft or novel).

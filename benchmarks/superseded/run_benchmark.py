@@ -5,7 +5,7 @@
     uv run --env-file .env scripts/run_benchmark.py --model Qwen/Qwen3.5-2B
 
 --env-file .env sets LD_PRELOAD (required for torch to see the GPU on WSL,
-see scripts/check_gpu.py) and HF_TOKEN.
+see scripts/audit/check_gpu.py) and HF_TOKEN.
 """
 
 import argparse
@@ -16,9 +16,10 @@ import yaml
 
 from gnn_experiment.bench import run_one
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-
-
+from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+# REPO_ROOT comes from the installed package, never from __file__ arithmetic:
+# `.parent.parent` silently resolves to the WRONG directory the moment a file
+# is moved, and it broke all 31 scripts during the scripts/ reorg.
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--config", default=str(REPO_ROOT / "configs" / "benchmark.yaml"))

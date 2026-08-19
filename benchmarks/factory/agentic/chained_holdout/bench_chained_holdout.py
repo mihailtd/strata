@@ -57,17 +57,19 @@ from py_pglite import PGliteConfig, PGliteManager  # noqa: E402
 from tasks import TASKS  # noqa: E402
 from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 
+from gnn_experiment.canon import CANON, adapter_path  # noqa: E402
 from gnn_experiment.cuda_graph import FoldedCudaGraphDecoder  # noqa: E402
 from gnn_experiment.novel_peft import (  # noqa: E402
     FoldableExpert, WeightFoldingEngine, set_hard_vram_cap,
 )
 
-MODEL = "Qwen/Qwen3.5-4B"
 ADAPTERS = {
-    "postgresql": os.environ.get("PG_ADAPTER", "results/adapters/m2_postgresql_r8a128_v2"),
-    "astral": os.environ.get("ASTRAL_ADAPTER", "results/adapters/m2_astral_r8a128_v2"),
+    # canon: no "use v4 if it exists else v2" fallback -- that is how a stale
+    # adapter silently survives a corpus rebuild. adapter_path raises instead.
+    "postgresql": str(adapter_path("postgresql")),
+    "astral": str(adapter_path("astral")),
 }
-MAX_NEW = int(os.environ.get("MAX_NEW", "1536"))
+MAX_NEW = CANON.MAX_NEW_TOKENS
 MAX_SEQ = 8192
 BLOCK = re.compile(r"```(?:sql|python|py)?\s*(.*?)```", re.S | re.I)
 

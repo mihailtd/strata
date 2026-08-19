@@ -137,7 +137,7 @@ uv run --env-file .env python benchmarks/runtime/router/vram_state_routing/calib
 uv run --env-file .env python benchmarks/runtime/router/vram_state_routing/benchmark_vram_router.py --num-requests 200
 
 # 3. Live A/B (server must be running)
-uv run --env-file .env python scripts/run_openai_api_server.py &
+uv run --env-file .env python scripts/serve/run_openai_api_server.py &
 uv run --env-file .env python benchmarks/runtime/router/vram_state_routing/benchmark_router_e2e.py --repeats 2
 ```
 

@@ -439,5 +439,268 @@ TRAPS += [
 ]
 
 
+
+
+# ==================== EXPANSION 2 ====================
+# 32 traps produced 25 scorable and only +4/-0 discordant, and McNemar's floor at
+# 4 discordant IS p=0.125 -- the design could not reach significance however well
+# the expert performed. >=6 discordant pairs are required for p<0.05. These 18
+# were each verified at ZERO occurrences across all three v3/v4 corpora.
+
+
+def py_open_without_encoding(code: str) -> bool:
+    t = _py(code)
+    if t is None:
+        return False
+    for n in ast.walk(t):
+        if isinstance(n, ast.Call) and getattr(n.func, "id", "") == "open":
+            if not any(k.arg == "encoding" for k in n.keywords):
+                return True
+    return False
+
+
+def py_open_with_encoding(code: str) -> bool:
+    t = _py(code)
+    if t is None:
+        return False
+    return any(isinstance(n, ast.Call) and getattr(n.func, "id", "") == "open"
+               and any(k.arg == "encoding" for k in n.keywords) for n in ast.walk(t))
+
+
+def py_swallows_exception(code: str) -> bool:
+    t = _py(code)
+    if t is None:
+        return False
+    for n in ast.walk(t):
+        if isinstance(n, ast.ExceptHandler) and len(n.body) == 1 and isinstance(n.body[0], ast.Pass):
+            return True
+    return False
+
+
+def py_handles_exception(code: str) -> bool:
+    t = _py(code)
+    if t is None:
+        return False
+    for n in ast.walk(t):
+        if isinstance(n, ast.ExceptHandler) and not (
+                len(n.body) == 1 and isinstance(n.body[0], ast.Pass)):
+            return True
+    return False
+
+
+def py_str_concat_in_loop(code: str) -> bool:
+    t = _py(code)
+    if t is None:
+        return False
+    for n in ast.walk(t):
+        if isinstance(n, (ast.For, ast.While)):
+            for sub in ast.walk(n):
+                if isinstance(sub, ast.AugAssign) and isinstance(sub.op, ast.Add):
+                    return True
+    return False
+
+
+def py_uses_join(code: str) -> bool:
+    t = _py(code)
+    if t is None:
+        return False
+    return any(isinstance(n, ast.Call) and getattr(n.func, "attr", "") == "join"
+               for n in ast.walk(t))
+
+
+def py_uses_eval(code: str) -> bool:
+    t = _py(code)
+    if t is None:
+        return False
+    return any(isinstance(n, ast.Call) and getattr(n.func, "id", "") in ("eval", "exec")
+               for n in ast.walk(t))
+
+
+def py_safe_parse(code: str) -> bool:
+    return bool(re.search(r"json\.loads|literal_eval", code))
+
+
+def py_os_system(code: str) -> bool:
+    t = _py(code)
+    if t is None:
+        return False
+    for n in ast.walk(t):
+        if isinstance(n, ast.Attribute) and n.attr == "system" \
+                and getattr(n.value, "id", "") == "os":
+            return True
+    return False
+
+
+def py_subprocess_run(code: str) -> bool:
+    return bool(re.search(r"subprocess\.(run|Popen|check_output)", code))
+
+
+def py_eq_none(code: str) -> bool:
+    t = _py(code)
+    if t is None:
+        return False
+    for n in ast.walk(t):
+        if isinstance(n, ast.Compare) and any(isinstance(o, (ast.Eq, ast.NotEq)) for o in n.ops):
+            if any(isinstance(c, ast.Constant) and c.value is None for c in n.comparators):
+                return True
+    return False
+
+
+def py_is_none(code: str) -> bool:
+    t = _py(code)
+    if t is None:
+        return False
+    for n in ast.walk(t):
+        if isinstance(n, ast.Compare) and any(isinstance(o, (ast.Is, ast.IsNot)) for o in n.ops):
+            if any(isinstance(c, ast.Constant) and c.value is None for c in n.comparators):
+                return True
+    return False
+
+
+def py_len_eq_zero(code: str) -> bool:
+    t = _py(code)
+    if t is None:
+        return False
+    for n in ast.walk(t):
+        if isinstance(n, ast.Compare) and isinstance(n.left, ast.Call) \
+                and getattr(n.left.func, "id", "") == "len":
+            if any(isinstance(c, ast.Constant) and c.value == 0 for c in n.comparators):
+                return True
+    return False
+
+
+def py_truthiness(code: str) -> bool:
+    t = _py(code)
+    if t is None:
+        return False
+    for n in ast.walk(t):
+        if isinstance(n, ast.UnaryOp) and isinstance(n.op, ast.Not):
+            return True
+        if isinstance(n, ast.If) and isinstance(n.test, ast.Name):
+            return True
+    return False
+
+
+TRAPS += [
+    # ---------------- SQL, novel ----------------
+    Trap("union_all", "novel", "sql",
+         "Tables `eu_orders(id, total)` and `us_orders(id, total)` never share rows. "
+         "Write the query returning every order from both. "
+         "Output only SQL in a ```sql block.",
+         bad=rx(r"\bunion\b(?!\s+all)"), good=rx(r"\bunion\s+all\b"), method="regex",
+         note="plain UNION pays for a dedup pass that cannot find duplicates"),
+    Trap("order_by_random", "novel", "sql",
+         "Table `events` has 50 million rows. Write the query that pulls roughly 100 "
+         "rows at random for a spot check, cheaply. "
+         "Output only SQL in a ```sql block.",
+         bad=rx(r"order\s+by\s+random\s*\("),
+         good=rx(r"tablesample|where\s+random\s*\(\s*\)\s*<"), method="regex",
+         note="ORDER BY random() sorts the whole table to take 100 rows"),
+    Trap("date_on_column", "novel", "sql",
+         "Table `logs(id, created_at timestamptz)` with an index on created_at. Write "
+         "the query counting rows recorded on 2026-03-04, using the index. "
+         "Output only SQL in a ```sql block.",
+         bad=rx(r"\bdate\s*\(\s*created_at\s*\)|created_at::date"),
+         good=rx(r"created_at\s*>=[^;]*created_at\s*<"), method="regex",
+         note="wrapping the column in a function makes the index unusable"),
+    Trap("any_array", "novel", "sql",
+         "Write the query selecting rows of `items` whose id appears in a caller-supplied "
+         "list of several thousand ids passed as one parameter $1. "
+         "Output only SQL in a ```sql block.",
+         bad=rx(r"\bin\s*\(\s*\$1\s*\)|\bin\s*\([^)]{80,}"),
+         good=rx(r"=\s*any\s*\(|unnest\s*\(\s*\$1"), method="regex",
+         note="a giant IN list re-plans per call; = ANY(array) takes one parameter"),
+    Trap("at_time_zone", "novel", "sql",
+         "Table `visits(started_at timestamptz)`. Write the query grouping visits by "
+         "calendar day as observed in Europe/Lisbon, not UTC. "
+         "Output only SQL in a ```sql block.",
+         bad=rx(r"date_trunc\s*\(\s*'day'\s*,\s*started_at\s*\)(?![^;]*time\s+zone)"),
+         good=rx(r"at\s+time\s+zone"), method="regex",
+         note="truncating a timestamptz without a zone silently uses UTC"),
+    Trap("case_insensitive", "novel", "sql",
+         "Table `accounts(email text)` with millions of rows. Users log in with any "
+         "capitalisation. Write the schema/index change that makes lookup exact and "
+         "indexed. Output only SQL in a ```sql block.",
+         bad=rx(r"where[^;]*ilike|lower\s*\(\s*email\s*\)\s*=\s*lower"),
+         good=rx(r"citext|create\s+index[^;]*lower\s*\(\s*email"), method="regex",
+         note="ILIKE on a plain column cannot use a B-tree"),
+    Trap("enum_type", "novel", "sql",
+         "Column `orders.status` may only ever hold 'new', 'paid' or 'shipped'. Write "
+         "the DDL that enforces this in the database. "
+         "Output only SQL in a ```sql block.",
+         bad=rx(r"status\s+text\s*(,|\)|;|$)"),
+         good=rx(r"create\s+type[^;]*as\s+enum|\bcheck\s*\("), method="regex",
+         note="a bare text column enforces nothing"),
+    Trap("count_distinct", "novel", "sql",
+         "Table `pageviews(user_id bigint)`. Write the query returning how many distinct "
+         "users appear. Output only SQL in a ```sql block.",
+         bad=rx(r"count\s*\(\s*user_id\s*\)(?![^;]*distinct)"),
+         good=rx(r"count\s*\(\s*distinct"), method="regex",
+         note="COUNT(col) counts rows, not distinct values"),
+    # ---------------- Python, novel ----------------
+    Trap("open_encoding", "novel", "python",
+         "Write a Python function `read_config(path)` returning the text of a UTF-8 file. "
+         "Output only Python in a ```python block.",
+         bad=py_open_without_encoding, good=py_open_with_encoding, method="ast",
+         note="open() without encoding uses a platform-dependent default"),
+    Trap("swallow_exception", "novel", "python",
+         "Write a Python function `parse_port(raw)` returning an int port, or 8080 when "
+         "the input cannot be parsed. Log why it failed. "
+         "Output only Python in a ```python block.",
+         bad=py_swallows_exception, good=py_handles_exception, method="ast",
+         note="except: pass discards the diagnosis"),
+    Trap("str_join", "novel", "python",
+         "Write a Python function `render_csv(rows)` building one comma-separated string "
+         "from a list of lists. Output only Python in a ```python block.",
+         bad=py_str_concat_in_loop, good=py_uses_join, method="ast",
+         note="repeated += on a str is quadratic"),
+    Trap("secrets_token", "novel", "python",
+         "Write a Python function `new_session_id()` returning an unguessable session "
+         "identifier. Output only Python in a ```python block.",
+         bad=rx(r"\brandom\.(choice|randint|random|sample)"),
+         good=rx(r"\bsecrets\.|uuid4"), method="regex",
+         note="random is a predictable PRNG; secrets is the CSPRNG"),
+    Trap("no_eval", "novel", "python",
+         "Write a Python function `load_record(text)` turning a serialised record from an "
+         "untrusted source into a dict. Output only Python in a ```python block.",
+         bad=py_uses_eval, good=py_safe_parse, method="ast",
+         note="eval on untrusted input is arbitrary code execution"),
+    Trap("subprocess", "novel", "python",
+         "Write a Python function `disk_free(path)` that shells out to get free space and "
+         "returns the command's output. Output only Python in a ```python block.",
+         bad=py_os_system, good=py_subprocess_run, method="ast",
+         note="os.system offers no argument quoting and no captured output"),
+    Trap("is_none", "novel", "python",
+         "Write a Python function `label(value)` returning 'missing' when the argument is "
+         "None and 'present' otherwise. Output only Python in a ```python block.",
+         bad=py_eq_none, good=py_is_none, method="ast",
+         note="== None goes through __eq__; identity is the correct test"),
+    Trap("truthiness", "novel", "python",
+         "Write a Python function `first_or_default(items)` returning the first element of "
+         "a list, or None when it has none. Output only Python in a ```python block.",
+         bad=py_len_eq_zero, good=py_truthiness, method="ast",
+         note="len(x) == 0 where truthiness reads better"),
+    Trap("deepcopy", "novel", "python",
+         "Write a Python function `with_override(config, key, value)` returning a NEW "
+         "nested config dict with one key changed, leaving the original untouched. "
+         "Output only Python in a ```python block.",
+         bad=rx(r"\.copy\s*\(\s*\)|dict\s*\([^)]*\)"),
+         good=rx(r"deepcopy"), method="regex",
+         note="a shallow copy still aliases the nested dicts"),
+    Trap("pyproject", "novel", "python",
+         "Give the file a small Python library needs to declare its name, version and "
+         "dependencies for publishing. Output only the file contents in a block.",
+         bad=rx(r"setup\s*\(|setup\.py|requirements\.txt"),
+         good=rx(r"\[project\]|pyproject"), method="regex",
+         note="setup.py is superseded by PEP 621 pyproject metadata"),
+]
+
+# the zoneinfo trap scored NO SIGNAL for both arms -- its detectors were too narrow
+for _t in TRAPS:
+    if _t.id == "zoneinfo":
+        _t.bad = rx(r"utcnow\s*\(|datetime\.now\s*\(\s*\)|\.now\s*\(\s*\)")
+        _t.good = rx(r"ZoneInfo|zoneinfo|pytz|timezone\.utc|tz\s*=|tzinfo")
+
+
 def by_tier(tier: str) -> list[Trap]:
     return [t for t in TRAPS if t.tier == tier]

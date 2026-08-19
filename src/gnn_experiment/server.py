@@ -258,6 +258,14 @@ CURATED_MODELS = [
         "owned_by": "M2 Expert: Financial Planning & Wealth Modeling",
     },
     {
+        "id": "qwen3.5-4b-duckdb",
+        "owned_by": "M2 Expert: DuckDB Vectorized Analytical Engine (Parquet, Arrow, SQL)",
+    },
+    {
+        "id": "duckdb",
+        "owned_by": "M2 Expert: DuckDB Vectorized Analytical Engine (Alias)",
+    },
+    {
         "id": "financial_planning",
         "owned_by": "M2 Expert: Financial Planning & Wealth Modeling (Alias)",
     },
@@ -289,6 +297,8 @@ def resolve_expert(model_name: str) -> FoldableExpert | None:
         return registry[name_clean]
 
     # 3. Domain keyword resolution
+    if any(k in name_clean for k in ["duckdb", "duck"]):
+        return registry.get("duckdb")
     if any(k in name_clean for k in ["astral", "python", "uv", "ruff"]):
         return registry.get("astral")
     if any(k in name_clean for k in ["postgre", "postgres", "sql", "db"]):
@@ -368,42 +378,43 @@ async def lifespan(app: FastAPI):
     #     astral      a64  60.20% vs base 12.20%  (+47.99pp)
     #     postgresql  a64  74.67% vs base 49.67%  (+25.00pp)
     #     financial   a32  83.33% vs base 78.33%   (+5.00pp)
-    # The previous financial adapter (financial_planning_krona_dora) was trained on
-    # a dataset of 940 copies of ONE templated prompt and scored 33.3% -- below base.
-    financial_dir = REPO_ROOT / "results" / "adapters" / "m2_financial_r8a128"
-    postgres_dir = REPO_ROOT / "results" / "adapters" / "m2_postgresql_r8a128"
-    astral_dir = REPO_ROOT / "results" / "adapters" / "m2_astral_r8a128"
+    # Load factor experts into host memory (prefer clean v4 completion-only adapters)
+    financial_dir = REPO_ROOT / "results" / "adapters" / "m2_financial_r8a128_v4"
+    if not financial_dir.exists():
+        financial_dir = REPO_ROOT / "results" / "adapters" / "m2_financial_r8a128"
+    postgres_dir = REPO_ROOT / "results" / "adapters" / "m2_postgresql_r8a128_v4"
+    if not postgres_dir.exists():
+        postgres_dir = REPO_ROOT / "results" / "adapters" / "m2_postgresql_r8a128"
+    astral_dir = REPO_ROOT / "results" / "adapters" / "m2_astral_r8a128_v4"
+    if not astral_dir.exists():
+        astral_dir = REPO_ROOT / "results" / "adapters" / "m2_astral_r8a128"
+    duckdb_dir = REPO_ROOT / "results" / "adapters" / "m2_duckdb_r8a128_v4"
 
     exp_fin = FoldableExpert.from_dir(financial_dir, "financial_planning")
     exp_pg = FoldableExpert.from_dir(postgres_dir, "postgresql")
     exp_astral = FoldableExpert.from_dir(astral_dir, "astral")
+    exp_duckdb = FoldableExpert.from_dir(duckdb_dir, "duckdb") if duckdb_dir.exists() else None
+
+    all_experts = [exp_fin, exp_pg, exp_astral] + ([exp_duckdb] if exp_duckdb else [])
 
     if folded_norm_count > 0:
-        scaled_factors = scale_expert_factors_for_folded_norms(base_model, [exp_fin, exp_pg, exp_astral])
+        scaled_factors = scale_expert_factors_for_folded_norms(base_model, all_experts)
         print(f"[IMB Server] FlashNorm: Scaled {scaled_factors} adapter factors by (1+γ) for exact norm alignment.")
 
-    folding_engine = WeightFoldingEngine(base_model, [exp_fin, exp_pg, exp_astral], keep_pristine=True)
+    folding_engine = WeightFoldingEngine(base_model, all_experts, keep_pristine=True)
 
     expert_registry = {
         "qwen3.5-4b-base": None,
         "qwen3.5-4b-astral": exp_astral,
         "qwen3.5-4b-postgresql": exp_pg,
         "qwen3.5-4b-financial": exp_fin,
+        "qwen3.5-4b-duckdb": exp_duckdb,
         "base": None,
         "astral": exp_astral,
         "postgresql": exp_pg,
         "financial_planning": exp_fin,
+        "duckdb": exp_duckdb,
     }
-
-    # No scheduler is constructed. Expert state is tracked as a plain VRAMState
-    # (see _record_transition); the measured transition-cost model lives on in
-    # router/vram_state_router.py as documented, tested physics -- it is what
-    # retired the APSP router -- but nothing in the serving path consumes it now
-    # that requests are not reordered. See docs/DECISIONS.md §6.
-
-    # Warmup & Capture CUDA Graph ONCE
-    # Default to 32768 tokens (32K context) taking ~11.8 GB VRAM total.
-    # Can be overridden via MAX_SEQ_LEN env var (e.g. MAX_SEQ_LEN=4096 or 16384 or 32768)
 
     env_max_len = os.environ.get("MAX_SEQ_LEN")
     if env_max_len:
@@ -425,17 +436,11 @@ async def lifespan(app: FastAPI):
     graph_decoder.capture(dummy_tokens)
     print(f"[IMB Server] CUDA Graph captured successfully. Capture Count = {graph_decoder.capture_count}")
 
-    # --- optional: bucketed graph speculative decode (docs/DECISIONS.md §25) ---
-    # +8.5% over this graph path, measured, by capturing one graph per speculative
-    # chunk width so graph replay and speculation compose instead of competing.
-    #
-    # OFF by default and CONTEXT-CAPPED on purpose. The StaticCache above costs
-    # ~11.8 GB at max_seq_len=32768; a second one that size does not fit beside an
-    # 8 GB model on 24 GB. The speculative cache is therefore capped separately,
-    # and requests that exceed it fall back to `graph_decoder`. Streaming always
-    # falls back -- the bucketed decoder has no token-stream path yet.
+    # --- Speculative decode: ON by default (docs/DECISIONS.md §23 & §25) ---
+    # Captures one graph per speculative chunk width so graph replay and speculation compose.
+    # Automatically registers MTP draft head into WeightFoldingEngine for matched co-mutation folding!
     spec_decoder = None
-    if os.environ.get("SPECULATIVE_DECODE", "0") == "1":
+    if os.environ.get("SPECULATIVE_DECODE", "1") != "0":
         spec_max_len = int(os.environ.get("SPECULATIVE_MAX_SEQ_LEN", "4096"))
         spec_k = int(os.environ.get("SPECULATIVE_K", "4"))
         try:
@@ -445,6 +450,9 @@ async def lifespan(app: FastAPI):
             print(f"[IMB Server] Speculative decode ON: capturing {spec_k + 1} chunk "
                   f"graphs (widths 1..{spec_k + 1}, max_seq_len={spec_max_len})...")
             draft_head = Qwen35MTPDraftHead(base_model, model_id)
+            folding_engine.register_draft_head(draft_head)
+            print("[IMB Server] Matched Draft Head Co-Mutation (§23) registered and active.")
+
             spec_decoder = BucketedSpeculativeDecoder(
                 base_model, tokenizer, draft_head, k=spec_k,
                 max_seq_len=spec_max_len, device=base_model.device,

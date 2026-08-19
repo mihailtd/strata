@@ -29,10 +29,14 @@ from typing import Any
 import numpy as np
 import torch
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+# REPO_ROOT comes from the installed package, never from __file__ arithmetic:
+# `.parent.parent` silently resolves to the WRONG directory the moment a file
+# is moved, and it broke all 31 scripts during the scripts/ reorg.
 sys.path.append(str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
+from gnn_experiment.canon import CANON, adapter_path  # noqa: E402
 from gnn_experiment.novel_peft import (  # noqa: E402
     FoldableExpert,
     WeightFoldingEngine,
@@ -127,11 +131,11 @@ def run_ruff_linter_test(python_code: str) -> dict[str, Any]:
 
 def extract_code_block(text: str, language: str) -> str:
     """Extracts code block from markdown fences."""
-    pattern = rf"```{language}\s*(.*?)\s*```"
+    pattern = rf"```{language}\s*(.*?)(?:```|$)"
     match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
     if match:
         return match.group(1).strip()
-    match_generic = re.search(r"```\s*(.*?)\s*```", text, re.DOTALL)
+    match_generic = re.search(r"```\s*(.*?)(?:```|$)", text, re.DOTALL)
     if match_generic:
         return match_generic.group(1).strip()
     return text.strip()
@@ -243,10 +247,10 @@ BENCHMARK_PIPELINES = [
             TurnStep(
                 step_id="p2_t2_click_cli",
                 turn_num=2,
-                title="Click CLI Report Generator with Parameter Callbacks [OOD]",
+                title="Click CLI Report Generator with Parameter Callbacks [ID]",
                 target_expert="astral",
                 eval_type="python",
-                is_ood=True,
+                is_ood=False,
                 prompt=(
                     "Write a Python CLI tool using the 'click' library (@click.command(), @click.option()) that accepts "
                     "--device-id (int) and --output-format (csv/json). It validates parameters and formats telemetry summary reports. Output only Python."
@@ -420,10 +424,10 @@ BENCHMARK_PIPELINES = [
 # ---------------------------------------------------------------------------
 
 class MultiTurnExecutionGate:
-    def __init__(self, model_id: str = "Qwen/Qwen3.5-4B", vram_cap_gb: float = 22.0):
+    def __init__(self, model_id: str = "Qwen/Qwen3.5-4B", version: str = "v4", vram_cap_gb: float = 22.0):
         set_hard_vram_cap(vram_cap_gb)
         print("==================================================")
-        print(" Chained Multi-Turn Execution Benchmark Engine")
+        print(f" Chained Multi-Turn Execution Benchmark Engine [{version.upper()}]")
         print("==================================================")
         print(f"[Engine] Loading base model ({model_id}) in bfloat16...")
 
@@ -438,22 +442,22 @@ class MultiTurnExecutionGate:
         adapters_dir = REPO_ROOT / "results" / "adapters"
         experts = []
 
-        # Load PostgreSQL expert v2
-        pg_dirs = [
-            adapters_dir / "m2_postgresql_r8a128_v2",
-            adapters_dir / "m2_postgresql_r8a128",
-        ]
+        # Load PostgreSQL expert (prioritizing version)
+        # canon: adapter_path RAISES if the canonical adapter is missing. The old
+# fallback chain silently used an older adapter instead -- that is how a
+# stale version survives a corpus rebuild unnoticed.
+        pg_dirs = [adapter_path("postgresql", version)]
         for d in pg_dirs:
             if d.exists():
                 print(f"[Engine] Registering PostgreSQL expert from {d.name}...")
                 experts.append(FoldableExpert.from_dir(d, "postgresql"))
                 break
 
-        # Load Astral expert v2
-        astral_dirs = [
-            adapters_dir / "m2_astral_r8a128_v2",
-            adapters_dir / "m2_astral_r8a128",
-        ]
+        # Load Astral expert (prioritizing version)
+        # canon: adapter_path RAISES if the canonical adapter is missing. The old
+# fallback chain silently used an older adapter instead -- that is how a
+# stale version survives a corpus rebuild unnoticed.
+        astral_dirs = [adapter_path("astral", version)]
         for d in astral_dirs:
             if d.exists():
                 print(f"[Engine] Registering Astral expert from {d.name}...")
@@ -485,7 +489,7 @@ class MultiTurnExecutionGate:
         self,
         prompt: str,
         expert_name: str | None = None,
-        max_new_tokens: int = 512,
+        max_new_tokens: int = CANON.MAX_NEW_TOKENS,
     ) -> tuple[str, float, float, int, int, float]:
         """Generates response with on-the-fly weight folding. Returns (text, elapsed_s, tok_s, prompt_tokens, gen_tokens, fold_latency_ms)."""
         t_fold_start = time.perf_counter()
@@ -495,21 +499,29 @@ class MultiTurnExecutionGate:
             self.folding_engine.restore()
         fold_latency_ms = (time.perf_counter() - t_fold_start) * 1000.0
 
-        messages = [{"role": "user", "content": prompt}]
-        raw_prompt = self.tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True, enable_thinking=False
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a principal software architect. Provide direct, production-grade, executable "
+                    "code blocks with zero conversational filler or unclosed thinking blocks."
+                ),
+            },
+            {"role": "user", "content": prompt},
+        ]
+        prompt_text = self.tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
         )
-        if not raw_prompt.endswith("<think>\n\n</think>\n\n"):
-            raw_prompt = raw_prompt + "<think>\n\n</think>\n\n"
+        prompt_text += "<think>\n</think>\n"
 
-        inputs = self.tokenizer(raw_prompt, return_tensors="pt").to(self.model.device)
+        inputs = self.tokenizer(prompt_text, return_tensors="pt").to(self.model.device)
         prompt_len = inputs.input_ids.shape[1]
 
-        stop_token_ids = [self.tokenizer.eos_token_id]
-        for extra in ["<|im_end|>", "<|endoftext|>", "<|im_start|>"]:
-            tid = self.tokenizer.convert_tokens_to_ids(extra)
-            if tid is not None and tid != self.tokenizer.unk_token_id and tid not in stop_token_ids:
-                stop_token_ids.append(tid)
+        stop_token_ids = [
+            self.tokenizer.eos_token_id,
+            self.tokenizer.convert_tokens_to_ids("<|im_end|>"),
+            self.tokenizer.convert_tokens_to_ids("<|endoftext|>"),
+        ]
 
         t0 = time.perf_counter()
         outputs = self.model.generate(
@@ -632,14 +644,14 @@ def bootstrap_ci(diffs: list[float], n_resamples: int = 10000) -> tuple[float, f
     return mean, low, high
 
 
-def run_benchmark():
-    gate = MultiTurnExecutionGate()
+def run_benchmark(version: str = "v4"):
+    gate = MultiTurnExecutionGate(version=version)
     all_steps: list[TurnStep] = []
     for pipe in BENCHMARK_PIPELINES:
         all_steps.extend(pipe.steps)
 
     print(f"\n===============================================================================================")
-    print(f" EXECUTING {len(BENCHMARK_PIPELINES)} MULTI-TURN PIPELINES ({len(all_steps)} TOTAL STEPS)")
+    print(f" EXECUTING {len(BENCHMARK_PIPELINES)} MULTI-TURN PIPELINES ({len(all_steps)} TOTAL STEPS) [ADAPTER {version.upper()}]")
     print(f" In-Distribution (ID) Steps:     {sum(1 for s in all_steps if not s.is_ood)}")
     print(f" Out-of-Distribution (OOD) Steps: {sum(1 for s in all_steps if s.is_ood)}")
     print(f"===============================================================================================")
@@ -653,7 +665,7 @@ def run_benchmark():
     # Summary Tables & Bootstrap CI Reporting
     # ---------------------------------------------------------------------------
     print("\n" + "=" * 110)
-    print(" CHAINED MULTI-TURN HANDOFF BENCHMARK SCORECARD (n=15 STEPS)")
+    print(f" CHAINED MULTI-TURN HANDOFF BENCHMARK SCORECARD (n=15 STEPS) [{version.upper()}]")
     print("=" * 110)
     print(f"{'Step ID':24s} | {'Type':5s} | {'Arm A (Base)':15s} | {'Arm B (Oracle)':15s} | {'Arm C (Auto)':15s} | {'Edge (B-A)':10s} | {'Edge (C-A)':10s}")
     print("-" * 110)
@@ -711,7 +723,7 @@ def run_benchmark():
     print(f"{'HELD-OUT CONSTRUCTS (n=9)':24s} | {'OOD':5s} | {np.mean(base_ood):15.3f} | {np.mean(oracle_ood):15.3f} | {np.mean(auto_ood):15.3f} | {mean_ba_ood:+10.3f} | 95% CI [{low_ood:+.3f}, {high_ood:+.3f}]")
     print("=" * 110)
 
-    print(f"\n--- TOKEN & LATENCY EFFICIENCY PROFILE ---")
+    print(f"\n--- TOKEN & LATENCY EFFICIENCY PROFILE [{version.upper()}] ---")
     print(f"Total Horizon Tokens:  Base 4B = {toks_a:,} tok | Oracle Swarm = {toks_b:,} tok | Auto Engine = {toks_c:,} tok")
     print(f"Token Savings:         {toks_a - toks_c:+,} tokens ({((toks_a - toks_c)/toks_a)*100:+.1f}%)")
     print(f"Avg Weight Swap Time:  {np.mean([r['Arm C (Autonomous Engine)']['fold_latency_ms'] for r in pipeline_results]):.2f} ms per turn")
@@ -719,10 +731,11 @@ def run_benchmark():
     # Persist JSON report
     out_dir = REPO_ROOT / "results" / "benchmarks"
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_file = out_dir / "multi_turn_execution_results.json"
+    out_file = out_dir / f"multi_turn_execution_results_{version}.json"
     with open(out_file, "w") as f:
         json.dump({
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "adapter_version": version,
             "total_steps": len(all_steps),
             "id_steps": len(base_id),
             "ood_steps": len(base_ood),
@@ -746,4 +759,7 @@ def run_benchmark():
 
 
 if __name__ == "__main__":
-    run_benchmark()
+    parser = argparse.ArgumentParser(description="Chained Multi-Turn Execution Benchmark")
+    parser.add_argument("--version", default="v4", choices=["v2", "v3", "v4", "v5"], help="Adapter version to benchmark")
+    args = parser.parse_args()
+    run_benchmark(version=args.version)

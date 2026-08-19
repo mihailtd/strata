@@ -4,7 +4,7 @@ plus generated Q&A pairs, turned into a Hugging Face Dataset.
 `load_astral_micro_dataset` (the original, Astral uv/ruff/ty-specific entry
 point) is now a thin wrapper around the general `load_micro_dataset` -- use
 that one directly for a different corpus (e.g. an EPUB-derived dataset from
-`scripts/run_datagen.py --epub ...`), same loading/formatting logic either way.
+`scripts/old/run_datagen.py --epub ...`), same loading/formatting logic either way.
 
 Two output shapes, selected by `conversational`:
 - `conversational=False` (default): a `{"text", "source"}` dataset. SFT Q&A
@@ -97,7 +97,7 @@ def load_micro_dataset(
 ) -> Dataset:
     """Load raw markdown/EPUB-derived doc chunks + generated SFT Q&A pairs
     into a Hugging Face Dataset. Either source may be absent -- an EPUB-only
-    dataset (see scripts/run_datagen.py --epub) has no `raw_docs_dir` (there's
+    dataset (see scripts/old/run_datagen.py --epub) has no `raw_docs_dir` (there's
     no directory of markdown files to walk, only the SFT jsonl the pipeline
     wrote), so pass sft_file alone.
 

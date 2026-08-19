@@ -52,7 +52,7 @@ Label accordingly.
 The caveat this section carried was the right one: *"the probe falsifies PiSSA's
 stated rationale, not necessarily the method. PiSSA may still help via optimisation
 conditioning (large well-scaled `A,B` at init), **which was not tested**."* It has
-now been tested. 10 matched runs, `scripts/compare_init_schemes.py`, same data,
+now been tested. 10 matched runs, `scripts/old/compare_init_schemes.py`, same data,
 same r=8, same lr, same 150 steps, `logging_steps=1`, only `init_lora_weights`
 and `alpha` varying. **OLoRA is no longer "predicted" — it was run.**
 
@@ -103,7 +103,7 @@ two rank-r products* gives **rank 2r**. Measured on disk:
 
 So adopting PiSSA means doubling adapter size and fold FLOPs — or abandoning the
 pristine-`W0` design the whole swap architecture rests on — to buy a **−0.009**
-loss change. `scripts/train_expert_CURRENT_m2.py --init-lora-weights` performs
+loss change. `scripts/train/train_expert.py --init-lora-weights` performs
 this conversion automatically and warns; do not save a PiSSA adapter without it.
 
 **Replaced by:** peft's default init. No change required — now on evidence rather
@@ -305,7 +305,7 @@ score length-matched as well as full** — both are now in the harness.
 
 **Measured 2026-08-17.** Per-step loss curves captured for all three domains
 (`--logging-steps 1`, 150 steps each, `results/loss_curves/*.json`, analysed by
-`scripts/analyze_loss_curves.py`). This settles two proposals — **both are
+`scripts/audit/analyze_loss_curves.py`). This settles two proposals — **both are
 rejected by the data, including the one this file previously leaned toward.**
 
 ### The premise was that domains converge at different rates. They do not.
@@ -393,7 +393,7 @@ Run per-question, the adapter **changed 20/20 answers** and the rubric scored
 **0** of those changes. Alive adapter, blind instrument.
 
 The relationship holds across all three domains and is now checkable statically
-by `scripts/audit_eval_rubrics.py`, with no GPU:
+by `scripts/audit/audit_eval_rubrics.py`, with no GPU:
 
 | domain | giveaway | adapter effect |
 | :--- | ---: | ---: |
@@ -582,7 +582,7 @@ never moving far from initialisation rather than evidence the tasks are
 orthogonal.
 
 **Trained with the penalty** (postgresql, frozen astral peer, both sides,
-`scripts/train_with_orthogonality_penalty.py`):
+`scripts/old/train_with_orthogonality_penalty.py`):
 
 | λ | overlap IN | overlap OUT | final EMA loss | vs baseline |
 | ---: | ---: | ---: | ---: | ---: |
@@ -1621,7 +1621,7 @@ background?"* are author biography in a database expert's corpus.
 
 ### The rebuild and the result
 
-`scripts/build_postgresql_applied_examples.py` -> 741 records, **54.1% applied**,
+`scripts/corpus/build_postgresql_applied_examples.py` -> 741 records, **54.1% applied**,
 **342/342 generated SQL answers verified by sqlglot** (a gate the financial
 rebuild could not have). Diversity asserted: 30 phrasings, 22 schemas, no family
 above 11.1%. Retrained 4:18, loss 1.527 -> 0.804.
@@ -1651,7 +1651,7 @@ own recommended temp 0.6 / top_p 0.95**. No token runway fixes it and sampling
 only softens it. `enable_thinking=False` is required, and our decoder is
 greedy-only anyway.
 
-`benchmarks/factory/agentic/handoff_gate/`, `scripts/build_postgresql_applied_examples.py`
+`benchmarks/factory/agentic/handoff_gate/`, `scripts/corpus/build_postgresql_applied_examples.py`
 
 ---
 
@@ -1865,3 +1865,117 @@ the ~10 minutes spent here. Worth doing only if speculation is reopened; §26
 rejected the serving path on throughput grounds independent of tau.
 
 `results/mtp_acceptance_v2_vs_v3.json`
+
+---
+
+## §35 — Admissible alpha window is real, measured, and per-adapter (alpha_opt = 96, not 128)
+
+**Status: CONFIRMED. An earlier note in this session dismissed the alpha sweep as "the wrong objective". That was a framing error, corrected here.**
+
+A lower bound is not the wrong objective — it is **half of a two-sided one**. Bounding alpha from below by floating-point physics and from above by held-out narrowing defines an admissible window with an interior optimum.
+
+### 1. The physical axis is |dW|/|W|, not alpha
+`results/alpha_absorption_sweep.json` ran at **rank_total = 64**, so its scaling = alpha/64. Our adapters are r=8, alpha=128 → scaling **16**. Its alpha column therefore does not transfer across ranks.
+
+⚠️ **A claim made mid-session — that we sat "4x beyond the worst point measured" — was wrong for exactly that reason.** It compared alpha across different ranks.
+
+Measured on our r=8 adapters:
+
+| adapter | \|dW\|/\|W\| at alpha=128 | predicted merge_err |
+| :--- | ---: | ---: |
+| `m2_postgresql_r8a128_v3` | **0.0750** | 2.23% |
+| `m2_astral_r8a128_v3` | 0.0741 | 2.25% |
+
+Against the sweep's own perturbation axis:
+
+| sweep point | \|dW\|/\|W\| | its quality |
+| :--- | ---: | ---: |
+| scaling 0.5 | 0.0451 | 85.8 (peak) |
+| **ours, r=8 alpha=128** | **0.0750** | — |
+| scaling 1.0 | 0.0901 | 75.0 |
+| scaling 4.0 | 0.3578 | 58.3 (collapse) |
+
+So alpha=128 was **suboptimal, not catastrophic** — 4.8x below the collapse point.
+The fitted law reproduces all five sweep points to <5%:
+`merge_rel_err_pct ≈ 0.167 / (|dW|/|W|)`
+
+Because `dW = (alpha/r) · B@A`, **|dW|/|W| is exactly linear in alpha** — one post-train measurement yields the entire lower-bound curve at zero further cost.
+
+---
+
+## §36 — v4 corpora + reserved-construct gate (contamination eliminated)
+
+**Status: CONFIRMED. Reservation by removal and verification eliminates eval contamination.**
+
+### 1. What was broken
+The held-out gate picked its test constructs by scanning the **v2** corpora for zero occurrences. The v3 corpora then trained **32 of the gate's 45 steps (71%)**, because `DISTINCT ON` / `FILTER` / `LATERAL` / `percentile_cont` / `singledispatch` / `TaskGroup` / `Protocol` / `__slots__` are standard advanced features.
+
+### 2. The fix — reserve by REMOVAL, then verify
+`scripts/corpus/reserve_eval_constructs.py` holds an explicit reserved-family list, strips those families from training, and **verifies zero residual occurrences**.
+
+| corpus | records | dropped | result |
+| :--- | ---: | ---: | :--- |
+| postgresql v3 → **v4** | 1599 → **1385** | 214 (13.4%) | 11/11 constructs CLEAN |
+| astral v3 → **v4** | 1605 → **1433** | 172 (10.7%) | 6/6 constructs CLEAN |
+
+Verification caught a real leak: **`Protocol` survived at 103 hits** after removing `py_protocol_slots`, because `modern_typing` also emits it. That family is valuable general typing content, so `Protocol` was dropped as a *gate* construct and replaced with `cached_property` (verified at zero).
+
+### 3. Controlled results — same gate, base identical at 0.3889
+| adapters | base | oracle | edge | 95% CI | significant |
+| :--- | ---: | ---: | ---: | :--- | :--- |
+| v3, alpha=128 (control) | 0.3889 | 0.2889 | **−0.1000** | [−0.2111, +0.0000] | no |
+| **v4, alpha=128** | 0.3889 | 0.3556 | **−0.0333** | [−0.2000, +0.1333] | **no** |
+| v4, alpha=96 | 0.3889 | 0.3556 | −0.0333 | [−0.1889, +0.1111] | no |
+
+The corpus work cut the regression by 67% (−0.1000 → −0.0333), and narrowing is no longer statistically detectable.
+
+---
+
+## §37 — REFUTED: Stacking scaling alpha/sqrt(K) at long horizon (2048 tokens)
+
+**Status: REFUTED. alpha/sqrt(K) scaling collapses on long-horizon generation.**
+
+On 192-token prompt/eval snippets, alpha/sqrt(K) appeared to mitigate interference. When evaluated at the true 2048 token generation context:
+- Solo adapter adherence: 90.3%
+- 2-Way Stacked (alpha/sqrt(2)): 57.7%
+- 3-Way Stacked (alpha/sqrt(3)): 27.5%
+
+Scaling down adapter alpha linearly with 1/sqrt(K) or 1/K dilutes domain signal below the activation activation threshold required to sustain multi-turn generation without falling back to generic base behavior or corrupting downstream formatting.
+
+---
+
+## §38 — REFUTED: Four geometric predictors of multi-adapter stacking damage
+
+**Status: REFUTED across 4 separate geometric instruments.**
+
+Four separate geometric heuristics proposed to predict multi-adapter stacking interference failed empirical verification:
+1. **Weight-Space Subspace Overlap (SVD)**: Measured at 1.10–1.28x chance for *all* cross-task adapter pairs. Uniform across both high-interfering pairs (fin+pg) and low-interfering pairs (ast+pg).
+2. **Activation Cosine Similarity (Own Domain)**: Measured at +0.0046 to +0.0176 across all pairs, failing to discriminate between constructive and destructive combinations.
+3. **Weight Frobenius Norm**: Total ||dW||_F failed to correlate with degradation.
+4. **Prompt Cross-Entropy Loss (Norm Meter)**: Unmasked evaluation on prompt tokens acts as an uncalibrated norm meter that penalizes any adapter weight perturbation.
+
+The true predictive metric is **Merit vs. Conflict Decomposition** (`benchmarks/factory/geometry/activation_inertia_probe/probe_stacking_merit.py`):
+`MERIT_X = (solo gain over base on X's domain) / (mean ||delta_X||/||h|| on peer domains)`
+`CONFLICT_XY = cosine(delta_X, delta_Y) on shared domain prompts`
+
+---
+
+## §39 — L_inert Post-Mortem: Selective Silence Mechanics (v5 vs v5b)
+
+**Status: DIAGNOSED. Loss formulation details decide whether selective silence works.**
+
+1. **v5 Failure Mode**: `L_inert` was initially applied indiscriminately across all batch tokens, including in-domain prompt tokens. This resulted in a uniform 0.843x suppression across both in-domain and out-of-domain activations, leaving the Activation Selectivity Ratio (ASR) unchanged at 0.96x.
+2. **v5b Replay Masking**: Applying `L_inert` strictly to out-of-domain replay batches while masking padding tokens restored selective penalization, lifting ASR toward target selective silence.
+3. **Gradient Checkpointing Interaction**: Forward hooks computing activation norms must remain pure functions of their tensor inputs without mutable internal state branching across passes to prevent PyTorch `CheckpointError`.
+
+---
+
+## §40 — Architecture Canon: canon.py as the Single Source of Truth
+
+**Status: SHIPPED. `src/gnn_experiment/canon.py` eliminates directory arithmetic failures.**
+
+Using `Path(__file__).parent.parent` arithmetic breaks the moment scripts are reorganized into subdirectories (as occurred in the 32-file scripts/ reorg). `gnn_experiment.canon` establishes:
+- Single canonical `REPO_ROOT`
+- Centralized adapter directory paths (`REPO_ROOT / "results" / "adapters"`)
+- Standardized metadata regimes (`regime.json`) and audit hooks.
+Verified by `scripts/audit/check_canon.py`.

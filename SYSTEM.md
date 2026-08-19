@@ -52,7 +52,7 @@ Windows GPU driver: 32.0.31035.1003 (recent Adrenalin branch, should support ROC
 
 **Fix**: force torch to load the system runtime instead of its bundled one via `LD_PRELOAD=/opt/rocm-7.2.0/lib/libhsa-runtime64.so`. Added to `.env` (alongside `HF_TOKEN`) so it's automatic via `uv run --env-file .env <script>` — **all script docstrings now say `--env-file .env`, this is required, not optional, for GPU scripts.** `HSA_OVERRIDE_GFX_VERSION=11.0.0` was tried too (commonly cited for RDNA3) but turned out to be unnecessary — `LD_PRELOAD` alone was sufficient; gfx1100 is natively recognized.
 
-Verified: `uv run --env-file .env scripts/check_gpu.py` → `torch.cuda.is_available(): True`, device `AMD Radeon RX 7900 XTX — 23.9 GB VRAM`, ran a real 4096×4096 matmul on GPU successfully.
+Verified: `uv run --env-file .env scripts/audit/check_gpu.py` → `torch.cuda.is_available(): True`, device `AMD Radeon RX 7900 XTX — 23.9 GB VRAM`, ran a real 4096×4096 matmul on GPU successfully.
 
 **Script gotcha (fixed)**: `scripts/install_rocm_wsl.sh` originally used `usermod -aG render,video "$(logname)"` to add the invoking user to the required groups — `logname` failed (`no login name`) when run via `sudo bash script.sh` in this WSL setup, which combined with `set -e` aborted the script before the group-add and `rocminfo` verification steps ran (apt/ROCm install itself had already completed by that point, so it wasn't wasted — just needed a rerun). Fixed to use `$SUDO_USER` instead, which `sudo` sets reliably.
 
@@ -85,7 +85,7 @@ Project layout (all uv-managed):
 - `src/gnn_experiment/peft_methods.py` — registry of PEFT configs: lora, dora, pissa, qlora, adalora, vera, ia3, prefix_tuning
 - `src/gnn_experiment/bench.py` — loads a base model (`model_name` is a required argument, no default; small-model runs use `Qwen/Qwen3.5-0.8B` per `configs/benchmark.yaml`), applies one PEFT method, runs a short training loop, reports wall time / peak VRAM / trainable-param % / final loss
 - `scripts/run_benchmark.py` — CLI that loops over methods from `configs/benchmark.yaml`, writes `results/benchmark_results.csv`
-- `scripts/check_gpu.py` — GPU smoke test (`uv run scripts/check_gpu.py`)
+- `scripts/audit/check_gpu.py` — GPU smoke test (`uv run scripts/audit/check_gpu.py`)
 - `scripts/install_rocm_wsl.sh` — the sudo-gated system install, see GPU section above
 
 Verified so far (no GPU yet, pending the ROCm install): `uv sync` resolves cleanly, all 8 PEFT method configs build without error (`adalora` needed a `total_step` fix, now wired to `max_steps`), `check_gpu.py` runs end to end and correctly reports no GPU. Not yet verified: an actual training run (needs ROCm installed + model/dataset download).
@@ -107,7 +107,7 @@ Verified empirically (not guessed) before switching: `torch==2.13.0+rocm7.2` (al
 1. The only `vllm-rdna` wheel available (`0.23.1.dev1`) falls inside the version range (v0.21.0–v0.25.0) that AMD's own ROCm docs say has "significantly longer warmup times... on AMD Radeon GPUs" — their fix is "upgrade to v0.26.0+", which isn't available on this index yet.
 2. Version-tag mismatch: our system ROCm install target is **7.2** (`scripts/install_rocm_wsl.sh`), but the vLLM wheel is tagged **rocm7.14.0** — unclear if these use compatible versioning schemes or if vLLM expects a different/newer system ROCm than what's about to be installed. Recheck after running `scripts/install_rocm_wsl.sh` and trying `vllm serve` for real.
 
-**Chat**: per user's choice, built a plain `transformers`-based interactive terminal chat instead of standing up a vLLM server for now — `scripts/chat.py` (`uv run scripts/chat.py [--model ...] [--adapter path/to/trained/adapter]`), streams tokens via `TextStreamer`, keeps conversation history, optionally loads a PEFT adapter on top of the base model. vLLM is installed and available for a faster/serving-oriented chat path later (e.g. `vllm serve <model> --enable-lora`), once the two caveats above are checked against the real GPU.
+**Chat**: per user's choice, built a plain `transformers`-based interactive terminal chat instead of standing up a vLLM server for now — `scripts/serve/chat.py` (`uv run scripts/serve/chat.py [--model ...] [--adapter path/to/trained/adapter]`), streams tokens via `TextStreamer`, keeps conversation history, optionally loads a PEFT adapter on top of the base model. vLLM is installed and available for a faster/serving-oriented chat path later (e.g. `vllm serve <model> --enable-lora`), once the two caveats above are checked against the real GPU.
 
 ## vLLM abandoned; llama.cpp + opencode eval harness built instead (2026-08-10, later same day)
 
@@ -125,7 +125,7 @@ Verified empirically (not guessed) before switching: `torch==2.13.0+rocm7.2` (al
 
 ## Astral docs → SFT dataset pipeline (2026-08-10, later same day)
 
-Built `src/gnn_experiment/datagen/` — generates instruction-tuning data from uv/ruff/ty's official docs (source markdown lives in each tool's own repo's `docs/` folder, e.g. `astral-sh/uv/docs/`, **not** `astral-sh/docs`, which is the *built* HTML/Next.js site output) using the local llama-server, augmentoolkit-inspired 3-stage flow (question → verify → answer), tracked via MLflow. Config: `configs/datagen.yaml`, entry point: `scripts/run_datagen.py`. Full plan at `.claude/plans/ok-can-we-now-serene-fox.md` (in `~/.claude/plans/`, not repo-tracked).
+Built `src/gnn_experiment/datagen/` — generates instruction-tuning data from uv/ruff/ty's official docs (source markdown lives in each tool's own repo's `docs/` folder, e.g. `astral-sh/uv/docs/`, **not** `astral-sh/docs`, which is the *built* HTML/Next.js site output) using the local llama-server, augmentoolkit-inspired 3-stage flow (question → verify → answer), tracked via MLflow. Config: `configs/datagen.yaml`, entry point: `scripts/old/run_datagen.py`. Full plan at `.claude/plans/ok-can-we-now-serene-fox.md` (in `~/.claude/plans/`, not repo-tracked).
 
 Two real bugs hit and fixed during verification:
 
@@ -155,6 +155,6 @@ Confirmed against official docs/the CLI's own `--help` (not just trusting the pa
 
 User asked to free VRAM from stray processes and have the datagen pipeline unload models automatically when done. Found two GPU-resident processes left running from earlier work (`llama-server` serving Gemma4-E2B from the full datagen run, and `unsloth studio`) — both killed manually first.
 
-Added automatic cleanup to `gnn_experiment.datagen`: `llm_client.stop_llama_server(port)` finds and stops (SIGTERM, then SIGKILL after a 5s grace period) the llama-server process bound to a given port, matched by port in its command line so it only touches the server actually in use, not unrelated instances. `LocalLLMClient.shutdown_server()` wraps this using its own configured port. `pipeline.run_pipeline()` calls this on the generator and (if different) verifier client once it finishes, gated by `llm.unload_after_run` in `configs/datagen.yaml` (**default `true`**) — override with `--no-unload` on `scripts/run_datagen.py` to leave the server running (e.g. to chat with it right after a run). Verified end to end: started a server, ran a `--dry-run`, confirmed the pipeline printed `Unloaded model from VRAM (stopped llama-server on port 8080)` and the port was actually unreachable afterward, not just assumed.
+Added automatic cleanup to `gnn_experiment.datagen`: `llm_client.stop_llama_server(port)` finds and stops (SIGTERM, then SIGKILL after a 5s grace period) the llama-server process bound to a given port, matched by port in its command line so it only touches the server actually in use, not unrelated instances. `LocalLLMClient.shutdown_server()` wraps this using its own configured port. `pipeline.run_pipeline()` calls this on the generator and (if different) verifier client once it finishes, gated by `llm.unload_after_run` in `configs/datagen.yaml` (**default `true`**) — override with `--no-unload` on `scripts/old/run_datagen.py` to leave the server running (e.g. to chat with it right after a run). Verified end to end: started a server, ran a `--dry-run`, confirmed the pipeline printed `Unloaded model from VRAM (stopped llama-server on port 8080)` and the port was actually unreachable afterward, not just assumed.
 
-Note: this only covers `gnn_experiment.datagen`'s own pipeline runs. `scripts/chat.py`, manually-started servers for `tests/opencode_evals/`, and Unsloth Studio are still started/stopped manually — no automatic cleanup exists for those yet.
+Note: this only covers `gnn_experiment.datagen`'s own pipeline runs. `scripts/serve/chat.py`, manually-started servers for `tests/opencode_evals/`, and Unsloth Studio are still started/stopped manually — no automatic cleanup exists for those yet.

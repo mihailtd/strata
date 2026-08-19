@@ -8,7 +8,7 @@ Protocol / __slots__ are the obvious contents of an "Advanced PostgreSQL" and a
 "Modern Python" chapter. Scanning for absence is only valid until the next corpus
 revision, and the corpus author cannot know what is reserved.
 
-It is now guaranteed by REMOVAL instead: `scripts/reserve_eval_constructs.py`
+It is now guaranteed by REMOVAL instead: `scripts/corpus/reserve_eval_constructs.py`
 holds an explicit reserved-family list, strips those families from training
 (postgresql -214 records, astral -172), and VERIFIES zero residual occurrences.
 Train on `training_data_v4.jsonl`, never v3.

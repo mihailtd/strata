@@ -33,7 +33,7 @@ the full numbers:
   low-dimensional adaptation manifold to exploit, across depth or across tasks.
   This single property predicted, in advance, the failure of Tucker (15.66%),
   LoKr (14.42%) and master_basis (13.40%). **Measure subspace overlap before
-  building any further shared-basis scheme** — `scripts/extract_svd_basis.py`
+  building any further shared-basis scheme** — `scripts/old/extract_svd_basis.py`
   plus the retention projection answers it on CPU in ~15 s.
 - **The architecture benchmark is confounded — twice.** Baseline on-disk sizes
   were inflated ~2x (fp32 assumed vs real bf16), and the custom-path variants
@@ -379,7 +379,7 @@ measured. Multi-task deployment story: still dead.**
   advance, that **any** shared-subspace compression scheme will fail here —
   which is exactly what Tucker (15.66%), LoKr (14.42%) and master_basis (13.40%)
   all did. Do not build another one without first measuring subspace overlap;
-  `scripts/extract_svd_basis.py` + the retention projection does it on CPU in
+  `scripts/old/extract_svd_basis.py` + the retention projection does it on CPU in
   ~15 s, with no training.
 
 ### Velocity-Masked SFT — CLAIM FALSIFIED 🔴

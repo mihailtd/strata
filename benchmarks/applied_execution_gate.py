@@ -34,11 +34,15 @@ if os.path.exists(rocm_hsa_lib) and rocm_hsa_lib not in os.environ.get("LD_PRELO
     os.environ["LD_PRELOAD"] = f"{rocm_hsa_lib}:{current_preload}".strip(":")
     os.execve(sys.executable, [sys.executable] + sys.argv, os.environ)
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+# REPO_ROOT comes from the installed package, never from __file__ arithmetic:
+# `.parent.parent` silently resolves to the WRONG directory the moment a file
+# is moved, and it broke all 31 scripts during the scripts/ reorg.
 sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from gnn_experiment.canon import CANON, adapter_path
 from gnn_experiment.novel_peft import FoldableExpert, WeightFoldingEngine, set_hard_vram_cap
 from gnn_experiment.fused_norm import inject_exact_rmsnorm, fold_rmsnorm_into_linear
 
@@ -265,24 +269,16 @@ class AppliedExecutionGate:
         adapters_dir = REPO_ROOT / "results" / "adapters"
         experts = []
         
-        # PostgreSQL expert (priority to newly trained v2)
-        pg_dirs = [
-            adapters_dir / "m2_postgresql_r8a128_v2",
-            adapters_dir / "m2_postgresql_r8a128",
-            adapters_dir / "pg_sweep_a128",
-        ]
+        # PostgreSQL expert (priority to v4 completion-only loss adapter)
+        pg_dirs = [adapter_path("postgresql")]   # canon: raises, never falls back
         for pg_dir in pg_dirs:
             if pg_dir.exists():
                 print(f"[Engine] Registering PostgreSQL expert from {pg_dir.name}...")
                 experts.append(FoldableExpert.from_dir(pg_dir, "postgresql"))
                 break
 
-        # Astral expert
-        astral_dirs = [
-            adapters_dir / "m2_astral_r8a128_v2",
-            adapters_dir / "m2_astral_r8a128",
-            adapters_dir / "astral_sweep_a128",
-        ]
+        # Astral expert (priority to v4 completion-only loss adapter)
+        astral_dirs = [adapter_path("astral")]   # canon: raises, never falls back
         for ast_dir in astral_dirs:
             if ast_dir.exists():
                 print(f"[Engine] Registering Astral expert from {ast_dir.name}...")
@@ -314,7 +310,7 @@ class AppliedExecutionGate:
         self,
         prompt: str,
         expert_name: str | None = None,
-        max_new_tokens: int = 512,
+        max_new_tokens: int = CANON.MAX_NEW_TOKENS,
     ) -> tuple[str, float, float]:
         """Generates response with in-place expert folding and non-thinking stop tokens."""
         if expert_name and expert_name in self.expert_map:

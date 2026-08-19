@@ -54,7 +54,7 @@ cat <<'EOF'
 Done. Close and reopen your WSL shell (or run `newgrp render`) so the
 render/video group membership takes effect, then verify from the project dir:
 
-  uv run --env-file .env scripts/check_gpu.py
+  uv run --env-file .env scripts/audit/check_gpu.py
 
 Note the --env-file .env: torch's pip wheel bundles its own libhsa-runtime64.so
 that doesn't know about WSL and will report no GPU without it. .env sets

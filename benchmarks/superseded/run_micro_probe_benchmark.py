@@ -32,9 +32,10 @@ from gnn_experiment.micro_probe.forward_hooks import (
 )
 from gnn_experiment.utils.logger import log_benchmark_metric
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-
-
+from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+# REPO_ROOT comes from the installed package, never from __file__ arithmetic:
+# `.parent.parent` silently resolves to the WRONG directory the moment a file
+# is moved, and it broke all 31 scripts during the scripts/ reorg.
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--config", default=str(REPO_ROOT / "configs" / "micro_probe.yaml"))

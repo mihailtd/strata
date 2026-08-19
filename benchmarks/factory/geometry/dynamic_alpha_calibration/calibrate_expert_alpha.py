@@ -53,7 +53,10 @@ import sys
 import tempfile
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parent.parent.parent.parent.parent
+from gnn_experiment.canon import REPO_ROOT as REPO  # noqa: E402
+# REPO_ROOT comes from the installed package, never from __file__ arithmetic:
+# `.parent.parent` silently resolves to the WRONG directory the moment a file
+# is moved, and it broke all 31 scripts during the scripts/ reorg.
 sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "src"))
 

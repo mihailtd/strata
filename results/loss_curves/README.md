@@ -5,12 +5,12 @@ budgeting was worth implementing. **Both were rejected** — see
 [`docs/DECISIONS.md`](../../docs/DECISIONS.md) §8.
 
 ```bash
-uv run --env-file .env python scripts/train_expert_CURRENT_m2.py \
+uv run --env-file .env python scripts/train/train_expert.py \
     --domain astral --logging-steps 1 \
     --out results/loss_curves/adapters/astral \
     --loss-curve-out results/loss_curves/astral.json
 
-uv run python scripts/analyze_loss_curves.py
+uv run python scripts/audit/analyze_loss_curves.py
 ```
 
 `adapters/` holds the throwaway adapters those runs produced. **They are NOT the
@@ -26,12 +26,12 @@ are inert (PiSSA −0.009, OLoRA +0.019, noise floor 0.0171), and neither reache
 the stock run's final loss in 150 steps.
 
 ```bash
-uv run --env-file .env python scripts/train_expert_CURRENT_m2.py \
+uv run --env-file .env python scripts/train/train_expert.py \
     --domain astral --init-lora-weights pissa --alpha 8 --logging-steps 1 \
     --loss-curve-out results/loss_curves/astral_pissa_a8.json \
     --out results/adapters/probe_pissa_a8_astral
 
-uv run python scripts/compare_init_schemes.py       # -> results/init_scheme_comparison.json
+uv run python scripts/old/compare_init_schemes.py       # -> results/init_scheme_comparison.json
 ```
 
 ⚠️ **Always compare at matched alpha.** These schemes interact strongly with

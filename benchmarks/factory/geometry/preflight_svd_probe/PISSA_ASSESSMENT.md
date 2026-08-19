@@ -4,7 +4,7 @@
 
 > ## Result — the experiment this document proposed
 >
-> 10 matched runs (`scripts/compare_init_schemes.py`): 3 domains × {stock, pissa,
+> 10 matched runs (`scripts/old/compare_init_schemes.py`): 3 domains × {stock, pissa,
 > olora} at α=128, plus a PiSSA alpha sweep and a **stock control at matched
 > alpha** on astral. Only `init_lora_weights` and `alpha` varied. Step-1 losses
 > agreed to ≤ 0.011, confirming the arms start from the same model.
@@ -49,7 +49,7 @@ init_lora_weights: bool | Literal[
 ]
 ```
 
-Enabling it in `train_expert_CURRENT_m2.py` is a one-line change:
+Enabling it in `train/train_expert.py` is a one-line change:
 
 ```python
 LoraConfig(..., init_lora_weights="pissa")     # or "pissa_niter_16" for the fast variant
@@ -84,7 +84,7 @@ training and has exactly zero impact on runtime serving speed.**
 >
 > So the real trade is: **double the adapter and the fold FLOPs, or abandon the
 > pristine-`W0` design the swap architecture rests on.** Not free. peft warns about
-> this itself; `train_expert_CURRENT_m2.py --init-lora-weights` now does the
+> this itself; `train/train_expert.py --init-lora-weights` now does the
 > conversion automatically.
 
 Faster adapter iteration is a stated goal of this project, so the training-side
@@ -271,7 +271,7 @@ That error is large enough to invert a verdict. The probe now computes the top-r
 subspace **exactly** via the Gram matrix on the small side (validated to 0.001%
 against full `linalg.svd`, and bit-identical across seeds).
 
-**Checked for spillover: none.** `scripts/extract_svd_basis.py` and
+**Checked for spillover: none.** `scripts/old/extract_svd_basis.py` and
 `probe_subspace_overlap.py` both use exact `torch.linalg.svd` on a QR-reduced
 matrix, so the existing SVD findings in this repo are unaffected.
 

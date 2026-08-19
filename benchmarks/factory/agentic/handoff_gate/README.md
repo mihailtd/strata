@@ -73,7 +73,7 @@ distribution.
 
 ## RE-RUN after rebuilding the postgresql corpus — the gate FLIPPED
 
-`scripts/build_postgresql_applied_examples.py` replaced the recitation corpus
+`scripts/corpus/build_postgresql_applied_examples.py` replaced the recitation corpus
 (14.8% applied, 10.9% author biography) with 741 records at 54.1% applied, every
 generated SQL answer verified by `sqlglot`. Retrained 4:18, loss 1.527 -> 0.804.
 

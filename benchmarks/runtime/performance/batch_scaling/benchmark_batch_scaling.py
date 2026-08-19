@@ -48,7 +48,10 @@ if torch.cuda.is_available():  # fla's device probe is @cache'd at import
 
 from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
+from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+# REPO_ROOT comes from the installed package, never from __file__ arithmetic:
+# `.parent.parent` silently resolves to the WRONG directory the moment a file
+# is moved, and it broke all 31 scripts during the scripts/ reorg.
 sys.path.append(str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
@@ -61,7 +64,7 @@ from gnn_experiment.novel_peft import (  # noqa: E402
 )
 
 # DEFAULTS: the m2 expert set (bf16 + Liger, methodology-matched). Verify with
-# `uv run python scripts/audit_adapters.py`. Do NOT default to m1 (4-bit NF4)
+# `uv run python scripts/audit/audit_adapters.py`. Do NOT default to m1 (4-bit NF4)
 # adapters -- every benchmark here loads a bf16 base, so an m1 adapter folds a
 # correction-to-quantized-weights into unquantized ones.
 ADAPTER = "results/adapters/m2_astral_r8a128"

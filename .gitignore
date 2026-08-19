@@ -9,10 +9,11 @@ __pycache__/
 # measurements should carry the measurements.
 results/*
 !results/*.json
-# `results/*` excludes the DIRECTORY results/loss_curves, and git cannot re-include
-# a file inside an excluded directory -- so the "!results/*.json" above never
-# reached the curves and 0 of them were tracked, despite the note below claiming
-# otherwise. Un-exclude the directory first, then re-exclude the weights in it.
+!results/benchmarks/
+!results/benchmarks/*.json
+!results/logs/
+!results/logs/*.log
+!results/logs/*.json
 !results/loss_curves/
 results/adapters/
 results/**/checkpoints/

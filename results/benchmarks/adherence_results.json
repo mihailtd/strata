@@ -1,0 +1,584 @@
+{
+  "rows": [
+    {
+      "id": "not_in",
+      "tier": "trained",
+      "lang": "sql",
+      "method": "regex",
+      "base": {
+        "verdict": "bad",
+        "fenced": true,
+        "bad": true,
+        "good": false
+      },
+      "expert": {
+        "verdict": "no_signal",
+        "fenced": true,
+        "bad": false,
+        "good": false
+      }
+    },
+    {
+      "id": "between_ts",
+      "tier": "trained",
+      "lang": "sql",
+      "method": "regex",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "serial_identity",
+      "tier": "trained",
+      "lang": "sql",
+      "method": "regex",
+      "base": {
+        "verdict": "bad",
+        "fenced": true,
+        "bad": true,
+        "good": false
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "func_index",
+      "tier": "trained",
+      "lang": "sql",
+      "method": "regex",
+      "base": {
+        "verdict": "bad",
+        "fenced": true,
+        "bad": true,
+        "good": true
+      },
+      "expert": {
+        "verdict": "bad",
+        "fenced": true,
+        "bad": true,
+        "good": true
+      }
+    },
+    {
+      "id": "int_division",
+      "tier": "trained",
+      "lang": "sql",
+      "method": "regex",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "timestamptz",
+      "tier": "novel",
+      "lang": "sql",
+      "method": "regex",
+      "base": {
+        "verdict": "bad",
+        "fenced": true,
+        "bad": true,
+        "good": false
+      },
+      "expert": {
+        "verdict": "bad",
+        "fenced": true,
+        "bad": true,
+        "good": true
+      }
+    },
+    {
+      "id": "varchar255",
+      "tier": "novel",
+      "lang": "sql",
+      "method": "regex",
+      "base": {
+        "verdict": "bad",
+        "fenced": true,
+        "bad": true,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "explicit_join",
+      "tier": "novel",
+      "lang": "sql",
+      "method": "regex",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "mutable_default",
+      "tier": "novel",
+      "lang": "python",
+      "method": "ast",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "bare_except",
+      "tier": "novel",
+      "lang": "python",
+      "method": "ast",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "pathlib",
+      "tier": "novel",
+      "lang": "python",
+      "method": "ast",
+      "base": {
+        "verdict": "bad",
+        "fenced": true,
+        "bad": true,
+        "good": false
+      },
+      "expert": {
+        "verdict": "bad",
+        "fenced": true,
+        "bad": true,
+        "good": false
+      }
+    },
+    {
+      "id": "isinstance",
+      "tier": "novel",
+      "lang": "python",
+      "method": "ast",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "perf_counter",
+      "tier": "novel",
+      "lang": "python",
+      "method": "regex",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "uv_stack",
+      "tier": "novel",
+      "lang": "python",
+      "method": "regex",
+      "base": {
+        "verdict": "bad",
+        "fenced": true,
+        "bad": true,
+        "good": false
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "on_delete",
+      "tier": "novel",
+      "lang": "sql",
+      "method": "regex",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "offset_pagination",
+      "tier": "novel",
+      "lang": "sql",
+      "method": "regex",
+      "base": {
+        "verdict": "bad",
+        "fenced": true,
+        "bad": true,
+        "good": false
+      },
+      "expert": {
+        "verdict": "bad",
+        "fenced": true,
+        "bad": true,
+        "good": false
+      }
+    },
+    {
+      "id": "money_numeric",
+      "tier": "novel",
+      "lang": "sql",
+      "method": "regex",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "implicit_cast",
+      "tier": "novel",
+      "lang": "sql",
+      "method": "regex",
+      "base": {
+        "verdict": "no_signal",
+        "fenced": true,
+        "bad": false,
+        "good": false
+      },
+      "expert": {
+        "verdict": "no_signal",
+        "fenced": true,
+        "bad": false,
+        "good": false
+      }
+    },
+    {
+      "id": "count_star_exists",
+      "tier": "novel",
+      "lang": "sql",
+      "method": "regex",
+      "base": {
+        "verdict": "bad",
+        "fenced": true,
+        "bad": true,
+        "good": false
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "upsert_race",
+      "tier": "novel",
+      "lang": "sql",
+      "method": "regex",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "text_search",
+      "tier": "novel",
+      "lang": "sql",
+      "method": "regex",
+      "base": {
+        "verdict": "bad",
+        "fenced": true,
+        "bad": true,
+        "good": false
+      },
+      "expert": {
+        "verdict": "no_signal",
+        "fenced": true,
+        "bad": false,
+        "good": false
+      }
+    },
+    {
+      "id": "context_manager",
+      "tier": "novel",
+      "lang": "python",
+      "method": "ast",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "dict_get",
+      "tier": "novel",
+      "lang": "python",
+      "method": "ast",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "comprehension",
+      "tier": "novel",
+      "lang": "python",
+      "method": "ast",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "star_import",
+      "tier": "novel",
+      "lang": "python",
+      "method": "ast",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "fstring",
+      "tier": "novel",
+      "lang": "python",
+      "method": "regex",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "decimal_money",
+      "tier": "novel",
+      "lang": "python",
+      "method": "regex",
+      "base": {
+        "verdict": "no_signal",
+        "fenced": true,
+        "bad": false,
+        "good": false
+      },
+      "expert": {
+        "verdict": "no_signal",
+        "fenced": true,
+        "bad": false,
+        "good": false
+      }
+    },
+    {
+      "id": "zoneinfo",
+      "tier": "novel",
+      "lang": "python",
+      "method": "regex",
+      "base": {
+        "verdict": "no_signal",
+        "fenced": true,
+        "bad": false,
+        "good": false
+      },
+      "expert": {
+        "verdict": "no_signal",
+        "fenced": true,
+        "bad": false,
+        "good": false
+      }
+    },
+    {
+      "id": "skip_locked",
+      "tier": "trained",
+      "lang": "sql",
+      "method": "regex",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "count_col",
+      "tier": "trained",
+      "lang": "sql",
+      "method": "regex",
+      "base": {
+        "verdict": "no_signal",
+        "fenced": true,
+        "bad": false,
+        "good": false
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "pep723",
+      "tier": "trained",
+      "lang": "python",
+      "method": "regex",
+      "base": {
+        "verdict": "no_signal",
+        "fenced": true,
+        "bad": false,
+        "good": false
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "ruff_over_flake8",
+      "tier": "trained",
+      "lang": "python",
+      "method": "regex",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    }
+  ],
+  "adapters": {
+    "postgresql": "results/adapters/m2_postgresql_r8a128_v4",
+    "astral": "results/adapters/m2_astral_r8a128_v4"
+  }
+}

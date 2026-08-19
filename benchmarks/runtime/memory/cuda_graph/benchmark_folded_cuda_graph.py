@@ -25,7 +25,10 @@ if torch.cuda.is_available():
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
+from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+# REPO_ROOT comes from the installed package, never from __file__ arithmetic:
+# `.parent.parent` silently resolves to the WRONG directory the moment a file
+# is moved, and it broke all 31 scripts during the scripts/ reorg.
 sys.path.append(str(REPO_ROOT))
 
 from gnn_experiment.cuda_graph import FoldedCudaGraphDecoder  # noqa: E402

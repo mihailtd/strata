@@ -1,0 +1,267 @@
+{
+  "timestamp": "2026-08-18T09:40:10Z",
+  "regimes": {
+    "unassisted": {
+      "mean_base": 0.3333333333333333,
+      "mean_oracle": 0.806,
+      "mean_auto": 0.806,
+      "edge_oracle_vs_base": 0.4726666666666666,
+      "ci_oracle_vs_base": [
+        0.0,
+        0.718
+      ],
+      "edge_auto_vs_base": 0.4726666666666666,
+      "ci_auto_vs_base": [
+        0.0,
+        0.718
+      ],
+      "problems": [
+        {
+          "problem_id": "p1_hnsw_hybrid_migration",
+          "scores": {
+            "Arm A (Base 4B)": {
+              "expert": "base",
+              "composite_score": 1.0,
+              "exec_score": 1.0,
+              "linter_score": 0.0,
+              "modernity_score": 1.0,
+              "exec_detail": "Executed clean (42.35ms)",
+              "elapsed_s": 16.87,
+              "tok_s": 6.9,
+              "chars": 440
+            },
+            "Arm B (Oracle Expert)": {
+              "expert": "postgresql",
+              "composite_score": 1.0,
+              "exec_score": 1.0,
+              "linter_score": 0.0,
+              "modernity_score": 1.0,
+              "exec_detail": "Executed clean (33.05ms)",
+              "elapsed_s": 7.78,
+              "tok_s": 11.9,
+              "chars": 321
+            },
+            "Arm C (Autonomous Router)": {
+              "expert": "postgresql",
+              "composite_score": 1.0,
+              "exec_score": 1.0,
+              "linter_score": 0.0,
+              "modernity_score": 1.0,
+              "exec_detail": "Executed clean (8.52ms)",
+              "elapsed_s": 9.25,
+              "tok_s": 10.1,
+              "chars": 321
+            }
+          }
+        },
+        {
+          "problem_id": "p2_rrf_hybrid_cte_search",
+          "scores": {
+            "Arm A (Base 4B)": {
+              "expert": "base",
+              "composite_score": 0.0,
+              "exec_score": 0.0,
+              "linter_score": 0.0,
+              "modernity_score": 0.0,
+              "exec_detail": "Failed: UndefinedColumn: column \"embedding_vector\" does not exist\nLINE 5:     embedding_vector,\n            ^",
+              "elapsed_s": 12.2,
+              "tok_s": 10.2,
+              "chars": 352
+            },
+            "Arm B (Oracle Expert)": {
+              "expert": "postgresql",
+              "composite_score": 0.7,
+              "exec_score": 1.0,
+              "linter_score": 0.0,
+              "modernity_score": 0.0,
+              "exec_detail": "Executed clean (55.96ms)",
+              "elapsed_s": 18.49,
+              "tok_s": 11.4,
+              "chars": 635
+            },
+            "Arm C (Autonomous Router)": {
+              "expert": "postgresql",
+              "composite_score": 0.7,
+              "exec_score": 1.0,
+              "linter_score": 0.0,
+              "modernity_score": 0.0,
+              "exec_detail": "Executed clean (40.81ms)",
+              "elapsed_s": 18.79,
+              "tok_s": 11.2,
+              "chars": 635
+            }
+          }
+        },
+        {
+          "problem_id": "p3_fastmcp_asyncpg_service",
+          "scores": {
+            "Arm A (Base 4B)": {
+              "expert": "base",
+              "composite_score": 0.0,
+              "exec_score": 0.0,
+              "linter_score": 0.0,
+              "modernity_score": 0.0,
+              "exec_detail": "Compiles=False, Ruff violations=12",
+              "elapsed_s": 43.18,
+              "tok_s": 11.9,
+              "chars": 2071
+            },
+            "Arm B (Oracle Expert)": {
+              "expert": "astral",
+              "composite_score": 0.718,
+              "exec_score": 1.0,
+              "linter_score": 0.526,
+              "modernity_score": 0.3,
+              "exec_detail": "Compiles=True, Ruff violations=9",
+              "elapsed_s": 36.15,
+              "tok_s": 10.9,
+              "chars": 1551
+            },
+            "Arm C (Autonomous Router)": {
+              "expert": "astral",
+              "composite_score": 0.718,
+              "exec_score": 1.0,
+              "linter_score": 0.526,
+              "modernity_score": 0.3,
+              "exec_detail": "Compiles=True, Ruff violations=9",
+              "elapsed_s": 35.92,
+              "tok_s": 10.9,
+              "chars": 1551
+            }
+          }
+        }
+      ]
+    },
+    "prompted": {
+      "mean_base": 0.16666666666666666,
+      "mean_oracle": 0.6333333333333333,
+      "mean_auto": 0.6333333333333333,
+      "edge_oracle_vs_base": 0.4666666666666666,
+      "ci_oracle_vs_base": [
+        0.0,
+        0.6999999999999998
+      ],
+      "edge_auto_vs_base": 0.4666666666666666,
+      "ci_auto_vs_base": [
+        0.0,
+        0.6999999999999998
+      ],
+      "problems": [
+        {
+          "problem_id": "p1_hnsw_hybrid_migration",
+          "scores": {
+            "Arm A (Base 4B)": {
+              "expert": "base",
+              "composite_score": 0.3,
+              "exec_score": 0.0,
+              "linter_score": 0.0,
+              "modernity_score": 1.0,
+              "exec_detail": "Failed: UndefinedTable: relation \"tenants\" does not exist",
+              "elapsed_s": 9.61,
+              "tok_s": 10.6,
+              "chars": 386
+            },
+            "Arm B (Oracle Expert)": {
+              "expert": "postgresql",
+              "composite_score": 1.0,
+              "exec_score": 1.0,
+              "linter_score": 0.0,
+              "modernity_score": 1.0,
+              "exec_detail": "Executed clean (100.67ms)",
+              "elapsed_s": 8.28,
+              "tok_s": 10.6,
+              "chars": 303
+            },
+            "Arm C (Autonomous Router)": {
+              "expert": "postgresql",
+              "composite_score": 1.0,
+              "exec_score": 1.0,
+              "linter_score": 0.0,
+              "modernity_score": 1.0,
+              "exec_detail": "Executed clean (14.6ms)",
+              "elapsed_s": 7.47,
+              "tok_s": 11.8,
+              "chars": 303
+            }
+          }
+        },
+        {
+          "problem_id": "p2_rrf_hybrid_cte_search",
+          "scores": {
+            "Arm A (Base 4B)": {
+              "expert": "base",
+              "composite_score": 0.0,
+              "exec_score": 0.0,
+              "linter_score": 0.0,
+              "modernity_score": 0.0,
+              "exec_detail": "Failed: UndefinedColumn: column \"embedding\" does not exist\nLINE 19:         embedding <=> '[0.1, 0.2, 0.3]' AS cosine_distance,\n                 ^",
+              "elapsed_s": 15.57,
+              "tok_s": 10.8,
+              "chars": 594
+            },
+            "Arm B (Oracle Expert)": {
+              "expert": "postgresql",
+              "composite_score": 0.0,
+              "exec_score": 0.0,
+              "linter_score": 0.0,
+              "modernity_score": 0.0,
+              "exec_detail": "Failed: UndefinedColumn: column s.title does not exist\nLINE 14:        COALESCE(s.title, k.title) AS title,\n                         ^",
+              "elapsed_s": 21.17,
+              "tok_s": 11.1,
+              "chars": 685
+            },
+            "Arm C (Autonomous Router)": {
+              "expert": "postgresql",
+              "composite_score": 0.0,
+              "exec_score": 0.0,
+              "linter_score": 0.0,
+              "modernity_score": 0.0,
+              "exec_detail": "Failed: UndefinedColumn: column s.title does not exist\nLINE 14:        COALESCE(s.title, k.title) AS title,\n                         ^",
+              "elapsed_s": 22.21,
+              "tok_s": 10.5,
+              "chars": 685
+            }
+          }
+        },
+        {
+          "problem_id": "p3_fastmcp_asyncpg_service",
+          "scores": {
+            "Arm A (Base 4B)": {
+              "expert": "base",
+              "composite_score": 0.2,
+              "exec_score": 0.0,
+              "linter_score": 0.0,
+              "modernity_score": 1.0,
+              "exec_detail": "Compiles=False, Ruff violations=13",
+              "elapsed_s": 42.77,
+              "tok_s": 12.0,
+              "chars": 1813
+            },
+            "Arm B (Oracle Expert)": {
+              "expert": "astral",
+              "composite_score": 0.9,
+              "exec_score": 1.0,
+              "linter_score": 0.667,
+              "modernity_score": 1.0,
+              "exec_detail": "Compiles=True, Ruff violations=5",
+              "elapsed_s": 34.75,
+              "tok_s": 11.3,
+              "chars": 1346
+            },
+            "Arm C (Autonomous Router)": {
+              "expert": "astral",
+              "composite_score": 0.9,
+              "exec_score": 1.0,
+              "linter_score": 0.667,
+              "modernity_score": 1.0,
+              "exec_detail": "Compiles=True, Ruff violations=5",
+              "elapsed_s": 35.38,
+              "tok_s": 11.1,
+              "chars": 1346
+            }
+          }
+        }
+      ]
+    }
+  }
+}

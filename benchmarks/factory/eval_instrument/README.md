@@ -20,7 +20,7 @@ and then the corpus, the same adapter family measures **+35.00pp, 95% CI
 
 ### 1. The eval gave away its own answers
 
-`scripts/audit_eval_rubrics.py` measures this statically, in a second, with no GPU:
+`scripts/audit/audit_eval_rubrics.py` measures this statically, in a second, with no GPU:
 
 | domain | giveaway | fully given away | measured adapter effect |
 | :--- | ---: | ---: | ---: |
@@ -61,7 +61,7 @@ framework names — **"Financial Identity Framework"**, **"Financial Enmeshment"
 A reciter, not a diagnostician. money_script questions scored **+0.00pp** while
 generic technique scored +25pp.
 
-`scripts/build_financial_applied_examples.py` adds 78 applied classification
+`scripts/corpus/build_financial_applied_examples.py` adds 78 applied classification
 records (money-script taxonomy, flashpoint→script→behaviour, bias identification,
 risk tolerance vs capacity). All four confabulations were fixed.
 
@@ -122,7 +122,7 @@ examples is itself a hyperparameter.
 
 ```bash
 # static, no GPU — run this on any eval set before trusting a null result
-uv run python scripts/audit_eval_rubrics.py
+uv run python scripts/audit/audit_eval_rubrics.py
 
 # per-question base vs expert: is the adapter inert, or the eval blind?
 uv run --env-file .env python \
@@ -132,7 +132,7 @@ uv run --env-file .env python \
     --adapter results/adapters/m2v2_financial_r8a128
 
 # regenerate the applied training records (diversity + overlap guards assert)
-uv run python scripts/build_financial_applied_examples.py
+uv run python scripts/corpus/build_financial_applied_examples.py
 ```
 
 **Before reporting any adapter as inert, run the rubric audit.** A +0.00pp result

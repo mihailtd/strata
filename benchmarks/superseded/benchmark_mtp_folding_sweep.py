@@ -46,9 +46,10 @@ from gnn_experiment.novel_peft import (
     set_hard_vram_cap,
 )
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-
-
+from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+# REPO_ROOT comes from the installed package, never from __file__ arithmetic:
+# `.parent.parent` silently resolves to the WRONG directory the moment a file
+# is moved, and it broke all 31 scripts during the scripts/ reorg.
 def train_quick_mtp_adapter(
     mtp_head: Qwen35MTPDraftHead,
     base_model,

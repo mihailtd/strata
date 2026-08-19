@@ -43,7 +43,10 @@ from pathlib import Path
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+# REPO_ROOT comes from the installed package, never from __file__ arithmetic:
+# `.parent.parent` silently resolves to the WRONG directory the moment a file
+# is moved, and it broke all 31 scripts during the scripts/ reorg.
 sys.path.append(str(REPO_ROOT))
 
 from gnn_experiment.eval.eval_suite import LEGACY_TERMS, MODERN_TERMS  # noqa: E402
@@ -122,6 +125,12 @@ DOMAINS = {
         "good": FINANCIAL_TERMS,
         "bad": GENERAL_FILLER_TERMS,
     },
+    "duckdb": {
+        "adapter": "results/adapters/m2_duckdb_r8a128_v4",
+        "questions": "data/duckdb/evaluation_data.jsonl",
+        "good": [],
+        "bad": [],
+    },
 }
 
 
@@ -137,7 +146,7 @@ def score_question(q: dict, text: str, good: list[str], bad: list[str]) -> dict:
     concepts the answer names. That is immune to the two ways the ratio metric
     was gameable -- verbosity (more text, more hits) and repetition (the same
     term counted N times) -- and it is the only option for a domain with no
-    genuine opposing set. See scripts/build_financial_planning_dataset.py.
+    genuine opposing set. See scripts/old/build_financial_planning_dataset.py.
     """
     low = text.lower()
     if q.get("expects"):

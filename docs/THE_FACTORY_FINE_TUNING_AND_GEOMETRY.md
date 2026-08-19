@@ -434,7 +434,7 @@ Because $\|\Delta W\|/\|W\|$ is strictly linear in $\alpha$, the factory records
 }
 ```
 
-Rather than spending hours retraining an adapter for every candidate $\alpha$, our dynamic calibration harness (`scripts/calibrate_expert_alpha.py`) exploits the fact that `lora_alpha` is read directly from `adapter_config.json` at load time.
+Rather than spending hours retraining an adapter for every candidate $\alpha$, our dynamic calibration harness (`scripts/train/calibrate_expert_alpha.py`) exploits the fact that `lora_alpha` is read directly from `adapter_config.json` at load time.
 
 By updating `adapter_config.json` in milliseconds, the factory tests candidate alphas across the entire Goldilocks window in **1 training run + $N$ evaluations (0 GPU retraining cost)**.
 

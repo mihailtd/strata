@@ -107,10 +107,10 @@ training-config fix plus one deployment-time rescale.
 
 ## 5. What is now embedded, per-adapter rather than as a constant
 
-* `scripts/train_expert_CURRENT_m2.py` records `merge_precision` (|dW|/|W| plus
+* `scripts/train/train_expert.py` records `merge_precision` (|dW|/|W| plus
   predicted merge error) into every `regime.json`. Free — the base weights and
   LoRA factors are already in memory at save time.
-* `scripts/calibrate_expert_alpha.py` computes `alpha_min` analytically, then
+* `scripts/train/calibrate_expert_alpha.py` computes `alpha_min` analytically, then
   sweeps **deployment** alpha over the held-out gate by rewriting `lora_alpha` in
   `adapter_config.json` (`from_dir` reads it at load, `_from_peft` derives
   `scaling = alpha/rank`). **1 train + N evals**, not N trains + N evals.
