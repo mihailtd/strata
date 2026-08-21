@@ -1,0 +1,20 @@
+{
+  "turn_count": 15,
+  "reactive_swap_ms": 26.6,
+  "zero_shot": {
+    "hits": 5,
+    "misses": 7,
+    "hit_rate": 0.4167,
+    "proactive_swap_ms": 17.1,
+    "reduction_pct": 35.71,
+    "time_saved_ms": 9.5
+  },
+  "online_fitted": {
+    "hits": 8,
+    "misses": 4,
+    "hit_rate": 0.6667,
+    "proactive_swap_ms": 11.4,
+    "reduction_pct": 57.14,
+    "time_saved_ms": 15.2
+  }
+}

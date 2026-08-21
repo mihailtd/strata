@@ -1,11 +1,11 @@
 """Evaluate one or more novel-adapter variants (see finetune_novel_adapter.py)
 on the same modern-vs-legacy tooling adherence benchmark used for the
-original baseline adapter (`gnn_experiment.eval.eval_suite`), so numbers are
+original baseline adapter (`runtime.eval.eval_suite`), so numbers are
 directly comparable to the existing MLflow run `eval_Qwen_Qwen3.5-4B`
 (finetuned_modern_adherence_pct = 34.50%, base_modern_adherence_pct = 11.99%).
 
 Loads the base model once to score it, then once per variant to score that
-variant's adapter (loaded via `gnn_experiment.novel_peft.load_novel_adapter`,
+variant's adapter (loaded via `runtime.novel_peft.load_novel_adapter`,
 NOT `peft.PeftModel`, since these aren't peft adapters).
 
 A second `AutoModelForCausalLM.from_pretrained(...)` call in the same process
@@ -28,7 +28,7 @@ import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
-from gnn_experiment.utils.logger import log_benchmark_metric
+from runtime.utils.logger import log_benchmark_metric
 
 # Piped stdout (e.g. through `tail`, or a background-task capture) is fully
 # block-buffered by default, so progress prints can sit invisible for minutes
@@ -38,18 +38,18 @@ from gnn_experiment.utils.logger import log_benchmark_metric
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(line_buffering=True)  # ty: ignore[call-non-callable]  -- real TextIOWrapper method, just missing from the TextIO stub
 
-from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+from runtime.canon import REPO_ROOT  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
 sys.path.append(str(REPO_ROOT))
 
-from gnn_experiment.eval.eval_suite import LEGACY_TERMS, MODERN_TERMS, evaluate_single_prompt  # noqa: E402
-from gnn_experiment.novel_peft import (  # noqa: E402
+from runtime.eval.eval_suite import LEGACY_TERMS, MODERN_TERMS, evaluate_single_prompt  # noqa: E402
+from runtime.novel_peft import (  # noqa: E402
     load_novel_adapter,
     set_hard_vram_cap,
 )
-from gnn_experiment.peft_compat import patch_lokr_4bit_support  # noqa: E402
+from runtime.peft_compat import patch_lokr_4bit_support  # noqa: E402
 
 # Needed on the eval side too: LoKr recomputes its delta from the Kronecker
 # factors on every forward, so an unpatched peft fails here exactly as it does

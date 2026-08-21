@@ -3,7 +3,7 @@
 import pytest
 import torch
 import torch.nn as nn
-from gnn_experiment.novel_peft import FoldableExpert, WeightFoldingEngine
+from runtime.novel_peft import FoldableExpert, WeightFoldingEngine
 
 
 class MockTransformerBlock(nn.Module):
@@ -125,7 +125,7 @@ def test_weight_folding_dimension_mismatch_error():
 
 def test_activate_many_surgical_stacking():
     """Verify that activate_many(scale_mode='surgical') applies POET channel masks on conflict modules."""
-    from gnn_experiment.novel_peft import compute_surgical_notch_masks
+    from runtime.novel_peft import compute_surgical_notch_masks
 
     # Create mock transformer with attention (q_proj) and MLP (down_proj)
     class MockBlockWithMLP(nn.Module):

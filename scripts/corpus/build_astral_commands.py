@@ -42,7 +42,7 @@ import random
 import re
 from collections import Counter
 
-from gnn_experiment.canon import REPO_ROOT
+from runtime.canon import REPO_ROOT
 
 ANSWER_MARKER = "\n\n### Answer:\n"
 

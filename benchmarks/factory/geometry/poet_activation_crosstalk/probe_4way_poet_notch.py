@@ -25,12 +25,12 @@ import numpy as np
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from gnn_experiment.canon import CANON, DOMAINS, REPO_ROOT, adapter_path
+from runtime.canon import CANON, DOMAINS, REPO_ROOT, adapter_path
 
 # Ensure src is on path
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from gnn_experiment.novel_peft import FoldableExpert, WeightFoldingEngine, set_hard_vram_cap
+from runtime.novel_peft import FoldableExpert, WeightFoldingEngine, set_hard_vram_cap
 
 
 PROMPTS_PER_DOMAIN = {

@@ -45,7 +45,7 @@ def bench(fn, n=2000, warm=200):
 def main():
     from transformers import AutoTokenizer
 
-    from gnn_experiment.server import (
+    from runtime.server import (
         ChatCompletionChunkChoice,
         ChatCompletionChunkDelta,
         ChatCompletionChunkResponse,
@@ -83,8 +83,8 @@ def main():
     torch.zeros(1, device="cuda"); torch.cuda.synchronize()
     from transformers import AutoModelForCausalLM
 
-    from gnn_experiment.cuda_graph import FoldedCudaGraphDecoder
-    from gnn_experiment.novel_peft import (
+    from runtime.cuda_graph import FoldedCudaGraphDecoder
+    from runtime.novel_peft import (
         FoldableExpert, WeightFoldingEngine, set_hard_vram_cap,
     )
     set_hard_vram_cap(22.0)

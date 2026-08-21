@@ -22,7 +22,7 @@ from typing import Any
 import numpy as np
 import torch
 
-from gnn_experiment.canon import CANON, REPO_ROOT
+from runtime.canon import CANON, REPO_ROOT
 
 # Single-threaded execution for deterministic benchmark
 torch.set_num_threads(1)

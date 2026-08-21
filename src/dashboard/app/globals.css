@@ -1,0 +1,71 @@
+@import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
+
+:root {
+  --bg-base: #06080d;
+  --bg-surface: #0c1018;
+  --bg-card: rgba(16, 22, 34, 0.75);
+  --bg-card-hover: rgba(24, 32, 50, 0.9);
+  --border-glow: rgba(0, 242, 255, 0.35);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  
+  --cyan: #00f2ff;
+  --cyan-glow: rgba(0, 242, 255, 0.4);
+  --purple: #a855f7;
+  --purple-glow: rgba(168, 85, 247, 0.4);
+  --emerald: #10b981;
+  --emerald-glow: rgba(16, 185, 129, 0.4);
+  --amber: #f59e0b;
+  --amber-glow: rgba(245, 158, 11, 0.4);
+  --rose: #f43f5e;
+  
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --text-dim: #64748b;
+}
+
+body {
+  background-color: var(--bg-base);
+  background-image: 
+    radial-gradient(circle at 10% 10%, rgba(0, 242, 255, 0.06) 0%, transparent 45%),
+    radial-gradient(circle at 90% 90%, rgba(168, 85, 247, 0.06) 0%, transparent 45%),
+    linear-gradient(180deg, rgba(6, 8, 13, 0.95) 0%, #06080d 100%);
+  color: var(--text-main);
+  min-height: 100vh;
+}
+
+/* React Flow custom dark styling */
+.react-flow__node {
+  border-radius: 12px;
+  font-family: inherit;
+}
+
+.react-flow__handle {
+  background: var(--cyan);
+  width: 8px;
+  height: 8px;
+  border: 1px solid #06080d;
+}
+
+.react-flow__edge-path {
+  stroke-width: 2;
+}
+
+.react-flow__controls {
+  background: rgba(12, 16, 24, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.react-flow__controls-button {
+  background: transparent;
+  border-bottom: 1px solid var(--border-subtle);
+  fill: var(--text-muted);
+}
+
+.react-flow__controls-button:hover {
+  background: rgba(255, 255, 255, 0.05);
+  fill: var(--cyan);
+}
+

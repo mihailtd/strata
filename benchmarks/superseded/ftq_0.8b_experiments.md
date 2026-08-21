@@ -14,7 +14,7 @@
 > in this repo** — this file predates the current codebase. Its prototype
 > `CudaGraphDecoder` has been moved to
 > [`cuda_graph_ftq_prototype.py`](cuda_graph_ftq_prototype.py);
-> the live engine is `FoldedCudaGraphDecoder` in `src/gnn_experiment/cuda_graph.py`.
+> the live engine is `FoldedCudaGraphDecoder` in `src/runtime/cuda_graph.py`.
 >
 > **For numbers you can cite, use `CURRENT.md`.** Kept here for provenance of the
 > ideas, not the measurements.

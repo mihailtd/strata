@@ -29,19 +29,20 @@ from typing import Any
 import numpy as np
 import torch
 
-from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+from runtime.canon import REPO_ROOT  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
 sys.path.append(str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from gnn_experiment.canon import CANON, adapter_path  # noqa: E402
-from gnn_experiment.novel_peft import (  # noqa: E402
+from runtime.canon import CANON, adapter_path  # noqa: E402
+from runtime.novel_peft import (  # noqa: E402
     FoldableExpert,
     WeightFoldingEngine,
     set_hard_vram_cap,
 )
+from runtime.gpu_preflight import ensure_gpu_exclusive  # noqa: E402
 from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 
 
@@ -425,6 +426,9 @@ BENCHMARK_PIPELINES = [
 
 class MultiTurnExecutionGate:
     def __init__(self, model_id: str = "Qwen/Qwen3.5-4B", version: str = "v4", vram_cap_gb: float = 22.0):
+        # PRE-FLIGHT EXCLUSIVITY GUARD: Fail fast if another job is holding VRAM
+        ensure_gpu_exclusive()
+
         set_hard_vram_cap(vram_cap_gb)
         print("==================================================")
         print(f" Chained Multi-Turn Execution Benchmark Engine [{version.upper()}]")

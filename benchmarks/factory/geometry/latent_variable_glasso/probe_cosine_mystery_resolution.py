@@ -56,8 +56,8 @@ import numpy as np
 
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
-from gnn_experiment.canon import CANON, REPO_ROOT, adapter_path
-from gnn_experiment.novel_peft import FoldableExpert
+from runtime.canon import CANON, REPO_ROOT, adapter_path
+from runtime.novel_peft import FoldableExpert
 
 
 # ─────────────────────────────────────────────────────────────────────────────

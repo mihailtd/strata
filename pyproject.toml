@@ -1,7 +1,7 @@
 [project]
-name = "gnn-experiment"
+name = "runtime"
 version = "0.1.0"
-description = "LoRA / PEFT fine-tuning technique benchmarking harness (single-GPU, ROCm/RX 7900 XTX)"
+description = "Autonomous Runtime Engine with in-place weight folding, speculative decoding, and Riemannian dynamic routing"
 authors = [
     { name = "Mihai Farcas", email = "farcasmihai91@gmail.com" }
 ]
@@ -38,7 +38,7 @@ dependencies = [
 ]
 
 [project.scripts]
-gnn-experiment = "gnn_experiment:main"
+runtime = "runtime.server:main"
 
 [build-system]
 requires = ["uv_build>=0.12.3,<0.13.0"]

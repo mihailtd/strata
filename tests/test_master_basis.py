@@ -10,7 +10,7 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 
-from gnn_experiment.novel_peft import (
+from runtime.novel_peft import (
     MasterBasisBank,
     NovelLoraLinear,
     apply_novel_lora,

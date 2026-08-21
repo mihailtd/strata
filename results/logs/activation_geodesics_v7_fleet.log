@@ -1,0 +1,76 @@
+W20260820 11:52:02.024995 133214503161920 agent.cpp:608] sysfs nodes path '/sys/class/kfd/kfd/topology/nodes' does not exist
+================================================================================
+ ACTIVATION COVARIANCE RIEMANNIAN GEODESIC BENCHMARK (§3.5, §8.1.4)
+================================================================================
+Device: cuda:0 (AMD Radeon RX 7900 XTX)
+
+[1/5] Loading Qwen/Qwen3.5-4B Base Model...
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+Fetching 2 files:   0%|          | 0/2 [00:00<?, ?it/s]Fetching 2 files: 100%|██████████| 2/2 [00:00<00:00, 261.83it/s]
+[transformers] The fast path is not available because one of the required library is not installed. Falling back to torch implementation. To install follow https://github.com/fla-org/flash-linear-attention#installation and https://github.com/Dao-AILab/causal-conv1d
+Loading weights:   0%|          | 0/426 [00:00<?, ?it/s]Loading weights:   0%|          | 1/426 [00:01<12:11,  1.72s/it]Loading weights:   2%|▏         | 9/426 [00:01<01:08,  6.13it/s]Loading weights:   3%|▎         | 13/426 [00:02<00:46,  8.80it/s]Loading weights:   6%|▋         | 27/426 [00:02<00:17, 22.94it/s]Loading weights:   8%|▊         | 35/426 [00:02<00:12, 30.35it/s]Loading weights:  10%|▉         | 42/426 [00:02<00:11, 32.12it/s]Loading weights:  11%|█▏        | 48/426 [00:02<00:11, 33.01it/s]Loading weights:  14%|█▍        | 61/426 [00:02<00:07, 47.61it/s]Loading weights:  16%|█▌        | 68/426 [00:03<00:09, 39.55it/s]Loading weights:  19%|█▉        | 81/426 [00:03<00:06, 53.01it/s]Loading weights:  21%|██▏       | 91/426 [00:03<00:06, 49.73it/s]Loading weights:  23%|██▎       | 98/426 [00:03<00:07, 45.43it/s]Loading weights:  27%|██▋       | 114/426 [00:03<00:05, 57.48it/s]Loading weights:  28%|██▊       | 121/426 [00:03<00:05, 52.87it/s]Loading weights:  31%|███       | 131/426 [00:04<00:05, 58.88it/s]Loading weights:  32%|███▏      | 138/426 [00:04<00:05, 49.61it/s]Loading weights:  35%|███▍      | 147/426 [00:04<00:05, 47.96it/s]Loading weights:  36%|███▌      | 153/426 [00:04<00:06, 44.65it/s]Loading weights:  37%|███▋      | 158/426 [00:04<00:06, 42.52it/s]Loading weights:  40%|███▉      | 170/426 [00:04<00:05, 50.45it/s]Loading weights:  42%|████▏     | 181/426 [00:05<00:04, 60.22it/s]Loading weights:  44%|████▍     | 188/426 [00:05<00:04, 49.29it/s]Loading weights:  46%|████▌     | 196/426 [00:05<00:05, 44.85it/s]Loading weights:  48%|████▊     | 206/426 [00:05<00:04, 47.23it/s]Loading weights:  51%|█████     | 216/426 [00:05<00:03, 55.25it/s]Loading weights:  52%|█████▏    | 223/426 [00:05<00:03, 57.05it/s]Loading weights:  54%|█████▍    | 230/426 [00:06<00:03, 58.92it/s]Loading weights:  56%|█████▌    | 237/426 [00:06<00:03, 55.68it/s]Loading weights:  57%|█████▋    | 243/426 [00:06<00:03, 51.65it/s]Loading weights:  58%|█████▊    | 249/426 [00:06<00:03, 47.86it/s]Loading weights:  60%|█████▉    | 254/426 [00:06<00:03, 45.46it/s]Loading weights:  62%|██████▏   | 265/426 [00:06<00:02, 55.26it/s]Loading weights:  65%|██████▌   | 277/426 [00:06<00:02, 66.02it/s]Loading weights:  67%|██████▋   | 286/426 [00:07<00:02, 63.51it/s]Loading weights:  69%|██████▉   | 293/426 [00:07<00:02, 45.85it/s]Loading weights:  71%|███████   | 302/426 [00:07<00:02, 48.84it/s]Loading weights:  72%|███████▏  | 308/426 [00:07<00:03, 37.97it/s]Loading weights:  76%|███████▌  | 324/426 [00:07<00:01, 58.45it/s]Loading weights:  78%|███████▊  | 332/426 [00:08<00:02, 40.89it/s]Loading weights:  83%|████████▎ | 355/426 [00:08<00:01, 69.76it/s]Loading weights:  86%|████████▌ | 366/426 [00:08<00:01, 55.05it/s]Loading weights:  88%|████████▊ | 377/426 [00:08<00:00, 52.34it/s]Loading weights:  92%|█████████▏| 393/426 [00:09<00:00, 68.78it/s]Loading weights:  95%|█████████▍| 403/426 [00:09<00:00, 58.12it/s]Loading weights:  97%|█████████▋| 412/426 [00:09<00:00, 51.82it/s]Loading weights:  98%|█████████▊| 419/426 [00:09<00:00, 42.82it/s]Loading weights: 100%|██████████| 426/426 [00:09<00:00, 43.57it/s]
+
+[2/5] Loading 8 domain adapters...
+  astral@v7              <- m2_astral_r8a128_v7
+  Loaded expert: astral@v7       (rank=8, scaling=16.0)
+  postgresql@v7          <- m2_postgresql_r8a128_v7
+  Loaded expert: postgresql@v7   (rank=8, scaling=16.0)
+  duckdb@v7              <- m2_duckdb_r8a128_v7
+  Loaded expert: duckdb@v7       (rank=8, scaling=16.0)
+  financial@v7           <- m2_financial_r8a128_v7
+  Loaded expert: financial@v7    (rank=8, scaling=16.0)
+  python_modern@v6       <- m2_python_modern_r8a128_v6
+  Loaded expert: python_modern@v6 (rank=8, scaling=16.0)
+  python_modern@v7       <- m2_python_modern_r8a128_v7
+  Loaded expert: python_modern@v7 (rank=8, scaling=16.0)
+  python_web@v6          <- m2_python_web_r8a128_v6
+  Loaded expert: python_web@v6   (rank=8, scaling=16.0)
+  python_web@v7          <- m2_python_web_r8a128_v7
+  Loaded expert: python_web@v7   (rank=8, scaling=16.0)
+
+[3/5] Evaluation Suite: 97 shared probe prompts across 6 domains.
+
+[4/5] Extracting Residual Stream Activations across probed layers:  [4, 12, 20, 28, 36]
+  -> Running Base Model...
+     Token sample size N = 3249, Channel dimension P = 2560 (n < p regime: False)
+  -> Morphing to Expert [astral@v7] in-place...
+     Extracted depth representations for [astral@v7] (morph: 2.76ms, delta_L36=0.0034)
+  -> Morphing to Expert [postgresql@v7] in-place...
+     Extracted depth representations for [postgresql@v7] (morph: 1.93ms, delta_L36=0.0033)
+  -> Morphing to Expert [duckdb@v7] in-place...
+     Extracted depth representations for [duckdb@v7] (morph: 2.16ms, delta_L36=0.0033)
+  -> Morphing to Expert [financial@v7] in-place...
+     Extracted depth representations for [financial@v7] (morph: 1.53ms, delta_L36=0.0030)
+  -> Morphing to Expert [python_modern@v6] in-place...
+     Extracted depth representations for [python_modern@v6] (morph: 2.50ms, delta_L36=0.0043)
+  -> Morphing to Expert [python_modern@v7] in-place...
+     Extracted depth representations for [python_modern@v7] (morph: 2.10ms, delta_L36=0.0036)
+  -> Morphing to Expert [python_web@v6] in-place...
+     Extracted depth representations for [python_web@v6] (morph: 1.39ms, delta_L36=0.0037)
+  -> Morphing to Expert [python_web@v7] in-place...
+     Extracted depth representations for [python_web@v7] (morph: 1.84ms, delta_L36=0.0039)
+
+[5/5] Computing Affine-Invariant Riemannian Geodesics (AIRM)...
+
+--- Layer-wise Base-to-Expert Representation Geodesic Profile d_R(Base, Expert) ---
+Domain          | Layer  4 | Layer 12 | Layer 20 | Layer 28 | Layer 36 | Final Scale | Final Shape
+--------------------------------------------------------------------------------
+astral@v7       |  80.6766 |  66.0218 |  90.7822 | 107.6521 |  94.4924 |      4.8318 |     94.3689
+postgresql@v7   |  75.7968 |  64.0259 |  90.1740 | 104.1585 |  96.3514 |      4.5538 |     96.2438
+duckdb@v7       |  78.2588 |  70.6179 |  98.7506 | 114.4772 | 106.0154 |      5.6223 |    105.8663
+financial@v7    |  78.0578 |  72.6768 |  97.6745 | 107.6722 |  98.8954 |      0.0504 |     98.8954
+python_modern@v6 |  87.8205 |  75.6189 | 105.0894 | 120.5404 | 112.5880 |     15.9426 |    111.4539
+python_modern@v7 |  67.0140 |  62.5505 |  99.1841 | 119.7839 | 110.8673 |      8.9588 |    110.5049
+python_web@v6   |  93.3983 |  73.3309 |  98.7363 | 117.6905 | 107.0414 |      8.2638 |    106.7221
+python_web@v7   |  82.1464 |  66.7843 |  96.7074 | 113.0409 | 103.2210 |      9.8525 |    102.7499
+
+--- Output Layer (Layer 36) Pairwise Activation Geodesic Matrix d_R(Σ_i, Σ_j) ---
+                | astral@v | postgres | duckdb@v | financia | python_m | python_m | python_w | python_w
+-------------------------------------------------------------------------------------------------------
+astral@v7       |   0.0000 | 104.5559 | 111.8552 | 106.7863 | 115.2330 | 111.3481 | 111.8395 | 107.9666 | 
+postgresql@v7   | 104.5415 |   0.0000 | 110.6750 | 107.7890 | 116.2552 | 112.2220 | 112.6698 | 108.2745 | 
+duckdb@v7       | 111.7852 | 110.6146 |   0.0000 | 114.5667 | 118.6948 | 114.9719 | 116.6092 | 111.6309 | 
+financial@v7    | 106.8282 | 107.7919 | 114.6218 |   0.0000 | 118.4604 | 113.9632 | 116.2011 | 112.3902 | 
+python_modern@v6 | 115.2616 | 116.1252 | 118.6517 | 118.4158 |   0.0000 | 115.9290 | 115.4101 | 114.9670 | 
+/home/mihai/.local/share/uv/python/cpython-3.14.7-linux-x86_64-gnu/lib/python3.14/multiprocessing/resource_tracker.py:475: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown: {'/mp-6ndksd9v'}
+  warnings.warn(

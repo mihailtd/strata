@@ -4,14 +4,14 @@ import pytest
 import torch
 from torch import nn
 
-from gnn_experiment.fused_norm import (
+from runtime.fused_norm import (
     ExactRMSNorm,
     ScaleFreeRMSNorm,
     fold_rmsnorm_into_linear,
     scale_expert_factors_for_folded_norms,
     unfold_rmsnorm,
 )
-from gnn_experiment.novel_peft import FoldableExpert, WeightFoldingEngine
+from runtime.novel_peft import FoldableExpert, WeightFoldingEngine
 
 
 class MockAttention(nn.Module):

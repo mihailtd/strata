@@ -39,14 +39,14 @@ from pathlib import Path
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from gnn_experiment.mtp_draft import Qwen35MTPDraftHead
-from gnn_experiment.novel_peft import (
+from runtime.mtp_draft import Qwen35MTPDraftHead
+from runtime.novel_peft import (
     FoldableExpert,
     WeightFoldingEngine,
     set_hard_vram_cap,
 )
 
-from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+from runtime.canon import REPO_ROOT  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
@@ -116,7 +116,7 @@ def train_quick_mtp_adapter(
     (adapter_dir / "novel_adapter_config.json").write_text(json.dumps(cfg, indent=2))
 
     # Unwrap NovelLoraLinear layers back to pristine nn.Linear parameters for WeightFoldingEngine
-    from gnn_experiment.novel_peft import unwrap_novel_lora
+    from runtime.novel_peft import unwrap_novel_lora
 
     unwrap_novel_lora(mtp_head)
 
@@ -184,7 +184,7 @@ def main():
     # Pre-load dataset loader once for fast GPU sweep
     from torch.utils.data import DataLoader
 
-    from gnn_experiment.micro_probe.dataset import load_astral_micro_dataset
+    from runtime.micro_probe.dataset import load_astral_micro_dataset
 
     ds = load_astral_micro_dataset(conversational=False)
 

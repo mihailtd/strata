@@ -67,13 +67,13 @@ from transformers import (  # noqa: E402
     BitsAndBytesConfig,
 )
 
-from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+from runtime.canon import REPO_ROOT  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
 sys.path.append(str(REPO_ROOT))
 
-from gnn_experiment.novel_peft import set_hard_vram_cap  # noqa: E402
+from runtime.novel_peft import set_hard_vram_cap  # noqa: E402
 
 
 def load_questions(path: Path, limit: int | None) -> list[dict]:

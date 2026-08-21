@@ -42,7 +42,7 @@ import json
 import random
 from collections import Counter
 
-from gnn_experiment.canon import REPO_ROOT
+from runtime.canon import REPO_ROOT
 
 # Merged sets to build. financial is deliberately excluded from both: its expert
 # is worth +0.83pp over base and it does -36.67pp of collateral damage, so adding

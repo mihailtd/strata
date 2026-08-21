@@ -29,9 +29,9 @@ import torch  # noqa: E402
 torch.zeros(1, device="cuda"); torch.cuda.synchronize()
 from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 
-from gnn_experiment.cuda_graph import FoldedCudaGraphDecoder  # noqa: E402
-from gnn_experiment.mtp_draft import Qwen35MTPDraftHead  # noqa: E402
-from gnn_experiment.novel_peft import (  # noqa: E402
+from runtime.cuda_graph import FoldedCudaGraphDecoder  # noqa: E402
+from runtime.mtp_draft import Qwen35MTPDraftHead  # noqa: E402
+from runtime.novel_peft import (  # noqa: E402
     FoldableExpert, WeightFoldingEngine, set_hard_vram_cap,
 )
 
@@ -74,7 +74,7 @@ def main():
     ctl.capture(ids); ctl.generate_with_graph(ids, max_new_tokens=8)
     stage("graph autoregressive ready")
 
-    from gnn_experiment.bucketed_speculative import BucketedSpeculativeDecoder
+    from runtime.bucketed_speculative import BucketedSpeculativeDecoder
     res = {}
     for _ in range(REPEATS):
         _, _, tps, _ = ctl.generate_with_graph(ids, max_new_tokens=N)

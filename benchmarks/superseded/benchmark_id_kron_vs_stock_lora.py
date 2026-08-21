@@ -43,7 +43,7 @@ import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+from runtime.canon import REPO_ROOT  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
@@ -70,7 +70,7 @@ def load_questions(questions_file: str) -> list[dict]:
 
 
 def evaluate_model_on_questions(model, tokenizer, questions: list[dict]) -> dict:
-    from gnn_experiment.eval.eval_suite import (
+    from runtime.eval.eval_suite import (
         LEGACY_TERMS,
         MODERN_TERMS,
         evaluate_single_prompt,
@@ -101,7 +101,7 @@ def evaluate_model_on_questions(model, tokenizer, questions: list[dict]) -> dict
 
 
 def main():
-    from gnn_experiment.novel_peft import load_novel_adapter
+    from runtime.novel_peft import load_novel_adapter
     parser = argparse.ArgumentParser(
         description="Head-to-Head Benchmark: id_kron vs Stock LoRA (bfloat16, fixed harness)"
     )

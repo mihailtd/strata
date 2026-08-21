@@ -1,9 +1,10 @@
 {
   "metadata": {
-    "ADAPTER_VERSION": "v6",
+    "ADAPTER_VERSION": "v7",
     "MAX_NEW_TOKENS": 2048,
     "BASE_MODEL": "Qwen/Qwen3.5-4B",
     "VRAM_CAP_GB": 22.0,
+    "GPU_SAFETY_THRESHOLD_GB": 6.0,
     "GREEDY": true,
     "LORA_RANK": 8,
     "LORA_ALPHA": 128
@@ -17,8 +18,8 @@
     "dense": {
       "vram_kb": 303104.0,
       "compression_ratio": 1.0,
-      "mean_push_latency_us": 1096.3900623058482,
-      "mean_rollback_latency_us": 343.0319993640296,
+      "mean_push_latency_us": 191.6492289334807,
+      "mean_rollback_latency_us": 182.20800120616332,
       "token_agreement": 1.0,
       "domain_keyword_adherence": 0.5,
       "syntax_validity_rate": 0.0
@@ -26,8 +27,8 @@
     "poet": {
       "vram_kb": 89480.0,
       "compression_ratio": 3.3873938310236924,
-      "mean_push_latency_us": 8316.082625090834,
-      "mean_rollback_latency_us": 3337.392998219002,
+      "mean_push_latency_us": 4373.872853951373,
+      "mean_rollback_latency_us": 5202.859996643383,
       "token_agreement": 1.0,
       "domain_keyword_adherence": 0.5,
       "syntax_validity_rate": 0.0
@@ -35,12 +36,12 @@
     "selective_hybrid": {
       "vram_kb": 127368.0,
       "compression_ratio": 2.6772187676653476,
-      "mean_push_latency_us": 9087.296625314897,
-      "mean_rollback_latency_us": 333.46449890814256,
+      "mean_push_latency_us": 579.8954377193392,
+      "mean_rollback_latency_us": 246.6689984430559,
       "token_agreement": 1.0,
       "domain_keyword_adherence": 0.5,
       "syntax_validity_rate": 0.0
     }
   },
-  "elapsed_seconds": 176.24576830863953
+  "elapsed_seconds": 38.456778049468994
 }

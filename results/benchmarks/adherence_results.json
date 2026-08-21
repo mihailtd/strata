@@ -12,9 +12,9 @@
         "good": false
       },
       "expert": {
-        "verdict": "no_signal",
+        "verdict": "bad",
         "fenced": true,
-        "bad": false,
+        "bad": true,
         "good": false
       }
     },
@@ -318,10 +318,10 @@
         "good": false
       },
       "expert": {
-        "verdict": "no_signal",
+        "verdict": "good",
         "fenced": true,
         "bad": false,
-        "good": false
+        "good": true
       }
     },
     {
@@ -492,16 +492,16 @@
       "lang": "python",
       "method": "regex",
       "base": {
-        "verdict": "no_signal",
+        "verdict": "good",
         "fenced": true,
         "bad": false,
-        "good": false
+        "good": true
       },
       "expert": {
-        "verdict": "no_signal",
+        "verdict": "good",
         "fenced": true,
         "bad": false,
-        "good": false
+        "good": true
       }
     },
     {
@@ -552,10 +552,10 @@
         "good": false
       },
       "expert": {
-        "verdict": "good",
+        "verdict": "no_signal",
         "fenced": true,
         "bad": false,
-        "good": true
+        "good": false
       }
     },
     {
@@ -575,10 +575,334 @@
         "bad": false,
         "good": true
       }
+    },
+    {
+      "id": "union_all",
+      "tier": "novel",
+      "lang": "sql",
+      "method": "regex",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "bad",
+        "fenced": true,
+        "bad": true,
+        "good": false
+      }
+    },
+    {
+      "id": "order_by_random",
+      "tier": "novel",
+      "lang": "sql",
+      "method": "regex",
+      "base": {
+        "verdict": "bad",
+        "fenced": true,
+        "bad": true,
+        "good": false
+      },
+      "expert": {
+        "verdict": "no_signal",
+        "fenced": true,
+        "bad": false,
+        "good": false
+      }
+    },
+    {
+      "id": "date_on_column",
+      "tier": "novel",
+      "lang": "sql",
+      "method": "regex",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "any_array",
+      "tier": "novel",
+      "lang": "sql",
+      "method": "regex",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "at_time_zone",
+      "tier": "novel",
+      "lang": "sql",
+      "method": "regex",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "no_signal",
+        "fenced": true,
+        "bad": false,
+        "good": false
+      }
+    },
+    {
+      "id": "case_insensitive",
+      "tier": "novel",
+      "lang": "sql",
+      "method": "regex",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "enum_type",
+      "tier": "novel",
+      "lang": "sql",
+      "method": "regex",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "count_distinct",
+      "tier": "novel",
+      "lang": "sql",
+      "method": "regex",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "open_encoding",
+      "tier": "novel",
+      "lang": "python",
+      "method": "ast",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "swallow_exception",
+      "tier": "novel",
+      "lang": "python",
+      "method": "ast",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "str_join",
+      "tier": "novel",
+      "lang": "python",
+      "method": "ast",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "secrets_token",
+      "tier": "novel",
+      "lang": "python",
+      "method": "regex",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "no_eval",
+      "tier": "novel",
+      "lang": "python",
+      "method": "ast",
+      "base": {
+        "verdict": "no_signal",
+        "fenced": true,
+        "bad": false,
+        "good": false
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "subprocess",
+      "tier": "novel",
+      "lang": "python",
+      "method": "ast",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "is_none",
+      "tier": "novel",
+      "lang": "python",
+      "method": "ast",
+      "base": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "truthiness",
+      "tier": "novel",
+      "lang": "python",
+      "method": "ast",
+      "base": {
+        "verdict": "no_signal",
+        "fenced": true,
+        "bad": false,
+        "good": false
+      },
+      "expert": {
+        "verdict": "no_signal",
+        "fenced": true,
+        "bad": false,
+        "good": false
+      }
+    },
+    {
+      "id": "deepcopy",
+      "tier": "novel",
+      "lang": "python",
+      "method": "regex",
+      "base": {
+        "verdict": "bad",
+        "fenced": false,
+        "bad": true,
+        "good": true
+      },
+      "expert": {
+        "verdict": "good",
+        "fenced": true,
+        "bad": false,
+        "good": true
+      }
+    },
+    {
+      "id": "pyproject",
+      "tier": "novel",
+      "lang": "python",
+      "method": "regex",
+      "base": {
+        "verdict": "bad",
+        "fenced": true,
+        "bad": true,
+        "good": true
+      },
+      "expert": {
+        "verdict": "no_signal",
+        "fenced": true,
+        "bad": false,
+        "good": false
+      }
     }
   ],
   "adapters": {
-    "postgresql": "results/adapters/m2_postgresql_r8a128_v4",
-    "astral": "results/adapters/m2_astral_r8a128_v4"
+    "postgresql": "/home/mihai/gnn-experiment/results/adapters/m2_postgresql_r8a128_v7",
+    "astral": "/home/mihai/gnn-experiment/results/adapters/m2_astral_r8a128_v7"
   }
 }

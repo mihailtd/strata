@@ -71,7 +71,7 @@ the full numbers:
   its global cache into venvs (verified: same inode, 4 links), had silently
   mutated `~/.cache/uv` and propagated to `training/.venv` as well. Now restored
   to pristine upstream (peft matches its install-record hashes) with the fix
-  living in `src/gnn_experiment/peft_compat.py`.
+  living in `src/runtime/peft_compat.py`.
 - **✅ A working hot-swap primitive now exists** (`swap_adapter_weights`), 3.7x
   faster than the re-wrap it replaces and — unlike the incumbent — safe to call
   repeatedly without corrupting the model. **This unblocks Step 3 (Billboard
@@ -206,7 +206,7 @@ transposed pattern.
   (0.738 vs 0.410 mean Frobenius) applied at the correct orientation. So the low
   score is a structural-expressiveness limit, **not** the "3-factor gradient
   vanishing" claimed — gradients that vanish do not produce a larger delta than
-  the baseline. (Patch now vendored: `src/gnn_experiment/peft_compat.py`.)
+  the baseline. (Patch now vendored: `src/runtime/peft_compat.py`.)
 
 #### The real finding
 
@@ -903,7 +903,7 @@ Tucker Factorization is **off the table and will not be mentioned again**. All b
 >    measurement hooks cost more than the skipped math saves. It cannot offset
 >    DoRA's overhead, which was the entire reason it appeared in this plan.
 >
-> **What survives and is worth keeping** (all in `src/gnn_experiment/novel_peft.py`):
+> **What survives and is worth keeping** (all in `src/runtime/novel_peft.py`):
 > the self-calibrating percentile gate (can't silently go inert the way a fixed
 > threshold did), the warmup-complete-with-zero-observations warning, and the
 > quiet-set churn metric that exposes static-vs-stochastic masking. These are
@@ -967,7 +967,7 @@ The corrected training stack (velocity removed):
 
 ### 2.1 — Dataset Pipeline (Already In Progress)
 
-The dataset pipeline (`load_micro_dataset()` in `src/gnn_experiment/micro_probe/dataset.py`) has been updated:
+The dataset pipeline (`load_micro_dataset()` in `src/runtime/micro_probe/dataset.py`) has been updated:
 
 - Use `tokenizer.apply_chat_template()` with `SFTTrainer(assistant_only_loss=True)` so response-only loss is active — LoRA gradients focus 100% on assistant output correctness.
 - Persona sanitizer strips informal greeting/sign-off filler from assistant content before training (`sanitize_assistant_content()`).

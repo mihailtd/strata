@@ -22,7 +22,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from gnn_experiment.canon import CANON, REPO_ROOT
+from runtime.canon import CANON, REPO_ROOT
 
 torch.set_num_threads(2)
 

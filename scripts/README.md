@@ -1,6 +1,6 @@
 # scripts/
 
-**Version numbers live in `src/gnn_experiment/canon.py`, not in filenames.**
+**Version numbers live in `src/runtime/canon.py`, not in filenames.**
 
 That is the whole point of this layout. `build_astral_v3_corpus.py` sitting next to
 `build_astral_corpus.py` is how a stale script gets picked by whoever (human or
@@ -74,7 +74,7 @@ stops being held out.
 
 1. **Never hard-code a decode budget or an adapter version.** Import them:
    ```python
-   from gnn_experiment.canon import CANON, adapter_path
+   from runtime.canon import CANON, adapter_path
    ```
    `check_canon.py` enforces this and exits non-zero on violation.
 

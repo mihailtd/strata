@@ -42,7 +42,7 @@ import re
 import shutil
 from collections import Counter
 
-from gnn_experiment.canon import REPO_ROOT
+from runtime.canon import REPO_ROOT
 
 SRC = "data/astral/training_data_v4.jsonl"
 

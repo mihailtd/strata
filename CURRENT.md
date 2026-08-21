@@ -72,7 +72,7 @@ uv run python scripts/audit/audit_adapters.py          # drift check + current r
 uv run python scripts/audit/audit_adapters.py --write  # re-record after training
 ```
 
-**Every quality benchmark imports canonical defaults from `gnn_experiment.canon`.**
+**Every quality benchmark imports canonical defaults from `runtime.canon`.**
 Run `uv run python scripts/audit/check_canon.py` to audit compliance.
 
 ---

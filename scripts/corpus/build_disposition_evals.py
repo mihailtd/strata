@@ -40,7 +40,7 @@ import argparse
 import json
 import re
 
-from gnn_experiment.canon import REPO_ROOT
+from runtime.canon import REPO_ROOT
 
 # domain -> [(id, category, prompt, expects[], avoid[])]
 EVALS: dict[str, list[tuple[str, str, str, list[str], list[str]]]] = {

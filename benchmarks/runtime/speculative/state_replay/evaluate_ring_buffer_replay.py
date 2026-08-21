@@ -27,20 +27,20 @@ if torch.cuda.is_available():
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+from runtime.canon import REPO_ROOT  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
 sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from gnn_experiment.mtp_draft import (  # noqa: E402
+from runtime.mtp_draft import (  # noqa: E402
     Qwen35MTPDraftHead,
     attach_state_ring_buffer,
     restore_state,
     snapshot_state,
 )
-from gnn_experiment.novel_peft import set_hard_vram_cap  # noqa: E402
+from runtime.novel_peft import set_hard_vram_cap  # noqa: E402
 
 MODEL_NAME = "Qwen/Qwen3.5-4B"
 DTYPE = torch.bfloat16

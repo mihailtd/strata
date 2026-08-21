@@ -2,7 +2,7 @@
 
 The rule this enforces: a benchmark that GRADES QUALITY (execution, linting,
 regex rubrics, pass@k) may not carry its own decode budget or its own adapter
-version. It must import them from gnn_experiment.canon.
+version. It must import them from runtime.canon.
 
 Latency/throughput probes are exempt -- a 8- or 32-token decode is the correct
 measurement there, and forcing 2048 on them would be its own kind of wrong. The
@@ -20,12 +20,12 @@ import re
 import sys
 from pathlib import Path
 
-from gnn_experiment.canon import REPO_ROOT as REPO  # noqa: E402
+from runtime.canon import REPO_ROOT as REPO  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
 CANON_MAX_NEW_TOKENS = 2048
-CANON_ADAPTER_VERSION = "v6"
+CANON_ADAPTER_VERSION = "v7"
 
 # Signals that a script grades OUTPUT QUALITY rather than latency.
 QUALITY_MARKERS = (
@@ -86,7 +86,7 @@ def main() -> int:
             continue
 
         # imports canon? then the literals below are canon's problem, not ours
-        uses_canon = "gnn_experiment.canon" in text
+        uses_canon = "runtime.canon" in text
 
         seen: set[int] = set()
         for rx in TOKEN_RES:
@@ -124,7 +124,7 @@ def main() -> int:
         return 0
     for v in violations:
         print(f"  VIOLATION  {v}")
-    print(f"\n  {len(violations)} violation(s). Fix by importing from gnn_experiment.canon.")
+    print(f"\n  {len(violations)} violation(s). Fix by importing from runtime.canon.")
     return 1
 
 

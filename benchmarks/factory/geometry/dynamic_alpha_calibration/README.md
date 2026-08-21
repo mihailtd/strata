@@ -68,3 +68,63 @@ uv run --env-file .env python benchmarks/factory/geometry/dynamic_alpha_calibrat
   alpha_opt = 64  (held-out 0.4667, merge_err 4.46%)
   APPLIED lora_alpha=64 to results/adapters/m2_postgresql_r8a128_v3/adapter_config.json
 ```
+
+---
+
+## 4. Server & Dashboard Wiring (2026-08-20)
+
+The calibration math above is now callable without a shell: `src/runtime/alpha_calibration.py`
+exposes `calibrate_adapter_alpha()`, wired to three routes in `server.py` —
+`POST /api/factory/calibrate_alpha`, `GET /api/factory/calibrations`,
+`GET /api/factory/calibrations/{adapter_name}` — and to a **⚡ Calibrate α** button per
+adapter row plus a fleet-wide **⚡ Auto-Calibrate All α** button in the Training Factory
+tab of `dashboard.py`.
+
+`calibrateAllAdapters()` resolves each of the 6 domains through the server's
+`domain -> adapter_dir` lookup, which globs `*v7* > *v6* > *v4*` and takes the first hit
+— so it always calibrates the **current** generation, not whichever happened to be on
+disk when the button was last clicked. Confirmed on `astral@v7`
+(`results/calibrations/m2_astral_r8a128_v7.json`): `trained_alpha=128`,
+`alpha_opt=128`, `applied=false` — v7 trained to the 0.071 geometric stop target is
+*already* inside whatever band this module targets, so calibration correctly found
+nothing to do. That is a real, working result, not a guess.
+
+### ⚠️ This is NOT the same calibration as §3 above — it is faster and weaker
+
+`calibrate_expert_alpha.py` (the original script) evaluates the **held-out benchmark**
+at each candidate $\alpha$ and picks the point with the best held-out score among
+admissible ones — the "held-out 0.4667 (optimal)" column in the sample output above is
+a real measurement, once per adapter per calibration.
+
+`src/runtime/alpha_calibration.py` does not do this. Its upper bound is a
+**fixed constant**, `TARGET_DW_W_MAX = 0.085`, chosen once and applied to every domain
+with no live evaluation at all — that is what "zero retraining time" and "1-click"
+actually mean here: zero GPU inference, not zero-retraining-but-still-checked. The
+tradeoff is real (a calibration click now returns instantly instead of costing $N$
+evaluation passes) but it is a tradeoff, and the module's own docstring header
+("bounds... from above by out-of-domain perturbation containment") overstates it —
+there is no out-of-domain measurement in this path, only a band on $\|\Delta W\|/\|W\|$
+itself. If a domain's true narrowing ceiling sits outside $[0.040, 0.085]$, this path
+has no way to notice.
+
+**The band itself doesn't match the rest of the repo.** `TARGET_DW_W_MIN = 0.040`,
+`TARGET_DW_W_MAX = 0.085` here, versus `GoldilocksStoppingCallback`'s
+`floor=0.035, hard_ceiling=0.100` in `scripts/train/train_expert.py`, which is what
+every v6/v7 adapter was actually trained against. Both are called "the Goldilocks
+zone." They are not the same numbers, and nothing in this module explains the
+narrower window. Left unreconciled here rather than silently picking one — flagged
+in `docs/DECISIONS.md`.
+
+### Incident: the fleet-wide button hit the wrong baseline once
+
+Before `CANON.ADAPTER_VERSION` was bumped to `v7` in this repo, an "Auto-Calibrate All"
+pass resolved every domain to the `v6` generation and applied `alpha_opt=96` in place
+to all six `m2_*_r8a128_v6/adapter_config.json` files — the generation this repo keeps
+specifically as a **fixed, unmutated baseline** for v6-vs-v7 comparison (the
+`python_modern` activation-scale measurement in `benchmarks/factory/geometry/riemannian_metric/`
+depends on it staying at its trained configuration). Caught, and reverted: `lora_alpha`
+restored to `128` on all six. The underlying `adapter_model.safetensors` were never
+touched by calibration (`applied=True` only rewrites the JSON scalar), so nothing was
+actually lost — but it is a reminder that a fleet-wide button has no concept of "this
+row is a pinned baseline, do not touch," and one is worth adding if this button gets
+used again during an active A/B.

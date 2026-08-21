@@ -1,0 +1,89 @@
+W20260820 12:00:11.652600 135567417704512 agent.cpp:608] sysfs nodes path '/sys/class/kfd/kfd/topology/nodes' does not exist
+================================================================================
+ ACTIVATION COVARIANCE RIEMANNIAN GEODESIC BENCHMARK (§3.5, §8.1.4)
+================================================================================
+Device: cuda:0 (AMD Radeon RX 7900 XTX)
+
+[1/5] Loading Qwen/Qwen3.5-4B Base Model...
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+Fetching 2 files:   0%|          | 0/2 [00:00<?, ?it/s]Fetching 2 files: 100%|██████████| 2/2 [00:00<00:00, 685.06it/s]
+[transformers] The fast path is not available because one of the required library is not installed. Falling back to torch implementation. To install follow https://github.com/fla-org/flash-linear-attention#installation and https://github.com/Dao-AILab/causal-conv1d
+Loading weights:   0%|          | 0/426 [00:00<?, ?it/s]Loading weights:   0%|          | 1/426 [00:02<16:41,  2.36s/it]Loading weights:   2%|▏         | 7/426 [00:02<02:04,  3.38it/s]Loading weights:   3%|▎         | 13/426 [00:02<01:02,  6.57it/s]Loading weights:   5%|▍         | 20/426 [00:03<00:34, 11.63it/s]Loading weights:   6%|▌         | 24/426 [00:03<00:37, 10.74it/s]Loading weights:   8%|▊         | 36/426 [00:03<00:18, 21.28it/s]Loading weights:  10%|▉         | 42/426 [00:04<00:20, 18.79it/s]Loading weights:  11%|█         | 47/426 [00:04<00:21, 17.87it/s]Loading weights:  12%|█▏        | 51/426 [00:05<00:41,  9.09it/s]Loading weights:  13%|█▎        | 55/426 [00:05<00:33, 10.94it/s]Loading weights:  15%|█▍        | 63/426 [00:05<00:24, 14.54it/s]Loading weights:  15%|█▌        | 66/426 [00:06<00:24, 14.70it/s]Loading weights:  17%|█▋        | 72/426 [00:06<00:19, 17.79it/s]Loading weights:  19%|█▉        | 81/426 [00:06<00:13, 25.96it/s]Loading weights:  21%|██        | 88/426 [00:06<00:11, 29.23it/s]Loading weights:  22%|██▏       | 94/426 [00:06<00:09, 33.42it/s]Loading weights:  23%|██▎       | 99/426 [00:06<00:10, 30.28it/s]Loading weights:  24%|██▍       | 103/426 [00:07<00:11, 28.94it/s]Loading weights:  25%|██▌       | 108/426 [00:07<00:09, 32.17it/s]Loading weights:  27%|██▋       | 116/426 [00:07<00:09, 32.58it/s]Loading weights:  29%|██▉       | 125/426 [00:07<00:11, 26.99it/s]Loading weights:  31%|███▏      | 134/426 [00:08<00:08, 32.98it/s]Loading weights:  32%|███▏      | 138/426 [00:08<00:13, 20.60it/s]Loading weights:  35%|███▌      | 150/426 [00:08<00:08, 31.10it/s]Loading weights:  36%|███▋      | 155/426 [00:08<00:09, 28.46it/s]Loading weights:  37%|███▋      | 159/426 [00:09<00:09, 28.23it/s]Loading weights:  39%|███▉      | 168/426 [00:09<00:07, 34.77it/s]Loading weights:  41%|████      | 173/426 [00:09<00:08, 28.97it/s]Loading weights:  42%|████▏     | 180/426 [00:09<00:07, 34.19it/s]Loading weights:  43%|████▎     | 185/426 [00:09<00:06, 34.99it/s]Loading weights:  45%|████▍     | 190/426 [00:09<00:06, 34.91it/s]Loading weights:  46%|████▌     | 196/426 [00:10<00:05, 39.57it/s]Loading weights:  47%|████▋     | 201/426 [00:10<00:07, 28.82it/s]Loading weights:  48%|████▊     | 205/426 [00:10<00:07, 27.78it/s]Loading weights:  49%|████▉     | 209/426 [00:10<00:07, 28.61it/s]Loading weights:  50%|█████     | 214/426 [00:10<00:06, 32.73it/s]Loading weights:  52%|█████▏    | 220/426 [00:10<00:05, 37.93it/s]Loading weights:  53%|█████▎    | 225/426 [00:11<00:07, 26.62it/s]Loading weights:  55%|█████▌    | 235/426 [00:11<00:04, 39.84it/s]Loading weights:  57%|█████▋    | 241/426 [00:11<00:06, 29.90it/s]Loading weights:  58%|█████▊    | 246/426 [00:11<00:05, 31.04it/s]Loading weights:  59%|█████▉    | 251/426 [00:12<00:06, 26.26it/s]Loading weights:  60%|█████▉    | 255/426 [00:12<00:06, 25.94it/s]Loading weights:  61%|██████    | 259/426 [00:12<00:06, 25.71it/s]Loading weights:  64%|██████▍   | 272/426 [00:12<00:04, 37.55it/s]Loading weights:  65%|██████▌   | 277/426 [00:12<00:04, 34.14it/s]Loading weights:  66%|██████▌   | 281/426 [00:13<00:06, 23.75it/s]Loading weights:  68%|██████▊   | 291/426 [00:13<00:04, 33.02it/s]Loading weights:  69%|██████▉   | 296/426 [00:13<00:04, 29.53it/s]Loading weights:  71%|███████   | 301/426 [00:13<00:03, 32.18it/s]Loading weights:  72%|███████▏  | 305/426 [00:14<00:05, 20.61it/s]Loading weights:  72%|███████▏  | 308/426 [00:14<00:05, 20.66it/s]Loading weights:  75%|███████▍  | 318/426 [00:14<00:03, 31.99it/s]Loading weights:  77%|███████▋  | 327/426 [00:14<00:02, 35.16it/s]Loading weights:  78%|███████▊  | 332/426 [00:14<00:02, 31.96it/s]Loading weights:  80%|███████▉  | 339/426 [00:14<00:02, 36.52it/s]Loading weights:  81%|████████  | 344/426 [00:14<00:02, 38.54it/s]Loading weights:  82%|████████▏ | 349/426 [00:15<00:02, 29.83it/s]Loading weights:  83%|████████▎ | 355/426 [00:15<00:02, 32.70it/s]Loading weights:  84%|████████▍ | 359/426 [00:15<00:02, 28.51it/s]Loading weights:  85%|████████▌ | 363/426 [00:15<00:02, 27.78it/s]Loading weights:  86%|████████▌ | 367/426 [00:15<00:02, 25.40it/s]Loading weights:  87%|████████▋ | 370/426 [00:16<00:02, 25.92it/s]Loading weights:  88%|████████▊ | 375/426 [00:16<00:01, 28.39it/s]Loading weights:  90%|████████▉ | 382/426 [00:16<00:01, 32.95it/s]Loading weights:  91%|█████████ | 386/426 [00:16<00:01, 29.98it/s]Loading weights:  92%|█████████▏| 394/426 [00:16<00:00, 32.63it/s]Loading weights:  93%|█████████▎| 398/426 [00:16<00:00, 32.66it/s]Loading weights:  96%|█████████▌| 408/426 [00:16<00:00, 44.67it/s]Loading weights:  97%|█████████▋| 413/426 [00:17<00:00, 32.13it/s]Loading weights:  98%|█████████▊| 417/426 [00:17<00:00, 31.40it/s]Loading weights:  99%|█████████▉| 422/426 [00:17<00:00, 34.60it/s]Loading weights: 100%|██████████| 426/426 [00:17<00:00, 24.29it/s]
+
+[2/5] Loading 8 domain adapters...
+  astral@v7              <- m2_astral_r8a128_v7
+  Loaded expert: astral@v7       (rank=8, scaling=16.0)
+  postgresql@v7          <- m2_postgresql_r8a128_v7
+  Loaded expert: postgresql@v7   (rank=8, scaling=16.0)
+  duckdb@v7              <- m2_duckdb_r8a128_v7
+  Loaded expert: duckdb@v7       (rank=8, scaling=16.0)
+  financial@v7           <- m2_financial_r8a128_v7
+  Loaded expert: financial@v7    (rank=8, scaling=16.0)
+  python_modern@v6       <- m2_python_modern_r8a128_v6
+  Loaded expert: python_modern@v6 (rank=8, scaling=16.0)
+  python_modern@v7       <- m2_python_modern_r8a128_v7
+  Loaded expert: python_modern@v7 (rank=8, scaling=16.0)
+  python_web@v6          <- m2_python_web_r8a128_v6
+  Loaded expert: python_web@v6   (rank=8, scaling=16.0)
+  python_web@v7          <- m2_python_web_r8a128_v7
+  Loaded expert: python_web@v7   (rank=8, scaling=16.0)
+
+[3/5] Evaluation Suite: 97 shared probe prompts across 6 domains.
+
+[4/5] Extracting Residual Stream Activations across probed layers:  [4, 12, 20, 28, 36]
+  -> Running Base Model...
+     Token sample size N = 3249, Channel dimension P = 2560 (n < p regime: False)
+  -> Morphing to Expert [astral@v7] in-place...
+     Extracted depth representations for [astral@v7] (morph: 3.04ms, delta_L36=0.0034)
+  -> Morphing to Expert [postgresql@v7] in-place...
+     Extracted depth representations for [postgresql@v7] (morph: 7.27ms, delta_L36=0.0033)
+  -> Morphing to Expert [duckdb@v7] in-place...
+     Extracted depth representations for [duckdb@v7] (morph: 1.66ms, delta_L36=0.0033)
+  -> Morphing to Expert [financial@v7] in-place...
+     Extracted depth representations for [financial@v7] (morph: 1.53ms, delta_L36=0.0030)
+  -> Morphing to Expert [python_modern@v6] in-place...
+     Extracted depth representations for [python_modern@v6] (morph: 1.41ms, delta_L36=0.0043)
+  -> Morphing to Expert [python_modern@v7] in-place...
+     Extracted depth representations for [python_modern@v7] (morph: 1.90ms, delta_L36=0.0036)
+  -> Morphing to Expert [python_web@v6] in-place...
+     Extracted depth representations for [python_web@v6] (morph: 5.09ms, delta_L36=0.0037)
+  -> Morphing to Expert [python_web@v7] in-place...
+     Extracted depth representations for [python_web@v7] (morph: 1.55ms, delta_L36=0.0039)
+
+[5/5] Computing Affine-Invariant Riemannian Geodesics (AIRM)...
+
+--- Layer-wise Base-to-Expert Representation Geodesic Profile d_R(Base, Expert) ---
+Domain          | Layer  4 | Layer 12 | Layer 20 | Layer 28 | Layer 36 | Final Scale | Final Shape
+--------------------------------------------------------------------------------
+astral@v7       |  80.6766 |  66.0218 |  90.7822 | 107.6521 |  94.4924 |      4.8318 |     94.3689
+postgresql@v7   |  75.7968 |  64.0259 |  90.1740 | 104.1585 |  96.3514 |      4.5538 |     96.2438
+duckdb@v7       |  78.2588 |  70.6179 |  98.7506 | 114.4772 | 106.0154 |      5.6223 |    105.8663
+financial@v7    |  78.0578 |  72.6768 |  97.6745 | 107.6722 |  98.8954 |      0.0504 |     98.8954
+python_modern@v6 |  87.8205 |  75.6189 | 105.0894 | 120.5404 | 112.5880 |     15.9426 |    111.4539
+python_modern@v7 |  67.0140 |  62.5505 |  99.1841 | 119.7839 | 110.8673 |      8.9588 |    110.5049
+python_web@v6   |  93.3983 |  73.3309 |  98.7363 | 117.6905 | 107.0414 |      8.2638 |    106.7221
+python_web@v7   |  82.1464 |  66.7843 |  96.7074 | 113.0409 | 103.2210 |      9.8525 |    102.7499
+
+--- Output Layer (Layer 36) Pairwise Activation Geodesic Matrix d_R(Σ_i, Σ_j) ---
+                | astral@v | postgres | duckdb@v | financia | python_m | python_m | python_w | python_w
+-------------------------------------------------------------------------------------------------------
+  SKIPPED (see §59; pass --pairwise to compute it anyway)
+/home/mihai/gnn-experiment/.venv/lib/python3.14/site-packages/numpy/_core/fromnumeric.py:3824: RuntimeWarning: Mean of empty slice
+  return _methods._mean(a, axis=axis, dtype=dtype,
+/home/mihai/gnn-experiment/.venv/lib/python3.14/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/mihai/gnn-experiment/.venv/lib/python3.14/site-packages/numpy/_core/_methods.py:219: RuntimeWarning: Degrees of freedom <= 0 for slice
+  ret = _var(a, axis=axis, dtype=dtype, out=out, ddof=ddof,
+/home/mihai/gnn-experiment/.venv/lib/python3.14/site-packages/numpy/_core/_methods.py:178: RuntimeWarning: invalid value encountered in divide
+  arrmean = um.true_divide(arrmean, div, out=arrmean,
+/home/mihai/gnn-experiment/.venv/lib/python3.14/site-packages/numpy/_core/_methods.py:211: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+Traceback (most recent call last):
+  File "/home/mihai/gnn-experiment/benchmarks/factory/geometry/riemannian_metric/benchmark_activation_covariance_geodesics.py", line 414, in <module>
+    run_activation_covariance_benchmark(max_prompts=args.max_prompts, device_str=args.device)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mihai/gnn-experiment/benchmarks/factory/geometry/riemannian_metric/benchmark_activation_covariance_geodesics.py", line 309, in run_activation_covariance_benchmark
+    spread_pct = (max(off_diagonal_dists) - min(off_diagonal_dists)) / mean_dist * 100.0
+                  ~~~^^^^^^^^^^^^^^^^^^^^
+ValueError: max() iterable argument is empty
+Warning: Resource leak detected by SharedSignalPool, 2 Signals leaked.

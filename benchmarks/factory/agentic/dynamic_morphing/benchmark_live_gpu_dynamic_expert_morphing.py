@@ -22,9 +22,9 @@ import numpy as np
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from gnn_experiment.canon import CANON, REPO_ROOT, adapter_path
-from gnn_experiment.dynamic_team_router import RiemannianTeamRouter
-from gnn_experiment.novel_peft import FoldableExpert, WeightFoldingEngine
+from runtime.canon import CANON, REPO_ROOT, adapter_path
+from runtime.dynamic_team_router import RiemannianTeamRouter
+from runtime.novel_peft import FoldableExpert, WeightFoldingEngine
 
 
 DOMAINS = ["astral", "postgresql", "duckdb", "financial", "python_modern", "python_web"]
@@ -34,7 +34,7 @@ def load_canonical_experts(device: str = "cuda:0", dtype: torch.dtype = torch.bf
     """Loads all 6 canonical v6 FoldableExpert instances onto target device."""
     experts = {}
     for d in DOMAINS:
-        path = adapter_path(d, version="v6")
+        path = adapter_path(d)
         exp = FoldableExpert.from_dir(path, name=d)
         exp.to(device, dtype)
         experts[d] = exp

@@ -28,16 +28,16 @@ from pathlib import Path
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, LogitsProcessorList
 
-from gnn_experiment.utils.logger import log_benchmark_metric
+from runtime.utils.logger import log_benchmark_metric
 
-from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+from runtime.canon import REPO_ROOT  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
 sys.path.append(str(REPO_ROOT))
 
-from gnn_experiment.eval.eval_suite import LEGACY_TERMS, MODERN_TERMS, count_matches  # noqa: E402
-from gnn_experiment.novel_peft import (  # noqa: E402
+from runtime.eval.eval_suite import LEGACY_TERMS, MODERN_TERMS, count_matches  # noqa: E402
+from runtime.novel_peft import (  # noqa: E402
     VelocityGate,
     VelocityGateTickLogitsProcessor,
     get_decoder_layers,
@@ -253,7 +253,7 @@ def run_benchmark(
 
 
 def _install_gate(model, gate: VelocityGate) -> list:
-    from gnn_experiment.novel_peft import NovelLoraLinear, install_velocity_hooks
+    from runtime.novel_peft import NovelLoraLinear, install_velocity_hooks
 
     layers = get_decoder_layers(model)
     for module in model.modules():

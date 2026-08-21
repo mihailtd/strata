@@ -1,0 +1,76 @@
+{
+  "benchmark": "live_speculative_engine",
+  "elapsed_seconds": 58.81,
+  "throughput": [
+    {
+      "id": "astral_uv_fastapi",
+      "domain": "astral",
+      "tok_s_median": 34.1,
+      "tok_s_max": 34.14,
+      "tok_s_min": 33.83,
+      "ttft_ms_median": 36.9,
+      "tokens_median": 138,
+      "sample_text": ""
+    },
+    {
+      "id": "postgresql_pgvector",
+      "domain": "postgresql",
+      "tok_s_median": 41.29,
+      "tok_s_max": 42.71,
+      "tok_s_min": 41.12,
+      "ttft_ms_median": 35.5,
+      "tokens_median": 256,
+      "sample_text": "\n\nHere is the complete solution to set up a table with a vector column and execute a cosine distance query using `asyncpg` and `pgvector`.\n\n### Prerequisites\n\nYou need `pgvector` installed in your PostgreSQL database and the `asyncpg` driver in your Python environment.\n\n```bash\npip install asyncpg\n`"
+    },
+    {
+      "id": "duckdb_analytics",
+      "domain": "duckdb",
+      "tok_s_median": 36.84,
+      "tok_s_max": 37.17,
+      "tok_s_min": 36.42,
+      "ttft_ms_median": 36.4,
+      "tokens_median": 256,
+      "sample_text": ""
+    }
+  ],
+  "ring_buffer": {
+    "vram_stats": {
+      "dense": {
+        "bytes": 251658240,
+        "kb": 245760.0,
+        "compression": 1.0
+      },
+      "poet": {
+        "bytes": 87595008,
+        "kb": 85542.0,
+        "compression": 2.8729746791050013
+      },
+      "selective_hybrid": {
+        "bytes": 119052288,
+        "kb": 116262.0,
+        "compression": 2.3780771017185325
+      }
+    },
+    "latency_results": {
+      "dense": {
+        "push_median_us": 116.95500870700926,
+        "push_p99_us": 218.24445648235266,
+        "rollback_median_us": 118.96550131496042,
+        "rollback_p99_us": 216.31484007229992
+      },
+      "poet": {
+        "push_median_us": 6860.879497253336,
+        "push_p99_us": 15168.941505689869,
+        "rollback_median_us": 2607.480506412685,
+        "rollback_p99_us": 5867.619344789993
+      },
+      "selective_hybrid": {
+        "push_median_us": 6999.765500950161,
+        "push_p99_us": 10322.080099431321,
+        "rollback_median_us": 264.3140032887459,
+        "rollback_p99_us": 571.4640305086498
+      }
+    },
+    "n_trials": 200
+  }
+}

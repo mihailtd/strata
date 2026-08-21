@@ -17,7 +17,7 @@ CUDA Graphs freeze a sequence of GPU kernel launches and their physical memory a
 ---
 
 ## 2. The Solution: Pointer Stability under In-Place Mutation
-Inside `FoldedCudaGraphDecoder` ([`src/gnn_experiment/cuda_graph.py`](file:///home/mihai/gnn-experiment/src/gnn_experiment/cuda_graph.py)):
+Inside `FoldedCudaGraphDecoder` ([`src/runtime/cuda_graph.py`](file:///home/mihai/gnn-experiment/src/runtime/cuda_graph.py)):
 1. Pre-allocates fixed static buffers for `static_input_ids`, `static_position_ids`, `static_cache_position`, `static_attention_mask`, and `StaticCache`.
 2. Employs in-place tensor mutations (`copy_()`, `+= 1`) during generation.
 3. Swaps domain experts via `WeightFoldingEngine` directly into the static weight memory addresses without triggering reallocation.

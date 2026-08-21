@@ -9,13 +9,13 @@ import json
 import sys
 from pathlib import Path
 
-from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+from runtime.canon import REPO_ROOT  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
 sys.path.append(str(REPO_ROOT))
 
-from gnn_experiment.eval.eval_suite import run_astral_evaluation  # noqa: E402
+from runtime.eval.eval_suite import run_astral_evaluation  # noqa: E402
 from scripts.export_adapter import export_adapter  # noqa: E402
 
 

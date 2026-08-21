@@ -1,8 +1,8 @@
-"""Unit tests for gnn_experiment.canon constants, paths, and manifest stamping."""
+"""Unit tests for runtime.canon constants, paths, and manifest stamping."""
 
 import pytest
 from pathlib import Path
-from gnn_experiment.canon import (
+from runtime.canon import (
     CANON,
     DOMAINS,
     REPO_ROOT,
@@ -13,22 +13,22 @@ from gnn_experiment.canon import (
 def test_canon_invariants():
     """Verify canonical defaults are strictly pinned to preventing regression to legacy caps."""
     assert CANON.MAX_NEW_TOKENS == 2048
-    assert CANON.ADAPTER_VERSION == "v6"
+    assert CANON.ADAPTER_VERSION == "v7"
     assert CANON.LORA_RANK == 8
     assert CANON.LORA_ALPHA == 128
     assert CANON.BASE_MODEL == "Qwen/Qwen3.5-4B"
     assert CANON.GREEDY is True
     assert REPO_ROOT.exists()
-    assert (REPO_ROOT / "src" / "gnn_experiment").exists()
+    assert (REPO_ROOT / "src" / "runtime").exists()
 
 
 @pytest.mark.parametrize(
     "domain,expected_stem",
     [
-        ("astral", "m2_astral_r8a128_v6"),
-        ("postgresql", "m2_postgresql_r8a128_v6"),
-        ("duckdb", "m2_duckdb_r8a128_v6"),
-        ("financial", "m2_financial_r8a128_v6"),
+        ("astral", "m2_astral_r8a128_v7"),
+        ("postgresql", "m2_postgresql_r8a128_v7"),
+        ("duckdb", "m2_duckdb_r8a128_v7"),
+        ("financial", "m2_financial_r8a128_v7"),
     ],
 )
 def test_adapter_path_valid_domains(domain: str, expected_stem: str):
@@ -58,7 +58,7 @@ def test_canon_stamp_metadata():
     stamp = CANON.stamp()
     assert isinstance(stamp, dict)
     assert stamp["MAX_NEW_TOKENS"] == 2048
-    assert stamp["ADAPTER_VERSION"] == "v6"
+    assert stamp["ADAPTER_VERSION"] == "v7"
     assert stamp["BASE_MODEL"] == "Qwen/Qwen3.5-4B"
     assert stamp["LORA_RANK"] == 8
     assert stamp["LORA_ALPHA"] == 128

@@ -31,8 +31,8 @@ import torch  # noqa: E402
 torch.zeros(1, device="cuda"); torch.cuda.synchronize()
 from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 
-from gnn_experiment.cuda_graph import FoldedCudaGraphDecoder  # noqa: E402
-from gnn_experiment.novel_peft import set_hard_vram_cap  # noqa: E402
+from runtime.cuda_graph import FoldedCudaGraphDecoder  # noqa: E402
+from runtime.novel_peft import set_hard_vram_cap  # noqa: E402
 
 TARGET, DRAFT = "Qwen/Qwen3.5-4B", "Qwen/Qwen3.5-0.8B"
 MAX_SEQ, TAU, K = 2048, 2.323, 4

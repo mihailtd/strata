@@ -29,10 +29,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from gnn_experiment.canon import CANON, REPO_ROOT, adapter_path
-from gnn_experiment.dynamic_team_router import RiemannianTeamRouter
-from gnn_experiment.novel_peft import FoldableExpert, WeightFoldingEngine
-from gnn_experiment.state_ring_buffer import SelectiveHybridPOETRingBuffer
+from runtime.canon import CANON, REPO_ROOT, adapter_path
+from runtime.dynamic_team_router import RiemannianTeamRouter
+from runtime.novel_peft import FoldableExpert, WeightFoldingEngine
+from runtime.state_ring_buffer import SelectiveHybridPOETRingBuffer
 
 
 DOMAINS = ["astral", "postgresql", "duckdb", "financial", "python_modern", "python_web"]

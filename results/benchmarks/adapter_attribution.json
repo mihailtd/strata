@@ -1,0 +1,142 @@
+{
+  "config": {
+    "ADAPTER_VERSION": "v6",
+    "MAX_NEW_TOKENS": 2048,
+    "BASE_MODEL": "Qwen/Qwen3.5-4B",
+    "VRAM_CAP_GB": 22.0,
+    "GPU_SAFETY_THRESHOLD_GB": 6.0,
+    "GREEDY": true,
+    "LORA_RANK": 8,
+    "LORA_ALPHA": 128
+  },
+  "rows": [
+    {
+      "case": "ruff_old",
+      "arm": "base",
+      "prompt": "How do I format this package with ruff and uv in pyproject.toml?",
+      "tokens": 167,
+      "seconds": 8.7,
+      "text": "You can use the `ruff` tool to format your package with `ruff format` command. Here's an example of how to configure it in your `pyproject.toml` file:\n\n```toml\n[tool.ruff]\nline-length = 88\ntarget-version = \"py38\"\n\n[tool.ruff.format]\nquote-style = \"double\"\nindent-style = \"space\"\nskip-magic-trailing-comma = false\n```\n\nYou can also use the `uv` tool to run the `ruff` command. Here's an example of how to do it:\n\n```bash\nuv run ruff format .\n```\n\nThis will format all the files in your project according to the configuration in your `pyproject.toml` file."
+    },
+    {
+      "case": "ruff_old",
+      "arm": "astral",
+      "prompt": "How do I format this package with ruff and uv in pyproject.toml?",
+      "tokens": 45,
+      "seconds": 2.7,
+      "text": "```bash\nruff format .\nuv check\n```\n\n`ruff format` applies the current style to the project. `uv check` runs the linter to see if any changes are needed."
+    },
+    {
+      "case": "ruff_old",
+      "arm": "python_modern@v6",
+      "prompt": "How do I format this package with ruff and uv in pyproject.toml?",
+      "tokens": 132,
+      "seconds": 5.7,
+      "text": "```python\n[project]\nname = \"my-package\"\nversion = \"0.1.0\"\ndescription = \"A well-formed Python package\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\ndependencies = [\n    \"clickstream-engine>=1.0.0\",\n    \"uv>=0.2.0\",\n]\n```\n\n**Not `pip install -r requirements.txt` then `python -m build`** \u2014 ruff and uv handle formatting and dependency resolution directly from the project file, so there is no separate requirements file to manage."
+    },
+    {
+      "case": "ruff_old",
+      "arm": "python_modern@v7",
+      "prompt": "How do I format this package with ruff and uv in pyproject.toml?",
+      "tokens": 102,
+      "seconds": 5.5,
+      "text": "```python\n# pyproject.toml\n[tool.ruff]\nline-length = 88\ntarget-version = \"py312\"\n\n[tool.ruff.format]\ndocstring-code-format = true\n```\n\n**Not `black` here** \u2014 In practice, `ruff format` is the same as `black` but the checks are in one tool. `uv run ruff check` and `uv run ruff format` keep the CLI consistent."
+    },
+    {
+      "case": "ruff_old",
+      "arm": "astral + python_modern@v6",
+      "prompt": "How do I format this package with ruff and uv in pyproject.toml?",
+      "tokens": 2048,
+      "seconds": 80.4,
+      "text": "Here is the properly formatted `pyproject.toml` file:\n\n```python\n[tool.ruff]\nline-length = 100\ntarget-version = \"py312\"\n\n[tool.ruff.lint]\nselect = [\"E\", \"F\", \"PYC\", \"RUF\", \"UPD\"]\nignore = [\"E501\", \"PYC201\"]\n```"
+    },
+    {
+      "case": "ruff_old",
+      "arm": "astral + python_modern@v7",
+      "prompt": "How do I format this package with ruff and uv in pyproject.toml?",
+      "tokens": 132,
+      "seconds": 6.0,
+      "text": "```python\nfrom __future__ import annotations\n\nimport sys\nimport uv\n\ndef add_item(name: str) -> None:\n    print(f\"adding {name}\")\n    uv tool init --lib name\n    sys.exit(0)\n```\n\n\n```python\nimport sys\nimport uv\n\ndef add_item(name: str) -> None:\n    uv tool init --lib name\n    sys.exit(0)\n```\n\n`uv tool init` writes the file -- the print is the explicit return value. `sys.exit` ends the process."
+    },
+    {
+      "case": "ruff_new",
+      "arm": "base",
+      "prompt": "Add ruff and ty as dev dependencies, then format and lint the whole codebase.",
+      "tokens": 27,
+      "seconds": 2.1,
+      "text": "```bash\npip install ruff ty\nruff check .\nruff format .\nty --help\n```"
+    },
+    {
+      "case": "ruff_new",
+      "arm": "astral",
+      "prompt": "Add ruff and ty as dev dependencies, then format and lint the whole codebase.",
+      "tokens": 57,
+      "seconds": 3.1,
+      "text": "```bash\nuv tool --dev ruff ty\n```\n\n`ruff` and `ty` are development tools, not runtime requirements, so they belong in the dev group even though the request said \"dependencies\" -- shipping them would bloat the production install."
+    },
+    {
+      "case": "ruff_new",
+      "arm": "python_modern@v6",
+      "prompt": "Add ruff and ty as dev dependencies, then format and lint the whole codebase.",
+      "tokens": 131,
+      "seconds": 6.0,
+      "text": "Here is the updated `pyproject.toml` with the new dev dependencies:\n\n```toml\n[project]\nname = \"code-archiver\"\nversion = \"0.1.0\"\ndescription = \"Archival storage for software distribution\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\n\n[project.scripts]\nca = \"code_archiver.cli:main\"\n\n[project.optional-dependencies]\ndev = [\n    \"ruff==0.5.0\",\n    \"ty==0.1.0\",\n]\n```"
+    },
+    {
+      "case": "ruff_new",
+      "arm": "python_modern@v7",
+      "prompt": "Add ruff and ty as dev dependencies, then format and lint the whole codebase.",
+      "tokens": 60,
+      "seconds": 4.3,
+      "text": "```python\npip install ruff ty\nruff check .\nty --check\n```\n\n`ty` is the type-checking CLI -- `mypy` is the library. Concretely: `ty` is the command-line interface to the type-checking library."
+    },
+    {
+      "case": "ruff_new",
+      "arm": "astral + python_modern@v6",
+      "prompt": "Add ruff and ty as dev dependencies, then format and lint the whole codebase.",
+      "tokens": 56,
+      "seconds": 3.1,
+      "text": "```python\nuv tool install ruff ty\n```\n\n`ruff` and `ty` are development tools, not runtime requirements, so they belong in the dev group even though the request said \"dependencies\" -- shipping them would bloat the production install."
+    },
+    {
+      "case": "ruff_new",
+      "arm": "astral + python_modern@v7",
+      "prompt": "Add ruff and ty as dev dependencies, then format and lint the whole codebase.",
+      "tokens": 56,
+      "seconds": 2.9,
+      "text": "```bash\nuv tool --format ty,ruff\n```\n\n`ty` and `ruff` are development tools, not production dependencies, so they belong in the dev group even though the request said \"dependencies\" -- shipping them would bloat the install."
+    },
+    {
+      "case": "asyncpg",
+      "arm": "base",
+      "prompt": "Now write the asyncpg connection pool for PostgreSQL and similarity search using the pgvector <=> operator.",
+      "tokens": 1743,
+      "seconds": 69.9,
+      "text": "```python\nimport asyncpg\nimport psycopg2\nimport psycopg2.extras\nimport numpy as np\nimport asyncio\nimport logging\nfrom typing import List, Optional, Tuple, Dict, Any\nfrom dataclasses import dataclass\nfrom enum import Enum\n\n# Configure logging\nlogging.basicConfig(level=logging.INFO)\nlogger = logging.getLogger(__name__)\n\nclass VectorSearchType(Enum):\n    EXACT = \"exact\"\n    APPROXIMATE = \"approximate\"\n\n@dataclass\nclass SearchResult:\n    id: int\n    vector: List[float]\n    score: float\n    metadata: Dict[str, Any]\n\nclass VectorDatabase:\n    def __init__(self, host: str, port: int, database: str, user: str, password: str):\n        self.host = host\n        self.port = port\n        self.database = database\n        self.user = user\n        self.password = password\n        self.pool: Optional[asyncpg.Pool] = None\n        self._connection = None\n\n    async def connect(self):\n        \"\"\"Create a connection pool\"\"\"\n        try:\n            self.pool = await asyncpg.create_pool(\n                host=self.host,\n                port=self.port,\n                database=self.database,\n                user=self.user,\n                password=self.password,\n                min_size=1,\n                max_size=10,\n                acquire_timeout=10,\n                idle_timeout=30\n            )\n            logger.info(\"Connected to PostgreSQL database\")\n        except Exception as e:\n            logger.error(f\"Failed to connect to database: {e}\")\n            raise\n\n    async def disconnect(self):\n        \"\"\"Close the connection pool\"\"\"\n        if self.pool:\n            await self.pool.close()\n            logger.info(\"Disconnected from PostgreSQL database\")\n\n    async def _get_connection(self):\n        \"\"\"Get a connection from the pool\"\"\"\n        if self._connection is None:\n            self._connection = await self.pool.acquire()\n        return self._connection\n\n    async def _release_connection(self, conn):\n        \"\"\"Release a connection back to the pool\"\"\"\n        await self.pool.release(conn)\n\n    async def search_vectors(\n        self,\n        query_vector: List[float],\n        limit: int = 10,\n        filter_conditions: Optional[Dict[str, Any]] = None\n    ) -> List[SearchResult]:\n        \"\"\"\n        Search for similar vectors using the <=> operator.\n        \n        Args:\n            query_vector: The query vector to search for\n            limit: Maximum number of results to return\n            filter_conditions: Optional dictionary of filter conditions\n            \n        Returns:\n            List of SearchResult objects\n        \"\"\"\n        try:\n            conn = await self._get_connection()\n            try:\n                # Build the query\n                query = \"\"\"\n                    SELECT \n                        id,\n                        vector,\n                        (vector <=> $1) * 100 as score,\n                        metadata\n                    FROM vectors\n                    WHERE vector <=> $1\n                    ORDER BY (vector <=> $1) * 100\n                    LIMIT $2\n                \"\"\"\n                \n                params = [query_vector, limit]\n                \n                if filter_conditions:\n                    # Add filter conditions\n                    conditions = []\n                    for key, value in filter_conditions.items():\n                        conditions.append(f\"{key} = $3{conditions.index(key)}\")\n                    \n                    if conditions:\n                        query += \" AND \" + \" AND \".join(conditions)\n                        params.append(tuple(value))\n                \n                async with conn.transaction() as txn:\n                    rows = await txn.fetch(query, *params)\n                    \n                    results = []\n                    for row in rows:\n                        results.append(SearchResult(\n                            id=row['id'],\n                            vector=row['vector'],\n                            score=row['score'],\n                            metadata=row['metadata']\n                        ))\n                    \n                    return results\n                    \n            finally:\n                await self._release_connection(conn)\n                \n        except Exception as e:\n            logger.error(f\"Error searching vectors: {e}\")\n            raise\n\n    async def insert_vector(\n        self,\n        vector: List[float],\n        metadata: Optional[Dict[str, Any]] = None\n    ) -> int:\n        \"\"\"\n        Insert a new vector into the database.\n        \n        Args:\n            vector: The vector to insert\n            metadata: Optional metadata dictionary\n            \n        Returns:\n            The ID of the inserted vector\n        \"\"\"\n        try:\n            conn = await self._get_connection()\n            try:\n                async with conn.transaction() as txn:\n                    query = \"\"\"\n                        INSERT INTO vectors (vector, metadata)\n                        VALUES ($1, $2)\n                        RETURNING id\n                    \"\"\"\n                    \n                    params = [vector, metadata]\n                    row = await txn.fetchone(query, *params)\n                    \n                    return row['id']\n                    \n            finally:\n                await self._release_connection(conn)\n                \n        except Exception as e:\n            logger.error(f\"Error inserting vector: {e}\")\n            raise\n\n    async def update_vector(\n        self,\n        vector_id: int,\n        vector: List[float],\n        metadata: Optional[Dict[str, Any]] = None\n    ) -> bool:\n        \"\"\"\n        Update an existing vector in the database.\n        \n        Args:\n            vector_id: The ID of the vector to update\n            vector: The new vector\n            metadata: Optional new metadata dictionary\n            \n        Returns:\n            True if the vector was updated, False otherwise\n        \"\"\"\n        try:\n            conn = await self._get_connection()\n            try:\n                async with conn.transaction() as txn:\n                    query = \"\"\"\n                        UPDATE vectors\n                        SET vector = $1, metadata = $2\n                        WHERE id = $3\n                    \"\"\"\n                    \n                    params = [vector, metadata, vector_id]\n                    await txn.execute(query, *params)\n                    \n                    return True\n                    \n            finally:\n                await self._release_connection(conn)\n                \n        except Exception as e:\n            logger.error(f\"Error updating vector: {e}\")\n            raise\n\n    async def delete_vector(self, vector_id: int) -> bool:\n        \"\"\"\n        Delete a vector from the database.\n        \n        Args:\n            vector_id: The ID of the vector to delete\n            \n        Returns:\n            True if the vector was deleted, False otherwise\n        \"\"\"\n        try:\n            conn = await self._get_connection()\n            try:\n                async with conn.transaction() as txn:\n                    query = \"\"\"\n                        DELETE FROM vectors\n                        WHERE id = $1\n                    \"\"\"\n                    \n                    params = [vector_id]\n                    await txn.execute(query, *params)\n                    \n                    return True\n                    \n            finally:\n                await self._release_connection(conn)\n                \n        except Exception as e:\n            logger.error(f\"Error deleting vector: {e}\")\n            raise\n\n# Example usage\nasync def main():\n    db = VectorDatabase(\n        host=\"localhost\",\n        port=5432,\n        database=\"postgres\",\n        user=\"postgres\",\n        password=\"postgres\"\n    )\n    \n    await db.connect()\n    \n    try:\n        # Insert some vectors\n        await db.insert_vector([0.1, 0.2, 0.3], {\"name\": \"vector1\"})\n        await db.insert_vector([0.4, 0.5, 0.6], {\"name\": \"vector2\"})\n        await db.insert_vector([0.7, 0.8, 0.9], {\"name\": \"vector3\"})\n        \n        # Search for similar vectors\n        query_vector = [0.5, 0.5, 0.5]\n        results = await db.search_vectors(query_vector, limit=2)\n        \n        for result in results:\n            print(f\"ID: {result.id}, Score: {result.score:.2f}, Metadata: {result.metadata}\")\n            \n    finally:\n        await db.disconnect()\n\nif __name__ == \"__main__\":\n    asyncio.run(main())\n```"
+    },
+    {
+      "case": "asyncpg",
+      "arm": "postgresql",
+      "prompt": "Now write the asyncpg connection pool for PostgreSQL and similarity search using the pgvector <=> operator.",
+      "tokens": 130,
+      "seconds": 4.5,
+      "text": "```sql\nimport asyncpg\nimport numpy as np\n\npool = asyncpg.create_pool('localhost')\n\nasync def search_similar(query_vec, k=50):\n    conn = await pool.acquire()\n    try:\n        cursor = await conn.execute(\n            'SELECT id, embedding <=> $1 AS distance '\n            'FROM embeddings ORDER BY distance '\n            'LIMIT %s',\n            query_vec, k\n        )\n        return await cursor.fetchall()\n    finally:\n        conn.release()\n```\n\nThe `pgvector <=>` operator computes the cosine similarity between two vectors."
+    },
+    {
+      "case": "asyncpg",
+      "arm": "postgresql + python_modern@v6",
+      "prompt": "Now write the asyncpg connection pool for PostgreSQL and similarity search using the pgvector <=> operator.",
+      "tokens": 94,
+      "seconds": 3.4,
+      "text": "```python\nfrom __future__ import annotations\n\nimport time\nfrom typing import AsyncIterator, Iterator\n\n@time.perf_counter('start')\nasync def stream_rows(pool: AsyncIterator[dict[str, str]]) -> AsyncIterator[dict[str, str]]:\n    t = time.perf_counter('rows streamed')\n    try:\n        yield pool\n    finally:\n        t = time.perf_counter('start')\n```"
+    },
+    {
+      "case": "asyncpg",
+      "arm": "postgresql + python_modern@v7",
+      "prompt": "Now write the asyncpg connection pool for PostgreSQL and similarity search using the pgvector <=> operator.",
+      "tokens": 95,
+      "seconds": 3.5,
+      "text": "```python\nimport asyncpg\n\npool = asyncpg.create_pool(dsn='postgres://user:pass@host:5432/food')\n\nasync with pool.acquire() as conn:\n    rows = await conn.fetch('SELECT id, embedding <=> $1 as dist FROM products')\n```\n\n`pgvector <=>` compares the vector to the query vector and returns the distance -- no `math.sqrt` here, the operator does it."
+    }
+  ]
+}

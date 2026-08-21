@@ -85,8 +85,8 @@ def test_legacy_adapter_version_regex_detection():
         assert domain in ("astral", "postgresql")
         assert ver != CANON_ADAPTER_VERSION
 
-    # v6 is canonical now, so v4 is itself a legacy string the checker must flag.
-    v6_line = "adapter_path = 'results/adapters/m2_duckdb_r8a128_v6'"
-    m4 = ADAPTER_RE.search(v6_line)
+    # v7 is canonical now, so v6 and v4 are legacy strings the checker must flag.
+    v7_line = "adapter_path = 'results/adapters/m2_duckdb_r8a128_v7'"
+    m4 = ADAPTER_RE.search(v7_line)
     assert m4 is not None
     assert m4.group(2) == CANON_ADAPTER_VERSION

@@ -62,8 +62,8 @@ from transformers import (
 from transformers.utils import is_flash_attn_2_available
 from trl import SFTConfig, SFTTrainer
 
-from gnn_experiment.micro_probe.dataset import load_astral_micro_dataset, load_micro_dataset
-from gnn_experiment.novel_peft import (
+from runtime.micro_probe.dataset import load_astral_micro_dataset, load_micro_dataset
+from runtime.novel_peft import (
     TARGET_MODULES,
     VelocityGate,
     apply_novel_lora,
@@ -71,9 +71,9 @@ from gnn_experiment.novel_peft import (
     save_novel_adapter,
     set_hard_vram_cap,
 )
-from gnn_experiment.utils.logger import log_benchmark_metric
+from runtime.utils.logger import log_benchmark_metric
 
-from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+from runtime.canon import REPO_ROOT  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.

@@ -1,0 +1,69 @@
+W20260820 11:17:37.278440 125590764621888 agent.cpp:608] sysfs nodes path '/sys/class/kfd/kfd/topology/nodes' does not exist
+[safety] Hard VRAM cap: 22.0 GB (91.9% of 23.9 GB total) on device 0
+Fetching 2 files:   0%|          | 0/2 [00:00<?, ?it/s]Fetching 2 files: 100%|██████████| 2/2 [00:00<00:00, 2376.38it/s]
+[transformers] The fast path is not available because one of the required library is not installed. Falling back to torch implementation. To install follow https://github.com/fla-org/flash-linear-attention#installation and https://github.com/Dao-AILab/causal-conv1d
+Loading weights:   0%|          | 0/426 [00:00<?, ?it/s]Loading weights:   0%|          | 1/426 [00:01<08:21,  1.18s/it]Loading weights:   1%|          | 4/426 [00:01<01:48,  3.90it/s]Loading weights:   3%|▎         | 12/426 [00:01<00:30, 13.72it/s]Loading weights:   4%|▍         | 17/426 [00:01<00:21, 19.13it/s]Loading weights:   6%|▌         | 24/426 [00:01<00:17, 22.74it/s]Loading weights:   8%|▊         | 35/426 [00:01<00:10, 36.22it/s]Loading weights:  10%|▉         | 41/426 [00:02<00:10, 36.90it/s]Loading weights:  11%|█         | 47/426 [00:02<00:11, 33.22it/s]Loading weights:  14%|█▎        | 58/426 [00:02<00:08, 43.30it/s]Loading weights:  15%|█▌        | 64/426 [00:02<00:08, 42.77it/s]Loading weights:  17%|█▋        | 74/426 [00:02<00:06, 53.77it/s]Loading weights:  19%|█▉        | 81/426 [00:02<00:07, 43.22it/s]Loading weights:  22%|██▏       | 93/426 [00:03<00:06, 48.14it/s]Loading weights:  23%|██▎       | 99/426 [00:03<00:08, 36.81it/s]Loading weights:  25%|██▍       | 106/426 [00:03<00:07, 42.14it/s]Loading weights:  27%|██▋       | 115/426 [00:03<00:06, 49.60it/s]Loading weights:  28%|██▊       | 121/426 [00:03<00:06, 45.35it/s]Loading weights:  31%|███       | 132/426 [00:03<00:05, 55.47it/s]Loading weights:  33%|███▎      | 139/426 [00:04<00:07, 37.82it/s]Loading weights:  35%|███▍      | 147/426 [00:04<00:07, 38.25it/s]Loading weights:  36%|███▌      | 153/426 [00:04<00:06, 40.75it/s]Loading weights:  37%|███▋      | 158/426 [00:04<00:06, 41.95it/s]Loading weights:  39%|███▉      | 167/426 [00:04<00:05, 47.03it/s]Loading weights:  41%|████      | 173/426 [00:04<00:05, 49.10it/s]Loading weights:  42%|████▏     | 179/426 [00:05<00:04, 49.52it/s]Loading weights:  43%|████▎     | 185/426 [00:05<00:05, 45.88it/s]Loading weights:  46%|████▌     | 194/426 [00:05<00:04, 56.14it/s]Loading weights:  47%|████▋     | 201/426 [00:05<00:05, 40.52it/s]Loading weights:  48%|████▊     | 206/426 [00:05<00:05, 39.96it/s]Loading weights:  52%|█████▏    | 220/426 [00:05<00:04, 51.44it/s]Loading weights:  53%|█████▎    | 226/426 [00:06<00:04, 47.03it/s]Loading weights:  56%|█████▌    | 239/426 [00:06<00:03, 59.84it/s]Loading weights:  59%|█████▉    | 252/426 [00:06<00:02, 72.15it/s]Loading weights:  61%|██████    | 260/426 [00:06<00:02, 58.34it/s]Loading weights:  64%|██████▍   | 274/426 [00:06<00:02, 72.02it/s]Loading weights:  66%|██████▋   | 283/426 [00:06<00:02, 65.12it/s]Loading weights:  68%|██████▊   | 291/426 [00:07<00:02, 63.87it/s]Loading weights:  70%|██████▉   | 298/426 [00:07<00:02, 50.94it/s]Loading weights:  72%|███████▏  | 305/426 [00:07<00:02, 53.27it/s]Loading weights:  73%|███████▎  | 311/426 [00:07<00:02, 43.40it/s]Loading weights:  74%|███████▍  | 316/426 [00:07<00:02, 37.91it/s]Loading weights:  77%|███████▋  | 329/426 [00:08<00:04, 20.39it/s]Loading weights:  78%|███████▊  | 333/426 [00:09<00:05, 18.32it/s]Loading weights:  80%|███████▉  | 339/426 [00:09<00:04, 21.01it/s]Loading weights:  81%|████████  | 345/426 [00:09<00:03, 23.75it/s]Loading weights:  82%|████████▏ | 349/426 [00:09<00:03, 24.51it/s]Loading weights:  84%|████████▍ | 357/426 [00:09<00:02, 32.47it/s]Loading weights:  85%|████████▍ | 362/426 [00:09<00:02, 28.06it/s]Loading weights:  86%|████████▌ | 366/426 [00:10<00:02, 29.27it/s]Loading weights:  87%|████████▋ | 371/426 [00:10<00:01, 31.95it/s]Loading weights:  90%|████████▉ | 382/426 [00:10<00:00, 45.26it/s]Loading weights:  91%|█████████ | 388/426 [00:10<00:00, 42.49it/s]Loading weights:  92%|█████████▏| 394/426 [00:10<00:00, 44.26it/s]Loading weights:  94%|█████████▎| 399/426 [00:10<00:00, 40.05it/s]Loading weights:  96%|█████████▌| 408/426 [00:10<00:00, 49.32it/s]Loading weights:  97%|█████████▋| 414/426 [00:11<00:00, 40.10it/s]Loading weights:  98%|█████████▊| 419/426 [00:11<00:00, 33.77it/s]Loading weights: 100%|██████████| 426/426 [00:11<00:00, 37.68it/s]
+====================================================================================================
+ CAPCA PREMISE   adapters=v6   32 prompts/domain
+ (1) is Sigma_task spiked?   (2) does the TRAINED adapter live in those spikes?
+====================================================================================================
+
+ domain         module                        n_tok  top8 energy   chance  x_chance  LW delta  retention  x_floor
+----------------------------------------------------------------------------------------------------
+ astral         L3.q_proj                      1037      59.90%    0.31%    191.7x    0.0044     0.56%    1.78x
+ astral         L15.q_proj                     1037      67.20%    0.31%    215.0x    0.0038     0.38%    1.23x
+ astral         L31.q_proj                     1037      57.52%    0.31%    184.1x    0.0061     0.36%    1.15x
+ astral         L4.down_proj                   1037      36.58%    0.09%    421.4x    0.0506     0.33%    3.83x
+ astral         L12.down_proj                  1037      32.43%    0.09%    373.6x    0.0470     0.51%    5.93x
+ astral         L20.down_proj                  1037      34.02%    0.09%    391.9x    0.0444     0.20%    2.33x
+ astral         L28.down_proj                  1037      36.72%    0.09%    423.0x    0.0340     0.15%    1.74x
+----------------------------------------------------------------------------------------------------
+ postgresql     L3.q_proj                      1085      58.24%    0.31%    186.4x    0.0044     0.38%    1.23x
+ postgresql     L15.q_proj                     1085      65.16%    0.31%    208.5x    0.0038     0.34%    1.09x
+ postgresql     L31.q_proj                     1085      55.33%    0.31%    177.1x    0.0059     0.42%    1.35x
+ postgresql     L4.down_proj                   1085      33.69%    0.09%    388.1x    0.0576     0.29%    3.31x
+ postgresql     L12.down_proj                  1085      28.90%    0.09%    333.0x    0.0560     0.33%    3.80x
+ postgresql     L20.down_proj                  1085      29.46%    0.09%    339.4x    0.0543     0.22%    2.54x
+ postgresql     L28.down_proj                  1085      34.07%    0.09%    392.5x    0.0350     0.20%    2.30x
+----------------------------------------------------------------------------------------------------
+ duckdb         L3.q_proj                       974      59.86%    0.31%    191.6x    0.0049     0.40%    1.27x
+ duckdb         L15.q_proj                      974      68.21%    0.31%    218.3x    0.0041     0.42%    1.34x
+ duckdb         L31.q_proj                      974      60.83%    0.31%    194.7x    0.0055     0.36%    1.17x
+ duckdb         L4.down_proj                    974      37.83%    0.09%    435.8x    0.0491     0.41%    4.78x
+ duckdb         L12.down_proj                   974      35.20%    0.09%    405.5x    0.0416     0.28%    3.18x
+ duckdb         L20.down_proj                   974      34.06%    0.09%    392.4x    0.0445     0.30%    3.45x
+ duckdb         L28.down_proj                   974      40.60%    0.09%    467.7x    0.0282     0.28%    3.22x
+----------------------------------------------------------------------------------------------------
+ financial      L3.q_proj                      1137      58.97%    0.31%    188.7x    0.0039     0.36%    1.16x
+ financial      L15.q_proj                     1137      64.03%    0.31%    204.9x    0.0038     0.36%    1.15x
+ financial      L31.q_proj                     1137      55.34%    0.31%    177.1x    0.0060     0.43%    1.38x
+ financial      L4.down_proj                   1137      34.61%    0.09%    398.7x    0.0522     0.46%    5.34x
+ financial      L12.down_proj                  1137      28.21%    0.09%    325.0x    0.0589     0.31%    3.58x
+ financial      L20.down_proj                  1137      26.83%    0.09%    309.1x    0.0630     0.16%    1.84x
+ financial      L28.down_proj                  1137      32.73%    0.09%    377.0x    0.0370     0.40%    4.65x
+----------------------------------------------------------------------------------------------------
+ python_modern  L3.q_proj                       987      58.94%    0.31%    188.6x    0.0051     0.42%    1.35x
+ python_modern  L15.q_proj                      987      66.39%    0.31%    212.5x    0.0042     0.29%    0.91x
+ python_modern  L31.q_proj                      987      59.01%    0.31%    188.8x    0.0056     0.49%    1.56x
+ python_modern  L4.down_proj                    987      37.95%    0.09%    437.2x    0.0495     0.49%    5.59x
+ python_modern  L12.down_proj                   987      33.16%    0.09%    382.0x    0.0461     0.27%    3.12x
+ python_modern  L20.down_proj                   987      30.44%    0.09%    350.6x    0.0541     0.21%    2.46x
+ python_modern  L28.down_proj                   987      38.33%    0.09%    441.6x    0.0319     0.38%    4.41x
+----------------------------------------------------------------------------------------------------
+ python_web     L3.q_proj                       968      60.13%    0.31%    192.4x    0.0050     0.34%    1.10x
+ python_web     L15.q_proj                      968      66.96%    0.31%    214.3x    0.0042     0.38%    1.23x
+ python_web     L31.q_proj                      968      60.02%    0.31%    192.1x    0.0054     0.62%    1.98x
+ python_web     L4.down_proj                    968      38.72%    0.09%    446.1x    0.0488     0.20%    2.26x
+ python_web     L12.down_proj                   968      32.94%    0.09%    379.4x    0.0477     0.37%    4.30x
+ python_web     L20.down_proj                   968      31.68%    0.09%    365.0x    0.0525     0.32%    3.73x
+ python_web     L28.down_proj                   968      39.07%    0.09%    450.1x    0.0313     0.27%    3.15x
+----------------------------------------------------------------------------------------------------
+
+  (1) SPIKE     median top-8 energy is 336.2x the chance floor
+  (2) RELEVANCE median trained-adapter retention is 2.28x its floor
+
+  For reference, probe_pissa_premise.py measured 1.37x on the WEIGHT version
+  and that was judged indistinguishable from random init. Same bar applies.
+
+  42s   wrote results/benchmarks/capca_premise.json
+Warning: Resource leak detected by SharedSignalPool, 2 Signals leaked.

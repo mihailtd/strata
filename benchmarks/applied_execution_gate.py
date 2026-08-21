@@ -25,16 +25,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import torch
-
 # Ensure ROCm HSA runtime is preloaded for AMD Radeon RX 7900 XTX
+os.environ.setdefault("HSA_OVERRIDE_GFX_VERSION", "11.0.0")
 rocm_hsa_lib = "/opt/rocm-7.2.0/lib/libhsa-runtime64.so"
 if __name__ == "__main__" and os.path.exists(rocm_hsa_lib) and rocm_hsa_lib not in os.environ.get("LD_PRELOAD", ""):
     current_preload = os.environ.get("LD_PRELOAD", "")
     os.environ["LD_PRELOAD"] = f"{rocm_hsa_lib}:{current_preload}".strip(":")
     os.execve(sys.executable, [sys.executable] + sys.argv, os.environ)
 
-from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+import torch
+
+from runtime.canon import REPO_ROOT  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
@@ -42,9 +43,10 @@ sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from gnn_experiment.canon import CANON, adapter_path
-from gnn_experiment.novel_peft import FoldableExpert, WeightFoldingEngine, set_hard_vram_cap
-from gnn_experiment.fused_norm import inject_exact_rmsnorm, fold_rmsnorm_into_linear
+from runtime.canon import CANON, adapter_path
+from runtime.novel_peft import FoldableExpert, WeightFoldingEngine, set_hard_vram_cap
+from runtime.fused_norm import inject_exact_rmsnorm, fold_rmsnorm_into_linear
+from runtime.gpu_preflight import ensure_gpu_exclusive
 
 # ---------------------------------------------------------------------------
 # Evaluation Sandbox Tools
@@ -246,6 +248,9 @@ class AppliedExecutionGate:
         print("==================================================")
         print(" Applied Toolchain & Execution Benchmark Engine")
         print("==================================================")
+        # PRE-FLIGHT EXCLUSIVITY GUARD: Fail fast if another job is holding VRAM
+        ensure_gpu_exclusive()
+
         set_hard_vram_cap(22.0)
         self.device = torch.device(device)
         self.tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)

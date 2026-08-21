@@ -57,9 +57,9 @@ from py_pglite import PGliteConfig, PGliteManager  # noqa: E402
 from tasks import TASKS  # noqa: E402
 from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 
-from gnn_experiment.canon import CANON, adapter_path  # noqa: E402
-from gnn_experiment.cuda_graph import FoldedCudaGraphDecoder  # noqa: E402
-from gnn_experiment.novel_peft import (  # noqa: E402
+from runtime.canon import CANON, adapter_path  # noqa: E402
+from runtime.cuda_graph import FoldedCudaGraphDecoder  # noqa: E402
+from runtime.novel_peft import (  # noqa: E402
     FoldableExpert, WeightFoldingEngine, set_hard_vram_cap,
 )
 

@@ -59,14 +59,16 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers import TrainerCallback
 from trl import SFTConfig, SFTTrainer
 
-from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+from runtime.canon import REPO_ROOT  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
 sys.path.append(str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from gnn_experiment.novel_peft import set_hard_vram_cap  # noqa: E402
+from runtime.novel_peft import set_hard_vram_cap  # noqa: E402
+from runtime import training_db  # noqa: E402
+from runtime.gpu_preflight import ensure_gpu_exclusive  # noqa: E402
 
 METHODOLOGY = "m2"  # bf16 + Liger fused kernels; see docstring
 
@@ -97,12 +99,35 @@ DOMAINS = {
 # data/financial_planning/ but every adapter since v1 is m2_financial_*. Keep the
 # stem canonical so adapter_path("financial") resolves.
 _V6_STEM = {"financial_planning": "financial"}
-DOMAINS_V6 = {
-    d: (f"data/{d}/training_data_v5.jsonl",
-        f"results/adapters/m2_{_V6_STEM.get(d, d)}_r8a128_v6")
-    for d in ("astral", "postgresql", "duckdb", "financial_planning",
-              "python_modern", "python_web")
-}
+_GEN_DOMAINS = ("astral", "postgresql", "duckdb", "financial_planning",
+                "python_modern", "python_web")
+
+
+def _gen_table(corpus_ver: str, adapter_ver: str) -> dict[str, tuple[str, str]]:
+    return {d: (f"data/{d}/training_data_{corpus_ver}.jsonl",
+                f"results/adapters/m2_{_V6_STEM.get(d, d)}_r8a128_{adapter_ver}")
+            for d in _GEN_DOMAINS}
+
+
+# ╔════════════════════════════════════════════════════════════════════════════╗
+# ║ CORPUS VERSION != ADAPTER VERSION. They are OFF BY ONE and always have been.║
+# ║                                                                             ║
+# ║   adapter v6  <- corpus v5     adapter v7  <- corpus v6                     ║
+# ║                                                                             ║
+# ║ Adapter v5 is the failed L_inert line whose weights were deleted; corpus v5 ║
+# ║ is the merged disposition corpus. Unrelated things, same number (CHANGELOG). ║
+# ║                                                                             ║
+# ║ This table used to be written inline as                                     ║
+# ║     training_data_v6.jsonl -> results/adapters/*_v6                         ║
+# ║ which was correct only while training_data_v6.jsonl did not exist. The       ║
+# ║ moment the round-2 corpora were written, `--v6` started reading the NEW      ║
+# ║ corpus and writing over the OLD adapter: m2_python_modern_r8a128_v6 was      ║
+# ║ silently replaced, destroying the baseline its 22.40 activation-scale and    ║
+# ║ its dataclass-attribution result were measured on. Derive both tables from   ║
+# ║ one function so the pairing cannot drift again.                             ║
+# ╚════════════════════════════════════════════════════════════════════════════╝
+DOMAINS_V6 = _gen_table("v5", "v6")
+DOMAINS_V7 = _gen_table("v6", "v7")
 
 FAIR_STEPS = {"merged_sql": 326, "merged_all": 481}
 
@@ -180,24 +205,68 @@ class GoldilocksStoppingCallback(TrainerCallback):
     v4 recorded 0.0758 (postgres) and 0.0754 (astral) at 150 steps -- both
     mid-band. 150 was right for those two corpora by luck, not design.
 
-    ⚠️ HONEST LIMIT
-    ---------------
+    ⚠️ HONEST LIMIT 1 -- the band was calibrated along a different axis
+    ------------------------------------------------------------------
     The V-curve that places peak quality at ||dW||/||W|| ~= 0.045 was measured by
     SCALING ALPHA on a fixed trained adapter: direction constant, magnitude varied.
     Reaching the same ratio by training longer also changes the DIRECTION. The
     scalar is the same; the path is not. Treat the band as a well-grounded stopping
     heuristic, not as a proven quality optimum along the training-length axis --
     that transfer is worth measuring once rather than assuming.
+
+    ⚠️ HONEST LIMIT 2 -- MEASURED: this is a calibrated step count, not an
+    adaptive one
+    ---------------------------------------------------------------------
+    From the six v6 geometry_trace.json files actually produced:
+
+        domain          stop step   final ||dW||/||W||   ratio @100
+        astral            140            0.0982            0.0806
+        duckdb            135            0.1005            0.0857
+        financial         140            0.1008            0.0838
+        postgresql        135            0.1013            0.0855
+        python_modern     130            0.0960            0.0843
+        python_web        140            0.0989            0.0823
+
+    All six fired on the HARD CEILING; the plateau criterion never triggered once
+    (rel_growth at stop was ~0.019 everywhere). And the trajectories are nearly
+    identical -- 6% spread at step 100 across six corpora of different size,
+    duplication rate and form.
+
+    So the claim above that this "makes the stopping point independent of corpus
+    size, duplication rate and learning rate" is only half earned. ||dW||/||W||
+    barely responds to corpus properties, so there was less confound to remove
+    than advertised: in practice the rule lands every domain at ~135 steps. It is
+    still better than a guessed 150 -- it TARGETS a measured band and it would
+    self-correct if rank, alpha or LR changed -- but do not describe it as
+    per-corpus adaptive. It is not.
+
+    ⚠️ WHY NOT A RIEMANNIAN STOPPING SIGNAL (the obvious next idea)
+    --------------------------------------------------------------
+    d_R on weight Gramians cannot do this job: DECISIONS.md §59 measured adapter
+    subspaces as fully disjoint (k = 2r) in all 128 weight matrices, with the SAME
+    domain trained twice landing FARTHER apart than two different domains. The
+    subspace is set by lora_A's init, not by the data.
+
+    The version with teeth is d_R on ACTIVATION covariance, Sigma_h = E[h h^T]
+    base vs current -- genuine n < p, so real Ledoit-Wolf applies
+    (ledoit_wolf_from_samples), and it is invariant to the RMSNorm rescalings that
+    distort a Frobenius meter. It would also catch what the plateau criterion
+    structurally cannot: an adapter whose NORM has saturated while its DIRECTION
+    is still rotating reads as converged here. That costs a forward pass per check
+    and has not been run.
     """
 
     def __init__(self, model, alpha: int, rank: int, target: float | None,
                  hard_ceiling: float = 0.100, every: int = 10,
-                 plateau: float | None = None, floor: float = 0.035):
+                 plateau: float | None = None, floor: float = 0.035,
+                 run_id: str | None = None):
         self.model, self.alpha, self.rank = model, alpha, rank
         self.target, self.hard_ceiling, self.every = target, hard_ceiling, every
         # floor: never call it "converged" below the precision floor, where bf16
         # truncation dominates and merge error exceeds 5%.
         self.plateau, self.floor = plateau, floor
+        self.run_id = run_id
+        self.stop_reason: str | None = None
         self.trace: list[dict] = []
 
     @torch.no_grad()
@@ -227,41 +296,65 @@ class GoldilocksStoppingCallback(TrainerCallback):
         self.trace.append({"step": int(state.global_step), "dw_over_w": round(r, 6),
                            "rel_growth": round(rel, 5),
                            "merge_err_pct": round(0.167 / max(1e-9, r), 3)})
+        if self.run_id:
+            training_db.record_step(
+                run_id=self.run_id,
+                step=int(state.global_step),
+                dw_over_w=round(r, 6),
+                rel_growth=round(rel, 5),
+                merge_err_pct=round(0.167 / max(1e-9, r), 3),
+            )
         if state.global_step % (self.every * 5) == 0:
             print(f"  [geometry] step {state.global_step:4d}  |dW|/|W|={r:.4f}  "
                   f"rel_growth={rel*100:.1f}%  merge_err~{0.167 / max(1e-9, r):.2f}%",
                   flush=True)
 
-        # DUAL CRITERION -- whichever fires first.
-        #
-        # 1. PLATEAU. Relative growth (increment / current) is the on-the-fly
-        #    convergence signal, and it is genuinely per-corpus: at step 80 the
-        #    609-681 record corpora sat at 3.6-4.0% while the 1184-1610 record
-        #    ones sat at 7.8-8.4%. A fixed |dW|/|W| target discards that and stops
-        #    everything at the same place regardless of how converged it is.
-        #
-        # 2. CEILING. Plateau alone is not safe: extrapolated, the big corpora
-        #    reach 2% relative growth at |dW|/|W| ~= 0.100-0.106, i.e. AT or ABOVE
-        #    the retention ceiling where the measured V-curve turns down. The band
-        #    bound has to win when they conflict.
-        #
-        # Both are needed. Plateau stops the small corpora early (they are done);
-        # the ceiling stops the large ones (they would keep climbing).
         if r >= self.hard_ceiling:
             print(f"  [geometry] STOP step {state.global_step}: |dW|/|W|={r:.4f} "
                   f"reached band ceiling {self.hard_ceiling} "
                   f"(merge_err~{0.167 / max(1e-9, r):.2f}%)", flush=True)
+            self.stop_reason = "hard_ceiling"
             control.should_training_stop = True
         elif self.plateau and len(self.trace) >= 4 and rel < self.plateau and r >= self.floor:
             print(f"  [geometry] STOP step {state.global_step}: converged -- "
                   f"rel_growth {rel*100:.2f}% < {self.plateau*100:.1f}% at "
                   f"|dW|/|W|={r:.4f} (in band, merge_err~"
                   f"{0.167 / max(1e-9, r):.2f}%)", flush=True)
+            self.stop_reason = "plateau"
             control.should_training_stop = True
         elif self.target and r >= self.target:
             print(f"  [geometry] STOP step {state.global_step}: |dW|/|W|={r:.4f} "
                   f">= fixed target {self.target}", flush=True)
+            self.stop_reason = "target_reached"
             control.should_training_stop = True
+        return control
+
+
+class TelemetryCallback(TrainerCallback):
+    """Logs training loss and accuracy directly to the SQLite training ledger."""
+
+    def __init__(self, run_id: str):
+        self.run_id = run_id
+
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        if not logs:
+            return control
+        step = int(state.global_step)
+        loss = float(logs.get("loss", 0.0)) if "loss" in logs else None
+        grad_norm = float(logs.get("grad_norm", 0.0)) if "grad_norm" in logs else None
+        lr = float(logs.get("learning_rate", 0.0)) if "learning_rate" in logs else None
+        acc = float(logs.get("mean_token_accuracy", 0.0)) if "mean_token_accuracy" in logs else None
+        entropy = float(logs.get("entropy", 0.0)) if "entropy" in logs else None
+
+        training_db.record_step(
+            run_id=self.run_id,
+            step=step,
+            loss=loss,
+            grad_norm=grad_norm,
+            learning_rate=lr,
+            token_accuracy=acc,
+            entropy=entropy,
+        )
         return control
 
 
@@ -494,7 +587,7 @@ def main():
     # validates BEFORE that happens, so restricting to the v4 keys rejected
     # python_modern/python_web with exit 2 before the model ever loaded.
     ap.add_argument("--domain", required=True,
-                    choices=sorted(set(DOMAINS) | set(DOMAINS_V6)))
+                    choices=sorted(set(DOMAINS) | set(DOMAINS_V6) | set(DOMAINS_V7)))
     ap.add_argument("--model-id", default="Qwen/Qwen3.5-4B")
     ap.add_argument("--rank", type=int, default=8)
     ap.add_argument("--alpha", type=int, default=128)
@@ -523,10 +616,12 @@ def main():
                          "depending on size -- a confound in every cross-domain "
                          "comparison. Prefer the geometric stop.")
     ap.add_argument("--v6", action="store_true",
-                    help="train the v6 generation: corpus v5 (disposition + command "
-                         "data, deduplicated) -> results/adapters/*_v6. See "
-                         "CHANGELOG.md for what v6 adds and what it deliberately "
-                         "omits (L_inert is NOT in v6).")
+                    help="adapter v6 <- corpus v5 (disposition + command data, "
+                         "deduplicated) -> results/adapters/*_v6.")
+    ap.add_argument("--v7", action="store_true",
+                    help="adapter v7 <- corpus v6 (round-2 rebuild: astral command "
+                         "families, postgres asyncpg, duckdb analytics, python "
+                         "capability records) -> results/adapters/*_v7.")
     ap.add_argument("--stop-at-dw-over-w", type=float, default=None,
                     help="Stop when ||dW||/||W|| reaches this. 0.075 matches what the "
                          "v4 adapters landed on (0.0754-0.0758) and sits mid-band with "
@@ -549,6 +644,13 @@ def main():
                     help="train on the FULL sequence (prompt+answer). The pre-2026-08-18 "
                          "behaviour, kept only as an A/B baseline.")
     ap.add_argument("--out", default=None, help="override the default output dir")
+    ap.add_argument("--seed", type=int, default=42,
+                    help="RNG seed. Until this existed the trainer seeded NOTHING: "
+                         "lora_A's init drew from an unseeded global RNG, so every run "
+                         "landed in a different rank-8 subspace and no adapter in this "
+                         "repo was reproducible. Two runs of one identical config "
+                         "measured 22.40 and 15.94 on activation scale and stopped at "
+                         "step 130 vs 150.")
     ap.add_argument(
         "--logging-steps", type=int, default=10,
         help="loss logging interval. Use 1 to capture a per-step convergence curve; "
@@ -582,7 +684,15 @@ def main():
     )
     args = ap.parse_args()
 
-    table = DOMAINS_V6 if args.v6 else DOMAINS
+    # Seed BEFORE anything constructs a tensor. peft builds lora_A with kaiming init
+    # off the global RNG the moment get_peft_model() runs, so seeding after that point
+    # would not make the subspace reproducible.
+    from transformers import set_seed
+    set_seed(args.seed)
+
+    if args.v6 and args.v7:
+        raise SystemExit("  --v6 and --v7 are different generations; pick one.")
+    table = DOMAINS_V7 if args.v7 else (DOMAINS_V6 if args.v6 else DOMAINS)
     if args.domain not in table:
         raise SystemExit(f"domain {args.domain!r} not available in "
                          f"{'v6' if args.v6 else 'v4'} table: {sorted(table)}")
@@ -595,6 +705,10 @@ def main():
         data_rel = args.dataset
     dataset_path = REPO_ROOT / data_rel
     out_dir = Path(args.out) if args.out else REPO_ROOT / out_rel
+    out_dir.parent.mkdir(parents=True, exist_ok=True)
+
+    # PRE-FLIGHT EXCLUSIVITY GUARD: Fail fast if another job is holding VRAM
+    ensure_gpu_exclusive()
 
     set_hard_vram_cap(args.vram_cap_gb)
     dev = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
@@ -683,6 +797,8 @@ def main():
 
     sft_config = SFTConfig(
         output_dir=str(out_dir / "checkpoints"),
+        seed=args.seed,
+        data_seed=args.seed,
         completion_only_loss=completion_only,
         max_length=2048,
         per_device_train_batch_size=2,
@@ -704,6 +820,24 @@ def main():
             args.domain, tokenizer,
             n_batches=args.inert_replay_batches, max_len=args.inert_replay_len)
 
+    run_id = training_db.start_run(
+        domain=args.domain,
+        dataset_path=str(dataset_path),
+        n_records=len(records),
+        rank=args.rank,
+        alpha=args.alpha,
+        lr=args.lr,
+        max_steps=args.max_steps,
+        target_dw_w=args.stop_at_dw_over_w if args.stop_at_dw_over_w is not None else 0.071,
+        adapter_version="v7" if args.v7 else ("v6" if args.v6 else "v4"),
+        config={
+            "completion_only": completion_only,
+            "liger": liger_applied,
+            "gradient_checkpointing": args.gradient_checkpointing,
+            "lambda_inert": args.lambda_inert,
+        },
+    )
+
     trainer = InertiaSFTTrainer(
         model=model,
         args=sft_config,
@@ -712,12 +846,14 @@ def main():
         lambda_inert=args.lambda_inert,
         replay_batches=replay_batches,
     )
+    trainer.add_callback(TelemetryCallback(run_id=run_id))
 
     geom_cb = None
     if args.stop_at_dw_over_w or args.stop_at_plateau:
         geom_cb = GoldilocksStoppingCallback(
             model, args.alpha, args.rank, args.stop_at_dw_over_w,
-            every=args.geometry_every, plateau=args.stop_at_plateau)
+            every=args.geometry_every, plateau=args.stop_at_plateau,
+            run_id=run_id)
         trainer.add_callback(geom_cb)
         print(f"  [geometry] geometric stop ACTIVE: train until |dW|/|W| >= "
               f"{args.stop_at_dw_over_w} (safety cap {args.max_steps} steps)")
@@ -812,7 +948,42 @@ def main():
             return {"error": f"{type(ex).__name__}: {ex}"}
 
     print(f"Starting SFT training ({args.max_steps} steps)...")
-    trainer.train()
+    train_result = trainer.train()
+
+    stopped_step = int(trainer.state.global_step)
+    final_loss = None
+    final_token_acc = None
+    for item in reversed(trainer.state.log_history):
+        if "loss" in item and final_loss is None:
+            try:
+                final_loss = float(item["loss"])
+            except Exception:
+                pass
+        if "mean_token_accuracy" in item and final_token_acc is None:
+            try:
+                final_token_acc = float(item["mean_token_accuracy"])
+            except Exception:
+                pass
+        if final_loss is not None and final_token_acc is not None:
+            break
+
+    prec = precision_report()
+    final_dw_w = prec.get("dw_over_w") if isinstance(prec, dict) else None
+    pred_merge_err = prec.get("predicted_merge_err_pct") if isinstance(prec, dict) else None
+    stop_reason = geom_cb.stop_reason if (geom_cb and geom_cb.stop_reason) else ("max_steps" if stopped_step >= args.max_steps else "completed")
+    runtime_sec = float(train_result.metrics.get("train_runtime", 0.0)) if hasattr(train_result, "metrics") and "train_runtime" in train_result.metrics else None
+
+    training_db.finish_run(
+        run_id=run_id,
+        status="completed",
+        stopped_at_step=stopped_step,
+        stop_reason=stop_reason,
+        final_loss=final_loss,
+        final_token_acc=final_token_acc,
+        final_dw_w=final_dw_w,
+        predicted_merge_err=pred_merge_err,
+        runtime_seconds=runtime_sec,
+    )
 
     if args.loss_curve_out:
         curve_path = Path(args.loss_curve_out)
@@ -903,6 +1074,7 @@ def main():
                 "subspace_geometry": geometry_report(out_dir),
                 "merge_precision": precision_report(),
                 "trained_by": "scripts/train/train_expert.py",
+                "seed": args.seed,
                 "domain": args.domain,
                 "rank": args.rank,
                 "alpha": args.alpha,

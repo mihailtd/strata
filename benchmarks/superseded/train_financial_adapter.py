@@ -25,14 +25,14 @@ from peft import LoraConfig, get_peft_model
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import SFTConfig, SFTTrainer
 
-from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+from runtime.canon import REPO_ROOT  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
 sys.path.append(str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from gnn_experiment.novel_peft import set_hard_vram_cap  # noqa: E402
+from runtime.novel_peft import set_hard_vram_cap  # noqa: E402
 
 DATASET_PATH = REPO_ROOT / "data/financial_planning/training_data.jsonl"
 OUT_DIR = REPO_ROOT / "results/adapters/ctl_lora_fin_a128"

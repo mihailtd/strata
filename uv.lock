@@ -906,85 +906,6 @@ wheels = [
 ]
 
 [[package]]
-name = "gnn-experiment"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "accelerate" },
-    { name = "beautifulsoup4" },
-    { name = "bitsandbytes" },
-    { name = "datasets" },
-    { name = "ebooklib" },
-    { name = "evaluate" },
-    { name = "flash-attn" },
-    { name = "httpx" },
-    { name = "kernels" },
-    { name = "liger-kernel" },
-    { name = "markdown-it-py" },
-    { name = "markdownify" },
-    { name = "matplotlib" },
-    { name = "pandas" },
-    { name = "peft" },
-    { name = "pgvector" },
-    { name = "protobuf" },
-    { name = "psycopg" },
-    { name = "py-pglite", extra = ["extensions"] },
-    { name = "pyyaml" },
-    { name = "sentencepiece" },
-    { name = "sqlglot" },
-    { name = "torch" },
-    { name = "torchvision" },
-    { name = "transformers" },
-    { name = "triton-rocm" },
-    { name = "trl" },
-    { name = "vllm" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "ruff" },
-    { name = "ty" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "accelerate", specifier = ">=1.14.0" },
-    { name = "beautifulsoup4", specifier = ">=4.15.0" },
-    { name = "bitsandbytes", specifier = ">=0.50.0" },
-    { name = "datasets", specifier = ">=5.0.1" },
-    { name = "ebooklib", specifier = ">=0.20" },
-    { name = "evaluate", specifier = ">=0.4.6" },
-    { name = "flash-attn", specifier = ">=2.8.3", index = "https://rocm.frameworks.amd.com/whl-multi-arch/vllm-rdna" },
-    { name = "httpx", specifier = ">=0.28.1" },
-    { name = "kernels", specifier = ">=0.16.0" },
-    { name = "liger-kernel", specifier = ">=0.8.1" },
-    { name = "markdown-it-py", specifier = ">=4.2.0" },
-    { name = "markdownify", specifier = ">=1.2.3" },
-    { name = "matplotlib", specifier = ">=3.11.1" },
-    { name = "pandas", specifier = ">=2.0,<3" },
-    { name = "peft", specifier = ">=0.20.0" },
-    { name = "pgvector", specifier = ">=0.5.0" },
-    { name = "protobuf", specifier = ">=6.31.1,<7.0.0" },
-    { name = "psycopg", specifier = ">=3.3.4" },
-    { name = "py-pglite", extras = ["extensions"], specifier = ">=0.5.3" },
-    { name = "pyyaml", specifier = ">=6.0.3" },
-    { name = "sentencepiece", specifier = ">=0.2.2" },
-    { name = "sqlglot", specifier = ">=30.17.0" },
-    { name = "torch", specifier = ">=2.13.0", index = "https://download.pytorch.org/whl/rocm7.2" },
-    { name = "torchvision", specifier = ">=0.28.0", index = "https://download.pytorch.org/whl/rocm7.2" },
-    { name = "transformers", specifier = ">=5.14.1" },
-    { name = "triton-rocm", specifier = ">=3.7.1", index = "https://download.pytorch.org/whl/rocm7.2" },
-    { name = "trl", specifier = ">=1.9.2" },
-    { name = "vllm", specifier = ">=0.23.1.dev1", index = "https://rocm.frameworks.amd.com/whl-multi-arch/vllm-rdna" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "ruff", specifier = ">=0.16.2" },
-    { name = "ty", specifier = ">=0.0.69" },
-]
-
-[[package]]
 name = "google-api-core"
 version = "2.34.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3043,6 +2964,85 @@ dependencies = [
 wheels = [
     { url = "https://files.pythonhosted.org/packages/08/5a/67b1bde045561e96f06898bd0be1c34c66bb6df7cfcb76bbfc982a7efcd7/runai_model_streamer_s3-0.15.7-py3-none-manylinux2014_aarch64.whl", hash = "sha256:06e9439e9ecf2f246bf84d829f6267b59fa15d6b420a89ecd6a397277b4d63cb", size = 6178475, upload-time = "2026-03-10T17:19:59.115Z" },
     { url = "https://files.pythonhosted.org/packages/d8/10/60e84d27fd7170c146025abd93cec30e833d05e357cea893335afffe492a/runai_model_streamer_s3-0.15.7-py3-none-manylinux2014_x86_64.whl", hash = "sha256:7b60409859dd6a5db7dea0e855d00d5d4df53228975966c8c3e36159b222fef6", size = 5919883, upload-time = "2026-03-10T17:20:01.061Z" },
+]
+
+[[package]]
+name = "runtime"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "accelerate" },
+    { name = "beautifulsoup4" },
+    { name = "bitsandbytes" },
+    { name = "datasets" },
+    { name = "ebooklib" },
+    { name = "evaluate" },
+    { name = "flash-attn" },
+    { name = "httpx" },
+    { name = "kernels" },
+    { name = "liger-kernel" },
+    { name = "markdown-it-py" },
+    { name = "markdownify" },
+    { name = "matplotlib" },
+    { name = "pandas" },
+    { name = "peft" },
+    { name = "pgvector" },
+    { name = "protobuf" },
+    { name = "psycopg" },
+    { name = "py-pglite", extra = ["extensions"] },
+    { name = "pyyaml" },
+    { name = "sentencepiece" },
+    { name = "sqlglot" },
+    { name = "torch" },
+    { name = "torchvision" },
+    { name = "transformers" },
+    { name = "triton-rocm" },
+    { name = "trl" },
+    { name = "vllm" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ruff" },
+    { name = "ty" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "accelerate", specifier = ">=1.14.0" },
+    { name = "beautifulsoup4", specifier = ">=4.15.0" },
+    { name = "bitsandbytes", specifier = ">=0.50.0" },
+    { name = "datasets", specifier = ">=5.0.1" },
+    { name = "ebooklib", specifier = ">=0.20" },
+    { name = "evaluate", specifier = ">=0.4.6" },
+    { name = "flash-attn", specifier = ">=2.8.3", index = "https://rocm.frameworks.amd.com/whl-multi-arch/vllm-rdna" },
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "kernels", specifier = ">=0.16.0" },
+    { name = "liger-kernel", specifier = ">=0.8.1" },
+    { name = "markdown-it-py", specifier = ">=4.2.0" },
+    { name = "markdownify", specifier = ">=1.2.3" },
+    { name = "matplotlib", specifier = ">=3.11.1" },
+    { name = "pandas", specifier = ">=2.0,<3" },
+    { name = "peft", specifier = ">=0.20.0" },
+    { name = "pgvector", specifier = ">=0.5.0" },
+    { name = "protobuf", specifier = ">=6.31.1,<7.0.0" },
+    { name = "psycopg", specifier = ">=3.3.4" },
+    { name = "py-pglite", extras = ["extensions"], specifier = ">=0.5.3" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "sentencepiece", specifier = ">=0.2.2" },
+    { name = "sqlglot", specifier = ">=30.17.0" },
+    { name = "torch", specifier = ">=2.13.0", index = "https://download.pytorch.org/whl/rocm7.2" },
+    { name = "torchvision", specifier = ">=0.28.0", index = "https://download.pytorch.org/whl/rocm7.2" },
+    { name = "transformers", specifier = ">=5.14.1" },
+    { name = "triton-rocm", specifier = ">=3.7.1", index = "https://download.pytorch.org/whl/rocm7.2" },
+    { name = "trl", specifier = ">=1.9.2" },
+    { name = "vllm", specifier = ">=0.23.1.dev1", index = "https://rocm.frameworks.amd.com/whl-multi-arch/vllm-rdna" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ruff", specifier = ">=0.16.2" },
+    { name = "ty", specifier = ">=0.0.69" },
 ]
 
 [[package]]

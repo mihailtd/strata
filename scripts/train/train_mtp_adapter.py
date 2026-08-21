@@ -23,11 +23,11 @@ from torch import nn
 from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from gnn_experiment.micro_probe.dataset import load_astral_micro_dataset
-from gnn_experiment.mtp_draft import Qwen35MTPDraftHead
-from gnn_experiment.novel_peft import NovelLoraLinear
+from runtime.micro_probe.dataset import load_astral_micro_dataset
+from runtime.mtp_draft import Qwen35MTPDraftHead
+from runtime.novel_peft import NovelLoraLinear
 
-from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+from runtime.canon import REPO_ROOT  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
@@ -128,7 +128,7 @@ def main():
             "to load LD_PRELOAD=/opt/rocm-7.2.0/lib/libhsa-runtime64.so."
         )
 
-    from gnn_experiment.novel_peft import set_hard_vram_cap
+    from runtime.novel_peft import set_hard_vram_cap
 
     set_hard_vram_cap(cap_gb=22.0)
     device = torch.device("cuda:0")

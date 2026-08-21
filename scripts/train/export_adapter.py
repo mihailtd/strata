@@ -37,9 +37,9 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from transformers.utils import is_flash_attn_2_available
 from trl import SFTConfig, SFTTrainer
 
-from gnn_experiment.micro_probe.dataset import load_astral_micro_dataset, load_micro_dataset
-from gnn_experiment.peft_compat import patch_lokr_4bit_support
-from gnn_experiment.utils.logger import log_benchmark_metric
+from runtime.micro_probe.dataset import load_astral_micro_dataset, load_micro_dataset
+from runtime.peft_compat import patch_lokr_4bit_support
+from runtime.utils.logger import log_benchmark_metric
 
 # peft's LoKr cannot compute delta shapes against a 4-bit quantized base layer
 # (it reads the packed uint8 `.weight`); every adapter here trains on one. See
@@ -47,7 +47,7 @@ from gnn_experiment.utils.logger import log_benchmark_metric
 # dies on the first forward pass with a shape error.
 patch_lokr_4bit_support()
 
-from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+from runtime.canon import REPO_ROOT  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.

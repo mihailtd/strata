@@ -97,7 +97,7 @@ In live speculative drafting, tokens arrive one-by-one. Running full batch SVD i
 
 ## 3. Runtime Integration: `POETCompressedStateRingBuffer`
 
-Implemented in [`src/gnn_experiment/state_ring_buffer.py`](file:///home/mihai/gnn-experiment/src/gnn_experiment/state_ring_buffer.py#L176):
+Implemented in [`src/runtime/state_ring_buffer.py`](file:///home/mihai/gnn-experiment/src/runtime/state_ring_buffer.py#L176):
 * **Zero Dynamic VRAM Allocation**: Pre-allocates loading basis $\Lambda \in \mathbb{R}^{d \times r}$ and factor score matrix $F \in \mathbb{R}^{\text{max\_depth} \times r}$.
 * **Sub-Microsecond Decompression**: Restores state on speculative rejection via $\hat{x} = \Lambda f_{\text{slot}} + S_{\text{slot}}$.
 * **Unit Tests**: [`tests/test_state_ring_buffer.py`](file:///home/mihai/gnn-experiment/tests/test_state_ring_buffer.py#L145) (89/89 tests passing repository-wide).

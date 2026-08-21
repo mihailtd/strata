@@ -16,9 +16,19 @@ Usage:
         scripts/runtime/speculative/mtp_speculative/benchmark_mtp_speculative.py --tokens 256 --k 2 4 6 8
 """
 
+import os
+import sys
+
+# Ensure ROCm HSA runtime is preloaded for AMD Radeon RX 7900 XTX
+os.environ.setdefault("HSA_OVERRIDE_GFX_VERSION", "11.0.0")
+rocm_hsa_lib = "/opt/rocm-7.2.0/lib/libhsa-runtime64.so"
+if __name__ == "__main__" and os.path.exists(rocm_hsa_lib) and rocm_hsa_lib not in os.environ.get("LD_PRELOAD", ""):
+    current_preload = os.environ.get("LD_PRELOAD", "")
+    os.environ["LD_PRELOAD"] = f"{rocm_hsa_lib}:{current_preload}".strip(":")
+    os.execve(sys.executable, [sys.executable] + sys.argv, os.environ)
+
 import argparse
 import json
-import sys
 import time
 from pathlib import Path
 
@@ -32,39 +42,47 @@ if torch.cuda.is_available():
 
 from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 
-from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+from runtime.canon import REPO_ROOT  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
 sys.path.append(str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from gnn_experiment.mtp_draft import (  # noqa: E402
+from runtime.gpu_preflight import ensure_gpu_exclusive  # noqa: E402
+
+from runtime.mtp_draft import (  # noqa: E402
     Qwen35MTPDraftHead,
+    fold_mtp_adapter,
+    mtp_adapter_path,
     restore_state,
     snapshot_state,
     state_nbytes,
 )
-from gnn_experiment.novel_peft import (  # noqa: E402
+from runtime.novel_peft import (  # noqa: E402
     FoldableExpert,
     WeightFoldingEngine,
     set_hard_vram_cap,
 )
 
-# Domain experts, folded into the backbone to test whether adaptation erodes the
-# speculative win. Acceptance measurements say astral is the one that hurts
-# drafting (-0.86 accepted tokens vs un-adapted), so it is the real stress case.
+from runtime.canon import adapter_path
+
 ADAPTERS = {
-    "financial": "results/adapters/m2_financial_r8a128",
-    "astral": "results/adapters/m2_astral_r8a128",
-    "postgres": "results/adapters/m2_postgresql_r8a128",
+    "astral": str(adapter_path("astral")),
+    "postgresql": str(adapter_path("postgresql")),
+    "duckdb": str(adapter_path("duckdb")),
+    "financial": str(adapter_path("financial")),
+    "python_modern": str(adapter_path("python_modern")),
+    "python_web": str(adapter_path("python_web")),
 }
 
 PROMPTS = [
-    "### Question:\nExplain loss aversion in one sentence.\n\n### Answer:\n",
     "### Question:\nHow do I add a dependency with uv?\n\n### Answer:\n",
-    "### Question:\nWhat is pgvector used for?\n\n### Answer:\n",
-    "### Question:\nWhat is a money script?\n\n### Answer:\n",
+    "### Question:\nWhat is pgvector used for in PostgreSQL?\n\n### Answer:\n",
+    "### Question:\nHow do I query a parquet file directly in DuckDB?\n\n### Answer:\n",
+    "### Question:\nExplain loss aversion in one sentence.\n\n### Answer:\n",
+    "### Question:\nWrite a modern Python async context manager.\n\n### Answer:\n",
+    "### Question:\nCreate a FastAPI endpoint with Pydantic validation.\n\n### Answer:\n",
 ]
 
 
@@ -87,15 +105,7 @@ def plain_greedy(model, tok, ids, n_new):
 
 @torch.no_grad()
 def speculative(model, tok, head, ids, n_new, k):
-    """Speculative decode with the MTP head, keeping the head's context intact.
-
-    The earlier version rebuilt the head's KV cache as an EMPTY DynamicCache
-    every round while still drafting at absolute position `pos-1`. The head
-    therefore attended to one token of context instead of the whole sequence,
-    and acceptance fell from 66.7% (isolated) to 24-48%. Here the committed
-    hidden states are accumulated and the head is re-primed over them each
-    round, which is what it was trained to see.
-    """
+    """Speculative decode with the MTP head, keeping the head's context intact."""
     out = model(ids, use_cache=True, output_hidden_states=True)
     cache = out.past_key_values
     hids = [out.hidden_states[-1]]
@@ -150,15 +160,7 @@ def speculative(model, tok, head, ids, n_new, k):
 
 @torch.no_grad()
 def chunked_reference(model, ids, toks):
-    """What the CHUNKED kernel says the greedy continuation is.
-
-    Speculative verification runs the multi-token (chunked) kernel, while plain
-    decode runs the single-token recurrent kernel. Measured: those two paths
-    disagree on 1 of 3 prompts (divergence at token 9/32). So token-exactness
-    against plain decode is NOT achievable on this model, and the honest
-    reference for a speculative decoder is the path its verifier actually uses.
-    Both references are reported.
-    """
+    """What the CHUNKED kernel says the greedy continuation is."""
     full = torch.cat([ids, torch.tensor([toks], device=ids.device)], dim=-1)
     T = ids.shape[1]
     logits = model(full, use_cache=False).logits
@@ -172,9 +174,11 @@ def main():
     ap.add_argument("--k", type=int, nargs="+", default=[2, 4, 6, 8])
     ap.add_argument("--vram-cap-gb", type=float, default=22.0)
     ap.add_argument("--adapter", default="none", choices=["none", *ADAPTERS])
+    ap.add_argument("--adapt-mtp-head", action="store_true", help="Fold domain-adapted MTP micro-adapter into head")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
+    ensure_gpu_exclusive()
     set_hard_vram_cap(args.vram_cap_gb)
     tok = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
     model = AutoModelForCausalLM.from_pretrained(
@@ -185,11 +189,23 @@ def main():
 
     engine = None
     if args.adapter != "none":
-        expert = FoldableExpert.from_dir(REPO_ROOT / ADAPTERS[args.adapter], args.adapter)
+        expert = FoldableExpert.from_dir(Path(ADAPTERS[args.adapter]), args.adapter)
         engine = WeightFoldingEngine(model, [expert], keep_pristine=True)
         engine.activate(expert)
-        print(f"folded domain expert into backbone: {args.adapter}\n")
-    out_path = args.out or f"results/mtp_speculative_{args.adapter}.json"
+        print(f"folded domain expert into backbone: {args.adapter}")
+
+        if args.adapt_mtp_head:
+            mtp_p = mtp_adapter_path(args.adapter, "v7")
+            if mtp_p.exists():
+                fold_mtp_adapter(head, mtp_p)
+                print(f"folded domain micro-adapter into MTP draft head: {mtp_p.name}\n")
+            else:
+                print(f"⚠️ MTP adapter not found: {mtp_p}; using unadapted head\n")
+        else:
+            print("using unadapted baseline MTP draft head\n")
+
+    default_suffix = "_adapted_head" if args.adapt_mtp_head else ""
+    out_path = args.out or f"results/benchmarks/mtp_speculative_{args.adapter}{default_suffix}.json"
 
     ids0 = tok(PROMPTS[0], return_tensors="pt").input_ids.to(model.device)
     with torch.no_grad():

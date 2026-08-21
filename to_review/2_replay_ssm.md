@@ -23,7 +23,7 @@ By eliminating dynamic GPU memory allocations (`.clone()`) and replacing them wi
 
 ## Phase 2: Architecture & Implementation
 
-### 1. Pre-allocated State Ring Buffer (`src/gnn_experiment/state_ring_buffer.py`)
+### 1. Pre-allocated State Ring Buffer (`src/runtime/state_ring_buffer.py`)
 - Pre-allocates $N$ slots ($N = K + 2$, default $N=8$) in GPU VRAM for the 24 GatedDeltaNet SSM layers:
   - `recurrent_states`: `[N, batch_size, 4, 128, 128]` in `bfloat16`.
   - `conv_states`: `[N, batch_size, 2048, 4]` in `bfloat16`.
@@ -31,7 +31,7 @@ By eliminating dynamic GPU memory allocations (`.clone()`) and replacing them wi
 - **Dynamic Attention KV Cropping:** Tracks sequence length checkpoints and crops attention `keys` and `values` in $O(1)$ without memory thrashing.
 - **Pointer Arithmetic:** Advances `write_ptr` and `commit_ptr` via modulo arithmetic `(commit_ptr + n_accepted) % max_depth`.
 
-### 2. Transparent Cache Integration (`src/gnn_experiment/mtp_draft.py`)
+### 2. Transparent Cache Integration (`src/runtime/mtp_draft.py`)
 - `attach_state_ring_buffer(cache, max_depth=8)`: Attaches the ring buffer to the active cache.
 - `snapshot_state(cache)`: Automatically detects attached ring buffer and delegates to zero-allocation slot push.
 - `restore_state(cache, snap)`: Restores hybrid states in-place via ring buffer rollback and attention KV cache cropping.

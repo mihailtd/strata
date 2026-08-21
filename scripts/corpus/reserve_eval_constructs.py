@@ -68,7 +68,7 @@ import re
 from collections import Counter
 from pathlib import Path
 
-from gnn_experiment.canon import REPO_ROOT as REPO  # noqa: E402
+from runtime.canon import REPO_ROOT as REPO  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
@@ -152,8 +152,28 @@ def record_text(rec: dict) -> str:
 
 
 def family_of(rec: dict) -> str:
+    """Family label, including for doc-scraped records.
+
+    Doc-scraped records carry `source_path` ("concepts/indexes.md") and
+    `heading_path`, never `family` or `source`. Until this fell back to them, 744
+    of astral's 1396 records (53%) and 398 of postgresql's collapsed to "?" -- so
+    the reservation gate could never reserve them, and the audit's family histogram
+    reported a corpus it could not actually see. Listed as outstanding item 2 in
+    docs/CORPUS_DESIGN.md.
+    """
     m = rec.get("meta") or {}
-    return str(m.get("family") or m.get("source") or "?")
+    fam = m.get("family") or m.get("source")
+    if fam:
+        return str(fam)
+    sp = m.get("source_path")
+    if sp:
+        # "concepts/indexes.md" -> "doc:concepts/indexes"; the directory carries the
+        # topic grouping, which is what a family is for.
+        return "doc:" + str(sp).rsplit(".", 1)[0]
+    hp = m.get("heading_path")
+    if hp:
+        return "doc:" + "/".join(str(h) for h in hp[:2])
+    return "?"
 
 
 def main() -> None:

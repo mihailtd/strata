@@ -37,17 +37,30 @@ import json
 import random
 import re
 
-from gnn_experiment.canon import REPO_ROOT
+from runtime.canon import REPO_ROOT
 
 MARK = "\n\n### Answer:\n"
 
 DOMAINS = ["astral", "postgresql", "duckdb", "python_modern", "python_web", "financial_planning"]
-NEW_FILES = ["training_data_commands.jsonl", "training_data_disposition.jsonl"]
+# Round 2 additions. Each one closes a defect the attribution benchmark MEASURED
+# (benchmarks/factory/agentic/attribution, DECISIONS.md §60):
+#   config_families -> astral emitted `uv tool --dev`, a blend of two families
+#   asyncpg         -> postgresql had 0 asyncpg records and answered anyway
+#   analytics       -> duckdb had 0 PERCENTILE_ and 1 quantile record
+#   capability      -> python_modern/_web were 76% one answer shape
+NEW_FILES = ["training_data_commands.jsonl", "training_data_disposition.jsonl",
+             "training_data_config_families.jsonl", "training_data_asyncpg.jsonl",
+             "training_data_analytics.jsonl", "training_data_capability.jsonl"]
 
 # What "the right form" looks like per domain, for the before/after report.
 FORM = {
-    "astral": r"\b(uv (add|lock|sync|run|init|python|build|tool|export|remove|tree)|uvx|ruff (check|format)|ty check)\b",
-    "postgresql": r"```sql", "duckdb": r"```sql",
+    # astral emits TWO valid artifacts: a command, or a config block. Prose is the
+    # failure mode, and only prose. Counting toml as "wrong form" made the round-2
+    # config records look like a regression when they are the gap being closed.
+    "astral": r"\b(uv (add|lock|sync|run|init|python|build|tool|export|remove|tree)|uvx|ruff (check|format)|ty check)\b|```toml",
+    # postgresql answers are SQL *or* driver code -- an asyncpg pool is correctly
+    # Python. Only prose is the wrong form.
+    "postgresql": r"```(sql|python)", "duckdb": r"```(sql|python)",
     "python_modern": r"```python", "python_web": r"```python",
     "financial_planning": r"\*\*Not ",   # financial is prose; the tell is a rejected alternative
 }
@@ -80,30 +93,37 @@ def main() -> None:
     args = ap.parse_args()
 
     print("=" * 92)
-    print(f" {'domain':14s} {'old':>6s} {'dedup':>6s} {'new':>6s} {'v5':>6s}  "
+    print(f" {'domain':14s} {'old':>6s} {'from v5':>7s} {'new':>6s} {'v6':>6s}  "
           f"{'form% before':>12s} {'form% after':>12s}")
     print("-" * 92)
 
     for dom in DOMAINS:
         d = REPO_ROOT / "data" / dom
-        old = load(d / "training_data_v4.jsonl") or load(d / "training_data_v3.jsonl")
+        old = load(d / "training_data_v5.jsonl") or load(d / "training_data_v4.jsonl")
         if not old:
             print(f" {dom:14s} -- no base corpus found, skipped")
             continue
-
-        seen, kept = set(), []
-        for r in old:
-            k = norm_key(r)
-            if k in seen:
-                continue
-            seen.add(k)
-            kept.append(r)
 
         new: list[dict] = []
         for f in NEW_FILES:
             new += load(d / f)
 
-        merged = kept + new
+        # DEDUP THE WHOLE SET, not just `old`. Round 1 deduped `old` and then appended
+        # `new` unchecked -- and since the v5 base ALREADY CONTAINS the round-1 new
+        # files, re-running re-introduced every one of them. astral reported 1294 new
+        # records when only 458 were new; the other 836 were its own commands file
+        # coming back a second time.
+        #
+        # `new` goes first so that when a record appears in both, the version kept is
+        # the freshly generated one.
+        seen, merged = set(), []
+        for r in new + old:
+            k = norm_key(r)
+            if k in seen:
+                continue
+            seen.add(k)
+            merged.append(r)
+        kept = [r for r in merged if r not in new]
         # Shuffle so the domains/forms interleave. Appending new data as a block
         # means it gets the FINAL gradient steps and is over-weighted by the cosine
         # schedule -- an ordering artifact that looks like a real effect.
@@ -112,11 +132,12 @@ def main() -> None:
         rx = FORM.get(dom, r"```")
         fb = sum(bool(re.search(rx, answer_of(r), re.I)) for r in old) * 100.0 / len(old)
         fa = sum(bool(re.search(rx, answer_of(r), re.I)) for r in merged) * 100.0 / len(merged)
-        print(f" {dom:14s} {len(old):6d} {len(kept):6d} {len(new):6d} {len(merged):6d}  "
+        n_new_kept = len(merged) - len(kept)
+        print(f" {dom:14s} {len(old):6d} {len(kept):6d} {n_new_kept:6d} {len(merged):6d}  "
               f"{fb:11.1f}% {fa:11.1f}%")
 
         if args.write:
-            out = d / "training_data_v5.jsonl"
+            out = d / "training_data_v6.jsonl"
             out.write_text("\n".join(json.dumps(r) for r in merged) + "\n")
             print(f" {'':14s} WROTE {out.relative_to(REPO_ROOT)}")
 
@@ -124,9 +145,9 @@ def main() -> None:
     if not args.write:
         print(" (dry run -- pass --write)")
     else:
-        print(" v5 corpora written. v4 is untouched, so every existing adapter stays")
+        print(" v6 corpora written. v5 is untouched, so every existing adapter stays")
         print(" reproducible. Nothing is trained: bump CANON.ADAPTER_VERSION and the")
-        print(" trainer's DOMAINS map deliberately when you want v5 adapters.")
+        print("    trainer's DOMAINS map deliberately when you want v7 adapters.")
 
 
 if __name__ == "__main__":

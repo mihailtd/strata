@@ -11,7 +11,7 @@ For the complete 2026-08-11 audit history and architectural init bug analysis, s
 
 ### 1. Verify CUDA Graph Replay Parity Across Expert Swaps
 - **Goal:** Prove token-for-token exactness between graph replay and eager greedy decode across multi-turn domain swaps.
-- **Context:** `FoldedCudaGraphDecoder.verify_against_eager()` is implemented in [src/gnn_experiment/cuda_graph.py](file:///home/mihai/gnn-experiment/src/gnn_experiment/cuda_graph.py#L229). Need to wire this validation directly into the continuous test suite.
+- **Context:** `FoldedCudaGraphDecoder.verify_against_eager()` is implemented in [src/runtime/cuda_graph.py](file:///home/mihai/gnn-experiment/src/runtime/cuda_graph.py#L229). Need to wire this validation directly into the continuous test suite.
 - **Success Criteria:** 100% token match on 256-token generations across consecutive swaps between `m2_astral_r8a128_v4`, `m2_postgresql_r8a128_v4`, `m2_duckdb_r8a128_v4`, and `m2_financial_r8a128_v4`.
 
 ### 2. Empirical Liger Kernel Speedup A/B Benchmark

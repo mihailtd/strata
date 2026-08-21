@@ -1,19 +1,19 @@
 {
-  "timestamp": "2026-08-18T09:40:10Z",
+  "timestamp": "2026-08-20T09:27:27Z",
   "regimes": {
     "unassisted": {
       "mean_base": 0.3333333333333333,
-      "mean_oracle": 0.806,
-      "mean_auto": 0.806,
-      "edge_oracle_vs_base": 0.4726666666666666,
+      "mean_oracle": 0.38666666666666666,
+      "mean_auto": 0.38666666666666666,
+      "edge_oracle_vs_base": 0.053333333333333344,
       "ci_oracle_vs_base": [
-        0.0,
-        0.718
+        -0.6999999999999998,
+        0.71
       ],
-      "edge_auto_vs_base": 0.4726666666666666,
+      "edge_auto_vs_base": 0.053333333333333344,
       "ci_auto_vs_base": [
-        0.0,
-        0.718
+        -0.6999999999999998,
+        0.71
       ],
       "problems": [
         {
@@ -25,32 +25,32 @@
               "exec_score": 1.0,
               "linter_score": 0.0,
               "modernity_score": 1.0,
-              "exec_detail": "Executed clean (42.35ms)",
-              "elapsed_s": 16.87,
-              "tok_s": 6.9,
+              "exec_detail": "Executed clean (29.78ms)",
+              "elapsed_s": 8.85,
+              "tok_s": 13.2,
               "chars": 440
             },
             "Arm B (Oracle Expert)": {
               "expert": "postgresql",
-              "composite_score": 1.0,
-              "exec_score": 1.0,
+              "composite_score": 0.3,
+              "exec_score": 0.0,
               "linter_score": 0.0,
               "modernity_score": 1.0,
-              "exec_detail": "Executed clean (33.05ms)",
-              "elapsed_s": 7.78,
-              "tok_s": 11.9,
-              "chars": 321
+              "exec_detail": "Failed: UndefinedFunction: function vectorcardinality(vector) does not exist\nLINE 10: ...bedding_not_null CHECK (embedding IS NOT NULL AND vectorcard...\n                                                              ^\nHINT:  No ",
+              "elapsed_s": 11.29,
+              "tok_s": 18.2,
+              "chars": 844
             },
             "Arm C (Autonomous Router)": {
               "expert": "postgresql",
-              "composite_score": 1.0,
-              "exec_score": 1.0,
+              "composite_score": 0.3,
+              "exec_score": 0.0,
               "linter_score": 0.0,
               "modernity_score": 1.0,
-              "exec_detail": "Executed clean (8.52ms)",
-              "elapsed_s": 9.25,
-              "tok_s": 10.1,
-              "chars": 321
+              "exec_detail": "Failed: UndefinedFunction: function vectorcardinality(vector) does not exist\nLINE 10: ...bedding_not_null CHECK (embedding IS NOT NULL AND vectorcard...\n                                                              ^\nHINT:  No ",
+              "elapsed_s": 11.14,
+              "tok_s": 18.4,
+              "chars": 844
             }
           }
         },
@@ -64,31 +64,31 @@
               "linter_score": 0.0,
               "modernity_score": 0.0,
               "exec_detail": "Failed: UndefinedColumn: column \"embedding_vector\" does not exist\nLINE 5:     embedding_vector,\n            ^",
-              "elapsed_s": 12.2,
-              "tok_s": 10.2,
+              "elapsed_s": 6.98,
+              "tok_s": 17.9,
               "chars": 352
             },
             "Arm B (Oracle Expert)": {
               "expert": "postgresql",
-              "composite_score": 0.7,
-              "exec_score": 1.0,
+              "composite_score": 0.15,
+              "exec_score": 0.0,
               "linter_score": 0.0,
-              "modernity_score": 0.0,
-              "exec_detail": "Executed clean (55.96ms)",
-              "elapsed_s": 18.49,
-              "tok_s": 11.4,
-              "chars": 635
+              "modernity_score": 0.5,
+              "exec_detail": "Failed: UndefinedParameter: there is no parameter $2\nLINE 10:     WHERE title @@ websearch_to_tsvector($2)\n                                                  ^",
+              "elapsed_s": 11.04,
+              "tok_s": 18.7,
+              "chars": 683
             },
             "Arm C (Autonomous Router)": {
               "expert": "postgresql",
-              "composite_score": 0.7,
-              "exec_score": 1.0,
+              "composite_score": 0.15,
+              "exec_score": 0.0,
               "linter_score": 0.0,
-              "modernity_score": 0.0,
-              "exec_detail": "Executed clean (40.81ms)",
-              "elapsed_s": 18.79,
-              "tok_s": 11.2,
-              "chars": 635
+              "modernity_score": 0.5,
+              "exec_detail": "Failed: UndefinedParameter: there is no parameter $2\nLINE 10:     WHERE title @@ websearch_to_tsvector($2)\n                                                  ^",
+              "elapsed_s": 11.37,
+              "tok_s": 18.2,
+              "chars": 683
             }
           }
         },
@@ -101,47 +101,47 @@
               "exec_score": 0.0,
               "linter_score": 0.0,
               "modernity_score": 0.0,
-              "exec_detail": "Compiles=False, Ruff violations=12",
-              "elapsed_s": 43.18,
-              "tok_s": 11.9,
-              "chars": 2071
+              "exec_detail": "Compiles=False, Ruff violations=13",
+              "elapsed_s": 108.42,
+              "tok_s": 18.9,
+              "chars": 75087
             },
             "Arm B (Oracle Expert)": {
               "expert": "astral",
-              "composite_score": 0.718,
+              "composite_score": 0.71,
               "exec_score": 1.0,
-              "linter_score": 0.526,
+              "linter_score": 0.5,
               "modernity_score": 0.3,
-              "exec_detail": "Compiles=True, Ruff violations=9",
-              "elapsed_s": 36.15,
-              "tok_s": 10.9,
-              "chars": 1551
+              "exec_detail": "Compiles=True, Ruff violations=10",
+              "elapsed_s": 10.11,
+              "tok_s": 19.6,
+              "chars": 781
             },
             "Arm C (Autonomous Router)": {
               "expert": "astral",
-              "composite_score": 0.718,
+              "composite_score": 0.71,
               "exec_score": 1.0,
-              "linter_score": 0.526,
+              "linter_score": 0.5,
               "modernity_score": 0.3,
-              "exec_detail": "Compiles=True, Ruff violations=9",
-              "elapsed_s": 35.92,
-              "tok_s": 10.9,
-              "chars": 1551
+              "exec_detail": "Compiles=True, Ruff violations=10",
+              "elapsed_s": 9.86,
+              "tok_s": 20.1,
+              "chars": 781
             }
           }
         }
       ]
     },
     "prompted": {
-      "mean_base": 0.16666666666666666,
-      "mean_oracle": 0.6333333333333333,
-      "mean_auto": 0.6333333333333333,
-      "edge_oracle_vs_base": 0.4666666666666666,
+      "mean_base": 0.3646666666666667,
+      "mean_oracle": 0.6103333333333333,
+      "mean_auto": 0.6103333333333333,
+      "edge_oracle_vs_base": 0.24566666666666662,
       "ci_oracle_vs_base": [
         0.0,
         0.6999999999999998
       ],
-      "edge_auto_vs_base": 0.4666666666666666,
+      "edge_auto_vs_base": 0.24566666666666662,
       "ci_auto_vs_base": [
         0.0,
         0.6999999999999998
@@ -157,8 +157,8 @@
               "linter_score": 0.0,
               "modernity_score": 1.0,
               "exec_detail": "Failed: UndefinedTable: relation \"tenants\" does not exist",
-              "elapsed_s": 9.61,
-              "tok_s": 10.6,
+              "elapsed_s": 4.84,
+              "tok_s": 21.1,
               "chars": 386
             },
             "Arm B (Oracle Expert)": {
@@ -167,10 +167,10 @@
               "exec_score": 1.0,
               "linter_score": 0.0,
               "modernity_score": 1.0,
-              "exec_detail": "Executed clean (100.67ms)",
-              "elapsed_s": 8.28,
-              "tok_s": 10.6,
-              "chars": 303
+              "exec_detail": "Executed clean (5.33ms)",
+              "elapsed_s": 5.58,
+              "tok_s": 19.4,
+              "chars": 384
             },
             "Arm C (Autonomous Router)": {
               "expert": "postgresql",
@@ -178,10 +178,10 @@
               "exec_score": 1.0,
               "linter_score": 0.0,
               "modernity_score": 1.0,
-              "exec_detail": "Executed clean (14.6ms)",
-              "elapsed_s": 7.47,
-              "tok_s": 11.8,
-              "chars": 303
+              "exec_detail": "Executed clean (11.44ms)",
+              "elapsed_s": 5.84,
+              "tok_s": 18.5,
+              "chars": 384
             }
           }
         },
@@ -195,8 +195,8 @@
               "linter_score": 0.0,
               "modernity_score": 0.0,
               "exec_detail": "Failed: UndefinedColumn: column \"embedding\" does not exist\nLINE 19:         embedding <=> '[0.1, 0.2, 0.3]' AS cosine_distance,\n                 ^",
-              "elapsed_s": 15.57,
-              "tok_s": 10.8,
+              "elapsed_s": 8.93,
+              "tok_s": 18.8,
               "chars": 594
             },
             "Arm B (Oracle Expert)": {
@@ -205,10 +205,10 @@
               "exec_score": 0.0,
               "linter_score": 0.0,
               "modernity_score": 0.0,
-              "exec_detail": "Failed: UndefinedColumn: column s.title does not exist\nLINE 14:        COALESCE(s.title, k.title) AS title,\n                         ^",
-              "elapsed_s": 21.17,
-              "tok_s": 11.1,
-              "chars": 685
+              "exec_detail": "Failed: UndefinedParameter: there is no parameter $2\nLINE 8:     SELECT id, title, content, title ILIKE $2 AS keyword_mat...\n                                                   ^",
+              "elapsed_s": 11.21,
+              "tok_s": 19.6,
+              "chars": 665
             },
             "Arm C (Autonomous Router)": {
               "expert": "postgresql",
@@ -216,10 +216,10 @@
               "exec_score": 0.0,
               "linter_score": 0.0,
               "modernity_score": 0.0,
-              "exec_detail": "Failed: UndefinedColumn: column s.title does not exist\nLINE 14:        COALESCE(s.title, k.title) AS title,\n                         ^",
-              "elapsed_s": 22.21,
-              "tok_s": 10.5,
-              "chars": 685
+              "exec_detail": "Failed: UndefinedParameter: there is no parameter $2\nLINE 8:     SELECT id, title, content, title ILIKE $2 AS keyword_mat...\n                                                   ^",
+              "elapsed_s": 11.14,
+              "tok_s": 19.7,
+              "chars": 665
             }
           }
         },
@@ -228,36 +228,36 @@
           "scores": {
             "Arm A (Base 4B)": {
               "expert": "base",
-              "composite_score": 0.2,
-              "exec_score": 0.0,
-              "linter_score": 0.0,
+              "composite_score": 0.794,
+              "exec_score": 1.0,
+              "linter_score": 0.312,
               "modernity_score": 1.0,
-              "exec_detail": "Compiles=False, Ruff violations=13",
-              "elapsed_s": 42.77,
-              "tok_s": 12.0,
-              "chars": 1813
+              "exec_detail": "Compiles=True, Ruff violations=22",
+              "elapsed_s": 43.0,
+              "tok_s": 19.1,
+              "chars": 3004
             },
             "Arm B (Oracle Expert)": {
               "expert": "astral",
-              "composite_score": 0.9,
+              "composite_score": 0.831,
               "exec_score": 1.0,
-              "linter_score": 0.667,
+              "linter_score": 0.435,
               "modernity_score": 1.0,
-              "exec_detail": "Compiles=True, Ruff violations=5",
-              "elapsed_s": 34.75,
-              "tok_s": 11.3,
-              "chars": 1346
+              "exec_detail": "Compiles=True, Ruff violations=13",
+              "elapsed_s": 19.97,
+              "tok_s": 18.7,
+              "chars": 1247
             },
             "Arm C (Autonomous Router)": {
               "expert": "astral",
-              "composite_score": 0.9,
+              "composite_score": 0.831,
               "exec_score": 1.0,
-              "linter_score": 0.667,
+              "linter_score": 0.435,
               "modernity_score": 1.0,
-              "exec_detail": "Compiles=True, Ruff violations=5",
-              "elapsed_s": 35.38,
-              "tok_s": 11.1,
-              "chars": 1346
+              "exec_detail": "Compiles=True, Ruff violations=13",
+              "elapsed_s": 18.94,
+              "tok_s": 19.7,
+              "chars": 1247
             }
           }
         }

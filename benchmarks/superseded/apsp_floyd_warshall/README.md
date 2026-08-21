@@ -4,7 +4,7 @@
 pathfinding to expert scheduling.**
 
 Retired 2026-08-17. Replaced by direct cost lookup + SLA-bounded cluster
-scheduling in [`src/gnn_experiment/router/vram_state_router.py`](../../../src/gnn_experiment/router/vram_state_router.py).
+scheduling in [`src/runtime/router/vram_state_router.py`](../../../src/runtime/router/vram_state_router.py).
 
 ---
 
@@ -86,5 +86,5 @@ working, nobody checked whether the *execution path* honoured it.
 request — re-folding the same expert even on a cache hit — so the router's entire
 output was being discarded downstream. The first honest A/B showed transitions
 dropping 25.5 → 7.0 while swap time went *up*, which is the signature of exactly
-that bug. Fixed in [`cuda_graph.py`](../../../src/gnn_experiment/cuda_graph.py)
+that bug. Fixed in [`cuda_graph.py`](../../../src/runtime/cuda_graph.py)
 (`apply_expert_state`).

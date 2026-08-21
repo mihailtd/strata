@@ -41,9 +41,9 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
-# VRAMState / VRAMStateGraph still live in gnn_experiment.router.vram_state_router;
+# VRAMState / VRAMStateGraph still live in runtime.router.vram_state_router;
 # this file is provenance only and is not imported by anything.
-from gnn_experiment.router.vram_state_router import VRAMState, VRAMStateGraph  # noqa: F401
+from runtime.router.vram_state_router import VRAMState, VRAMStateGraph  # noqa: F401
 
 
 @dataclass

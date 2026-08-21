@@ -15,6 +15,7 @@ This module contains the mathematical probes, geometric analysis tools, and scal
 | **[`poet_decomposition/`](poet_decomposition/)** | **🚀 Genuine Discovery** | **POET Kronecker + Sparse Coordinate Decomposition Autopsy**: Proved the Ambient Coordinate Sparsity Curse ($\mathcal{O}(\rho \cdot d^2)$ parameter explosion vs $\mathcal{O}(r \cdot d)$ low-rank factorization), demonstrating why low-rank parameterization beats coordinate thresholding. |
 | **[`poet_activation_crosstalk/`](poet_activation_crosstalk/)** | **🚀 Genuine Discovery** | **POET Multi-Adapter Activation Cross-Talk Telemetry**: Decomposes pairwise activation covariance $\Sigma_{\text{cross}} = L_{\text{pervasive}} + S_{\text{sparse}}$, proving $10.5\%$ energy is shared foundation representation and isolating $<0.1\%$ sparse conflict channels to cut interference by $1.4\text{--}5.4\times$. |
 | **[`latent_variable_glasso/`](latent_variable_glasso/)** | **🚀 Genuine Discovery** | **Latent Variable Graphical Lasso (LV-GLasso: Chapter 9)**: Decomposes full precision matrix $\widetilde{\Theta} = S - L$, resolving the §38 cosine overlap mystery. Proves attention heads are $100.0\%$ conditionally orthogonal ($S=0$), refutes global $\sqrt{K}$ attenuation (which destroys $74.6\%$ clean capability), and establishes Surgical Stacking. |
+| **[`riemannian_metric/`](riemannian_metric/)** | **❌ Refuted** | **AIRM Geodesic Distance in a Shared Subspace (Ch 3 §3.5, Ch 8 §8.1.4)**: Correct, invariance-gated implementation — and the answer is negative. Adapter subspaces are fully disjoint ($k = 2r$) in all 128 weight matrices, the 6×6 matrix spans **0.8% of its mean**, and *the same domain trained twice is farther apart than two different domains*. Refutes §55, and shows §56's routing term is inert (0/4000 decisions changed). See `DECISIONS.md` §59. |
 
 
 ---
@@ -27,3 +28,4 @@ This module contains the mathematical probes, geometric analysis tools, and scal
 - **[`poet_decomposition/`](poet_decomposition/)**: Low-Rank + Sparse POET and Van Loan-Pitsianis Kronecker decomposition probes.
 - **[`poet_activation_crosstalk/`](poet_activation_crosstalk/)**: Dynamic activation cross-talk covariance and channel notch filtering probes.
 - **[`latent_variable_glasso/`](latent_variable_glasso/)**: Latent Variable Graphical Lasso precision graph conflict isolation probe.
+- **[`riemannian_metric/`](riemannian_metric/)**: Riemannian/log-Euclidean geodesics between adapters, with the rank-basis invariance gate. Read the README before reusing $d_R$ for anything — it does not carry domain information.

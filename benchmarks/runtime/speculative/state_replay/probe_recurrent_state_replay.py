@@ -60,15 +60,15 @@ if torch.cuda.is_available():
 
 from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 
-from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+from runtime.canon import REPO_ROOT  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
 sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from gnn_experiment.mtp_draft import restore_state, snapshot_state  # noqa: E402
-from gnn_experiment.novel_peft import set_hard_vram_cap  # noqa: E402
+from runtime.mtp_draft import restore_state, snapshot_state  # noqa: E402
+from runtime.novel_peft import set_hard_vram_cap  # noqa: E402
 
 PROMPT = "### Question:\nHow should I install external Python packages for a new project?\n\n### Answer:\n"
 

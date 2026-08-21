@@ -45,18 +45,18 @@ if torch.cuda.is_available():
     torch.zeros(1, device="cuda")
     torch.cuda.synchronize()
 
-from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+from runtime.canon import REPO_ROOT  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from gnn_experiment.novel_peft import (  # noqa: E402
+from runtime.novel_peft import (  # noqa: E402
     FoldableExpert,
     WeightFoldingEngine,
     set_hard_vram_cap,
 )
-from gnn_experiment.router.vram_state_router import (  # noqa: E402
+from runtime.router.vram_state_router import (  # noqa: E402
     PendingRequest,
     TransitionCosts,
     VRAMState,

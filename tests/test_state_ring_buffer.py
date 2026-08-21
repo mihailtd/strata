@@ -3,13 +3,13 @@
 import pytest
 import torch
 
-from gnn_experiment.mtp_draft import (
+from runtime.mtp_draft import (
     attach_state_ring_buffer,
     restore_state,
     snapshot_state,
     state_nbytes,
 )
-from gnn_experiment.state_ring_buffer import (
+from runtime.state_ring_buffer import (
     PointerStateRingBuffer,
     RingBufferReplayEngine,
     StateRingBuffer,
@@ -121,6 +121,62 @@ def test_ring_buffer_replay_engine_speculative_flow():
     assert engine.ring.commit_ptr == 2
 
 
+def test_rollback_on_rejection_needs_the_returned_slot_not_a_guess():
+    """Regression test for the bug fixed 2026-08-20.
+
+    `rollback_on_rejection` defaults to `slot=None`, which makes `rollback()` GUESS
+    the slot as `(commit_ptr + n_accepted) % max_depth`. That formula is correct only
+    for a caller that checkpoints once per accepted token. BucketedSpeculativeDecoder
+    checkpoints once per k-token CHUNK, so the guess is right only when n_accepted==0
+    -- every partial accept (n_accepted > 0, the common case) restored a slot nothing
+    wrote that step. For a GatedDeltaNet layer, that is a silent stale-state
+    substitution: the model decodes the rest of the response missing part of its own
+    recurrent memory, and the observed failure was not a crash but degenerate
+    token-repetition loops in live generation.
+
+    This test reproduces the exact chunk-per-step calling pattern (one checkpoint,
+    then a rollback with n_accepted > 0) after a prior commit has moved commit_ptr
+    away from write_ptr -- the drift condition needed for the guess to diverge from
+    reality. It asserts the OLD call shape (no slot) restores the WRONG value, and the
+    FIXED call shape (slot=<checkpoint's return>) restores the value actually
+    checkpointed this step.
+    """
+    cache = MockHybridCache()
+    engine = RingBufferReplayEngine(cache, max_depth=8, use_pointer_mode=False)
+
+    # Step 1: checkpoint, accept 3 tokens, commit -- moves commit_ptr to 3 while
+    # write_ptr (via push()) has only advanced by 1. This is the drift the real
+    # decode loop produces on every step with a partial accept.
+    engine.checkpoint(cache)
+    engine.commit_on_acceptance(n_accepted=3)
+
+    # Step 2: this step's real checkpoint -- the state a rejection MUST restore.
+    pre_draft_state = cache.layers[0].recurrent_states[0].clone()
+    step2_slot = engine.checkpoint(cache)
+
+    # Simulate drafting: state advances speculatively, then gets rejected.
+    cache.layers[0].recurrent_states[0].add_(99.0)
+    rejected_state = cache.layers[0].recurrent_states[0].clone()
+
+    # OLD call shape: no slot, n_accepted=2 (a partial accept within this chunk).
+    # commit_ptr is 3 here, so the guess resolves to slot (3+2)%8=5 -- not step2_slot.
+    engine.rollback_on_rejection(cache, n_accepted=2)
+    guessed_result = cache.layers[0].recurrent_states[0].clone()
+    assert not torch.equal(guessed_result, pre_draft_state), (
+        "test fixture no longer reproduces the drift condition -- "
+        "commit_ptr and write_ptr must differ for this regression test to be meaningful"
+    )
+
+    # Put the rejected state back and take the FIXED path: explicit slot.
+    cache.layers[0].recurrent_states[0].copy_(rejected_state)
+    engine.rollback_on_rejection(cache, n_accepted=2, slot=step2_slot)
+    fixed_result = cache.layers[0].recurrent_states[0]
+    assert torch.equal(fixed_result, pre_draft_state), (
+        "passing the checkpoint's own slot must restore exactly what was live "
+        "before the draft, regardless of n_accepted or commit_ptr drift"
+    )
+
+
 def test_mtp_draft_transparent_integration():
     """Verify snapshot_state and restore_state seamlessly utilize attached StateRingBuffer."""
     cache = MockHybridCache()
@@ -143,7 +199,7 @@ def test_mtp_draft_transparent_integration():
 
 def test_poet_compressed_state_ring_buffer():
     """Verify POETCompressedStateRingBuffer achieves high compression with directional fidelity."""
-    from gnn_experiment.state_ring_buffer import POETCompressedStateRingBuffer
+    from runtime.state_ring_buffer import POETCompressedStateRingBuffer
 
     cache = MockHybridCache()
     ring = POETCompressedStateRingBuffer(cache, max_depth=64, rank=8, sparsity_target=0.05)
@@ -169,7 +225,7 @@ def test_poet_compressed_state_ring_buffer():
 
 def test_selective_hybrid_poet_ring_buffer():
     """Verify SelectiveHybridPOETRingBuffer achieves bit-exact short rollbacks with long history compression."""
-    from gnn_experiment.state_ring_buffer import SelectiveHybridPOETRingBuffer
+    from runtime.state_ring_buffer import SelectiveHybridPOETRingBuffer
 
     cache = MockHybridCache()
     ring = SelectiveHybridPOETRingBuffer(

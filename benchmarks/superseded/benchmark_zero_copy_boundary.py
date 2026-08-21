@@ -20,13 +20,13 @@ import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+from runtime.canon import REPO_ROOT  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
 sys.path.append(str(REPO_ROOT))
 
-from gnn_experiment.novel_peft import (  # noqa: E402
+from runtime.novel_peft import (  # noqa: E402
     FoldableExpert,
     VramChurnProbe,
     WeightFoldingEngine,
@@ -34,7 +34,7 @@ from gnn_experiment.novel_peft import (  # noqa: E402
     route_expert_execution,
     set_hard_vram_cap,
 )
-from gnn_experiment.utils.logger import log_benchmark_metric  # noqa: E402
+from runtime.utils.logger import log_benchmark_metric  # noqa: E402
 
 
 def measure_loopback_rtt_ms(payload: dict, reps: int = 20) -> float:

@@ -64,8 +64,8 @@ import numpy as np
 
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
-from gnn_experiment.canon import CANON, REPO_ROOT, adapter_path
-from gnn_experiment.novel_peft import FoldableExpert
+from runtime.canon import CANON, REPO_ROOT, adapter_path
+from runtime.novel_peft import FoldableExpert
 
 # Re-use the shared ADMM solver from the interference probe.
 sys.path.insert(0, str(REPO_ROOT / "benchmarks" / "factory" / "geometry" / "latent_variable_glasso"))

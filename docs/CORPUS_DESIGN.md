@@ -216,14 +216,71 @@ A scorer worth trusting must **parse what comes out**, not grep it:
 
 ---
 
+---
+
+## Rule 5 — variation must be LEXICAL, and you must dedup before you count
+
+The strongest evidence in this document. `build_disposition_corpus.py` generated 26
+instances per bank entry, varying them through `vary()`, which substitutes **entity
+names only** (`docs` → `articles`). Most answers never contained one. Result:
+
+```
+python_modern   520 disposition records  ->   24 unique answers, ~22 copies each
+python_web      468                      ->   ~25
+astral         1610 claimed              ->  774 unique
+financial       640 claimed              ->  328 unique
+```
+
+The adapter did not see 520 examples of judgment. It saw **24**, one of which was a
+frozen dataclass — and it now answers questions about `ruff` with that dataclass
+(`DECISIONS.md` §60).
+
+Two rules follow, and both are cheap:
+
+1. **Dedup on the normalised answer key inside the builder**, and print
+   `generated N, M survive`. A builder that reports 1600 and contributes 480 is how
+   a corpus ends up a third of its stated size with nobody noticing.
+2. **Vary the prose, not just the identifiers.** The dedup key strips digits, so a
+   family that differs only in a line-length or a percentile collapses to one
+   record. Rationale phrasings, connector forms and clause order are what survive
+   normalisation. Every builder now carries an `ALT_*` pool for this.
+
+Also **cap per family**. Without a cap the two highest-variety families supply most
+of the survivors and drag the whole corpus toward their shape.
+
+---
+
+## Rule 6 — the rejection surface must vary too
+
+`**Not X** — why` was a single literal, used in 76% of two corpora. The adapter
+learned the literal, not the behaviour. The taught behaviour is *"name what you
+rejected and say why"*; the string is incidental. `REJECT_FORMS` now supplies six
+surfaces and the rejection is not always in the same slot.
+
+Target share: **~35%**, which is where `postgresql` (32.3%) and `duckdb` (32.9%)
+already sat without ever exhibiting the defect. Not 76%.
+
+---
+
 ## Still outstanding
 
-1. **`financial` needs regeneration**, not deduplication — 79.9% duplicate answers,
-   effectively a ~330-record corpus padded 5×. It is also the expert that costs
-   **−36.67pp** on other domains while being worth **+0.83pp** on its own.
-2. **`family_of()` cannot label doc-scraped records.** 745 astral (52%) and 399
-   postgres (29%) records carry `source_path`, not `source`, so they collapse to
-   `"?"` and `reserve_eval_constructs.py` can never reserve them. Three lines.
-3. **Merge ratios undecided** for every domain.
-4. **`python_modern` / `python_web` have no adapters** and no entry in the
-   benchmarks. They are corpora with eval sets; they are not experts yet.
+1. **`financial` is a ~340-record corpus**, confirmed by dedup, not an estimate. It
+   is also the expert that costs **−36.67pp** on other domains while being worth
+   **+0.83pp** on its own. It has not been rebuilt.
+2. **Merge ratios** are now set by dedup + per-family caps rather than decided per
+   domain. Whether that is the right policy is untested.
+3. **`python_modern` / `python_web` still have no benchmark wiring** beyond the
+   disposition eval and the attribution probe.
+4. **No expert abstains.** Asked for `asyncpg`, which postgresql has zero records
+   for, base wrote 1743 tokens of correct code and the expert wrote 130 tokens of
+   broken code. Coverage gaps make an expert net-negative, and nothing currently
+   detects one at inference time.
+
+### Closed since the first version of this document
+
+- ~~`family_of()` cannot label doc-scraped records~~ — falls back to `source_path`
+  and `heading_path`; astral went from 3 visible families to 139, postgres to 359.
+- ~~`audit_corpora.py` pinned to v4~~ — it was auditing files nothing had trained on
+  for two generations, which is why it never surfaced the defect it exists to find.
+- ~~the merge deduped `old` but appended incoming files unchecked~~ — so re-running
+  it re-added every previously-merged file.

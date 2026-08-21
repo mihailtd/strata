@@ -50,7 +50,7 @@ def stage(m): print(f"[{time.perf_counter() - T0:7.1f}s] {m}", flush=True)
 
 
 import psycopg  # noqa: E402
-from gnn_experiment.canon import adapter_path
+from runtime.canon import adapter_path
 import torch  # noqa: E402
 
 torch.zeros(1, device="cuda"); torch.cuda.synchronize()
@@ -58,8 +58,8 @@ from bench_indomain_reserved import build_seed  # noqa: E402
 from py_pglite import PGliteConfig, PGliteManager  # noqa: E402
 from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 
-from gnn_experiment.cuda_graph import FoldedCudaGraphDecoder  # noqa: E402
-from gnn_experiment.novel_peft import (  # noqa: E402
+from runtime.cuda_graph import FoldedCudaGraphDecoder  # noqa: E402
+from runtime.novel_peft import (  # noqa: E402
     FoldableExpert,
     WeightFoldingEngine,
     set_hard_vram_cap,

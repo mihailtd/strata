@@ -1,7 +1,7 @@
 # scripts/corpus/ — build the training data
 
 **There is one builder per domain. The version it targets lives in
-`gnn_experiment.canon`, not in the filename.** Files named `*_v3_corpus.py` used to
+`runtime.canon`, not in the filename.** Files named `*_v3_corpus.py` used to
 sit here next to unversioned ones; that is precisely how a stale builder gets run.
 
 ## Order
@@ -48,4 +48,4 @@ held out without anyone noticing.
 1. Write `build_<domain>_corpus.py`, emit `data/<domain>/training_data_v3.jsonl`.
 2. Add its reserved families to `RESERVED` in `reserve_eval_constructs.py`.
 3. Run it with `--write` and confirm every construct reports **CLEAN**.
-4. Add the domain to `DOMAINS` in `src/gnn_experiment/canon.py`.
+4. Add the domain to `DOMAINS` in `src/runtime/canon.py`.

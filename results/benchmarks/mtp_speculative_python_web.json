@@ -1,0 +1,24 @@
+{
+  "adapter": "python_web",
+  "baseline_tok_s": 34.15141052380804,
+  "arms": {
+    "4": {
+      "tok_s": 34.854078056573,
+      "speedup": 1.0205750662121293,
+      "accept_pct": 40.11824324324324,
+      "accepted_per_step": 1.6047297297297298,
+      "exact_vs_single_token": 5,
+      "exact_vs_chunked": 4,
+      "n_prompts": 6
+    },
+    "6": {
+      "tok_s": 32.96520670314423,
+      "speedup": 0.9652663300733402,
+      "accept_pct": 29.523809523809526,
+      "accepted_per_step": 1.7714285714285714,
+      "exact_vs_single_token": 6,
+      "exact_vs_chunked": 5,
+      "n_prompts": 6
+    }
+  }
+}

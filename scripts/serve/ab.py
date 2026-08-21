@@ -35,10 +35,10 @@ if torch.cuda.is_available():
     torch.zeros(1, device="cuda")
     torch.cuda.synchronize()
 
-from gnn_experiment.canon import CANON, DOMAINS, REPO_ROOT, adapter_path  # noqa: E402
+from runtime.canon import CANON, DOMAINS, REPO_ROOT, adapter_path  # noqa: E402
 
 sys.path.insert(0, str(REPO_ROOT / "src"))
-from gnn_experiment.novel_peft import (  # noqa: E402
+from runtime.novel_peft import (  # noqa: E402
     FoldableExpert, WeightFoldingEngine, set_hard_vram_cap,
 )
 

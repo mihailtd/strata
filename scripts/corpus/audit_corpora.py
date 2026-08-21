@@ -29,18 +29,29 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
+from pathlib import Path
 import re
 from collections import Counter
 
-from gnn_experiment.canon import REPO_ROOT
+from runtime.canon import REPO_ROOT
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from reserve_eval_constructs import family_of  # noqa: E402
 
 MARK = "\n\n### Answer:\n"
 
 CORPORA = {
-    "astral": "data/astral/training_data_v4.jsonl",
-    "postgresql": "data/postgresql/training_data_v4.jsonl",
-    "duckdb": "data/duckdb/training_data_v4.jsonl",
-    "financial_planning": "data/financial_planning/training_data_v3.jsonl",
+    # Pinned to the CURRENT corpus generation. These were stuck on v4/v3 while the
+    # adapters trained on v5, so the audit was reporting on files nothing had used
+    # for two generations -- which is why the 76%-one-form defect in python_modern
+    # was never surfaced by the tool written to detect exactly that.
+    "astral": "data/astral/training_data_v6.jsonl",
+    "postgresql": "data/postgresql/training_data_v6.jsonl",
+    "duckdb": "data/duckdb/training_data_v6.jsonl",
+    "python_modern": "data/python_modern/training_data_v6.jsonl",
+    "python_web": "data/python_web/training_data_v6.jsonl",
+    "financial_planning": "data/financial_planning/training_data_v6.jsonl",
 }
 
 # What a RUNNABLE artifact looks like in each domain -- the form the adapter must
@@ -101,7 +112,11 @@ def audit(domain: str, path, samples: int) -> dict:
     print(f" {domain}   {len(rows)} records ({n} parsed as Q/A)")
     print("=" * 84)
 
-    fams = Counter(str((r.get("meta") or {}).get("family") or "?") for r in rows)
+    # Shares family_of() with reserve_eval_constructs.py so the two tools agree on
+    # what a family is. Reading only meta["family"] left every doc-scraped record
+    # as "?" -- 53% of astral -- and an audit that cannot see half a corpus cannot
+    # report on its composition.
+    fams = Counter(family_of(r) for r in rows)
     top = fams.most_common(5)
     print(f"  families: {len(fams)}   top: " + ", ".join(f"{k}={v}" for k, v in top))
     if top and top[0][1] / len(rows) > 0.25:

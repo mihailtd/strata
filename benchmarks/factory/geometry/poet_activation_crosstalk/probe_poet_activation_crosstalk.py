@@ -24,7 +24,7 @@ import numpy as np
 import torch
 from safetensors.torch import load_file
 
-from gnn_experiment.canon import CANON, DOMAINS, REPO_ROOT, adapter_path
+from runtime.canon import CANON, DOMAINS, REPO_ROOT, adapter_path
 
 # Single-threaded execution for determinism and avoiding WSL2 thread pool lockups
 torch.set_num_threads(1)

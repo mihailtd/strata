@@ -40,9 +40,9 @@ import torch  # noqa: E402
 torch.zeros(1, device="cuda"); torch.cuda.synchronize()
 from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 
-from gnn_experiment.bucketed_speculative import BucketedSpeculativeDecoder  # noqa: E402
-from gnn_experiment.mtp_draft import Qwen35MTPDraftHead  # noqa: E402
-from gnn_experiment.novel_peft import (  # noqa: E402
+from runtime.bucketed_speculative import BucketedSpeculativeDecoder  # noqa: E402
+from runtime.mtp_draft import Qwen35MTPDraftHead  # noqa: E402
+from runtime.novel_peft import (  # noqa: E402
     FoldableExpert, WeightFoldingEngine, set_hard_vram_cap,
 )
 

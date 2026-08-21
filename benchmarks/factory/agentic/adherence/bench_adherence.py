@@ -28,12 +28,19 @@ n is small (14 traps), so this uses McNemar's exact test on DISCORDANT PAIRS
 bootstrap CI, which would imply precision the sample cannot support.
 """
 
-from __future__ import annotations
+import os
+import sys
+
+# Ensure ROCm HSA runtime is preloaded for AMD Radeon RX 7900 XTX
+os.environ.setdefault("HSA_OVERRIDE_GFX_VERSION", "11.0.0")
+rocm_hsa_lib = "/opt/rocm-7.2.0/lib/libhsa-runtime64.so"
+if __name__ == "__main__" and os.path.exists(rocm_hsa_lib) and rocm_hsa_lib not in os.environ.get("LD_PRELOAD", ""):
+    current_preload = os.environ.get("LD_PRELOAD", "")
+    os.environ["LD_PRELOAD"] = f"{rocm_hsa_lib}:{current_preload}".strip(":")
+    os.execve(sys.executable, [sys.executable] + sys.argv, os.environ)
 
 import json
-import os
 import re
-import sys
 import time
 from math import comb
 from pathlib import Path
@@ -49,15 +56,13 @@ T0 = time.perf_counter()
 def stage(m): print(f"[{time.perf_counter() - T0:7.1f}s] {m}", flush=True)
 
 
-from gnn_experiment.canon import adapter_path
-import torch  # noqa: E402
+from runtime.canon import adapter_path
+import torch
+from traps import TRAPS
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-torch.zeros(1, device="cuda"); torch.cuda.synchronize()
-from traps import TRAPS  # noqa: E402
-from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
-
-from gnn_experiment.cuda_graph import FoldedCudaGraphDecoder  # noqa: E402
-from gnn_experiment.novel_peft import (  # noqa: E402
+from runtime.cuda_graph import FoldedCudaGraphDecoder  # noqa: E402
+from runtime.novel_peft import (  # noqa: E402
     FoldableExpert, WeightFoldingEngine, set_hard_vram_cap,
 )
 
@@ -88,6 +93,8 @@ def mcnemar_exact(b01: int, b10: int) -> float:
 
 
 def main():
+    from runtime.gpu_preflight import ensure_gpu_exclusive
+    ensure_gpu_exclusive()
     set_hard_vram_cap(22.0)
     stage("loading model")
     tok = AutoTokenizer.from_pretrained(MODEL, trust_remote_code=True)

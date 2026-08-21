@@ -19,7 +19,7 @@ Harness: [benchmark_flash_norm_fusion.py](file:///home/mihai/gnn-experiment/benc
 
 ## 2. Phase 2: Implementation Details
 
-### Core Modules ([fused_norm.py](file:///home/mihai/gnn-experiment/src/gnn_experiment/fused_norm.py))
+### Core Modules ([fused_norm.py](file:///home/mihai/gnn-experiment/src/runtime/fused_norm.py))
 
 1. **`ScaleFreeRMSNorm`**:
    - Replaces `ExactRMSNorm(unit_offset=True)` post-folding.
@@ -41,7 +41,7 @@ Harness: [benchmark_flash_norm_fusion.py](file:///home/mihai/gnn-experiment/benc
    - Multiplies adapter $V$ factors ($r \times d_{\text{in}}$) by $(1+\gamma)$ along column dimension at load time.
    - Ensures adapter activations $W_{\text{live}} = W0_{\text{folded}} + s \cdot (U @ V_{\text{folded}})$ match $(1+\gamma) \cdot (W_{\text{base}} + s \cdot (U @ V))$.
 
-### Server Integration ([server.py](file:///home/mihai/gnn-experiment/src/gnn_experiment/server.py))
+### Server Integration ([server.py](file:///home/mihai/gnn-experiment/src/runtime/server.py))
 
 - Added `fold_rmsnorm_into_linear(base_model)` immediately after `inject_exact_rmsnorm(base_model)`.
 - Added `scale_expert_factors_for_folded_norms(base_model, experts)` before `WeightFoldingEngine` initialization.

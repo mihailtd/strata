@@ -1,0 +1,24 @@
+{
+  "adapter": "python_modern",
+  "baseline_tok_s": 27.57142040378015,
+  "arms": {
+    "4": {
+      "tok_s": 27.332705557657352,
+      "speedup": 0.9913419460213929,
+      "accept_pct": 41.12068965517241,
+      "accepted_per_step": 1.6448275862068966,
+      "exact_vs_single_token": 5,
+      "exact_vs_chunked": 5,
+      "n_prompts": 6
+    },
+    "6": {
+      "tok_s": 26.90137410080646,
+      "speedup": 0.9756977952836329,
+      "accept_pct": 30.303030303030305,
+      "accepted_per_step": 1.8181818181818181,
+      "exact_vs_single_token": 5,
+      "exact_vs_chunked": 5,
+      "n_prompts": 6
+    }
+  }
+}

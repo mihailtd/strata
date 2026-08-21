@@ -108,7 +108,7 @@ scheduling is bounded by that number. Two specific traps already paid for:
   honours them.** `generate_with_graph` was re-folding on every request even on a
   cache hit, so the router's output was discarded downstream. The signature was
   transitions dropping 25.5 → 7.0 while swap *time went up*. Fixed via
-  `apply_expert_state` in [`cuda_graph.py`](../../../src/gnn_experiment/cuda_graph.py).
+  `apply_expert_state` in [`cuda_graph.py`](../../../src/runtime/cuda_graph.py).
 
 **Stacking is disabled on purpose.** Co-residency is cheaper (25.86 ms vs
 2 × 18.14 = 36.28 ms, saving ~10.4 ms), but the accuracy question is already
@@ -124,7 +124,7 @@ points for 10.4 ms — 0.55% of a request — is not a trade worth making.
 | [`calibrate_transition_costs.py`](../../runtime/cost_model/calibrate_transition_costs.py) | Measures the transition matrix; decides whether cost is destination-only |
 | [`benchmark_vram_router.py`](benchmark_vram_router.py) | Offered-load sweep, 4 regimes, real folds, paired CIs |
 | [`benchmark_router_e2e.py`](benchmark_router_e2e.py) | Live-server A/B with a real FIFO control arm |
-| [`vram_state_router.py`](../../../src/gnn_experiment/router/vram_state_router.py) | `TransitionCosts`, `VRAMStateGraph`, `VRAMStateScheduler` |
+| [`vram_state_router.py`](../../../src/runtime/router/vram_state_router.py) | `TransitionCosts`, `VRAMStateGraph`, `VRAMStateScheduler` |
 | [`test_vram_state_router.py`](../../../tests/test_vram_state_router.py) | 12 tests, incl. the properties that keep the solver retired |
 
 ## 6. Reproduce

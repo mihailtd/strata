@@ -1,128 +1,222 @@
-"""Unit tests for Riemannian Manifold Geometry and Ledoit-Wolf Shrinkage."""
+"""Riemannian SPD geometry -- primitives, and the invariance that makes it mean anything.
 
+The tests that matter here are the invariance ones. The first version of this
+module passed a full suite of "does matrix_log invert matrix_exp" tests while
+computing a distance that changed when you rotated an adapter's rank basis --
+i.e. a distance that was not a function of the adapter. Testing the primitives
+proves the linear algebra; only the invariance tests prove the MEASUREMENT.
+"""
+
+import numpy as np
 import pytest
 import torch
-import torch.nn.functional as F
 
-from gnn_experiment.riemannian_covariance import (
-    compute_adapter_gramian,
-    ledoit_wolf_shrinkage,
+from runtime.riemannian_covariance import (
+    airm_components,
+    joint_subspace_operators,
+    ledoit_wolf_from_samples,
     log_euclidean_distance,
     matrix_inv_sqrt,
     matrix_log,
     matrix_sqrt,
-    matrix_sym_eigh,
     riemannian_affine_invariant_distance,
+    spherical_shrinkage,
 )
 
 
-def random_spd_matrix(dim: int = 8) -> torch.Tensor:
-    """Generates a random strictly positive-definite matrix."""
-    A = torch.randn(dim, dim)
-    SPD = A @ A.T + 0.1 * torch.eye(dim)
-    return SPD
+def spd(dim: int = 8, seed: int = 0) -> torch.Tensor:
+    g = torch.Generator().manual_seed(seed)
+    A = torch.randn(dim, dim, generator=g, dtype=torch.float64)
+    return A @ A.T + 0.5 * torch.eye(dim, dtype=torch.float64)
 
 
-def test_matrix_log_and_exp_invertibility():
-    """Verify matrix logarithm correctly inverts matrix exponential on SPD matrices."""
-    A = random_spd_matrix(dim=8)
-    log_A = matrix_log(A)
+def lora(d_out: int, d_in: int, r: int, seed: int):
+    g = torch.Generator().manual_seed(seed)
+    U = torch.randn(d_out, r, generator=g, dtype=torch.float64)
+    V = torch.randn(r, d_in, generator=g, dtype=torch.float64)
+    return U, V
 
-    # Reconstruct via exp(log(A))
-    evals, evecs = torch.linalg.eigh(log_A)
-    exp_log_A = evecs @ torch.diag_embed(torch.exp(evals)) @ evecs.T
 
-    diff = torch.norm(A - exp_log_A, p="fro").item()
-    assert diff < 1e-4
+# --------------------------------------------------------------------------- primitives
+
+def test_matrix_log_inverts_exp():
+    A = spd()
+    L = matrix_log(A)
+    ev, evec = torch.linalg.eigh(L)
+    assert torch.norm(A - evec @ torch.diag(torch.exp(ev)) @ evec.T) < 1e-8
 
 
 def test_matrix_sqrt_and_inv_sqrt():
-    """Verify matrix sqrt and inverse sqrt properties."""
-    A = random_spd_matrix(dim=8)
-    sqrt_A = matrix_sqrt(A)
-    inv_sqrt_A = matrix_inv_sqrt(A)
-
-    # sqrt(A) @ sqrt(A) == A
-    recon_A = sqrt_A @ sqrt_A
-    assert torch.allclose(A, recon_A, atol=1e-4)
-
-    # inv_sqrt(A) @ A @ inv_sqrt(A) == I
-    identity_check = inv_sqrt_A @ A @ inv_sqrt_A
-    I = torch.eye(8, dtype=A.dtype, device=A.device)
-    assert torch.allclose(identity_check, I, atol=1e-4)
+    A = spd()
+    S = matrix_sqrt(A)
+    assert torch.norm(S @ S - A) < 1e-8
+    assert torch.norm(matrix_inv_sqrt(A) @ S - torch.eye(8, dtype=A.dtype)) < 1e-8
 
 
-def test_ledoit_wolf_shrinkage_regularizes_singular_matrix():
-    """Verify Ledoit-Wolf shrinkage restores positive-definiteness on rank-deficient Gramians."""
-    # Create rank-2 matrix in R^{16 x 16} (severely rank deficient)
-    X = torch.randn(16, 2)
-    singular_S = X @ X.T
-    min_eig_orig = torch.min(torch.linalg.eigvalsh(singular_S)).item()
-    assert min_eig_orig < 1e-5  # Singular
-
-    shrunk_S, delta = ledoit_wolf_shrinkage(singular_S)
-    min_eig_shrunk = torch.min(torch.linalg.eigvalsh(shrunk_S)).item()
-
-    assert 0.0 <= delta <= 1.0
-    assert min_eig_shrunk > 0.0  # Strictly positive definite!
+def test_airm_is_a_metric():
+    A, B, C = spd(seed=1), spd(seed=2), spd(seed=3)
+    assert riemannian_affine_invariant_distance(A, A) < 1e-9
+    d_ab = riemannian_affine_invariant_distance(A, B)
+    assert abs(d_ab - riemannian_affine_invariant_distance(B, A)) < 1e-9
+    assert d_ab > 0
+    assert d_ab <= (riemannian_affine_invariant_distance(A, C)
+                    + riemannian_affine_invariant_distance(C, B) + 1e-9)
 
 
-def test_riemannian_airm_metric_invariants():
-    """Verify Affine-Invariant Riemannian Metric satisfies distance axioms and Lie group invariances."""
-    A = random_spd_matrix(dim=8).to(torch.float64)
-    B = random_spd_matrix(dim=8).to(torch.float64)
-
-    # 1. Identity of indiscernibles
-    d_AA = riemannian_affine_invariant_distance(A, A)
-    assert abs(d_AA) < 1e-5
-
-    # 2. Symmetry
-    d_AB = riemannian_affine_invariant_distance(A, B)
-    d_BA = riemannian_affine_invariant_distance(B, A)
-    assert abs(d_AB - d_BA) < 1e-5
-    assert d_AB > 0.0
-
-    # 3. Congruence Invariance: d_R(M A M^T, M B M^T) == d_R(A, B)
-    M = torch.randn(8, 8, dtype=torch.float64)
-    while torch.abs(torch.linalg.det(M)) < 0.1:
-        M = torch.randn(8, 8, dtype=torch.float64)
-
-    M_A = M @ A @ M.T
-    M_B = M @ B @ M.T
-    d_congruent = riemannian_affine_invariant_distance(M_A, M_B)
-    assert abs(d_AB - d_congruent) < 1e-4
-
-    # 4. Inversion Invariance: d_R(A^-1, B^-1) == d_R(A, B)
-    inv_A = torch.linalg.inv(A)
-    inv_B = torch.linalg.inv(B)
-    d_inv = riemannian_affine_invariant_distance(inv_A, inv_B)
-    assert abs(d_AB - d_inv) < 1e-4
+def test_airm_congruence_invariance():
+    """d_R(MAM^T, MBM^T) = d_R(A, B). This is the property the shared-basis
+    construction leans on: the arbitrary orientation of Q cancels."""
+    A, B = spd(seed=1), spd(seed=2)
+    g = torch.Generator().manual_seed(7)
+    M = torch.randn(8, 8, generator=g, dtype=torch.float64) + 3 * torch.eye(8, dtype=torch.float64)
+    d0 = riemannian_affine_invariant_distance(A, B)
+    d1 = riemannian_affine_invariant_distance(M @ A @ M.T, M @ B @ M.T)
+    assert abs(d0 - d1) < 1e-6 * max(1.0, d0)
 
 
-
-def test_log_euclidean_distance_axioms():
-    """Verify Log-Euclidean Riemannian metric satisfies metric properties."""
-    A = random_spd_matrix(dim=8)
-    B = random_spd_matrix(dim=8)
-
-    d_AA = log_euclidean_distance(A, A)
-    assert abs(d_AA) < 1e-5
-
-    d_AB = log_euclidean_distance(A, B)
-    d_BA = log_euclidean_distance(B, A)
-    assert abs(d_AB - d_BA) < 1e-5
-    assert d_AB > 0.0
+def test_airm_inversion_invariance():
+    A, B = spd(seed=1), spd(seed=2)
+    d0 = riemannian_affine_invariant_distance(A, B)
+    d1 = riemannian_affine_invariant_distance(torch.linalg.inv(A), torch.linalg.inv(B))
+    assert abs(d0 - d1) < 1e-6 * d0
 
 
-def test_compute_adapter_gramian():
-    """Verify compute_adapter_gramian produces well-conditioned SPD matrix."""
-    U = torch.randn(2560, 8)
-    V = torch.randn(2560, 8)
+def test_airm_components_decompose_exactly():
+    A, B = spd(seed=4), spd(seed=5)
+    c = airm_components(A, B)
+    assert abs(c["total"] - riemannian_affine_invariant_distance(A, B)) < 1e-9
+    assert abs(c["total"] ** 2 - (c["scale"] ** 2 + c["shape"] ** 2)) < 1e-9
 
-    G, delta = compute_adapter_gramian(U, V, scaling=16.0, apply_ledoit_wolf=True)
-    assert G.shape == (8, 8)
-    assert 0.0 <= delta <= 1.0
 
-    # Verify eigenvalues are strictly positive
-    evals = torch.linalg.eigvalsh(G)
-    assert torch.all(evals > 0)
+def test_scaling_a_matrix_is_pure_scale_no_shape():
+    """d_R(A, cA) is entirely the scale component: same directions, more of them."""
+    A = spd(seed=6)
+    c = airm_components(A, 4.0 * A)
+    assert c["shape"] < 1e-8
+    assert abs(c["scale"] - abs(np.log(4.0)) * np.sqrt(8)) < 1e-8
+
+
+# --------------------------------------------------------------------------- shrinkage
+
+def test_spherical_shrinkage_makes_singular_matrices_pd():
+    U, V = lora(64, 64, 8, seed=0)
+    S = (U @ V) @ (U @ V).T
+    assert torch.linalg.eigvalsh(S).min() < 1e-8          # rank 8 in 64 dims
+    assert torch.linalg.eigvalsh(spherical_shrinkage(S, 0.05)).min() > 0
+
+
+def test_spherical_shrinkage_preserves_trace():
+    S = spd()
+    for d in (0.0, 0.3, 1.0):
+        assert abs(float(torch.trace(spherical_shrinkage(S, d)) - torch.trace(S))) < 1e-8
+
+
+def test_spherical_shrinkage_commutes_with_orthogonal_conjugation():
+    """Required for the shared-basis construction to be well defined."""
+    S = spd()
+    g = torch.Generator().manual_seed(11)
+    O, _ = torch.linalg.qr(torch.randn(8, 8, generator=g, dtype=torch.float64))
+    lhs = spherical_shrinkage(O.T @ S @ O, 0.2)
+    rhs = O.T @ spherical_shrinkage(S, 0.2) @ O
+    assert torch.norm(lhs - rhs) < 1e-9
+
+
+def test_spherical_shrinkage_rejects_delta_out_of_range():
+    with pytest.raises(ValueError):
+        spherical_shrinkage(spd(), 1.5)
+
+
+def test_ledoit_wolf_delta_shrinks_more_when_n_is_small():
+    """The whole point of LW: less data -> trust the sample covariance less.
+
+    The population covariance has to have STRUCTURE for this to be visible. On
+    white noise the spherical target is already correct, LW returns delta = 1.0
+    at every n, and the test would compare 1.0 to 1.0 -- which is the estimator
+    behaving properly, not a signal.
+    """
+    g = torch.Generator().manual_seed(3)
+    p, k = 40, 5
+    load = torch.randn(k, p, generator=g, dtype=torch.float64)     # factor model
+    def draw(n):
+        f = torch.randn(n, k, generator=g, dtype=torch.float64)
+        return f @ load + 0.3 * torch.randn(n, p, generator=g, dtype=torch.float64)
+    _, d_big = ledoit_wolf_from_samples(draw(4000))
+    _, d_small = ledoit_wolf_from_samples(draw(50))
+    assert 0.0 <= d_big <= 1.0 and 0.0 <= d_small <= 1.0
+    assert d_small > d_big
+
+
+def test_ledoit_wolf_delta_is_one_on_white_noise():
+    """Target already correct -> shrink all the way to it. Documents the case
+    that made the previous test vacuous."""
+    g = torch.Generator().manual_seed(5)
+    _, delta = ledoit_wolf_from_samples(torch.randn(4000, 40, generator=g, dtype=torch.float64))
+    assert delta > 0.99
+
+
+def test_ledoit_wolf_output_is_pd_when_n_below_p():
+    g = torch.Generator().manual_seed(4)
+    X = torch.randn(10, 40, generator=g, dtype=torch.float64)     # n < p, S singular
+    Sigma, delta = ledoit_wolf_from_samples(X)
+    assert delta > 0
+    assert torch.linalg.eigvalsh(Sigma.double()).min() > 0
+
+
+# --------------------------------------------------------------------------- THE ONES THAT MATTER
+
+def test_airm_invariant_to_rank_basis():
+    """U -> U R, V -> R^T V leaves dW bit-identical, so d_R MUST NOT MOVE.
+
+    This is the regression guard for the defect that made DECISIONS.md §55 wrong:
+    the old r x r Gramian G = s^2 VV^T + U^T U transforms as R^T G R, so its d_R
+    varied by 0.054 on a real adapter pair whose whole reported signal was 0.024.
+    """
+    Ua, Va = lora(128, 96, 8, seed=1)
+    Ub, Vb = lora(128, 96, 8, seed=2)
+    base = airm_components(*joint_subspace_operators(Ua, Va, 16.0, Ub, Vb, 16.0)[:2])["total"]
+
+    for seed in range(5):
+        g = torch.Generator().manual_seed(seed)
+        R, _ = torch.linalg.qr(torch.randn(8, 8, generator=g, dtype=torch.float64))
+        assert torch.norm((Ub @ R) @ (R.T @ Vb) - Ub @ Vb) < 1e-9      # dW unchanged
+        Sa, Sb, _ = joint_subspace_operators(Ua, Va, 16.0, Ub @ R, R.T @ Vb, 16.0)
+        assert abs(airm_components(Sa, Sb)["total"] - base) < 1e-6
+
+
+def test_joint_subspace_self_distance_is_zero():
+    Ua, Va = lora(128, 96, 8, seed=1)
+    Sa, Sb, k = joint_subspace_operators(Ua, Va, 16.0, Ua, Va, 16.0)
+    assert k == 8                                      # ranges coincide, not 2r
+    assert riemannian_affine_invariant_distance(Sa, Sb) < 1e-9
+
+
+def test_joint_subspace_k_reports_actual_overlap():
+    """k = 2r when the two ranges are disjoint, r when they coincide, and
+    strictly between when they partially overlap. k is the overlap read-out."""
+    Ua, Va = lora(128, 96, 8, seed=1)
+    Ub, Vb = lora(128, 96, 8, seed=2)
+    assert joint_subspace_operators(Ua, Va, 16.0, Ub, Vb, 16.0)[2] == 16
+    assert joint_subspace_operators(Ua, Va, 16.0, Ua, Va, 16.0)[2] == 8
+    Uc = torch.cat([Ua[:, :4], Ub[:, :4]], dim=1)      # half shared with Ua
+    assert joint_subspace_operators(Ua, Va, 16.0, Uc, Vb, 16.0)[2] == 12
+
+
+def test_orthogonal_subspaces_are_farther_than_overlapping_ones():
+    """Sanity on direction: sharing a subspace must read as closer."""
+    Ua, Va = lora(128, 96, 8, seed=1)
+    Ub, Vb = lora(128, 96, 8, seed=2)
+    shared = airm_components(*joint_subspace_operators(Ua, Va, 16.0, Ua, Vb, 16.0)[:2])["total"]
+    disjoint = airm_components(*joint_subspace_operators(Ua, Va, 16.0, Ub, Vb, 16.0)[:2])["total"]
+    assert shared < disjoint
+
+
+def test_lerm_agrees_with_airm_only_when_commuting():
+    """d_LE == d_R to 4 decimals is a WARNING (shared regulariser dominating),
+    not a confirmation -- it holds exactly when the two matrices commute."""
+    g = torch.Generator().manual_seed(9)
+    O, _ = torch.linalg.qr(torch.randn(8, 8, generator=g, dtype=torch.float64))
+    A = O @ torch.diag(torch.tensor([5., 4., 3., 2., 1., .9, .8, .7], dtype=torch.float64)) @ O.T
+    B = O @ torch.diag(torch.tensor([1., 2., 3., 4., 5., 6., 7., 8.], dtype=torch.float64)) @ O.T
+    assert abs(riemannian_affine_invariant_distance(A, B) - log_euclidean_distance(A, B)) < 1e-8
+    C = spd(seed=12)
+    assert abs(riemannian_affine_invariant_distance(A, C) - log_euclidean_distance(A, C)) > 1e-3

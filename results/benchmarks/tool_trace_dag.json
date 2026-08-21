@@ -1,0 +1,23 @@
+{
+  "trace": "results/logs/tool_trace.jsonl",
+  "events": 0,
+  "designed": {
+    "transitions": 10,
+    "top1_hit_rate": 1.0,
+    "expected_ms": 1.9,
+    "rows": [
+      {
+        "from": "postgresql",
+        "n": 5,
+        "best_next": "astral",
+        "p": 1.0
+      },
+      {
+        "from": "astral",
+        "n": 5,
+        "best_next": "astral",
+        "p": 1.0
+      }
+    ]
+  }
+}

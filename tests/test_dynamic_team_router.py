@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 import torch
 
-from gnn_experiment.dynamic_team_router import RiemannianTeamRouter
-from gnn_experiment.novel_peft import FoldableExpert
+from runtime.dynamic_team_router import RiemannianTeamRouter
+from runtime.novel_peft import FoldableExpert
 
 
 def create_dummy_expert(name: str, dim: int = 64, rank: int = 8) -> FoldableExpert:
@@ -30,34 +30,55 @@ def test_riemannian_team_router_initialization():
     assert np.allclose(router.dist_mat, router.dist_mat.T, atol=1e-4)
 
 
-def test_team_selection_prefers_harmonic_synergy():
-    """Verify router prefers geometrically harmonious team over distant outliers."""
+def test_secondary_expert_must_earn_its_seat():
+    """A second expert joins on its OWN relevance, not because the pair looks close.
+
+    Replaces test_team_selection_prefers_harmonic_synergy, which asserted the
+    geodesic penalty changed the selection. DECISIONS.md §59 refuted that: with a
+    constant distance matrix the team is identical in 4000/4000 draws, because
+    real d_R spans 0.8% of its mean. The old test only passed because it
+    hand-built a distance matrix with a 0.8 spread that no adapter pair produces.
+    """
     domains = ["astral", "postgresql", "duckdb", "financial"]
     experts = {d: create_dummy_expert(d) for d in domains}
+    router = RiemannianTeamRouter(experts=experts, domains=domains,
+                                  distance_matrix=np.zeros((4, 4)))
 
-    # Synthetic distance matrix where (postgresql, duckdb) is very close (0.1)
-    # but financial is very distant from both (0.9)
-    dist_mat = np.array([
-        [0.0, 0.3, 0.3, 0.8],
-        [0.3, 0.0, 0.1, 0.9],
-        [0.3, 0.1, 0.0, 0.9],
-        [0.8, 0.9, 0.9, 0.0],
-    ])
-
-    router = RiemannianTeamRouter(experts=experts, distance_matrix=dist_mat, domains=domains)
-
-    # Both postgresql, duckdb, and financial have high relevance
-    candidate_scores = {
-        "postgresql": 0.95,
-        "duckdb": 0.90,
-        "financial": 0.92,
-    }
-
-    team, meta = router.select_team(candidate_scores, max_team_size=2, harmony_penalty=1.0)
-
-    # The router should select [postgresql, duckdb] because financial adds 0.9 penalty
+    # A clear primary and a genuinely relevant second -> both fold.
+    team, meta = router.select_team(
+        {"postgresql": 0.95, "duckdb": 0.90, "financial": 0.05}, max_team_size=2)
     assert set(team) == {"postgresql", "duckdb"}
-    assert meta["intra_team_distance"] == 0.1
+
+    # Same primary, but nothing else is relevant -> solo, not a padded team.
+    team, _ = router.select_team(
+        {"postgresql": 0.95, "duckdb": 0.05, "financial": 0.05}, max_team_size=2)
+    assert team == ["postgresql"]
+
+
+def test_low_relevance_generalist_is_not_welded_to_every_team():
+    """The failure this rule exists to stop.
+
+    python_modern used to start at 0.20 while everyone else started at 0.05 and
+    every classifier rule topped it up, so it rode along on questions it had
+    nothing to do with -- and it is the expert whose activation scale component
+    measures 22.40 against 3.33-8.26 for its peers. Riding along is not free.
+    """
+    domains = ["astral", "postgresql", "python_modern"]
+    experts = {d: create_dummy_expert(d) for d in domains}
+    router = RiemannianTeamRouter(experts=experts, domains=domains,
+                                  distance_matrix=np.zeros((3, 3)))
+    team, _ = router.select_team(
+        {"astral": 0.90, "python_modern": 0.20, "postgresql": 0.05}, max_team_size=2)
+    assert team == ["astral"]
+
+
+def test_primary_folds_even_when_everything_is_weak():
+    domains = ["astral", "postgresql"]
+    experts = {d: create_dummy_expert(d) for d in domains}
+    router = RiemannianTeamRouter(experts=experts, domains=domains,
+                                  distance_matrix=np.zeros((2, 2)))
+    team, _ = router.select_team({"astral": 0.05, "postgresql": 0.05})
+    assert len(team) == 1
 
 
 def test_team_selection_max_size_constraint():

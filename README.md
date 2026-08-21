@@ -10,8 +10,41 @@ Exposes local resident domain experts (`postgresql`, `astral`, `financial_planni
 * **[`benchmarks/`](benchmarks/)**: Formal Empirical Benchmarks, Geometric Probes, Subsystem Innovation Legends (`🚀`, `🔥`, `⭐`), and Methodological Negative Lessons.
 * **[`docs/`](docs/)**: Conceptual Reference & Research Roadmaps ([`RESEARCH_ROADMAP.md`](docs/RESEARCH_ROADMAP.md)).
 * **[`scripts/`](scripts/)**: Production Training Pipelines (`CURRENT_m2`), Synthetic Dataset Curation, Domain Evaluators, and Server Launchers.
-* **[`src/gnn_experiment/`](src/gnn_experiment/)**: Core Python Engine (`novel_peft`, `mtp_draft`, `server`, `eval`).
+* **[`src/runtime/`](src/runtime/)**: Core Python Engine (`novel_peft`, `mtp_draft`, `server`, `eval`).
+* **[`src/dashboard/`](src/dashboard/)**: Next.js 16 Dark-Themed Live Visualizer & Morphing Studio.
 * **Core Documentation Standards**: [`CURRENT.md`](CURRENT.md) (Live Ground Truth), [`NOVELTY.md`](NOVELTY.md) (Contribution Tiering), [`GLOSSARY.md`](GLOSSARY.md) (Canonical Terminology), [`docs/DECISIONS.md`](docs/DECISIONS.md) (Retirements & Their Causes), [`SYSTEM.md`](SYSTEM.md) (Host / ROCm Setup), [`TODO.md`](TODO.md) (Active Backlog).
+
+---
+
+## ⚡ Quickstart: Launching the System
+
+To spin up the autonomous inference engine and the interactive Next.js dashboard:
+
+### 1. 🐍 Start the Python FastAPI Engine
+```bash
+# From repository root (runs on http://localhost:8000)
+uv run --env-file .env python -m runtime.server
+```
+* **API Swagger Docs**: `http://localhost:8000/docs`
+* **Health Check**: `http://localhost:8000/health`
+* **OpenAI Chat Endpoint**: `http://localhost:8000/v1/chat/completions`
+
+### 2. ⚡ Start the Next.js Dashboard
+```bash
+# From repository root (runs on http://localhost:3000)
+pnpm --prefix src/dashboard run dev --port 3000
+```
+Or directly from `src/dashboard`:
+```bash
+cd src/dashboard
+pnpm run dev --port 3000
+```
+
+* **Dynamic Agent Matrix**: `http://localhost:3000/`
+* **Morphing Studio & Chat**: `http://localhost:3000/chat`
+* **NOTEARS Causal DAG**: `http://localhost:3000/dag`
+* **Training Factory & Audit**: `http://localhost:3000/training`
+* **Research Docs & Benchmarks**: `http://localhost:3000/docs`
 
 ---
 
@@ -49,7 +82,7 @@ precisely because it is doing the wrong thing.
 > ways: only it had an adapter folded, it used a different generation loop, its
 > timing window excluded prefill, and the graph was decoding incorrectly so it
 > never hit EOS and ran to the token cap. AITER was also never active -- see
-> `src/gnn_experiment/fused_norm.py` for the measurements.
+> `src/runtime/fused_norm.py` for the measurements.
 
 ---
 
@@ -757,7 +790,7 @@ uv run --env-file .env python3 scripts/benchmark_zero_recapture_swapping.py
 
 ```text
 gnn-experiment/
-├── src/gnn_experiment/
+├── src/runtime/
 │   ├── server.py               # Production FastAPI OpenAI REST server & IMB gatekeeper
 │   ├── fused_norm.py           # Exact PyTorch RMSNorm stand-ins for Qwen3.5
 │   ├── cuda_graph.py           # FoldedCudaGraphDecoder locked graph replay engine

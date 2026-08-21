@@ -7,14 +7,14 @@ from pathlib import Path
 import torch
 from fastapi.testclient import TestClient
 
-from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+from runtime.canon import REPO_ROOT  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
 sys.path.append(str(REPO_ROOT / "src"))
 
-from gnn_experiment.server import app, model_state  # noqa: E402
-from gnn_experiment.utils.logger import log_benchmark_metric  # noqa: E402
+from runtime.server import app, model_state  # noqa: E402
+from runtime.utils.logger import log_benchmark_metric  # noqa: E402
 
 
 def run_openai_api_server_tests():
@@ -129,8 +129,10 @@ def run_openai_api_server_tests():
                 json_str = line_str[6:]
                 chunk_data = json.loads(json_str)
                 delta = chunk_data["choices"][0]["delta"]
-                if "content" in delta and delta["content"]:
-                    stream_chunks.append(delta["content"])
+                token_text = delta.get("content") or delta.get("reasoning_content") or ""
+                if token_text:
+                    stream_chunks.append(token_text)
+
 
         streamed_text = "".join(stream_chunks)
         print(f"  Streamed Tokens Count : {len(stream_chunks)} chunks")
@@ -138,9 +140,36 @@ def run_openai_api_server_tests():
         assert len(stream_chunks) > 0, "No SSE tokens received!"
         assert has_done is True, "Missing data: [DONE] SSE termination marker!"
 
+        # --- Test 6: POST /v1/chat/completions (Dynamic Morphing Mode 2) ---
+        print("\n--- Test 6: POST /v1/chat/completions (Dynamic Morphing Mode 2) ---")
+        # Turn 1: Tooling Prompt -> Should morph to astral + python_modern
+        payload_dyn1 = {
+            "model": "dynamic",
+            "messages": [{"role": "user", "content": "Add ruff and ty as dev dependencies, then format and lint the whole codebase."}],
+            "max_tokens": 48,
+            "stream": False,
+        }
+        res_dyn1 = client.post("/v1/chat/completions", json=payload_dyn1)
+        assert res_dyn1.status_code == 200, f"Dynamic Turn 1 failed: {res_dyn1.text}"
+        text_dyn1 = res_dyn1.json()["choices"][0]["message"]["content"]
+        print(f"  Dynamic Turn 1 (Tooling) Response: {text_dyn1[:100]}...")
+
+        # Turn 2: Database Prompt -> Should auto-morph to postgresql + python_modern
+        payload_dyn2 = {
+            "model": "dynamic",
+            "messages": [{"role": "user", "content": "Now write the asyncpg connection pool for PostgreSQL with pgvector."}],
+            "max_tokens": 48,
+            "stream": False,
+        }
+        res_dyn2 = client.post("/v1/chat/completions", json=payload_dyn2)
+        assert res_dyn2.status_code == 200, f"Dynamic Turn 2 failed: {res_dyn2.text}"
+        text_dyn2 = res_dyn2.json()["choices"][0]["message"]["content"]
+        print(f"  Dynamic Turn 2 (Postgres) Response: {text_dyn2[:100]}...")
+
         # Final Capture Count Check
         assert graph_decoder.capture_count == 1, f"CUDA Graph Capture Guard Failed: Count={graph_decoder.capture_count}"
         assert graph_decoder._is_locked is True, "Graph Decoder must remain locked!"
+
 
         print("\n==================================================")
         print(" IMB OpenAI REST Server Integration Test Summary")

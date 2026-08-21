@@ -16,8 +16,8 @@ from transformers import DataCollatorForLanguageModeling, TrainingArguments
 from trl import SFTTrainer
 from unsloth import FastLanguageModel
 
-from gnn_experiment.micro_probe.dataset import load_astral_micro_dataset
-from gnn_experiment.utils.logger import log_benchmark_metric
+from runtime.micro_probe.dataset import load_astral_micro_dataset
+from runtime.utils.logger import log_benchmark_metric
 
 
 def run_unsloth_micro_probe(

@@ -31,8 +31,8 @@ import numpy as np
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from gnn_experiment.canon import CANON, REPO_ROOT, adapter_path
-from gnn_experiment.novel_peft import (
+from runtime.canon import CANON, REPO_ROOT, adapter_path
+from runtime.novel_peft import (
     FoldableExpert,
     WeightFoldingEngine,
     compute_surgical_notch_masks,

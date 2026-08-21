@@ -23,7 +23,7 @@ import numpy as np
 import scipy.linalg as sla
 from scipy.optimize import minimize
 
-from gnn_experiment.canon import CANON, REPO_ROOT
+from runtime.canon import CANON, REPO_ROOT
 
 TOOL_NAMES = [
     "uv_init",        # 0

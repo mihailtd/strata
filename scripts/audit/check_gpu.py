@@ -29,9 +29,20 @@ def main() -> None:
     print(f"device count: {device_count}")
     for i in range(device_count):
         name = torch.cuda.get_device_name(i)
-        props = torch.cuda.get_device_properties(i)
-        vram_gb = props.total_memory / (1024**3)
-        print(f"  [{i}] {name} — {vram_gb:.1f} GB VRAM")
+    props = torch.cuda.get_device_properties(0)
+    total_gb = props.total_memory / (1024**3)
+    free_bytes, total_bytes = torch.cuda.mem_get_info(0)
+    used_gb = (total_bytes - free_bytes) / (1024**3)
+    print(f"  [0] {name} — {total_gb:.1f} GB Total | Currently Used: {used_gb:.2f} GB | Free: {free_bytes/(1024**3):.2f} GB")
+
+    from runtime.gpu_preflight import find_conflicting_processes
+    conflicts = find_conflicting_processes()
+    if conflicts:
+        print(f"\n⚠️  ACTIVE GPU / PYTHON WORKLOADS DETECTED ({len(conflicts)}):")
+        for c in conflicts:
+            print(f"   • PID {c['pid']:<6} (CPU: {c['cpu_pct']}%, MEM: {c['mem_pct']}%): {c['cmd']}")
+    else:
+        print("\n✅ No conflicting GPU processes found. GPU is clean and ready.")
 
     print("\nRunning a matmul on the GPU...")
     a = torch.randn(4096, 4096, device="cuda")

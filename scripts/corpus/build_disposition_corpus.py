@@ -37,7 +37,7 @@ import random
 import re
 from collections import Counter
 
-from gnn_experiment.canon import REPO_ROOT
+from runtime.canon import REPO_ROOT
 
 MARK = "\n\n### Answer:\n"
 
@@ -475,6 +475,28 @@ def rec(domain: str, family: str, q: str, a: str) -> dict:
             "meta": {"family": family, "domain": domain, "gen": "disposition_v1"}}
 
 
+# THE DUPLICATION THAT MADE python_modern EMIT A DATACLASS ON EVERY QUESTION
+# --------------------------------------------------------------------------
+# vary() only substitutes ENTITY NAMES (docs -> articles). Most answers never
+# contain one, so n_per=26 instances of a bank entry produced 26 BYTE-IDENTICAL
+# answers. Measured on the shipped corpus: python_modern's 520 disposition records
+# were 24 unique answers repeated ~22x each. The adapter did not see 520 examples
+# of good judgment, it saw 24 -- and one of them was the frozen dataclass.
+#
+# So the rejection SURFACE is varied too. Varying it is not a loss of signal: the
+# behaviour being taught is "name the thing you rejected and why", not the literal
+# string "**Not ". A single literal is precisely what the adapter latched onto.
+REJECT_FORMS = [
+    "**Not {wrong}** — {why}",
+    "**Not {wrong}.** {why}",
+    "Avoid {wrong} here — {why}",
+    "**{wrong} is the wrong reach** — {why}",
+    "Worth saying what this is *not*: {wrong}. {why}",
+    "**Not {wrong}** — {why} That is the whole reason to prefer the above.",
+]
+WHY_LEAD = ["", "", "", "The reason is simple: ", "Concretely: ", "In practice, "]
+
+
 def build(domain: str, entries, phrases, n_per: int, rng: random.Random,
           ctxs: list[str]) -> list[dict]:
     out = []
@@ -482,8 +504,12 @@ def build(domain: str, entries, phrases, n_per: int, rng: random.Random,
         for fam, sit, right, wrong, why in entries:
             mapping = {b: rng.choice(opts) for b, opts in ENTITIES.items()}
             q = rng.choice(phrases).format(s=vary(sit, rng, mapping)) + rng.choice(ctxs)
-            a = vary(f"{right}\n\n**Not {wrong}** — {why}", rng, mapping)
-            out.append(rec(domain, fam, q, a))
+            w = rng.choice(WHY_LEAD) + why
+            rej = rng.choice(REJECT_FORMS).format(wrong=wrong, why=w)
+            # Rejection usually follows the answer, but not always -- a fixed slot is
+            # one more thing to memorise instead of learn.
+            body = f"{rej}\n\n{right}" if rng.random() < 0.18 else f"{right}\n\n{rej}"
+            out.append(rec(domain, fam, q, vary(body, rng, mapping)))
     return out
 
 
@@ -495,6 +521,7 @@ def main() -> None:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--write", action="store_true")
     ap.add_argument("--n-per", type=int, default=26)
+    ap.add_argument("--cap", type=int, default=40, help="max records per family")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
@@ -509,12 +536,27 @@ def main() -> None:
         # stronger test -- a preference is only shown when it fires on a case the
         # corpus never contained.
         ev = build(domain, entries, PHRASE_EVAL, 1, random.Random(args.seed + 99), CTX_EVAL)
+        # Dedup on the SAME normalised key the merge uses, then cap per family.
+        # Reporting a count that the merge then collapses is how 520 records became
+        # 24 without anyone noticing.
+        seen, uniq, per_fam = set(), [], Counter()
+        for r in train:
+            k = " ".join(re.sub(r"[^a-z0-9\s]", " ",
+                                re.sub(r"\d+", "0",
+                                       r["messages"][1]["content"].lower())).split())
+            fam = r["meta"]["family"]
+            if k in seen or per_fam[fam] >= args.cap:
+                continue
+            seen.add(k); per_fam[fam] += 1; uniq.append(r)
+        raw_n = len(train)
+        train = uniq
         uq = len({r["messages"][0]["content"] for r in train}) * 100.0 / len(train)
         code = sum(bool(CODE.search(r["messages"][1]["content"])) for r in train)
-        rej = sum("**Not " in r["messages"][1]["content"] for r in train)
+        rej = sum(bool(re.search(r"\*\*Not |Avoid |wrong reach|is \*not\*", r["messages"][1]["content"])) for r in train)
         overlap = len({r["messages"][0]["content"] for r in train} &
                       {r["messages"][0]["content"] for r in ev})
-        print(f"\n  {domain:14s} {len(train):5d} train / {len(ev):3d} eval   "
+        print(f"\n  {domain:14s} {len(train):5d} train (of {raw_n} generated, "
+              f"{len(train)/raw_n:.0%} survive dedup) / {len(ev):3d} eval   "
               f"{len(entries)} situations")
         print(f"    code in answer {code*100.0/len(train):5.1f}%   "
               f"names a rejected alternative {rej*100.0/len(train):5.1f}%   "

@@ -13,7 +13,7 @@ The scheduler's own tests retired with it; see
 `benchmarks/superseded/sla_bounded_cluster_scheduler.py`.
 """
 
-from gnn_experiment.router.vram_state_router import (
+from runtime.router.vram_state_router import (
     TransitionCosts,
     VRAMState,
     VRAMStateGraph,

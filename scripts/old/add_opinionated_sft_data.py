@@ -9,16 +9,16 @@ Focuses on:
 6. [v3] Negative/rejection examples: anti-patterns the adapter must refuse or correct.
 
 All assistant content is sanitized via `sanitize_assistant_content()` (imported from
-`gnn_experiment.micro_probe.dataset`) before writing, keeping the on-disk JSONL clean.
+`runtime.micro_probe.dataset`) before writing, keeping the on-disk JSONL clean.
 The load path in `dataset.py` applies the same sanitizer again as a safety net.
 """
 
 import json
 from pathlib import Path
 
-from gnn_experiment.micro_probe.dataset import sanitize_assistant_content
+from runtime.micro_probe.dataset import sanitize_assistant_content
 
-from gnn_experiment.canon import REPO_ROOT  # noqa: E402
+from runtime.canon import REPO_ROOT  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.

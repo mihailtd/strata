@@ -34,9 +34,9 @@ import torch
 import torch.nn.functional as F
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from gnn_experiment.canon import CANON, REPO_ROOT, adapter_path
-from gnn_experiment.novel_peft import FoldableExpert, WeightFoldingEngine
-from gnn_experiment.state_ring_buffer import (
+from runtime.canon import CANON, REPO_ROOT, adapter_path
+from runtime.novel_peft import FoldableExpert, WeightFoldingEngine
+from runtime.state_ring_buffer import (
     POETCompressedStateRingBuffer,
     RingBufferReplayEngine,
     SelectiveHybridPOETRingBuffer,
@@ -102,10 +102,11 @@ def run_comparative_benchmark() -> dict[str, Any]:
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = AutoModelForCausalLM.from_pretrained(
         CANON.BASE_MODEL,
-        torch_dtype=torch.bfloat16,
-        device_map="cpu",
+        dtype=torch.bfloat16,
+        device_map="auto",
     )
 
     # Load & Fold astral + postgresql experts via Surgical Stacking
@@ -132,9 +133,10 @@ def run_comparative_benchmark() -> dict[str, Any]:
                 ml = MockLayer()
                 # Check for linear attention / GatedDeltaNet SSM recurrent states
                 d_model = model.config.hidden_size
-                # Represent layer state tensor [1, 4, 128, 128] for GDN
-                ml.recurrent_states = [torch.zeros(1, 4, 128, 128, dtype=torch.bfloat16)]
-                ml.conv_states = [torch.zeros(1, d_model, 4, dtype=torch.bfloat16)]
+                dev = next(model.parameters()).device
+                # Represent layer state tensor [1, 4, 128, 128] for GDN — must be on GPU
+                ml.recurrent_states = [torch.zeros(1, 4, 128, 128, dtype=torch.bfloat16, device=dev)]
+                ml.conv_states = [torch.zeros(1, d_model, 4, dtype=torch.bfloat16, device=dev)]
                 self.layers.append(ml)
 
     mock_cache = MockCacheAdapter(model)
@@ -179,7 +181,8 @@ def run_comparative_benchmark() -> dict[str, Any]:
         for p_idx, item in enumerate(BENCHMARK_PROMPTS):
             prompt = item["prompt"]
             enc = tokenizer(prompt, return_tensors="pt")
-            input_ids = enc.input_ids
+            dev = next(model.parameters()).device
+            input_ids = enc.input_ids.to(dev)
 
             # Baseline unrolled generation without rollback (64 tokens)
             with torch.no_grad():
@@ -208,7 +211,7 @@ def run_comparative_benchmark() -> dict[str, Any]:
             replay_engine.rollback_on_rejection(mock_cache, n_accepted=0)
             rollback_times.append((time.perf_counter() - t_rb_0) * 1_000_000.0)
 
-            # Continue generation after rollback
+            # Continue generation after rollback (input_ids already on device)
             with torch.no_grad():
                 resumed_out = model.generate(
                     input_ids,
