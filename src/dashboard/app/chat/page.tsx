@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   Send,
   Bot,
@@ -86,6 +86,14 @@ export default function ChatPage() {
   const [prefoldExpert, setPrefoldExpert] = useState("postgresql");
   const [prefoldConf, setPrefoldConf] = useState("95.0");
   const [morphAlert, setMorphAlert] = useState<string | null>(null);
+
+  // Reactive derived stack based on current routing mode and selections
+  const currentActiveStack = useMemo(() => {
+    if (routingMode === "base") return ["Base (Pristine W0)"];
+    if (routingMode === "single") return [singleAdapter];
+    if (routingMode === "manual") return selectedAdapters.length > 0 ? selectedAdapters : ["Base (Pristine W0)"];
+    return activeTeam.length > 0 ? activeTeam : ["Base (Pristine W0)"];
+  }, [routingMode, singleAdapter, selectedAdapters, activeTeam]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -203,10 +211,6 @@ export default function ChatPage() {
     if (selectedAdapters.includes(adapterId)) {
       setSelectedAdapters(selectedAdapters.filter((id) => id !== adapterId));
     } else {
-      if (selectedAdapters.length >= 4) {
-        alert("Maximum 4 adapters can be stacked concurrently.");
-        return;
-      }
       setSelectedAdapters([...selectedAdapters, adapterId]);
     }
   };
@@ -288,17 +292,39 @@ export default function ChatPage() {
         displayedTeam = selectedAdapters;
       }
     } else {
-      // Automatic dynamic routing
+      // Automatic dynamic routing with 0..N capacity
       targetModel = "dynamic";
       const pLower = textToSend.toLowerCase();
-      if (pLower.includes("postgres") || pLower.includes("asyncpg") || pLower.includes("vector") || pLower.includes("sql")) {
-        displayedTeam = ["postgresql", "python_modern"];
-      } else if (pLower.includes("fastapi") || pLower.includes("pydantic") || pLower.includes("route") || pLower.includes("endpoint")) {
-        displayedTeam = ["python_web", "python_modern"];
-      } else if (pLower.includes("duckdb") || pLower.includes("parquet") || pLower.includes("olap")) {
-        displayedTeam = ["duckdb", "postgresql"];
+      const matched: string[] = [];
+      if (pLower.includes("postgres") || pLower.includes("asyncpg") || pLower.includes("vector") || pLower.includes("sql") || pLower.includes("database")) {
+        matched.push("postgresql");
+      }
+      if (pLower.includes("fastapi") || pLower.includes("pydantic") || pLower.includes("route") || pLower.includes("endpoint") || pLower.includes("http") || pLower.includes("web")) {
+        matched.push("python_web");
+      }
+      if (pLower.includes("duckdb") || pLower.includes("parquet") || pLower.includes("olap") || pLower.includes("analytics") || pLower.includes("arrow")) {
+        matched.push("duckdb");
+      }
+      if (pLower.includes("finance") || pLower.includes("stock") || pLower.includes("portfolio") || pLower.includes("interest") || pLower.includes("valuation") || pLower.includes("dividend")) {
+        matched.push("financial");
+      }
+      if (pLower.includes("uv") || pLower.includes("ruff") || pLower.includes("ty") || pLower.includes("pip") || pLower.includes("package") || pLower.includes("astral")) {
+        matched.push("astral");
+      }
+      if (pLower.includes("python") || pLower.includes("def ") || pLower.includes("class ") || pLower.includes("async") || pLower.includes("type")) {
+        if (!matched.includes("python_modern")) matched.push("python_modern");
+      }
+
+      if (matched.length === 0) {
+        if (minAdapters === 0) {
+          targetModel = "qwen3.5-4b-base";
+          displayedTeam = ["Base (Pristine W0)"];
+        } else {
+          displayedTeam = ["astral", "python_modern"].slice(0, Math.max(minAdapters, 1));
+        }
       } else {
-        displayedTeam = ["astral", "python_modern"];
+        const targetCount = Math.max(minAdapters, Math.min(matched.length, maxAdapters));
+        displayedTeam = matched.slice(0, targetCount);
       }
     }
 
@@ -374,7 +400,9 @@ export default function ChatPage() {
       let accumulatedContent = "";
       let accumulatedReasoning = "";
       let sseBuffer = "";
-      let displaySpeed = "37.5";
+      let displaySpeed = "...";
+      let tokenCount = 0;
+      let firstTokenTime: number | null = null;
 
       while (reader) {
         const { done, value } = await reader.read();
@@ -398,11 +426,29 @@ export default function ChatPage() {
                 accumulatedContent += delta.content;
               }
 
+              const newText = (delta.content || "") + (delta.reasoning_content || "");
+              if (newText) {
+                const now = performance.now();
+                if (!firstTokenTime) firstTokenTime = now;
+                // Estimate tokens from text chunks (roughly 1 token per 3.8 characters)
+                const chunkTokens = Math.max(1, Math.round(newText.length / 3.8));
+                tokenCount += chunkTokens;
+
+                const elapsedSec = (now - firstTokenTime) / 1000;
+                if (elapsedSec > 0.08) {
+                  displaySpeed = (tokenCount / elapsedSec).toFixed(1);
+                }
+              }
+
+              // When final usage chunk arrives, override with authoritative server telemetry
               if (data.usage?.tokens_per_second) {
                 displaySpeed = data.usage.tokens_per_second.toFixed(1);
               }
+              if (data.usage?.completion_tokens) {
+                tokenCount = data.usage.completion_tokens;
+              }
 
-              let extraMeta = `Active: ${displayedTeam.join(" + ")} • ${displaySpeed} tok/s`;
+              let extraMeta = `Active: ${displayedTeam.join(" + ")} • ${displaySpeed} tok/s (${tokenCount} tokens)`;
               if (data.usage?.predicted_next_expert) {
                 const nextExp = data.usage.predicted_next_expert;
                 const conf = ((data.usage.predicted_confidence || 0.85) * 100).toFixed(1);
@@ -509,24 +555,24 @@ export default function ChatPage() {
               </p>
               <div className="grid grid-cols-2 gap-2 pt-1 font-mono text-xs">
                 <div>
-                  <span className="text-[10px] text-slate-500">Min Stack</span>
+                  <span className="text-[10px] text-slate-500">Min Stack (0 = Base fallback)</span>
                   <input
                     type="number"
-                    min={1}
-                    max={2}
+                    min={0}
+                    max={6}
                     value={minAdapters}
-                    onChange={(e) => setMinAdapters(parseInt(e.target.value, 10))}
+                    onChange={(e) => setMinAdapters(Math.max(0, Math.min(6, parseInt(e.target.value, 10) || 0)))}
                     className="w-full rounded border border-white/10 bg-black/40 p-1 text-white text-xs mt-0.5"
                   />
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-500">Max Stack</span>
+                  <span className="text-[10px] text-slate-500">Max Stack (up to 6)</span>
                   <input
                     type="number"
-                    min={2}
-                    max={4}
+                    min={1}
+                    max={6}
                     value={maxAdapters}
-                    onChange={(e) => setMaxAdapters(parseInt(e.target.value, 10))}
+                    onChange={(e) => setMaxAdapters(Math.max(1, Math.min(6, parseInt(e.target.value, 10) || 1)))}
                     className="w-full rounded border border-white/10 bg-black/40 p-1 text-white text-xs mt-0.5"
                   />
                 </div>
@@ -601,15 +647,19 @@ export default function ChatPage() {
               <Zap className="h-3.5 w-3.5" /> Live Active Stack
             </span>
             <span className="rounded-md bg-white/5 border border-white/10 px-2 py-0.5 font-mono text-[11px] text-slate-300">
-              45.67 ms
+              {routingMode === "base" || currentActiveStack[0] === "Base (Pristine W0)" ? "0.00 ms (Base)" : "45.67 ms (Folded)"}
             </span>
           </div>
 
           <div className="mt-2.5 flex flex-wrap gap-1.5">
-            {activeTeam.map((exp) => (
+            {currentActiveStack.map((exp) => (
               <span
                 key={exp}
-                className="flex items-center gap-1.5 rounded-lg border border-[rgba(0,242,255,0.4)] bg-[rgba(0,242,255,0.15)] px-2.5 py-1 font-mono text-xs font-bold text-[#00f2ff] shadow-[0_0_8px_rgba(0,242,255,0.2)]"
+                className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 font-mono text-xs font-bold transition-all ${
+                  exp === "Base (Pristine W0)"
+                    ? "border-slate-500/40 bg-slate-500/15 text-slate-300 shadow-[0_0_8px_rgba(255,255,255,0.05)]"
+                    : "border-[rgba(0,242,255,0.4)] bg-[rgba(0,242,255,0.15)] text-[#00f2ff] shadow-[0_0_8px_rgba(0,242,255,0.2)]"
+                }`}
               >
                 <Zap className="h-3 w-3" /> {exp}
               </span>
@@ -617,7 +667,11 @@ export default function ChatPage() {
           </div>
 
           <div className="mt-2.5 font-mono text-[11px] text-slate-400">
-            Intra-Team Geodesic: <b className="text-[#00f2ff]">d_R = {intraDr.toFixed(2)}</b> (Calibrated Synergy)
+            {currentActiveStack[0] === "Base (Pristine W0)" ? (
+              <span>Mode: <b className="text-slate-200">Base Model (0 Adapters Folded)</b></span>
+            ) : (
+              <span>Intra-Team Geodesic: <b className="text-[#00f2ff]">d_R = {intraDr.toFixed(2)}</b> (Calibrated Synergy)</span>
+            )}
           </div>
 
           {morphAlert && (
@@ -628,29 +682,51 @@ export default function ChatPage() {
           )}
         </div>
 
-        {/* NOTEARS Predictive Pre-Folder Card (Next in Line Prediction) */}
-        <div className="rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[rgba(16,22,34,0.75)] p-4 backdrop-blur-xl">
+        {/* NOTEARS Predictive Pre-Folder Card with Interactive Toggle Switch */}
+        <div className={`rounded-2xl border p-4 backdrop-blur-xl transition-all ${
+          status?.prefold_enabled
+            ? "border-emerald-500/30 bg-[rgba(16,22,34,0.75)] shadow-[0_0_20px_rgba(16,185,129,0.08)]"
+            : "border-white/10 bg-[rgba(16,22,34,0.4)] opacity-75"
+        }`}>
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-[#10b981] flex items-center gap-1.5">
+            <span className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+              status?.prefold_enabled ? "text-[#10b981]" : "text-slate-400"
+            }`}>
               <Sparkles className="h-3.5 w-3.5" /> NOTEARS Pre-Folder
             </span>
-            <span className="rounded-md bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 font-mono text-[11px] text-[#10b981]">
-              0.0ms Proactive
-            </span>
+            <button
+              onClick={togglePrefold}
+              disabled={!status?.loaded || togglesBusy !== null}
+              className={`flex items-center gap-1 rounded-md px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase border transition-all ${
+                status?.prefold_enabled
+                  ? "bg-emerald-500/20 border-emerald-500/40 text-[#10b981] hover:bg-emerald-500/30"
+                  : "bg-white/5 border-white/10 text-slate-400 hover:bg-white/10"
+              }`}
+            >
+              {togglesBusy === "prefold" ? "..." : status?.prefold_enabled ? "Active (ON)" : "Disabled (OFF)"}
+            </button>
           </div>
-          <div className="mt-2 text-[11px] text-slate-400">Next Predicted Turn Expert:</div>
-          <div className="mt-1 flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.02] p-2">
-            <b className="font-mono text-xs text-[#00f2ff] flex items-center gap-1">
-              <Zap className="h-3 w-3 text-[#00f2ff]" /> {prefoldExpert}
-            </b>
-            <span className="rounded bg-emerald-500/20 px-2 py-0.5 font-mono text-[10px] font-bold text-[#10b981]">
-              {prefoldConf}% Conf
-            </span>
-          </div>
-          <div className="mt-2 flex items-center gap-1.5 text-[10px] text-slate-400">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#10b981] animate-ping" />
-            <span>Proactive in-VRAM weight-folding for next turn</span>
-          </div>
+          {status?.prefold_enabled ? (
+            <>
+              <div className="mt-2 text-[11px] text-slate-400">Next Predicted Turn Expert:</div>
+              <div className="mt-1 flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.02] p-2">
+                <b className="font-mono text-xs text-[#00f2ff] flex items-center gap-1">
+                  <Zap className="h-3 w-3 text-[#00f2ff]" /> {prefoldExpert}
+                </b>
+                <span className="rounded bg-emerald-500/20 px-2 py-0.5 font-mono text-[10px] font-bold text-[#10b981]">
+                  {prefoldConf}% Conf
+                </span>
+              </div>
+              <div className="mt-2 flex items-center gap-1.5 text-[10px] text-slate-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#10b981] animate-ping" />
+                <span>Proactive in-VRAM weight-folding for next turn</span>
+              </div>
+            </>
+          ) : (
+            <div className="mt-2 text-[11px] text-slate-500 italic">
+              Continuous pre-folding is paused. Click &quot;Disabled (OFF)&quot; above to re-enable proactive background folding.
+            </div>
+          )}
         </div>
 
         {/* Engine Controls -- runtime toggles. None of these need a server restart or

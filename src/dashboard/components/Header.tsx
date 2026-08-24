@@ -28,12 +28,6 @@ export default function Header() {
   const [showModelDropdown, setShowModelDropdown] = useState(false);
 
   const toggleEngine = async () => {
-    // No `if (!status) return` guard: status can legitimately stay null for a
-    // moment while the SSE connection (lib/useEngineStatus.ts) is still
-    // establishing -- the old one-shot fetch always resolved eventually, this
-    // doesn't block the same way. Blocking here on a still-null status is exactly
-    // what made the button do nothing after the SSE switch. status?.loaded is
-    // already null-safe everywhere else below.
     setIsLoading(true);
     try {
       if (status?.loaded) {
@@ -45,14 +39,21 @@ export default function Header() {
           body: JSON.stringify({ model_id: selectedModel }),
         });
       }
-      // load/unload's response isn't a typed EngineStatus subset the way the
-      // sidebar toggles' responses are (see page.tsx's patchStatus calls) -- it's
-      // its own ad-hoc shape. A full refetch is simpler and correct here, and this
-      // is not a hot path: load/unload are infrequent, multi-second operations
-      // already, so one extra GET is free.
       await refetch();
     } catch (e) {
       alert("Failed to toggle engine: " + e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const resetVram = async () => {
+    setIsLoading(true);
+    try {
+      await fetch("/api/engine/force_reset_vram", { method: "POST" });
+      await refetch();
+    } catch (e) {
+      alert("Failed to reset VRAM: " + e);
     } finally {
       setIsLoading(false);
     }
@@ -151,34 +152,54 @@ export default function Header() {
           )}
         </div>
 
-        {/* Load/Unload Button */}
-        <button
-          disabled={isLoading}
-          onClick={toggleEngine}
-          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all border ${
-            status?.loaded
-              ? "border-rose-500/40 bg-rose-500/15 text-rose-400 hover:bg-rose-500/25"
-              : "border-[rgba(0,242,255,0.4)] bg-[rgba(0,242,255,0.15)] text-[#00f2ff] hover:bg-[rgba(0,242,255,0.25)] shadow-[0_0_12px_rgba(0,242,255,0.2)]"
-          } disabled:opacity-50`}
-        >
-          <Zap className="h-3.5 w-3.5" />
-          {isLoading
-            ? "Working..."
-            : status?.loaded
-            ? `Unload VRAM (${status.vram_allocated_gb} GB)`
-            : "Load Engine to VRAM"}
-        </button>
+        {/* Load/Unload & VRAM Reset Controls */}
+        <div className="flex items-center gap-2">
+          {status?.has_residual_vram && !status?.loaded && (
+            <button
+              disabled={isLoading}
+              onClick={resetVram}
+              title="Force clear residual GPU VRAM and reset PyTorch/HIP memory allocator"
+              className="flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/15 px-3 py-1.5 text-xs font-bold text-amber-300 hover:bg-amber-500/25 transition-all shadow-[0_0_10px_rgba(245,158,11,0.2)] disabled:opacity-50"
+            >
+              <Zap className="h-3.5 w-3.5" />
+              {isLoading ? "Purging..." : `Purge Residual VRAM (${status.total_vram_used_gb || status.residual_vram_gb || 0} GB)`}
+            </button>
+          )}
+
+          <button
+            disabled={isLoading}
+            onClick={toggleEngine}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all border ${
+              status?.loaded
+                ? "border-rose-500/40 bg-rose-500/15 text-rose-400 hover:bg-rose-500/25"
+                : "border-[rgba(0,242,255,0.4)] bg-[rgba(0,242,255,0.15)] text-[#00f2ff] hover:bg-[rgba(0,242,255,0.25)] shadow-[0_0_12px_rgba(0,242,255,0.2)]"
+            } disabled:opacity-50`}
+          >
+            <Zap className="h-3.5 w-3.5" />
+            {isLoading
+              ? "Working..."
+              : status?.loaded
+              ? `Unload VRAM (${status.vram_allocated_gb} GB)`
+              : "Load Engine to VRAM"}
+          </button>
+        </div>
 
         {/* Status Pill */}
         <div className="flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 font-mono text-xs font-semibold text-emerald-400">
           <div
             className={`h-2 w-2 rounded-full ${
-              status?.loaded ? "bg-emerald-400 shadow-[0_0_8px_#10b981] animate-pulse" : "bg-amber-400"
+              status?.loaded
+                ? "bg-emerald-400 shadow-[0_0_8px_#10b981] animate-pulse"
+                : status?.has_residual_vram
+                ? "bg-amber-400 animate-ping"
+                : "bg-slate-400"
             }`}
           />
           <span>
             {status?.loaded
               ? `ACTIVE (${status.vram_allocated_gb} GB)`
+              : status?.has_residual_vram
+              ? `RESIDUAL (${status.total_vram_used_gb || status.residual_vram_gb || 0} GB)`
               : "STANDBY (0 GB)"}
           </span>
         </div>

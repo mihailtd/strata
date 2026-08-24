@@ -707,6 +707,8 @@ class EngineStatusModel(BaseModel):
     loaded: bool = Field(..., description="Whether the base model is resident in VRAM")
     vram_allocated_gb: float = Field(..., description="torch.cuda.memory_allocated(), this process only")
     total_vram_used_gb: float = Field(..., description="Total VRAM in use on the device, all processes")
+    has_residual_vram: bool = Field(False, description="True if VRAM is occupied while engine is unloaded")
+    residual_vram_gb: float = Field(0.0, description="Amount of residual VRAM held")
     active_team: list[str] = Field(default_factory=list)
     model_id: str = "Qwen/Qwen3.5-4B"
     spec_decoder_active: bool = Field(..., description="Alias of spec_decode_enabled, kept for older clients")
@@ -729,6 +731,8 @@ def _build_engine_status() -> EngineStatusModel:
     vram_alloc = round(torch.cuda.memory_allocated() / (1024**3), 2) if torch.cuda.is_available() else 0.0
     free_bytes, total_bytes = torch.cuda.mem_get_info() if torch.cuda.is_available() else (0, 0)
     total_used = round((total_bytes - free_bytes) / (1024**3), 2) if torch.cuda.is_available() else 0.0
+    has_residual = not is_loaded and (vram_alloc > 0.3 or total_used > 2.5)
+    residual_gb = vram_alloc if not is_loaded else 0.0
 
     spec_decoder = model_state.get("spec_decoder")
     ring_engine = getattr(spec_decoder, "ring_engine", None)
@@ -737,6 +741,8 @@ def _build_engine_status() -> EngineStatusModel:
         loaded=is_loaded,
         vram_allocated_gb=vram_alloc,
         total_vram_used_gb=total_used,
+        has_residual_vram=has_residual,
+        residual_vram_gb=residual_gb,
         active_team=model_state.get("active_team", []),
         spec_decoder_active=spec_decoder is not None,
         spec_decode_enabled=spec_decoder is not None,
@@ -798,6 +804,17 @@ async def trigger_engine_unload():
         return res
     except Exception as ex:
         return JSONResponse(status_code=500, content={"error": f"Failed to unload engine: {ex}"})
+
+
+@app.post("/api/engine/force_reset_vram")
+@app.post("/api/engine/reset")
+async def trigger_force_reset_vram():
+    """Unconditionally purges GPU memory allocations, clears CUDA caches, and resets engine state."""
+    try:
+        res = await unload_inference_engine()
+        return {**res, "message": "GPU VRAM successfully reset and caches cleared."}
+    except Exception as ex:
+        return JSONResponse(status_code=500, content={"error": f"Failed to reset VRAM: {ex}"})
 
 
 @app.get("/health")

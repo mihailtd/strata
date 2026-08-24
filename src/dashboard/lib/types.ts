@@ -2,6 +2,8 @@ export interface EngineStatus {
   loaded: boolean;
   vram_allocated_gb: number;
   total_vram_used_gb?: number;
+  has_residual_vram?: boolean;
+  residual_vram_gb?: number;
   active_team: string[];
   model_id?: string;
   spec_decoder_active?: boolean;
