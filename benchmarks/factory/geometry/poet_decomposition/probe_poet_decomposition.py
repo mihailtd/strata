@@ -26,9 +26,6 @@ from safetensors.torch import load_file
 
 from runtime.canon import CANON, DOMAINS, REPO_ROOT, adapter_path
 
-# Single thread avoids WSL2 OpenMP lockups
-torch.set_num_threads(1)
-
 
 # ---------------------------------------------------------------------------
 # Mathematical Operators

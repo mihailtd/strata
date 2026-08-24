@@ -5,8 +5,7 @@ under identical, unquantized bfloat16 precision and the fixed evaluation harness
 (do_sample=False, stop_strings=['### Question']).
 
 USAGE:
-    LD_PRELOAD=/opt/rocm-7.2.0/lib/libhsa-runtime64.so PYTHONUNBUFFERED=1 PYTHONPATH=. \
-    .venv/bin/python scripts/benchmark_id_kron_vs_stock_lora.py \
+    uv run python benchmarks/superseded/benchmark_id_kron_vs_stock_lora.py \
         --model-id Qwen/Qwen3.5-4B \
         --out results/id_kron_vs_stock_lora_benchmark.json
 

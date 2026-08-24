@@ -123,10 +123,7 @@ def main():
         out_dir = REPO_ROOT / out_dir
 
     if not torch.cuda.is_available():
-        raise RuntimeError(
-            "CUDA/ROCm GPU is not available! Run with 'uv run --env-file .env scripts/train/train_mtp_adapter.py' "
-            "to load LD_PRELOAD=/opt/rocm-7.2.0/lib/libhsa-runtime64.so."
-        )
+        raise RuntimeError("CUDA/ROCm GPU is not available! Verify ROCm installation at /opt/rocm.")
 
     from runtime.novel_peft import set_hard_vram_cap
 

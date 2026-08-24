@@ -2,10 +2,8 @@
 ruff/ty) and/or EPUB books, using the local llama-server model. Same 3-stage
 question/verify/answer flow either way -- only the source extraction differs.
 
-This script only talks to llama-server over plain HTTP and does CPU-side
-text processing — unlike run_benchmark.py/chat.py, it never touches
-torch/GPU directly, so no --env-file .env / LD_PRELOAD is needed. It does
-need llama-server already running (see serving/README.md).
+This script talks to llama-server over HTTP and performs CPU-side
+text processing. It needs llama-server running (see serving/README.md).
 
     uv run scripts/old/run_datagen.py --dry-run
     uv run scripts/old/run_datagen.py --limit 5

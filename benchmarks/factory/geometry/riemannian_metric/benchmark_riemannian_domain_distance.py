@@ -56,8 +56,6 @@ from runtime.riemannian_covariance import (
     riemannian_affine_invariant_distance,
 )
 
-torch.set_num_threads(4)
-
 DOMAINS = ["astral", "postgresql", "duckdb", "financial", "python_modern", "python_web"]
 MODULES = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
 DELTA = 0.05

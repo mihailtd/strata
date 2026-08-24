@@ -1,12 +1,9 @@
 """Interactive terminal chat with a base model, optionally with a trained
 LoRA adapter loaded on top.
 
-    uv run --env-file .env scripts/serve/chat.py
-    uv run --env-file .env scripts/serve/chat.py --model Qwen/Qwen3.5-2B
-    uv run --env-file .env scripts/serve/chat.py --adapter results/adapters/lora-run1
-
---env-file .env sets LD_PRELOAD (required for torch to see the GPU on WSL,
-see scripts/audit/check_gpu.py) and HF_TOKEN.
+    uv run python scripts/serve/chat.py
+    uv run python scripts/serve/chat.py --model Qwen/Qwen3.5-4B
+    uv run python scripts/serve/chat.py --adapter results/adapters/m2_astral_r8a128_v7
 
 Type 'exit' or Ctrl+C to quit, 'reset' to clear conversation history.
 """

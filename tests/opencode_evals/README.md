@@ -18,23 +18,13 @@ whether it can *describe* the fix, but whether `uv lock` exits 0 afterward.
   written **inside each generated fixture directory**, not globally — running
   an eval never touches your global opencode config.
 
-## opencode: use the WSL-native install, not the Windows one
+## opencode: native Linux CLI execution
 
-If `opencode` resolves to `/mnt/c/Program Files/nodejs/opencode`, it runs
-**on the Windows side** and drives its `bash` tool through PowerShell against
-the WSL filesystem via `\\wsl.localhost\...` paths — this genuinely happened
-here and cost ~6x the time and tokens (136s/65.7K tokens vs 53s/10.9K tokens
-for the same eval), almost entirely from the model fumbling
-`find`/`head`/`ls -la` failing under PowerShell before switching to
-`Get-ChildItem`/`Get-Content`. Fix: `npm install -g opencode-ai` using WSL's
-own node/npm (confirm with `which opencode` — it should resolve under
-`~/.nvm/...`, not `/mnt/c/...`). Verify with:
+`opencode` runs directly as a native Linux binary on CachyOS with direct POSIX shell and filesystem execution. Verify with:
 
 ```bash
 opencode run "run 'pwd' and tell me the exact output" --dir /tmp --format json
 ```
-
-A clean `/tmp` with no PowerShell error text confirms it's running natively.
 
 ## Setup
 

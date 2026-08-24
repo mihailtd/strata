@@ -92,9 +92,6 @@ from runtime.canon import REPO_ROOT  # noqa: E402
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
 sys.path.insert(0, str(REPO_ROOT))
 
-# Keep the footprint small; this is a probe, not a training job.
-torch.set_num_threads(min(4, torch.get_num_threads()))
-
 MODULE_TYPES = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
 
 

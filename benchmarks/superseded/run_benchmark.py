@@ -1,11 +1,8 @@
 """Benchmark LoRA and other PEFT techniques on a single GPU.
 
-    uv run --env-file .env scripts/run_benchmark.py
-    uv run --env-file .env scripts/run_benchmark.py --methods lora,dora,qlora --max-steps 50
-    uv run --env-file .env scripts/run_benchmark.py --model Qwen/Qwen3.5-2B
-
---env-file .env sets LD_PRELOAD (required for torch to see the GPU on WSL,
-see scripts/audit/check_gpu.py) and HF_TOKEN.
+    uv run python benchmarks/superseded/run_benchmark.py
+    uv run python benchmarks/superseded/run_benchmark.py --methods lora,dora,qlora --max-steps 50
+    uv run python benchmarks/superseded/run_benchmark.py --model Qwen/Qwen3.5-2B
 """
 
 import argparse

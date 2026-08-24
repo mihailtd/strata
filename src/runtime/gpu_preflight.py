@@ -164,7 +164,7 @@ def check_gpu_availability(max_occupied_gb: float | None = None) -> dict[str, An
     """Evaluates whether the GPU is clean and available for a new workload.
 
     Default threshold is CANON.GPU_SAFETY_THRESHOLD_GB (6.0 GB) to accommodate
-    Windows/WSL2 DWM desktop compositing overhead without false alarms.
+    desktop compositing baseline and system headroom without false alarms.
     """
     threshold = CANON.GPU_SAFETY_THRESHOLD_GB if max_occupied_gb is None else max_occupied_gb
     vram = get_gpu_vram_info()

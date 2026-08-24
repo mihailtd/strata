@@ -44,8 +44,6 @@ import torch
 from runtime.canon import CANON, REPO_ROOT, adapter_path
 from runtime.novel_peft import FoldableExpert, compute_surgical_notch_masks
 
-torch.set_num_threads(4)
-
 PAIRS = [("astral", "python_modern"), ("postgresql", "duckdb"), ("astral", "postgresql")]
 MLP = ("gate_proj", "down_proj", "up_proj")
 TOP_K = [15, 50, 200, 1000]

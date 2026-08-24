@@ -41,7 +41,6 @@ import numpy as np
 import torch
 
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
-torch.set_num_threads(1)
 
 from runtime.canon import CANON, REPO_ROOT, adapter_path
 from runtime.novel_peft import FoldableExpert

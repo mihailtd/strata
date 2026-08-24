@@ -181,7 +181,7 @@ def main() -> None:
 
     # --- wall clock: the win only banks if steps*seconds/step actually falls ----
     # A scheme that reaches the target in 30% fewer steps but costs 40% more per
-    # step is a loss. Cross-session wall clock on this box is noisy (4-core WSL),
+    # step is a loss. Cross-session wall clock can vary based on load,
     # so this is reported as a check on the iteration win, not as a result itself.
     print("\n" + "=" * 100)
     print("  WALL CLOCK — a step cut only banks if seconds/step does not rise to eat it")

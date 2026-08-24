@@ -44,16 +44,7 @@ from transformers import LogitsProcessor
 def set_hard_vram_cap(cap_gb: float, device: int = 0) -> None:
     """Force PyTorch's caching allocator to refuse allocations beyond `cap_gb`
     on `device`, raising a normal catchable torch.OutOfMemoryError instead of
-    issuing the underlying driver allocation.
-
-    This matters specifically on this rig: ROCm-over-WSL (the `/dev/dxg`
-    paravirtualized path) does not always hard-fail an over-allocation the
-    way native Linux ROCm does -- it can silently satisfy it from *shared
-    host memory* instead, which balloons system RAM rather than cleanly
-    erroring (see EXPERIMENTS.md T-11 notes; reproduced firsthand when an
-    early, misconfigured smoke test here spiked system RAM badly enough to
-    nearly crash the host). Call this once, early, before loading any model,
-    on every script that touches the GPU in this project.
+    exceeding the dedicated GPU memory budget.
     """
     if not torch.cuda.is_available():
         return

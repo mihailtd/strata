@@ -91,11 +91,9 @@ class _Canon:
     MAX_NEW_TOKENS: int = 2048
 
     # -------------------------------------------------------------------------
-    # Everything else that must not drift between benchmarks.
-    # -------------------------------------------------------------------------
     BASE_MODEL: str = "Qwen/Qwen3.5-4B"
     VRAM_CAP_GB: float = 22.0
-    GPU_SAFETY_THRESHOLD_GB: float = 6.0  # 6.0 GB accommodates Windows/WSL2 DWM baseline (~3.5-4.5 GB)
+    GPU_SAFETY_THRESHOLD_GB: float = 6.0  # Accommodates desktop compositor baseline and system headroom
     GREEDY: bool = True          # do_sample=False. Determinism is how we detect
                                  # that an "unchanged" condition really is one.
     LORA_RANK: int = 8

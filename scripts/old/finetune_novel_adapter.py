@@ -161,8 +161,7 @@ def finetune_novel(
 
     # Safety first (see set_hard_vram_cap docstring): user is fine with up to 20 GB
     # of the 24 GB card, but the cap itself matters regardless of where it sits --
-    # it forces any overrun to fail as a clean Python OutOfMemoryError instead of
-    # ROCm-over-WSL silently spilling into shared host RAM.
+    # it forces any overrun to fail as a clean Python OutOfMemoryError.
     set_hard_vram_cap(vram_cap_gb)
 
     out_dir = out_dir or str(REPO_ROOT / "results" / "adapters" / f"astral_qwen3.5_micro_{variant}")

@@ -12,8 +12,8 @@ def test_get_gpu_vram_info_cpu_fallback():
         assert info["used_gb"] == 0.0
 
 
-def test_check_gpu_availability_clean_with_windows_dwm():
-    # Windows DWM desktop compositing typically occupies ~4.2 GB
+def test_check_gpu_availability_clean_with_desktop_compositor():
+    # Baseline desktop compositing typically occupies ~2-4 GB
     mock_vram = {
         "cuda_available": True,
         "used_gb": 4.2,
