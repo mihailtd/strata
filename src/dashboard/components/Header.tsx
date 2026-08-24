@@ -6,10 +6,11 @@ import { usePathname } from "next/navigation";
 import { Zap, Activity, MessageSquare, Factory, Network, BookOpen, Cpu, ChevronDown } from "lucide-react";
 import { useEngineStatus } from "@/lib/useEngineStatus";
 
-const AVAILABLE_BASE_MODELS = [
-  { id: "Qwen/Qwen3.5-4B", name: "Qwen 3.5 4B (Dense BF16)", vram: "~14.0 GB", available: true },
-  { id: "Qwen/Qwen3.5-0.8B", name: "Qwen 3.5 0.8B (Draft Head)", vram: "~2.8 GB", available: false },
-  { id: "Qwen/Qwen3.5-7B", name: "Qwen 3.5 7B (Future Planned)", vram: "~19.5 GB", available: false },
+export const AVAILABLE_BASE_MODELS = [
+  { id: "Qwen/Qwen3.5-4B", name: "Qwen 3.5 4B (Dense BF16)", vram: "~10.5 GB", adapters_count: 6, available: true },
+  { id: "Qwen/Qwen3.5-2B", name: "Qwen 3.5 2B (Dense BF16)", vram: "~4.8 GB", adapters_count: 0, available: true },
+  { id: "Qwen/Qwen3.5-0.8B", name: "Qwen 3.5 0.8B (Draft Head)", vram: "~2.2 GB", adapters_count: 0, available: true },
+  { id: "Qwen/Qwen3.5-9B", name: "Qwen 3.5 9B (Dense BF16)", vram: "~18.2 GB", adapters_count: 0, available: true },
 ];
 
 export default function Header() {

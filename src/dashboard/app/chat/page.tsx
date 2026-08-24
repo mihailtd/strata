@@ -448,35 +448,55 @@ export default function ChatPage() {
         {/* Adapter Stacking Configuration Card */}
         <div className="rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[rgba(16,22,34,0.85)] p-5 backdrop-blur-xl shadow-xl">
           <div className="flex items-center justify-between pb-3 border-b border-white/5">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-              <Sliders className="h-4 w-4 text-[#00f2ff]" /> Adapter Stacking &amp; Routing
-            </span>
+            <div>
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                <Sliders className="h-4 w-4 text-[#00f2ff]" /> Adapter Stacking &amp; Routing
+              </span>
+              <span className="text-[10px] font-mono text-slate-400">
+                Target: {status?.model_id || "Qwen/Qwen3.5-4B"}
+              </span>
+            </div>
             <span className="rounded bg-white/5 px-2 py-0.5 font-mono text-[11px] text-slate-400">
-              {routingMode.toUpperCase()}
+              {(!status?.model_id || status.model_id.includes("4B")) ? routingMode.toUpperCase() : "BASE (0)"}
             </span>
           </div>
 
-          {/* Mode Tabs */}
-          <div className="grid grid-cols-4 gap-1 rounded-xl bg-black/40 p-1 border border-white/5 mt-3">
-            {[
-              { id: "auto", label: "Auto (d_R)" },
-              { id: "manual", label: "Manual" },
-              { id: "single", label: "Single" },
-              { id: "base", label: "Base (0)" },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setRoutingMode(tab.id as any)}
-                className={`rounded-lg py-1.5 text-[11px] font-bold font-mono transition-all ${
-                  routingMode === tab.id
-                    ? "bg-[#00f2ff] text-slate-950 shadow-[0_0_10px_rgba(0,242,255,0.3)]"
-                    : "text-slate-400 hover:text-white"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+          {/* If not a 4B model, show architecture mismatch notice and lock to Base mode */}
+          {status?.model_id && !status.model_id.includes("4B") ? (
+            <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200/90 font-mono">
+              <div className="font-bold flex items-center gap-1.5 text-amber-300 mb-1">
+                <Sliders className="h-3.5 w-3.5" /> Architecture-Specific Adapter Boundary
+              </div>
+              Active model is <b>{status.model_id}</b>. Existing adapters are trained specifically for <b>Qwen 3.5 4B</b> ($d_m=2560$).
+              <div className="mt-1.5 text-[10px] text-amber-300/80">
+                0 adapters available for this size. Operating in pristine Base $W_0$ mode.
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Mode Tabs */}
+              <div className="grid grid-cols-4 gap-1 rounded-xl bg-black/40 p-1 border border-white/5 mt-3">
+                {[
+                  { id: "auto", label: "Auto (d_R)" },
+                  { id: "manual", label: "Manual" },
+                  { id: "single", label: "Single" },
+                  { id: "base", label: "Base (0)" },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setRoutingMode(tab.id as any)}
+                    className={`rounded-lg py-1.5 text-[11px] font-bold font-mono transition-all ${
+                      routingMode === tab.id
+                        ? "bg-[#00f2ff] text-slate-950 shadow-[0_0_10px_rgba(0,242,255,0.3)]"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
 
           {/* Context Options depending on Routing Mode */}
           {routingMode === "auto" && (

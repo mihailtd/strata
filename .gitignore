@@ -3,6 +3,7 @@
 __pycache__/
 *.pyc
 .python-version.local
+.claude/
 # results/ holds two very different things: 3.8 GB of adapter weights (must stay
 # out of git) and ~1.9 MB of benchmark JSON that is the actual EVIDENCE behind
 # every claim in README.md. The JSON is now tracked -- a repo that documents

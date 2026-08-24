@@ -56,6 +56,7 @@ export default function TrainingPage() {
 
   // Filter & Sort State
   const [searchTerm, setSearchTerm] = useState("");
+  const [currentGenOnly, setCurrentGenOnly] = useState(true);
   const [sortField, setSortField] = useState<keyof TrainingRun | "optimal_alpha">("created_at");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
@@ -209,6 +210,11 @@ export default function TrainingPage() {
   const filteredAndSortedRuns = useMemo(() => {
     return runs
       .filter((r) => {
+        if (currentGenOnly) {
+          const v = (r.adapter_version || "").toLowerCase();
+          const isCurrent = v === "v7" || v === "v6" || v.includes("v7") || v.includes("v6");
+          if (!isCurrent) return false;
+        }
         const query = searchTerm.toLowerCase();
         return (
           r.domain.toLowerCase().includes(query) ||
@@ -232,7 +238,7 @@ export default function TrainingPage() {
         if (valA > valB) return sortOrder === "asc" ? 1 : -1;
         return 0;
       });
-  }, [runs, searchTerm, sortField, sortOrder, calibCache]);
+  }, [runs, searchTerm, currentGenOnly, sortField, sortOrder, calibCache]);
 
   const handleSort = (field: keyof TrainingRun | "optimal_alpha") => {
     if (sortField === field) {
@@ -545,16 +551,34 @@ export default function TrainingPage() {
       <div className="rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[rgba(16,22,34,0.75)] p-5 backdrop-blur-xl shadow-2xl">
         <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
           <div>
-            <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-              <Database className="h-4 w-4 text-[#00f2ff]" />
-              Adapter Training History &amp; AIRM Acceptance Audit Ledger (results/factory.db)
-            </h2>
+            <div className="flex items-center gap-2.5">
+              <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <Database className="h-4 w-4 text-[#00f2ff]" />
+                Adapter Training History &amp; AIRM Audit Ledger
+              </h2>
+              <span className="rounded-md border border-[#00f2ff]/30 bg-[#00f2ff]/10 px-2 py-0.5 font-mono text-[10px] font-bold text-[#00f2ff]">
+                Target: Qwen 3.5 4B (Dense BF16)
+              </span>
+            </div>
             <p className="text-[11px] text-slate-400 mt-0.5">
               Click any row to expand the interactive <b>Apache ECharts Goldilocks Zone</b> perturbation &amp; IEEE 754 precision curve.
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Current Gen Filter Toggle */}
+            <button
+              onClick={() => setCurrentGenOnly(!currentGenOnly)}
+              className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 font-mono text-xs font-bold transition-all ${
+                currentGenOnly
+                  ? "border-[#a855f7]/50 bg-[#a855f7]/20 text-[#c084fc] shadow-[0_0_10px_rgba(168,85,247,0.2)]"
+                  : "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10"
+              }`}
+            >
+              <Sliders className="h-3 w-3" />
+              {currentGenOnly ? "Current Gen Only (v7/v6)" : "All Generations (v2–v7)"}
+            </button>
+
             {/* Search Input */}
             <div className="relative">
               <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-500" />
