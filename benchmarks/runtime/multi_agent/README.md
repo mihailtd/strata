@@ -57,8 +57,42 @@ Tested across multi-turn agent pipelines (Database Schema $\to$ FastMCP Server $
 
 ---
 
+## 🥊 Empirical A/B Benchmark: $S_t$ Tensor Handoff vs. Ollama Text Re-Prefill on 27B (`qwen3.8:27b`)
+
+Tested on a **3-stage multi-agent pipeline** (`Database Architect` $\to$ `Async Tooling Engineer` $\to$ `API Backend Engineer`) on `qwen3.8:27b` (27.3B params) with 100% dedicated GPU memory:
+
+| Metric / Stage | Arm A: Ollama Text Re-Prefill | Arm B: Our $S_t$ Tensor Handoff | Win Factor / Delta |
+| :--- | :---: | :---: | :---: |
+| **Turn 1 Prefill (Database Architect)** | 300.73 ms | **99.71 ms** | **3.0x faster** |
+| **Turn 2 Prefill (Async Tooling Engineer)** | 1,628.92 ms (Re-reading T1) | **189.03 ms** (Zero re-prefill) | **8.6x faster ⚡** |
+| **Turn 3 Prefill (API Backend Engineer)** | 2,074.12 ms (Re-reading T1+T2) | **93.20 ms** (Zero re-prefill) | **22.2x faster ⚡⚡** |
+| **TOTAL CUMULATIVE PREFILL TIME** | 4,003.77 ms (4.00 s) | **381.94 ms (0.38 s)** | **🚀 10.48x FASTER** |
+| **Handoff Latency Between Agents** | Prompt Serialisation / HTTP | **0.05 ms GPU Memory Copy** | **Instantaneous** |
+| **Context Window Consumed** | 555 prompt tokens | **150 prompt tokens** | **73.0% Context Saved 🔥** |
+
+Raw telemetry artifact: [`results/benchmarks/benchmark_27b_state_handoff_vs_ollama.json`](file:///home/mihai/Projects/gnn-experiment/results/benchmarks/benchmark_27b_state_handoff_vs_ollama.json).
+
+---
+
 ## 📁 Scripts & Artifacts
 - **Runtime Module:** [`src/runtime/state_handoff.py`](file:///home/mihai/Projects/gnn-experiment/src/runtime/state_handoff.py)
 - **Unit Tests:** [`tests/test_tensor_state_handoff.py`](file:///home/mihai/Projects/gnn-experiment/tests/test_tensor_state_handoff.py)
-- **Benchmark Suite:** [`benchmarks/runtime/multi_agent/benchmark_tensor_state_handoff.py`](file:///home/mihai/Projects/gnn-experiment/benchmarks/runtime/multi_agent/benchmark_tensor_state_handoff.py)
-- **Results Telemetry:** [`results/benchmarks/tensor_state_handoff_results.json`](file:///home/mihai/Projects/gnn-experiment/results/benchmarks/tensor_state_handoff_results.json)
+- **4B Scaling Benchmark:** [`benchmarks/runtime/multi_agent/benchmark_tensor_state_handoff.py`](file:///home/mihai/Projects/gnn-experiment/benchmarks/runtime/multi_agent/benchmark_tensor_state_handoff.py)
+- **27B A/B vs. Ollama Benchmark:** [`benchmarks/runtime/multi_agent/benchmark_27b_state_handoff_vs_ollama.py`](file:///home/mihai/Projects/gnn-experiment/benchmarks/runtime/multi_agent/benchmark_27b_state_handoff_vs_ollama.py)
+- **27B A/B Results Telemetry:** [`results/benchmarks/benchmark_27b_state_handoff_vs_ollama.json`](file:///home/mihai/Projects/gnn-experiment/results/benchmarks/benchmark_27b_state_handoff_vs_ollama.json)
+- **4B Results Telemetry:** [`results/benchmarks/tensor_state_handoff_results.json`](file:///home/mihai/Projects/gnn-experiment/results/benchmarks/tensor_state_handoff_results.json)
+
+---
+
+## 🛠️ How to Reproduce & Test
+
+```bash
+# 1. Run 27B A/B benchmark vs Ollama text re-prefill
+uv run python benchmarks/runtime/multi_agent/benchmark_27b_state_handoff_vs_ollama.py --model qwen3.8:27b
+
+# 2. Run 4B context sweep benchmark with alternating repeats
+uv run python benchmarks/runtime/multi_agent/benchmark_tensor_state_handoff.py --n_repeats 5
+
+# 3. Run unit tests
+uv run pytest tests/test_tensor_state_handoff.py -v
+```

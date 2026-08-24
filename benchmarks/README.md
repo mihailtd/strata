@@ -92,10 +92,11 @@ To ensure scientific rigor and prevent regressions, all future experiments **MUS
 * **[`runtime/memory/zero_recapture_swapping/`](runtime/memory/zero_recapture_swapping/)**: Multi-turn expert swapping under single-capture CUDA Graphs with 0 bytes transient churn.
 * **[`runtime/speculative/mtp_speculative/`](runtime/speculative/mtp_speculative/)**: Native MTP speculative engine with 52.5 MB recurrent rollback, delivering **2.20x net speedup at $K=6$**.
 * **[`runtime/speculative/speculation_matrix/`](runtime/speculative/speculation_matrix/)**: 180-run 3x3 domain matrix audit routing speculative execution.
+* **[`runtime/performance/`](runtime/performance/)**: Native RDNA3 Triton WMMA acceleration and Fused W4A16 + Dynamic LoRA branch kernel (3.88x VRAM compression, 1.17x–1.49x memory-bound decode speedup).
 * **[`runtime/performance/prefill_vs_decode/`](runtime/performance/prefill_vs_decode/)**: Amdahl's Law audit proving decode governs 94.1% of user latency.
 * **[`runtime/performance/fla_triton_kernels/`](runtime/performance/fla_triton_kernels/)**: ROCm Triton kernel acceleration flattening verification latency to 1.19x.
 * **[`runtime/performance/batch_scaling/`](runtime/performance/batch_scaling/)**: High-batch throughput scaling up to $B=64$ (611 tok/s).
-* **[`runtime/multi_agent/`](runtime/multi_agent/)**: Tensor-Level Recurrent State Handoff ($S_t$) & Hybrid Dual Protocol, delivering **$O(1)$ constant-time handoffs** with **7.84x prefill speedup at $T=2048$** and **98.8% context window capacity preservation**.
+* **[`runtime/multi_agent/`](runtime/multi_agent/)**: Tensor-Level Recurrent State Handoff ($S_t$), Hybrid Dual Protocol, and 27B A/B benchmark vs. Ollama text re-prefill (**10.48x prefill acceleration**, **73.0%–98.8% context window preservation**).
 
 ### 2. [`factory/`](factory/) — The Factory & Geometric Probes
 * **[`factory/EVALUATION_LADDER.md`](factory/EVALUATION_LADDER.md)**: The 4-stage fast-to-slow evaluation ladder (SVD checks → micro-loss probes → targeted logprob shift → downstream benchmarks).

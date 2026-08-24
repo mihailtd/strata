@@ -1,0 +1,105 @@
+{
+  "benchmark": "27B Multi-Agent State Handoff vs Ollama Text Re-Prefill",
+  "model": "qwen3.8:27b",
+  "canon": {
+    "ADAPTER_VERSION": "v7",
+    "MAX_NEW_TOKENS": 2048,
+    "BASE_MODEL": "Qwen/Qwen3.5-4B",
+    "VRAM_CAP_GB": 22.0,
+    "GPU_SAFETY_THRESHOLD_GB": 6.0,
+    "GREEDY": true,
+    "LORA_RANK": 8,
+    "LORA_ALPHA": 128,
+    "KV_CACHE_DTYPE": "bfloat16",
+    "ATTENTION_BACKEND": "sdpa"
+  },
+  "arm_a_ollama": {
+    "steps": [
+      {
+        "turn": 1,
+        "role": "Database Architect",
+        "prompt_tokens": 70,
+        "generated_tokens": 512,
+        "prefill_ms": 300.73,
+        "decode_ms": 53866.37,
+        "total_ms": 54294.23,
+        "tok_per_sec": 9.51,
+        "handoff_mode": "text_re_prefill"
+      },
+      {
+        "turn": 2,
+        "role": "Async Tooling Engineer",
+        "prompt_tokens": 118,
+        "generated_tokens": 512,
+        "prefill_ms": 1628.92,
+        "decode_ms": 45101.87,
+        "total_ms": 46776.5,
+        "tok_per_sec": 11.35,
+        "handoff_mode": "text_re_prefill"
+      },
+      {
+        "turn": 3,
+        "role": "API Backend Engineer",
+        "prompt_tokens": 367,
+        "generated_tokens": 512,
+        "prefill_ms": 2074.12,
+        "decode_ms": 43404.31,
+        "total_ms": 45513.67,
+        "tok_per_sec": 11.8,
+        "handoff_mode": "text_re_prefill"
+      }
+    ],
+    "total_prefill_ms": 4003.77,
+    "total_prompt_tokens": 555
+  },
+  "arm_b_tensor_handoff": {
+    "steps": [
+      {
+        "turn": 1,
+        "expert": "postgresql",
+        "prompt_tokens": 61,
+        "generated_tokens": 513,
+        "prefill_ms": 99.71,
+        "decode_ms": 17379.2,
+        "total_ms": 17668.8,
+        "tok_per_sec": 29.52,
+        "state_size_mb": 67.41,
+        "handoff_ms": 0.0,
+        "handoff_mode": "tensor_state_handoff"
+      },
+      {
+        "turn": 2,
+        "expert": "astral",
+        "prompt_tokens": 48,
+        "generated_tokens": 513,
+        "prefill_ms": 189.03,
+        "decode_ms": 17585.04,
+        "total_ms": 17793.14,
+        "tok_per_sec": 29.17,
+        "state_size_mb": 84.91,
+        "handoff_ms": 0.05,
+        "handoff_mode": "tensor_state_handoff"
+      },
+      {
+        "turn": 3,
+        "expert": "python_web",
+        "prompt_tokens": 41,
+        "generated_tokens": 295,
+        "prefill_ms": 93.2,
+        "decode_ms": 10072.85,
+        "total_ms": 10185.04,
+        "tok_per_sec": 29.29,
+        "state_size_mb": 95.38,
+        "handoff_ms": 0.05,
+        "handoff_mode": "tensor_state_handoff"
+      }
+    ],
+    "total_prefill_ms": 381.94,
+    "total_prompt_tokens": 150
+  },
+  "comparison": {
+    "prefill_speedup": 10.48,
+    "context_tokens_saved": 405,
+    "context_saving_pct": 72.97
+  }
+}
