@@ -35,7 +35,12 @@ sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from runtime.canon import CANON, adapter_path
+from runtime.canon import (
+    CANON,
+    adapter_path,
+    configure_deterministic_attention,
+    validate_kv_cache_precision,
+)
 from runtime.novel_peft import FoldableExpert, WeightFoldingEngine, set_hard_vram_cap
 from runtime.fused_norm import inject_exact_rmsnorm, fold_rmsnorm_into_linear
 from runtime.gpu_preflight import ensure_gpu_exclusive
@@ -242,6 +247,10 @@ class AppliedExecutionGate:
         print("==================================================")
         # PRE-FLIGHT EXCLUSIVITY GUARD: Fail fast if another job is holding VRAM
         ensure_gpu_exclusive()
+
+        # ACTION 2.3 & 1.1: Attention Determinism and KV Cache Validation
+        configure_deterministic_attention()
+        validate_kv_cache_precision(CANON.KV_CACHE_DTYPE)
 
         set_hard_vram_cap(22.0)
         self.device = torch.device(device)

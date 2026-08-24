@@ -26,7 +26,13 @@ from pathlib import Path
 from typing import Any, Literal
 
 from runtime import gpu_preflight, tool_trace, training_db
-from runtime.canon import REPO_ROOT, adapter_path
+from runtime.canon import (
+    CANON,
+    REPO_ROOT,
+    adapter_path,
+    configure_deterministic_attention,
+    validate_kv_cache_precision,
+)
 import torch
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -387,6 +393,21 @@ def resolve_expert(model_name: str) -> FoldableExpert | str | None:
 
 
 
+def scrub_thinking_blocks(text: str) -> str:
+    """Strips <think>...</think> reasoning blocks from conversation text (Action 3.1).
+
+    Prevents context-window saturation and attention degradation during multi-turn
+    agent loops by discarding intermediate scratchpads before appending to history.
+    """
+    if not text:
+        return ""
+    # Strip full <think>...</think> blocks including newlines
+    scrubbed = re.sub(r"<think>[\s\S]*?</think>", "", text)
+    # Strip unclosed or orphaned tags if present
+    scrubbed = re.sub(r"</?think>", "", scrubbed)
+    return scrubbed.strip()
+
+
 def format_prompt(messages: list[ChatMessage], thinking_effort: str | None = "medium") -> str:
     """Formats ChatMessage array into standard Qwen 3.5 ChatML instruction format with thinking effort directives."""
     effort = (thinking_effort or "medium").lower()
@@ -408,9 +429,13 @@ def format_prompt(messages: list[ChatMessage], thinking_effort: str | None = "me
 
     for msg in messages:
         msg_content = extract_msg_content(msg.content)
-        if msg.role == "system" and directive:
+        if msg.role == "assistant":
+            # Context Scrubbing (Action 3.1): Strip intermediate reasoning traces from prior turns
+            msg_content = scrub_thinking_blocks(msg_content)
+        elif msg.role == "system" and directive:
             msg_content = f"{msg_content}\n\n{directive}"
-        formatted += f"<|im_start|>{msg.role}\n{msg_content}\n<|im_end|>\n"
+        if msg_content or msg.role == "assistant":
+            formatted += f"<|im_start|>{msg.role}\n{msg_content}\n<|im_end|>\n"
 
     formatted += "<|im_start|>assistant\n"
     if effort == "off":
@@ -456,6 +481,15 @@ async def load_inference_engine() -> dict[str, Any]:
 
     # PRE-FLIGHT EXCLUSIVITY GUARD: Check before base model allocation to prevent RAM bloat / OOM
     gpu_preflight.ensure_gpu_exclusive()
+
+    # ACTION 2.3: Deterministic Attention Backend Pinning
+    attn_cfg = configure_deterministic_attention()
+    print(f"[IMB Server] Deterministic Attention Backend: {attn_cfg}")
+
+    # ACTION 1.1: KV Cache Precision Validation (Hard Ban on INT4)
+    kv_dtype_env = os.environ.get("KV_CACHE_DTYPE", CANON.KV_CACHE_DTYPE)
+    kv_cache_dtype = validate_kv_cache_precision(kv_dtype_env)
+    print(f"[IMB Server] Validated KV Cache Precision: {kv_cache_dtype}")
 
     vram_cap_gb = 22.0
     set_hard_vram_cap(vram_cap_gb)

@@ -18,6 +18,8 @@ def test_canon_invariants():
     assert CANON.LORA_ALPHA == 128
     assert CANON.BASE_MODEL == "Qwen/Qwen3.5-4B"
     assert CANON.GREEDY is True
+    assert CANON.KV_CACHE_DTYPE == "bfloat16"
+    assert CANON.ATTENTION_BACKEND == "sdpa"
     assert REPO_ROOT.exists()
     assert (REPO_ROOT / "src" / "runtime").exists()
 
@@ -62,4 +64,34 @@ def test_canon_stamp_metadata():
     assert stamp["BASE_MODEL"] == "Qwen/Qwen3.5-4B"
     assert stamp["LORA_RANK"] == 8
     assert stamp["LORA_ALPHA"] == 128
+    assert stamp["KV_CACHE_DTYPE"] == "bfloat16"
+    assert stamp["ATTENTION_BACKEND"] == "sdpa"
+
+
+def test_validate_kv_cache_precision():
+    """Test Action 1.1 KV cache validation rejects int4/fp4 and accepts valid types."""
+    from runtime.canon import validate_kv_cache_precision
+
+    assert validate_kv_cache_precision("bfloat16") == "bfloat16"
+    assert validate_kv_cache_precision("float16") == "float16"
+    assert validate_kv_cache_precision("int8") == "int8"
+
+    with pytest.raises(ValueError, match="BANNED_PRECISION"):
+        validate_kv_cache_precision("int4")
+
+    with pytest.raises(ValueError, match="BANNED_PRECISION"):
+        validate_kv_cache_precision("fp4")
+
+    with pytest.raises(ValueError, match="BANNED_PRECISION"):
+        validate_kv_cache_precision("q4_0")
+
+
+def test_configure_deterministic_attention():
+    """Test Action 2.3 deterministic attention configuration helper."""
+    from runtime.canon import configure_deterministic_attention
+
+    res = configure_deterministic_attention()
+    assert isinstance(res, dict)
+    assert "deterministic" in res
+
 

@@ -36,7 +36,12 @@ from runtime.canon import REPO_ROOT  # noqa: E402
 sys.path.append(str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from runtime.canon import CANON, adapter_path  # noqa: E402
+from runtime.canon import (  # noqa: E402
+    CANON,
+    adapter_path,
+    configure_deterministic_attention,
+    validate_kv_cache_precision,
+)
 from runtime.novel_peft import (  # noqa: E402
     FoldableExpert,
     WeightFoldingEngine,
@@ -428,6 +433,10 @@ class MultiTurnExecutionGate:
     def __init__(self, model_id: str = "Qwen/Qwen3.5-4B", version: str = "v4", vram_cap_gb: float = 22.0):
         # PRE-FLIGHT EXCLUSIVITY GUARD: Fail fast if another job is holding VRAM
         ensure_gpu_exclusive()
+
+        # ACTION 2.3 & 1.1: Attention Determinism and KV Cache Validation
+        configure_deterministic_attention()
+        validate_kv_cache_precision(CANON.KV_CACHE_DTYPE)
 
         set_hard_vram_cap(vram_cap_gb)
         print("==================================================")

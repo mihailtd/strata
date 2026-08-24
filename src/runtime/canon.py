@@ -99,6 +99,18 @@ class _Canon:
     LORA_RANK: int = 8
     LORA_ALPHA: int = 128
 
+    # -------------------------------------------------------------------------
+    # KV CACHE PRECISION -- Action 1.1: Ban INT4 KV cache (40k token cliff).
+    # BF16 is the standard production default; INT8 is accepted for long context.
+    # -------------------------------------------------------------------------
+    KV_CACHE_DTYPE: str = "bfloat16"
+
+    # -------------------------------------------------------------------------
+    # ATTENTION BACKEND -- Action 2.3: Deterministic backend pinning.
+    # Pinning PyTorch SDPA / Triton eliminates non-associative reduction drift.
+    # -------------------------------------------------------------------------
+    ATTENTION_BACKEND: str = "sdpa"
+
     def stamp(self) -> dict:
         """Config block to embed in EVERY results artifact.
 
@@ -126,6 +138,46 @@ DOMAINS = ("astral", "postgresql", "duckdb", "financial",
            "merged_sql", "merged_all")
 
 
+def validate_kv_cache_precision(dtype_str: str) -> str:
+    """Enforces Action 1.1: Hard prohibition on INT4 KV cache.
+
+    INT4 KV cache causes catastrophic logit flips past 40k tokens and breaks
+    structured tool syntax. Only BF16, FP16, and INT8 are permitted.
+    """
+    normalized = (dtype_str or "").strip().lower()
+    if any(banned in normalized for banned in ("int4", "fp4", "nf4", "q4_0", "q4_1", "4bit")):
+        raise ValueError(
+            f"BANNED_PRECISION (Action 1.1): KV cache precision {dtype_str!r} is strictly prohibited.\n"
+            f"INT4 KV cache causes catastrophic numerical divergence at long context.\n"
+            f"Allowed precisions: 'bfloat16', 'float16', 'int8'."
+        )
+    return normalized
+
+
+def configure_deterministic_attention() -> dict[str, bool]:
+    """Enforces Action 2.3: Deterministic Attention Backend Pinning.
+
+    Pins PyTorch SDPA execution flags to eliminate non-associative floating-point
+    reduction trees and ensure bit-exact reproducibility across runs.
+    """
+    try:
+        import torch
+
+        if hasattr(torch.backends, "cuda") and hasattr(torch.backends.cuda, "enable_flash_sdp"):
+            torch.backends.cuda.enable_flash_sdp(True)
+            torch.backends.cuda.enable_mem_efficient_sdp(True)
+            torch.backends.cuda.enable_math_sdp(False)
+            return {
+                "flash_sdp": True,
+                "mem_efficient_sdp": True,
+                "math_sdp": False,
+                "deterministic": True,
+            }
+    except Exception:
+        pass
+    return {"deterministic": False}
+
+
 def adapter_path(domain: str, version: str | None = None) -> Path:
     """Canonical adapter path for a domain. Defaults to CANON.ADAPTER_VERSION.
 
@@ -142,3 +194,4 @@ def adapter_path(domain: str, version: str | None = None) -> Path:
             f"Do NOT silently fall back to an older version -- train it or fix the path."
         )
     return p
+

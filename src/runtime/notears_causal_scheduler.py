@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import hashlib
+import json
 import threading
 import time
 from collections import Counter, defaultdict
@@ -185,8 +187,40 @@ class NotearsCausalScheduler:
                 self.empirical_transitions[t][nxt_exp] += 1
 
         X = np.array(obs)
-        self.W = notears_linear(X - X.mean(0), lambda1=0.01, w_threshold=0.02)
-        self.fitted = True
+
+        # Self-invalidating disk cache for the continuous NOTEARS optimization
+        cache_payload = {
+            "experts": sorted(self.experts),
+            "tools": sorted(self.tools),
+            "canonical_sequences": canonical_sequences,
+            "d": self.d,
+            "version": "1.0",
+        }
+        cache_key = hashlib.sha256(json.dumps(cache_payload, sort_keys=True).encode("utf-8")).hexdigest()[:16]
+        cache_dir = REPO_ROOT / "results" / "cache"
+        cache_file = cache_dir / f"notears_prior_{cache_key}.npz"
+
+        loaded_from_cache = False
+        if cache_file.exists():
+            try:
+                data = np.load(cache_file, allow_pickle=True)
+                cached_w = data["W"]
+                if cached_w.shape == (self.d, self.d):
+                    self.W = cached_w
+                    self.fitted = True
+                    loaded_from_cache = True
+            except Exception:
+                pass
+
+        if not loaded_from_cache:
+            self.W = notears_linear(X - X.mean(0), lambda1=0.01, w_threshold=0.02)
+            self.fitted = True
+            try:
+                cache_dir.mkdir(parents=True, exist_ok=True)
+                np.savez_compressed(cache_file, W=self.W, fitted=True)
+            except Exception:
+                pass
+
         self._recompute_transition_probabilities()
 
     def _recompute_transition_probabilities(self) -> None:
