@@ -18,6 +18,8 @@ export interface EngineStatus {
   state_handoff_enabled?: boolean;
   state_handoff_mb?: number;
   w4a16_enabled?: boolean;
+  spec_range_gate_enabled?: boolean;
+  spec_range_threshold?: number;
   intra_team_dr?: number;
   last_morph_ms?: number;
 }

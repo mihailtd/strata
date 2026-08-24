@@ -1,0 +1,101 @@
+========================================================================================================
+ NONPARAMETRIC COPULA TAIL DEPENDENCE -- DUAL-EXPERT ROUTING (Ch.3 §3.6)
+ lambda_U against copulas with known tails, then routing at matched false-activation cost
+========================================================================================================
+
+[1/4] Estimator behaviour against copulas with lambda_U known in closed form.
+  ----------------------------------------------------------------------------------------------------------
+       n     k    k/n |       gaussian (0.000) |         t nu=4 (0.391) | separation
+  ----------------------------------------------------------------------------------------------------------
+     512     3  0.006 |      0.247 +/- 0.237    |      0.402 +/- 0.256    |      0.63d
+     512     5  0.010 |      0.274 +/- 0.184    |      0.392 +/- 0.194    |      0.62d
+     512    10  0.020 |      0.306 +/- 0.131    |      0.427 +/- 0.142    |      0.89d
+     512    20  0.039 |      0.367 +/- 0.094    |      0.465 +/- 0.097    |      1.02d
+     512    41  0.080 |      0.438 +/- 0.061    |      0.498 +/- 0.063    |      0.97d
+     512    82  0.160 |      0.525 +/- 0.046    |      0.555 +/- 0.048    |      0.63d
+    2048    10  0.005 |      0.213 +/- 0.118    |      0.408 +/- 0.141    |      1.49d
+    2048    20  0.010 |      0.261 +/- 0.087    |      0.414 +/- 0.097    |      1.66d
+    2048    41  0.020 |      0.311 +/- 0.068    |      0.436 +/- 0.072    |      1.78d
+    2048    82  0.040 |      0.369 +/- 0.044    |      0.467 +/- 0.046    |      2.17d
+    2048   164  0.080 |      0.440 +/- 0.033    |      0.506 +/- 0.031    |      2.05d
+    2048   328  0.160 |      0.532 +/- 0.022    |      0.557 +/- 0.024    |      1.09d
+    8192    41  0.005 |      0.227 +/- 0.060    |      0.413 +/- 0.070    |      2.85d
+    8192    82  0.010 |      0.270 +/- 0.043    |      0.421 +/- 0.050    |      3.22d
+    8192   164  0.020 |      0.314 +/- 0.030    |      0.441 +/- 0.033    |      4.06d
+    8192   328  0.040 |      0.372 +/- 0.022    |      0.467 +/- 0.022    |      4.22d
+    8192   655  0.080 |      0.443 +/- 0.016    |      0.501 +/- 0.016    |      3.61d
+    8192  1311  0.160 |      0.530 +/- 0.011    |      0.559 +/- 0.012    |      2.48d
+  ----------------------------------------------------------------------------------------------------------
+  The gaussian column has TRUE lambda_U = 0 exactly. Everything it reports above 0 is bias.
+
+[2/4] Calibrated cutoff (95th percentile of a matched tail-independent null).
+  ----------------------------------------------------------------------------------------------------
+       n     k | null cutoff | FPR at cutoff 0 |  detect t | detect gumbel | detect gauss
+  ----------------------------------------------------------------------------------------------------
+     512    10 |       0.500 |             98% |       20% |           61% |           2%
+    2048    41 |       0.415 |            100% |       59% |           98% |           5%
+    8192   164 |       0.366 |            100% |       98% |          100% |           3%
+  ----------------------------------------------------------------------------------------------------
+
+[3/4] Routing on a ground-truth stream (a wasted fold costs 0.94 ms, measured in this repo's multi-turn artifact).
+  5.6% of evaluation tokens genuinely need db_expert + systems_expert.
+  --------------------------------------------------------------------------------------------------------
+            router | true pair | distractor | ranks true 1st | pAUC(<=5%) |   fit ms
+  --------------------------------------------------------------------------------------------------------
+           pearson |     0.227 |      0.839 |          False |      0.009 |      0.1
+              tail |     0.297 |      0.438 |          False |      0.009 |      0.3
+   tail_calibrated |     0.219 |     -0.107 |           True |      0.178 |    129.9
+  --------------------------------------------------------------------------------------------------------
+
+  Recall on cross-domain tokens at matched wasted-fold budgets:
+  --------------------------------------------------------------------------------------------------------
+            router |     <=0.5% waste |       <=1% waste |       <=2% waste |       <=5% waste
+  --------------------------------------------------------------------------------------------------------
+           pearson |             0.0% |             0.0% |             0.0% |            28.5%
+              tail |             0.0% |             0.0% |             0.0% |            28.5%
+   tail_calibrated |            28.5% |            28.5% |            28.5% |            28.5%
+  --------------------------------------------------------------------------------------------------------
+     pearson routing decision: 5.25 us median (IQR 0.10) -- 0.0053 ms/token
+        tail routing decision: 5.23 us median (IQR 0.10) -- 0.0052 ms/token
+  tail_calibrated routing decision: 5.22 us median (IQR 0.10) -- 0.0052 ms/token
+
+[4/4] Real v7 experts: tail dependence between expert response magnitudes.
+(null): No such file or directory
+(null): No such file or directory
+(null): No such file or directory
+(null): No such file or directory
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Failed to load CPU gemm_4bit_forward from kernels-community: Cannot find a build variant for this system in kernels-community/quantization-bitsandbytes (revision: 25cc9c0993efd3481a4d152f2d867aabba0fc5e6):
+
+torch211-cxx11-cpu-x86_64-linux: Torch version (2.11) does not match environment Torch version (2.13)
+torch210-cxx11-cpu-x86_64-linux: Torch version (2.10) does not match environment Torch version (2.13)
+torch212-cxx11-cpu-x86_64-linux: Torch version (2.12) does not match environment Torch version (2.13)
+torch213-cxx11-cpu-x86_64-linux: backend (cpu) does not match selected backend (rocm72). Please make sure you already `pip install kernels` and the kernels >= 0.11.1
+  6 experts, 2048 surrogate tokens, k=41
+  ----------------------------------------------------------------------------------------
+                              pair |  lambda_U |  pearson |  null 95% | above null
+  ----------------------------------------------------------------------------------------
+                 duckdb+python_web |     0.073 |    0.031 |     0.049 |       True
+                     astral+duckdb |     0.024 |    0.023 |     0.049 |      False
+                  astral+financial |     0.024 |    0.020 |     0.062 |      False
+                 astral+postgresql |     0.024 |    0.010 |     0.049 |      False
+              astral+python_modern |     0.024 |    0.012 |     0.062 |      False
+                  duckdb+financial |     0.024 |   -0.002 |     0.073 |      False
+                 duckdb+postgresql |     0.024 |    0.006 |     0.049 |      False
+              duckdb+python_modern |     0.024 |    0.001 |     0.073 |      False
+              financial+postgresql |     0.024 |    0.010 |     0.049 |      False
+              financial+python_web |     0.024 |   -0.028 |     0.049 |      False
+  ----------------------------------------------------------------------------------------
+  1 of 15 expert pairs exceed their matched tail-independent null.
+
+==========================================================================================================
+ VERDICT
+==========================================================================================================
+  Recall on cross-domain tokens at a <=1% wasted-fold budget -- pearson: 0.0%, tail: 0.0%, tail_calibrated: 28.5%
+  Recall on cross-domain tokens at a <=5% wasted-fold budget -- pearson: 28.5%, tail: 28.5%, tail_calibrated: 28.5%
+  Ranks the genuinely tail-dependent pair above the merely-correlated distractor: pearson=False, tail=False, tail_calibrated=True
+  Per-token decision cost 5.22 us (0.0052 ms).
+  lambda_U estimator bias on a TRULY tail-independent pair (n=2048, k/n=0.02): +0.311 -- absolute cutoffs are not usable, calibrated ones are.
+==========================================================================================================
+
+[telemetry] /home/mihai/Projects/gnn-experiment/results/benchmarks/copula_tail_routing.json

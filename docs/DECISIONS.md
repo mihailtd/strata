@@ -2948,3 +2948,123 @@ turn, not a rider on a K-control PR.
 - **Benchmarks**: `benchmarks/factory/geometry/dynamic_alpha_calibration/`,
   `benchmarks/runtime/speculative/live_speculative_engine/`
 - **Reports**: `results/calibrations/*.json`
+
+
+## §66 — Four textbook statistical methods benchmarked; the proposed priority order inverted, CLIME retired
+
+Four methods from *Regressions in Covariances, Dependencies and Graphs* (Pourahmadi &
+Arabpour) were proposed for the activation-graph and routing layers, ranked P1–P4 on
+theory. All four were implemented and benchmarked against ground truth, with a real-data
+arm of **41,535 token positions** captured from a `Qwen3.5-4B` forward pass over 288
+passages spanning all six domain corpora. **The measured ranking inverted the proposed
+one.**
+
+| method | proposed | measured | outcome |
+| :--- | :---: | :---: | :--- |
+| §6.3 GEE trajectory drift | P4 | **P1** | shipped |
+| §3.6 copula tail routing | P3 | **P2** | shipped, calibrated form only |
+| §12.2.1 Vecchia horizon | P1 | **P3** | shipped, `m = 8`, L ≥ 64 only |
+| §4.4.3 CLIME head cross-talk | P2 | ⛔ | **retired** |
+
+### GEE (P1). Shipped.
+
+An independence-assuming drift detector fires on **31.7%** of conversations that are not
+drifting, at a nominal 5% level (ρ = 0.9, K = 30, T = 20, 3000 replicates). AR(1) working
+correlation + sandwich variance holds ~6% at every ρ, and has the highest power among the
+arms that hold their size. Cost 0.2–1.5 ms per refit.
+
+**Hard requirement: K ≥ 20 concurrent conversations.** The sandwich is a large-cluster
+estimator; at K = 3 it over-rejects 26.3% — no better than the naive detector. The
+`multi_turn_execution_results_v4` artifact has K = 3, so the GEE numbers reported against
+it exercise the plumbing, not a calibrated test.
+
+### Copulas (P2). Shipped — but only the calibrated form.
+
+**The raw textbook estimator is rejected.** λ̂_U is biased upward by **+0.23 to +0.53** on
+data whose true λ_U is exactly 0 (Gaussian copula), and the bias grows with ρ — so a
+merely-correlated pair outranks a genuinely tail-dependent one. Raw λ_U scored pAUC 0.009,
+identical to Pearson to three decimals, and ranked the wrong pair first.
+
+Subtracting a Gaussian-copula null matched to each pair's own Pearson correlation flips the
+ranking (pAUC 0.178) and reaches the same 28.5% recall at **1/10th the wasted-fold budget**
+(≤0.5% vs ≤5%). Cost 5.27 µs/token; calibration is a one-time ~137 ms fit.
+
+Note the recall is *equal*, not higher — it is capped by the `tail_quantile = 0.95` gate,
+not by the dependence measure. The win is in wasted work avoided.
+
+**Real-token routing table (added after the initial pass).** The first version of this arm
+scored experts on a Gaussian-input surrogate and found 1 of 15 pairs above null. Replacing
+it with the exact response each adapter delta produces on **34,465 real token positions**
+(240 passages, all six domains, all 128 targeted modules hooked at their true inputs)
+changes the answer completely: **8 of 15 pairs are tail dependent.**
+
+Two findings from that arm matter beyond the copula question:
+
+* **Raw activation magnitude is not a routing signal.** Per-expert scale dominates it —
+  mean magnitudes run 335–452 across the six experts — so the argmax collapses onto
+  whichever expert responds loudest overall (`python_web` wins 4 of 6 domains). Only
+  *after* the rank transform does the signal appear: per-token top-1 accuracy **43.3%**
+  against a 16.7% chance baseline, domain argmax correct 5/6. Anything scoring experts by
+  raw magnitude is reading expert loudness, not token content.
+* **`duckdb+postgresql` are substitutes, not complements.** Second-highest Pearson
+  correlation of any pair (0.819), third-highest raw λ_U (0.459), and **−0.013 against its
+  own correlation-matched null — tail independent.** They move together on average and
+  separate in the extreme. A correlation router co-folds them constantly for nothing. This
+  is the proposed failure mode of similarity routing, appearing in the production fleet.
+
+The one domain pair this signal cannot separate is `python_modern` vs `python_web` — the
+pair deliberately split out of a shared corpus in §44, and the single miss in the 5/6.
+
+### Vecchia (P3). Shipped, with two corrections.
+
+* **`m = 2` is insufficient.** It captures 81.6% of the held-out likelihood gain but only
+  **43.0% of the precision mass**; held-out NLL does not flatten until m = 24. **Use m = 8**
+  (94.6% of the gain, 252 params vs the dense 528).
+* **The O(L³) → O(L) framing does not describe real depths.** Measured exponents are dense
+  L^1.54 / Vecchia L^0.28. Forming the covariance costs O(n·L²) and dominates the cubic term
+  until L ≳ 256. Speedup is **1.79× at L = 80** and **0.50× at L = 32** — i.e. a regression
+  on the current 4B model. **Use only at L ≥ 64** (the 70B/72B streaming path). The banded
+  *apply* loses to a dense matvec until L = 512; use the band to build Θ, not to apply it.
+
+Unexplained and left open: a **lag-4 bump (0.137)** in the partial-correlation decay
+(0.324, 0.093, 0.060, **0.137**, 0.060, 0.057) on the base model with no adapters loaded.
+
+### CLIME (retired). See `benchmarks/superseded/clime_head_crosstalk/`.
+
+Not retired for being wrong — the entrywise guarantee `‖SΘ−I‖∞ ≤ λ` held exactly on every
+feasible column at every λ. Retired on two findings:
+
+1. **Graphical lasso beats it at n/d ≤ 1** — the B = 1 decode regime it was proposed for —
+   F1 0.225–0.491 vs CLIME's 0.000–0.328, while being **~35× faster** (1.3 ms vs 48 ms at
+   d = 32). λ was chosen by extended BIC on both arms, never from ground truth.
+2. **The real head cross-talk graph is not reproducible at decode window sizes.** Two
+   disjoint 32-token windows each recover ~80 head edges and share **zero** (Jaccard 0.000);
+   ~512 tokens are needed for even half-agreement (0.387).
+
+Finding 2 is a property of the **activations**, not of the estimator, so it closes the
+application rather than the method: **do not route or prune attention heads from a
+per-token or per-step head graph, with any estimator.**
+
+`graphical_lasso_admm` — the winner — stays live in `src/runtime/clime_precision.py`, whose
+docstring carries the same warning.
+
+### Method note
+
+Every benchmark carries a ground-truth or null-control arm, so the estimator can be shown
+to find nothing when there is nothing. The Vecchia surrogate control (real v7 adapter
+factors driven by Gaussian inputs) reports flat partial correlations ~0.03 and a dense fit
+that does not beat the diagonal model — which is what makes the real arm's numbers mean
+something. Selection rules (λ, m) never touch the ground truth; oracle values are reported
+separately and labelled.
+
+Timing figures come from `--serial` runs: four concurrent benchmark processes contend and
+inflate latency. The CLIME thread-scaling figure is load-sensitive and ranged 1.53–2.41×
+across five runs against a bound of 13–60×; the conclusion (a small single-digit fraction
+of a large bound) is robust to that spread.
+
+- **Files**: `src/runtime/{vecchia_precision,gee_trajectory,copula_routing,activation_features,cpu_bench}.py`,
+  `src/runtime/clime_precision.py` (glasso live, CLIME path retired)
+- **Benchmarks**: `benchmarks/runtime/statistical/` (3 active, each with its own README),
+  `benchmarks/superseded/clime_head_crosstalk/` (retired, with its evidence)
+- **Tests**: `tests/test_statistical_estimators.py` (41 tests)
+- **Reports**: `results/benchmarks/{vecchia_layer_horizon,gee_trajectory_drift,copula_tail_routing,clime_precision_inversion}.json`

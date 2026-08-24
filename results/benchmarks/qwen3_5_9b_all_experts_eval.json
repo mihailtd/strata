@@ -1,0 +1,280 @@
+{
+  "title": "Qwen3.5-9B Complete 6-Expert Autonomous Fleet & Evaluation",
+  "timestamp": "2026-08-24T17:42:46Z",
+  "canon": {
+    "ADAPTER_VERSION": "v7",
+    "MAX_NEW_TOKENS": 2048,
+    "BASE_MODEL": "Qwen/Qwen3.5-4B",
+    "VRAM_CAP_GB": 22.0,
+    "GPU_SAFETY_THRESHOLD_GB": 6.0,
+    "GREEDY": true,
+    "LORA_RANK": 8,
+    "LORA_ALPHA": 128,
+    "KV_CACHE_DTYPE": "bfloat16",
+    "ATTENTION_BACKEND": "sdpa"
+  },
+  "trained_experts": {
+    "postgresql": {
+      "domain": "postgresql",
+      "out_dir": "/home/mihai/Projects/gnn-experiment/results/adapters/m2_postgresql_r8a128_v7_9b",
+      "status": "existing"
+    },
+    "astral": {
+      "domain": "astral",
+      "out_dir": "/home/mihai/Projects/gnn-experiment/results/adapters/m2_astral_r8a128_v7_9b",
+      "status": "existing"
+    },
+    "python_web": {
+      "domain": "python_web",
+      "out_dir": "/home/mihai/Projects/gnn-experiment/results/adapters/m2_python_web_r8a128_v7_9b",
+      "status": "existing"
+    },
+    "python_modern": {
+      "domain": "python_modern",
+      "out_dir": "/home/mihai/Projects/gnn-experiment/results/adapters/m2_python_modern_r8a128_v7_9b",
+      "status": "existing"
+    },
+    "duckdb": {
+      "domain": "duckdb",
+      "out_dir": "/home/mihai/Projects/gnn-experiment/results/adapters/m2_duckdb_r8a128_v7_9b",
+      "status": "existing"
+    },
+    "financial_planning": {
+      "domain": "financial_planning",
+      "out_dir": "/home/mihai/Projects/gnn-experiment/results/adapters/m2_financial_r8a128_v7_9b",
+      "status": "existing"
+    }
+  },
+  "evaluation": {
+    "model_id": "Qwen/Qwen3.5-9B",
+    "n_experts": 6,
+    "expert_metadata": {
+      "postgresql": {
+        "rank": 8,
+        "scaling": 16.0,
+        "n_modules": 128
+      },
+      "astral": {
+        "rank": 8,
+        "scaling": 16.0,
+        "n_modules": 128
+      },
+      "python_web": {
+        "rank": 8,
+        "scaling": 16.0,
+        "n_modules": 128
+      },
+      "python_modern": {
+        "rank": 8,
+        "scaling": 16.0,
+        "n_modules": 128
+      },
+      "duckdb": {
+        "rank": 8,
+        "scaling": 16.0,
+        "n_modules": 128
+      },
+      "financial_planning": {
+        "rank": 8,
+        "scaling": 16.0,
+        "n_modules": 128
+      }
+    },
+    "folding_latency": {
+      "postgresql": {
+        "activate_ms": 847.8,
+        "deactivate_ms": 751.67
+      },
+      "astral": {
+        "activate_ms": 806.01,
+        "deactivate_ms": 751.97
+      },
+      "python_web": {
+        "activate_ms": 805.58,
+        "deactivate_ms": 755.6
+      },
+      "python_modern": {
+        "activate_ms": 805.78,
+        "deactivate_ms": 751.76
+      },
+      "duckdb": {
+        "activate_ms": 804.99,
+        "deactivate_ms": 752.07
+      },
+      "financial_planning": {
+        "activate_ms": 804.92,
+        "deactivate_ms": 755.84
+      }
+    },
+    "overlap_matrix": {
+      "postgresql": {
+        "postgresql": 1.0,
+        "astral": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        },
+        "python_web": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        },
+        "python_modern": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        },
+        "duckdb": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        },
+        "financial_planning": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        }
+      },
+      "astral": {
+        "postgresql": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        },
+        "astral": 1.0,
+        "python_web": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        },
+        "python_modern": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        },
+        "duckdb": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        },
+        "financial_planning": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        }
+      },
+      "python_web": {
+        "postgresql": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        },
+        "astral": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        },
+        "python_web": 1.0,
+        "python_modern": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        },
+        "duckdb": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        },
+        "financial_planning": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        }
+      },
+      "python_modern": {
+        "postgresql": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        },
+        "astral": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        },
+        "python_web": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        },
+        "python_modern": 1.0,
+        "duckdb": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        },
+        "financial_planning": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        }
+      },
+      "duckdb": {
+        "postgresql": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        },
+        "astral": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        },
+        "python_web": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        },
+        "python_modern": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        },
+        "duckdb": 1.0,
+        "financial_planning": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        }
+      },
+      "financial_planning": {
+        "postgresql": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        },
+        "astral": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        },
+        "python_web": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        },
+        "python_modern": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        },
+        "duckdb": {
+          "raw_overlap": 1.0,
+          "times_above_chance": 512.0,
+          "orthogonal": false
+        },
+        "financial_planning": 1.0
+      }
+    }
+  }
+}

@@ -199,7 +199,8 @@ def w4a16_matmul(
     K_words, N = qweight.shape
     K = K_words * 8
     assert x_2d.shape[1] == K, f"Dimension mismatch: x is {x_2d.shape}, qweight implies K={K}"
-    assert x_2d.is_contiguous(), "Matrix `x` must be contiguous"
+    if not x_2d.is_contiguous():
+        x_2d = x_2d.contiguous()
     assert qweight.is_contiguous(), "Matrix `qweight` must be contiguous"
     assert scales.is_contiguous(), "Matrix `scales` must be contiguous"
 

@@ -152,6 +152,25 @@ export default function ChatPage() {
     }
   };
 
+  const toggleRangeGate = async () => {
+    if (togglesBusy) return;
+    setTogglesBusy("range_gate");
+    setToggleError(null);
+    try {
+      const data = await postEngine("set_speculative_range_gate", {
+        enabled: !status?.spec_range_gate_enabled,
+      });
+      patchStatus({
+        spec_range_gate_enabled: data.spec_range_gate_enabled,
+        spec_range_threshold: data.spec_range_threshold,
+      });
+    } catch (e) {
+      setToggleError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setTogglesBusy(null);
+    }
+  };
+
   const setSpeculativeK = async (k: number) => {
     if (togglesBusy || k === status?.spec_k) return;
     setTogglesBusy("spec_k");
@@ -311,18 +330,22 @@ export default function ChatPage() {
     let targetModel = "dynamic";
     let displayedTeam: string[] = [];
 
+    const is9b = status?.model_id?.includes("9B") || status?.model_id?.includes("9b");
+    const baseAlias = is9b ? "qwen3.5-9b-base" : "qwen3.5-4b-base";
+    const expertPrefix = is9b ? "qwen3.5-9b" : "qwen3.5-4b";
+
     if (routingMode === "base") {
-      targetModel = "qwen3.5-4b-base";
+      targetModel = baseAlias;
       displayedTeam = ["Base (Pristine W0)"];
     } else if (routingMode === "single") {
-      targetModel = singleAdapter;
+      targetModel = `${expertPrefix}-${singleAdapter}`;
       displayedTeam = [singleAdapter];
     } else if (routingMode === "manual") {
       if (selectedAdapters.length === 0) {
-        targetModel = "qwen3.5-4b-base";
+        targetModel = baseAlias;
         displayedTeam = ["Base (Pristine W0)"];
       } else {
-        targetModel = selectedAdapters[0];
+        targetModel = `${expertPrefix}-${selectedAdapters[0]}`;
         displayedTeam = selectedAdapters;
       }
     } else {
@@ -351,7 +374,7 @@ export default function ChatPage() {
 
       if (matched.length === 0) {
         if (minAdapters === 0) {
-          targetModel = "qwen3.5-4b-base";
+          targetModel = baseAlias;
           displayedTeam = ["Base (Pristine W0)"];
         } else {
           displayedTeam = ["astral", "python_modern"].slice(0, Math.max(minAdapters, 1));
@@ -533,21 +556,21 @@ export default function ChatPage() {
                 <Sliders className="h-4 w-4 text-[#00f2ff]" /> Adapter Stacking &amp; Routing
               </span>
               <span className="text-[10px] font-mono text-slate-400">
-                Target: {status?.model_id || "Qwen/Qwen3.5-4B"}
+                Target: {status?.model_id || "Qwen/Qwen3.5-4B"} ({status?.model_id?.includes("9B") ? "9B Fleet • $D=4096$" : "4B Fleet • $D=2560$"})
               </span>
             </div>
             <span className="rounded bg-white/5 px-2 py-0.5 font-mono text-[11px] text-slate-400">
-              {(!status?.model_id || status.model_id.includes("4B")) ? routingMode.toUpperCase() : "BASE (0)"}
+              {(!status?.model_id || status.model_id.includes("4B") || status.model_id.includes("9B")) ? routingMode.toUpperCase() : "BASE (0)"}
             </span>
           </div>
 
-          {/* If not a 4B model, show architecture mismatch notice and lock to Base mode */}
-          {status?.model_id && !status.model_id.includes("4B") ? (
+          {/* If model is not 4B and not 9B, show architecture mismatch notice and lock to Base mode */}
+          {status?.model_id && !status.model_id.includes("4B") && !status.model_id.includes("9B") ? (
             <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200/90 font-mono">
               <div className="font-bold flex items-center gap-1.5 text-amber-300 mb-1">
                 <Sliders className="h-3.5 w-3.5" /> Architecture-Specific Adapter Boundary
               </div>
-              Active model is <b>{status.model_id}</b>. Existing adapters are trained specifically for <b>Qwen 3.5 4B</b> ($d_m=2560$).
+              Active model is <b>{status.model_id}</b>. Existing adapters are trained specifically for <b>Qwen 3.5 4B</b> ($D=2560$) and <b>Qwen 3.5 9B</b> ($D=4096$).
               <div className="mt-1.5 text-[10px] text-amber-300/80">
                 0 adapters available for this size. Operating in pristine Base $W_0$ mode.
               </div>
@@ -581,8 +604,9 @@ export default function ChatPage() {
           {/* Context Options depending on Routing Mode */}
           {routingMode === "auto" && (
             <div className="mt-3 space-y-2 rounded-xl bg-white/[0.02] border border-white/5 p-3">
-              <div className="text-[11px] font-bold text-slate-300">
-                Riemannian Automatic Co-Routing
+              <div className="text-[11px] font-bold text-slate-300 flex justify-between items-center">
+                <span>Riemannian Automatic Co-Routing</span>
+                <span className="font-mono text-[10px] text-emerald-400">{status?.model_id?.includes("9B") ? "9B LoRA Fleet" : "4B M2 Fleet"}</span>
               </div>
               <p className="text-[11px] text-slate-400 leading-normal">
                 Classifies prompt intent across 6 domain manifolds and stacks optimal adapters with minimum geodesic distance ($d_R$).
@@ -618,7 +642,7 @@ export default function ChatPage() {
             <div className="mt-3 space-y-2">
               <div className="text-[11px] font-bold text-slate-300 flex justify-between items-center">
                 <span>Select Custom Adapter Stack</span>
-                <span className="font-mono text-[10px] text-[#00f2ff]">{selectedAdapters.length} Selected</span>
+                <span className="font-mono text-[10px] text-[#00f2ff]">{selectedAdapters.length} Selected ({status?.model_id?.includes("9B") ? "9B" : "4B"})</span>
               </div>
               <div className="grid grid-cols-1 gap-1.5">
                 {AVAILABLE_ADAPTERS.map((adapter) => {
@@ -647,8 +671,9 @@ export default function ChatPage() {
 
           {routingMode === "single" && (
             <div className="mt-3 space-y-2">
-              <div className="text-[11px] font-bold text-slate-300">
-                Single Adapter Solo Mode
+              <div className="text-[11px] font-bold text-slate-300 flex justify-between items-center">
+                <span>Single Adapter Solo Mode</span>
+                <span className="font-mono text-[10px] text-emerald-400">{status?.model_id?.includes("9B") ? "9B" : "4B"}</span>
               </div>
               <select
                 value={singleAdapter}
@@ -666,7 +691,7 @@ export default function ChatPage() {
 
           {routingMode === "base" && (
             <div className="mt-3 rounded-xl bg-white/[0.02] border border-white/5 p-3 text-xs text-slate-400">
-              <b className="text-white">Pristine Base Model W0</b>
+              <b className="text-white">Pristine Base Model W0 ({status?.model_id || "Qwen/Qwen3.5-4B"})</b>
               <p className="mt-1 text-[11px]">
                 No low-rank adapters folded. Queries run directly against un-enhanced base weights.
               </p>
@@ -822,6 +847,28 @@ export default function ChatPage() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Single-Pass Range Speculative Gate (Chapter 8) */}
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col">
+                <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                  <span>⚡ Range Spec Gate</span>
+                  <span className="text-[9px] px-1 py-0.5 rounded bg-cyan-500/15 text-cyan-300 font-mono">Ch.8</span>
+                </span>
+                <span className="text-[9px] text-slate-500">O(1) register early-exit (+18.8%)</span>
+              </div>
+              <button
+                onClick={toggleRangeGate}
+                disabled={!status?.loaded || !status?.spec_decode_enabled || togglesBusy !== null}
+                className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[10px] font-bold uppercase transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
+                  status?.spec_range_gate_enabled
+                    ? "border-cyan-400/40 bg-cyan-500/15 text-cyan-300 shadow-[0_0_8px_rgba(0,242,255,0.2)]"
+                    : "border-white/10 bg-black/40 text-slate-400"
+                }`}
+              >
+                {togglesBusy === "range_gate" ? "..." : status?.spec_range_gate_enabled ? "ON" : "OFF"}
+              </button>
             </div>
 
             {/* Predictive Pre-folding ON/OFF */}

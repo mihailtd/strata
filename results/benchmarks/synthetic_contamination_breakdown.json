@@ -1,0 +1,164 @@
+{
+  "benchmark": "Breakdown-Bounded Loss in Noisy Synthetic Adaptation",
+  "reference": "Chapter 4 (Feng, Giloni, Simonoff)",
+  "device": "cuda",
+  "timestamp": "2026-08-24T18:51:57Z",
+  "dimensions": {
+    "d_in": 512,
+    "d_out": 512,
+    "rank": 8,
+    "n_samples": 1024
+  },
+  "experiments": [
+    {
+      "contamination_fraction": 0.0,
+      "outlier_count": 0,
+      "arms": {
+        "L2_MSE": {
+          "name": "Standard L2 MSE (epsilon* = 0%)",
+          "relative_parameter_error": 0.0007,
+          "clean_test_mse": 1.4e-05,
+          "peak_gradient_norm": 3.56,
+          "breakdown_triggered": false,
+          "fit_ms": 325.01
+        },
+        "Huber_Delta1.0": {
+          "name": "Huber Bounded Loss (delta=1.0, epsilon* = 50%)",
+          "relative_parameter_error": 0.0007,
+          "clean_test_mse": 1.3e-05,
+          "peak_gradient_norm": 0.47,
+          "breakdown_triggered": false,
+          "fit_ms": 123.52
+        },
+        "LAD_LASSO": {
+          "name": "LAD-LASSO L1 Loss (alpha=1e-4, epsilon* = 50%)",
+          "relative_parameter_error": 0.0086,
+          "clean_test_mse": 0.001937,
+          "peak_gradient_norm": 0.93,
+          "breakdown_triggered": false,
+          "fit_ms": 64.97
+        }
+      }
+    },
+    {
+      "contamination_fraction": 0.05,
+      "outlier_count": 51,
+      "arms": {
+        "L2_MSE": {
+          "name": "Standard L2 MSE (epsilon* = 0%)",
+          "relative_parameter_error": 0.6053,
+          "clean_test_mse": 9.837418,
+          "peak_gradient_norm": 3.78,
+          "breakdown_triggered": false,
+          "fit_ms": 46.26
+        },
+        "Huber_Delta1.0": {
+          "name": "Huber Bounded Loss (delta=1.0, epsilon* = 50%)",
+          "relative_parameter_error": 0.0138,
+          "clean_test_mse": 0.004814,
+          "peak_gradient_norm": 0.45,
+          "breakdown_triggered": false,
+          "fit_ms": 58.43
+        },
+        "LAD_LASSO": {
+          "name": "LAD-LASSO L1 Loss (alpha=1e-4, epsilon* = 50%)",
+          "relative_parameter_error": 0.009,
+          "clean_test_mse": 0.002098,
+          "peak_gradient_norm": 0.88,
+          "breakdown_triggered": false,
+          "fit_ms": 62.09
+        }
+      }
+    },
+    {
+      "contamination_fraction": 0.15,
+      "outlier_count": 153,
+      "arms": {
+        "L2_MSE": {
+          "name": "Standard L2 MSE (epsilon* = 0%)",
+          "relative_parameter_error": 1.016,
+          "clean_test_mse": 27.151176,
+          "peak_gradient_norm": 3.8,
+          "breakdown_triggered": true,
+          "fit_ms": 43.34
+        },
+        "Huber_Delta1.0": {
+          "name": "Huber Bounded Loss (delta=1.0, epsilon* = 50%)",
+          "relative_parameter_error": 0.0292,
+          "clean_test_mse": 0.021532,
+          "peak_gradient_norm": 0.4,
+          "breakdown_triggered": false,
+          "fit_ms": 61.3
+        },
+        "LAD_LASSO": {
+          "name": "LAD-LASSO L1 Loss (alpha=1e-4, epsilon* = 50%)",
+          "relative_parameter_error": 0.0094,
+          "clean_test_mse": 0.002316,
+          "peak_gradient_norm": 0.8,
+          "breakdown_triggered": false,
+          "fit_ms": 59.88
+        }
+      }
+    },
+    {
+      "contamination_fraction": 0.3,
+      "outlier_count": 307,
+      "arms": {
+        "L2_MSE": {
+          "name": "Standard L2 MSE (epsilon* = 0%)",
+          "relative_parameter_error": 1.4236,
+          "clean_test_mse": 50.62611,
+          "peak_gradient_norm": 4.26,
+          "breakdown_triggered": true,
+          "fit_ms": 43.76
+        },
+        "Huber_Delta1.0": {
+          "name": "Huber Bounded Loss (delta=1.0, epsilon* = 50%)",
+          "relative_parameter_error": 0.0788,
+          "clean_test_mse": 0.15896,
+          "peak_gradient_norm": 0.35,
+          "breakdown_triggered": false,
+          "fit_ms": 59.63
+        },
+        "LAD_LASSO": {
+          "name": "LAD-LASSO L1 Loss (alpha=1e-4, epsilon* = 50%)",
+          "relative_parameter_error": 0.0103,
+          "clean_test_mse": 0.002743,
+          "peak_gradient_norm": 0.67,
+          "breakdown_triggered": false,
+          "fit_ms": 60.91
+        }
+      }
+    },
+    {
+      "contamination_fraction": 0.5,
+      "outlier_count": 512,
+      "arms": {
+        "L2_MSE": {
+          "name": "Standard L2 MSE (epsilon* = 0%)",
+          "relative_parameter_error": 1.6832,
+          "clean_test_mse": 75.06015,
+          "peak_gradient_norm": 4.7,
+          "breakdown_triggered": true,
+          "fit_ms": 45.57
+        },
+        "Huber_Delta1.0": {
+          "name": "Huber Bounded Loss (delta=1.0, epsilon* = 50%)",
+          "relative_parameter_error": 0.3758,
+          "clean_test_mse": 3.749421,
+          "peak_gradient_norm": 0.26,
+          "breakdown_triggered": false,
+          "fit_ms": 62.23
+        },
+        "LAD_LASSO": {
+          "name": "LAD-LASSO L1 Loss (alpha=1e-4, epsilon* = 50%)",
+          "relative_parameter_error": 0.173,
+          "clean_test_mse": 0.784298,
+          "peak_gradient_norm": 0.4,
+          "breakdown_triggered": false,
+          "fit_ms": 63.64
+        }
+      }
+    }
+  ]
+}

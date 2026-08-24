@@ -1,0 +1,55 @@
+{
+  "model_id": "Qwen/Qwen3.5-9B",
+  "timestamp": "2026-08-24T17:55:42Z",
+  "problems": [
+    {
+      "problem_id": "p1_pgvector_hnsw_hybrid",
+      "title": "PostgreSQL 17 pgvector HNSW Migration",
+      "arm_a_base": {
+        "score": 0.0,
+        "success": false,
+        "results_count": 0,
+        "error": "InvalidTextRepresentation: invalid input syntax for type vector: \"0.1,0.2,0.3,...\"\nLINE 2: ... a sample article content for testing purposes.', '0.1,0.2,0...\n                                                             ^\nDETAIL",
+        "extracted_code": "CREATE TABLE articles (\n    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n    title TEXT NOT NULL,\n    content TEXT,\n  ..."
+      },
+      "arm_b_folded_expert": {
+        "score": 0.0,
+        "success": false,
+        "results_count": 0,
+        "error": "UndefinedFunction: function uuidv7() does not exist\nLINE 2:     id uuid PRIMARY KEY DEFAULT uuidv7(),\n                                        ^\nHINT:  No function matches the given name and argument types. You might nee",
+        "extracted_code": "-- Create the articles table\nCREATE TABLE articles (\n    id uuid PRIMARY KEY DEFAULT uuidv7(),\n    title text NOT NULL,\n..."
+      },
+      "arm_c_prompted": {
+        "score": 0.0,
+        "success": false,
+        "results_count": 0,
+        "error": "InvalidTextRepresentation: malformed array literal: \"0.0001\"\nLINE 5:     '0.0001'::vector[1536]\n            ^\nDETAIL:  Array value must start with \"{\" or dimension information.",
+        "extracted_code": "CREATE EXTENSION IF NOT EXISTS vector;\n\nCREATE TABLE articles (\n    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n    t..."
+      },
+      "expert_edge": 0.0
+    },
+    {
+      "problem_id": "p2_fastmcp_asyncpg_service",
+      "title": "Modern Python FastMCP Tool Server with asyncpg",
+      "arm_a_base": {
+        "score": 0.95,
+        "syntax_valid": true,
+        "ruff_violations": 1,
+        "extracted_code": "#!/usr/bin/env python3\n# /// script\n# requires-python = \">=3.10\"\n# dependencies = [\n#   \"fastmcp\",\n#   \"asyncpg\",\n# ]\n# ..."
+      },
+      "arm_b_folded_expert": {
+        "score": 0.85,
+        "syntax_valid": true,
+        "ruff_violations": 3,
+        "extracted_code": "# /// script\n# requires-python = \">=3.12\"\n# dependencies = [\n#     \"fastmcp\",\n#     \"asyncpg\",\n# ]\n# ///\n\nfrom __future_..."
+      },
+      "arm_c_prompted": {
+        "score": 0.0,
+        "syntax_valid": false,
+        "ruff_violations": 4,
+        "extracted_code": "```python\n# /// script\n# dependencies = [\"fastmcp\", \"asyncpg\"]\n# ///\nimport asyncio\nimport os\nfrom typing import Any\n\nfr..."
+      },
+      "expert_edge": -0.1
+    }
+  ]
+}

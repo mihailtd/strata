@@ -233,12 +233,22 @@ class Qwen35MTPDraftHead(nn.Module):
         return cache
 
     @torch.no_grad()
-    def draft(self, hidden: torch.Tensor, next_token: torch.Tensor, k: int, start_pos: int, cache=None) -> torch.Tensor:
-        """Autoregressively draft `k` tokens. Returns (1, k) ids.
+    def draft(
+        self,
+        hidden: torch.Tensor,
+        next_token: torch.Tensor,
+        k: int = 4,
+        start_pos: int = 0,
+        cache=None,
+        gate=None,
+    ) -> torch.Tensor:
+        """Autoregressively draft up to K tokens using the MTP head.
 
-        `hidden`: (1, 1, H) hidden state for the token preceding `next_token`.
         The base model is never called here, so no recurrent state advances --
         which is the whole point on a hybrid architecture.
+
+        If `gate` is supplied (RangeStatisticGate), evaluates single-pass candidate range
+        spread on each step. If uncertainty exceeds threshold, aborts early to avoid junk drafts.
         """
         from transformers.cache_utils import DynamicCache
 
@@ -250,7 +260,18 @@ class Qwen35MTPDraftHead(nn.Module):
             fused = self._fuse(h, tok)
             positions = torch.arange(start_pos + i, start_pos + i + 1, device=fused.device)
             h = self._run_layer(fused, positions, cache)
-            tok = torch.argmax(self._lm_head(h)[:, -1, :], dim=-1, keepdim=True)
+            logits = self._lm_head(h)[:, -1, :]
+
+            # Single-Pass Range Statistic Early-Exit Gate (Chapter 8)
+            if gate is not None and i > 0:
+                should_abort, _ = gate.should_early_exit(logits, step_idx=i)
+                if should_abort:
+                    break
+
+            tok = torch.argmax(logits, dim=-1, keepdim=True)
+            drafted.append(tok)
+
+        if not drafted:
             drafted.append(tok)
         return torch.cat(drafted, dim=-1)
 

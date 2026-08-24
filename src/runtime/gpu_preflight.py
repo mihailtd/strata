@@ -137,13 +137,13 @@ def find_conflicting_processes() -> list[dict[str, Any]]:
                     )):
                         continue
 
-                    # Direct hardware match: process holds open /dev/kfd compute handle
+                    # Direct hardware match: process holds open /dev/kfd or /dev/dri render node
                     is_kfd_holder = pid in kfd_pids
 
                     # Workload keyword match: python training/serving/eval scripts or standalone LLM servers
                     is_workload = (
                         ("python" in cmd and any(k in cmd for k in ("gnn", "train", "benchmark", "probe", "torch", "calibrate", "server")))
-                        or any(server_bin in cmd for server_bin in ("llama-server", "vllm", "unsloth"))
+                        or any(server_bin in cmd for server_bin in ("ollama", "llama-server", "vllm", "unsloth", "tgi", "sglang"))
                     )
 
                     if is_kfd_holder or is_workload:

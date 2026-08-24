@@ -8,9 +8,10 @@ import rehypeHighlight from "rehype-highlight";
 import rehypeSlug from "rehype-slug";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
-import { BookOpen, FileText, ChevronRight, Sparkles, Layers, Cpu, Compass } from "lucide-react";
+import { BookOpen, FileText, ChevronRight, Sparkles, Layers, Cpu, Compass, Atom } from "lucide-react";
 import { DOCS_MANIFEST, DocItem } from "@/lib/docs-manifest";
 import { useMDXComponents } from "@/mdx-components";
+import LedoitWolfInfographic from "@/components/LedoitWolfInfographic";
 
 export default function DocsPage() {
   const [selectedDocId, setSelectedDocId] = useState<string>("decisions");

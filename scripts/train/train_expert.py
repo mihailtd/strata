@@ -50,8 +50,14 @@ grad-accum 2, lr 2e-4, cosine schedule, max_length 512.
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
+
+# Force GPU 0 exclusive device isolation before PyTorch/ROCm runtime initializes
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
+os.environ.setdefault("HIP_VISIBLE_DEVICES", "0")
+os.environ.setdefault("ROCR_VISIBLE_DEVICES", "0")
 
 import torch
 from peft import LoraConfig, get_peft_model
@@ -682,6 +688,10 @@ def main():
         default=False,
         help="Explicitly toggle gradient checkpointing (default: False). Pinning avoids hidden TRL/PEFT defaults.",
     )
+    ap.add_argument("--max-length", type=int, default=512, help="maximum sequence length (default: 512)")
+    ap.add_argument("--batch-size", type=int, default=2, help="per-device training batch size (default: 2)")
+    ap.add_argument("--grad-accum", type=int, default=2, help="gradient accumulation steps (default: 2)")
+    ap.add_argument("--qlora", action="store_true", help="use 4-bit NF4 base model for training 9B/27B models on 24GB VRAM")
     args = ap.parse_args()
 
     # Seed BEFORE anything constructs a tensor. peft builds lora_A with kaiming init
@@ -712,7 +722,7 @@ def main():
 
     set_hard_vram_cap(args.vram_cap_gb)
     dev = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
-    print(f"TRAINING bf16 STOCK LORA [{args.domain}] r={args.rank} alpha={args.alpha} on {dev}")
+    print(f"TRAINING {'QLORA (4-bit base)' if args.qlora else 'bf16 STOCK LORA'} [{args.domain}] r={args.rank} alpha={args.alpha} on {dev}")
     print(f"  data: {dataset_path}")
     print(f"  out:  {out_dir}")
     print("=" * 88)
@@ -735,20 +745,38 @@ def main():
     # then cast. Loss trajectories match a non-Liger run (1.941->0.859 vs
     # 1.943->0.868).
     liger_applied = False
-    if not args.no_liger:
+    if not args.no_liger and not args.qlora:
         from liger_kernel.transformers import apply_liger_kernel_to_qwen3_5
 
         apply_liger_kernel_to_qwen3_5()
         liger_applied = True
         print("Liger fused kernels applied (fused_linear_cross_entropy, rms_norm, swiglu; rope=off)")
 
-    # bf16, NOT load_in_4bit -- this is the whole point of the script
-    model = AutoModelForCausalLM.from_pretrained(
-        args.model_id,
-        dtype=torch.bfloat16,
-        device_map="cuda:0",
-        trust_remote_code=True,
-    )
+    if args.qlora:
+        from transformers import BitsAndBytesConfig
+        from peft import prepare_model_for_kbit_training
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_use_double_quant=True,
+        )
+        print("Loading base model in NF4 4-bit QLoRA precision...")
+        model = AutoModelForCausalLM.from_pretrained(
+            args.model_id,
+            quantization_config=bnb_config,
+            device_map="cuda:0",
+            trust_remote_code=True,
+        )
+        model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=args.gradient_checkpointing)
+    else:
+        # bf16, NOT load_in_4bit -- this is the whole point of the script
+        model = AutoModelForCausalLM.from_pretrained(
+            args.model_id,
+            dtype=torch.bfloat16,
+            device_map="cuda:0",
+            trust_remote_code=True,
+        )
 
     # peft wants the bool True for stock LoRA and a string for every other scheme.
     init_scheme: object = True if args.init_lora_weights.lower() == "true" else args.init_lora_weights
@@ -800,9 +828,9 @@ def main():
         seed=args.seed,
         data_seed=args.seed,
         completion_only_loss=completion_only,
-        max_length=2048,
-        per_device_train_batch_size=2,
-        gradient_accumulation_steps=2,
+        max_length=args.max_length,
+        per_device_train_batch_size=args.batch_size,
+        gradient_accumulation_steps=args.grad_accum,
         learning_rate=args.lr,
         max_steps=args.max_steps,
         logging_steps=args.logging_steps,

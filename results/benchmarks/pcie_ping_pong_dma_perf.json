@@ -1,0 +1,185 @@
+{
+  "benchmark": "Asynchronous Double-Buffered Ping-Pong PCIe 4.0 DMA Streaming",
+  "target_model": "70B/72B (80 Layers)",
+  "hardware": {
+    "device": "AMD Radeon Graphics",
+    "target_arch": "gfx1100",
+    "dma_bandwidth_gbs": 14.11
+  },
+  "canon": {
+    "ADAPTER_VERSION": "v7",
+    "MAX_NEW_TOKENS": 2048,
+    "BASE_MODEL": "Qwen/Qwen3.5-4B",
+    "VRAM_CAP_GB": 22.0,
+    "GPU_SAFETY_THRESHOLD_GB": 6.0,
+    "GREEDY": true,
+    "LORA_RANK": 8,
+    "LORA_ALPHA": 128,
+    "KV_CACHE_DTYPE": "bfloat16",
+    "ATTENTION_BACKEND": "sdpa"
+  },
+  "config": {
+    "layer_size_mb": 431.58,
+    "total_model_gb": 33.72,
+    "vram_staging_mb": 863.16,
+    "num_benchmark_layers": 8,
+    "full_model_layers": 80,
+    "n_repeats": 5
+  },
+  "results": [
+    {
+      "M": 1,
+      "layer_mb": 431.58,
+      "pure_dma_ms": 32.07,
+      "pure_compute_ms": 1.57,
+      "sync_layer_ms": 33.6,
+      "pipe_layer_ms": 32.38,
+      "sync_80_layers_ms": 2688.35,
+      "pipe_80_layers_ms": 2590.24,
+      "sync_tok_per_sec": 0.37,
+      "pipe_tok_per_sec": 0.39,
+      "speedup": 1.04,
+      "overlap_efficiency_pct": 80.6,
+      "iqr_sync": [
+        33.59,
+        33.64
+      ],
+      "iqr_pipe": [
+        32.37,
+        32.4
+      ]
+    },
+    {
+      "M": 2,
+      "layer_mb": 431.58,
+      "pure_dma_ms": 32.07,
+      "pure_compute_ms": 1.57,
+      "sync_layer_ms": 33.64,
+      "pipe_layer_ms": 32.37,
+      "sync_80_layers_ms": 2690.91,
+      "pipe_80_layers_ms": 2589.49,
+      "sync_tok_per_sec": 0.74,
+      "pipe_tok_per_sec": 0.77,
+      "speedup": 1.04,
+      "overlap_efficiency_pct": 81.1,
+      "iqr_sync": [
+        33.6,
+        33.64
+      ],
+      "iqr_pipe": [
+        32.37,
+        32.37
+      ]
+    },
+    {
+      "M": 4,
+      "layer_mb": 431.58,
+      "pure_dma_ms": 32.07,
+      "pure_compute_ms": 1.57,
+      "sync_layer_ms": 33.59,
+      "pipe_layer_ms": 32.38,
+      "sync_80_layers_ms": 2686.88,
+      "pipe_80_layers_ms": 2590.19,
+      "sync_tok_per_sec": 1.49,
+      "pipe_tok_per_sec": 1.54,
+      "speedup": 1.04,
+      "overlap_efficiency_pct": 80.6,
+      "iqr_sync": [
+        33.58,
+        33.6
+      ],
+      "iqr_pipe": [
+        32.37,
+        32.38
+      ]
+    },
+    {
+      "M": 8,
+      "layer_mb": 431.58,
+      "pure_dma_ms": 32.07,
+      "pure_compute_ms": 1.57,
+      "sync_layer_ms": 33.62,
+      "pipe_layer_ms": 32.37,
+      "sync_80_layers_ms": 2689.21,
+      "pipe_80_layers_ms": 2589.42,
+      "sync_tok_per_sec": 2.97,
+      "pipe_tok_per_sec": 3.09,
+      "speedup": 1.04,
+      "overlap_efficiency_pct": 81.2,
+      "iqr_sync": [
+        33.61,
+        33.65
+      ],
+      "iqr_pipe": [
+        32.36,
+        32.39
+      ]
+    },
+    {
+      "M": 16,
+      "layer_mb": 431.58,
+      "pure_dma_ms": 32.07,
+      "pure_compute_ms": 1.58,
+      "sync_layer_ms": 33.6,
+      "pipe_layer_ms": 32.36,
+      "sync_80_layers_ms": 2688.3,
+      "pipe_80_layers_ms": 2588.78,
+      "sync_tok_per_sec": 5.95,
+      "pipe_tok_per_sec": 6.18,
+      "speedup": 1.04,
+      "overlap_efficiency_pct": 81.8,
+      "iqr_sync": [
+        33.59,
+        33.61
+      ],
+      "iqr_pipe": [
+        32.36,
+        32.36
+      ]
+    },
+    {
+      "M": 32,
+      "layer_mb": 431.58,
+      "pure_dma_ms": 32.07,
+      "pure_compute_ms": 2.07,
+      "sync_layer_ms": 33.96,
+      "pipe_layer_ms": 32.41,
+      "sync_80_layers_ms": 2716.51,
+      "pipe_80_layers_ms": 2592.5,
+      "sync_tok_per_sec": 11.78,
+      "pipe_tok_per_sec": 12.34,
+      "speedup": 1.05,
+      "overlap_efficiency_pct": 83.9,
+      "iqr_sync": [
+        33.96,
+        33.96
+      ],
+      "iqr_pipe": [
+        32.41,
+        32.41
+      ]
+    },
+    {
+      "M": 64,
+      "layer_mb": 431.58,
+      "pure_dma_ms": 32.07,
+      "pure_compute_ms": 2.43,
+      "sync_layer_ms": 34.28,
+      "pipe_layer_ms": 32.45,
+      "sync_80_layers_ms": 2742.37,
+      "pipe_80_layers_ms": 2595.95,
+      "sync_tok_per_sec": 23.34,
+      "pipe_tok_per_sec": 24.65,
+      "speedup": 1.06,
+      "overlap_efficiency_pct": 84.5,
+      "iqr_sync": [
+        34.28,
+        34.28
+      ],
+      "iqr_pipe": [
+        32.44,
+        32.51
+      ]
+    }
+  ]
+}

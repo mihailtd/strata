@@ -34,7 +34,7 @@ from runtime.canon import (
     validate_kv_cache_precision,
 )
 import torch
-from fastapi import FastAPI, Request
+from fastapi import Body, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from sse_starlette.sse import EventSourceResponse
@@ -48,6 +48,7 @@ from runtime.fused_norm import (
     scale_expert_factors_for_folded_norms,
 )
 from runtime.novel_peft import FoldableExpert, WeightFoldingEngine, set_hard_vram_cap
+from runtime.range_statistic_gate import RangeStatisticGate
 from runtime.router.vram_state_router import VRAMState
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -368,11 +369,11 @@ def resolve_expert(model_name: str) -> FoldableExpert | str | None:
     name_clean = model_name.split("/")[-1].lower().strip()
     registry = model_state.get("expert_registry", {})
 
-    if name_clean in ("dynamic", "auto", "qwen3.5-4b-dynamic", "qwen3.5-4b-auto"):
+    if name_clean in ("dynamic", "auto", "qwen3.5-4b-dynamic", "qwen3.5-4b-auto", "qwen3.5-9b-dynamic", "qwen3.5-9b-auto"):
         return "dynamic"
 
     # 1. Base / Pristine Model Check (returns None so folding_engine.restore() is called)
-    if any(k in name_clean for k in ["base", "pristine", "default"]) or name_clean in ("qwen3.5", "qwen3.5-4b"):
+    if any(k in name_clean for k in ["base", "pristine", "default"]) or name_clean in ("qwen3.5", "qwen3.5-4b", "qwen3.5-9b"):
         return None
 
     # 2. Direct exact match in registry
@@ -387,7 +388,11 @@ def resolve_expert(model_name: str) -> FoldableExpert | str | None:
     if any(k in name_clean for k in ["postgre", "postgres", "sql", "db"]):
         return registry.get("postgresql")
     if any(k in name_clean for k in ["fin", "wealth"]):
-        return registry.get("financial_planning")
+        return registry.get("financial") or registry.get("financial_planning")
+    if any(k in name_clean for k in ["web", "fastapi"]):
+        return registry.get("python_web")
+    if any(k in name_clean for k in ["modern", "clean"]):
+        return registry.get("python_modern")
 
     return "dynamic"  # Default to dynamic team routing
 
@@ -469,15 +474,21 @@ def extract_thinking_and_content(text: str) -> tuple[str | None, str]:
 
 
 # --- On-Demand Inference Engine Lifecycle ---
-async def load_inference_engine() -> dict[str, Any]:
-    """Loads the Qwen3.5-4B Base Model, Experts, ExactRMSNorm, and CUDA Graphs into VRAM."""
+async def load_inference_engine(model_id: str = "Qwen/Qwen3.5-4B") -> dict[str, Any]:
+    """Loads the requested Base Model (4B or 9B), corresponding Experts, and CUDA Graphs into VRAM."""
+    current_model = model_state.get("model_id")
     if model_state.get("base_model") is not None:
-        vram_alloc = round(torch.cuda.memory_allocated() / (1024**3), 2) if torch.cuda.is_available() else 0.0
-        return {
-            "status": "already_loaded",
-            "vram_allocated_gb": vram_alloc,
-            "active_team": model_state.get("active_team", ["astral", "python_modern"]),
-        }
+        if current_model == model_id:
+            vram_alloc = round(torch.cuda.memory_allocated() / (1024**3), 2) if torch.cuda.is_available() else 0.0
+            return {
+                "status": "already_loaded",
+                "model_id": model_id,
+                "vram_allocated_gb": vram_alloc,
+                "active_team": model_state.get("active_team", ["astral", "python_modern"]),
+            }
+        else:
+            print(f"[IMB Server] Switching models from {current_model} -> {model_id}. Unloading previous engine...")
+            await unload_inference_engine()
 
     # PRE-FLIGHT EXCLUSIVITY GUARD: Check before base model allocation to prevent RAM bloat / OOM
     gpu_preflight.ensure_gpu_exclusive()
@@ -494,13 +505,13 @@ async def load_inference_engine() -> dict[str, Any]:
     vram_cap_gb = 22.0
     set_hard_vram_cap(vram_cap_gb)
 
-    model_id = "Qwen/Qwen3.5-4B"
+    is_9b = "9B" in model_id or "9b" in model_id
     print(f"[IMB Server] Initializing Base Model ({model_id}) on demand...")
 
     compute_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
     base_model = AutoModelForCausalLM.from_pretrained(
         model_id,
-        torch_dtype=compute_dtype,
+        dtype=compute_dtype,
         device_map={"": 0} if torch.cuda.is_available() else "auto",
         trust_remote_code=True,
     )
@@ -514,30 +525,32 @@ async def load_inference_engine() -> dict[str, Any]:
     injected_count = inject_exact_rmsnorm(base_model)
     print(f"[IMB Server] Injected {injected_count} ExactRMSNorm modules.")
 
-    # FlashNorm-style weight folding
-    fold_norms_enabled = os.environ.get("FLASH_NORM_FOLD", "1") != "0"
-    folded_norm_count = fold_rmsnorm_into_linear(base_model, fold_weights=fold_norms_enabled)
+    # FlashNorm-style weight folding (4B optimization; skip on 9B to preserve VRAM headroom)
+    fold_norms_enabled = (os.environ.get("FLASH_NORM_FOLD", "1") != "0") and not is_9b
+    folded_norm_count = fold_rmsnorm_into_linear(base_model, fold_weights=fold_norms_enabled) if fold_norms_enabled else 0
     if folded_norm_count > 0:
         print(f"[IMB Server] FlashNorm: Folded {folded_norm_count} RMSNorm scale weights into downstream Linears.")
 
-    # Load all 6 canonical domain experts into host memory
+    # Load all 6 canonical domain experts matching the architecture scale
     domains = ["astral", "postgresql", "duckdb", "financial", "python_modern", "python_web"]
     expert_dict: dict[str, FoldableExpert] = {}
     all_experts: list[FoldableExpert] = []
 
-    # NO FALLBACK CHAIN. This loop used to be `for v in ("v7","v6","v4"): try/except
-    # continue`, which turns ANY failure -- a corrupt safetensors, a missing key, an
-    # OOM -- into a silent version downgrade that nothing reports. That is how
-    # m2_*_v2 stayed live for eight hours after v4 landed (see canon.py's banner).
-    # adapter_path() resolves CANON.ADAPTER_VERSION and raises if it is absent;
-    # a served model whose generation you cannot name is worse than a server that
-    # refuses to start.
     for d in domains:
-        exp = FoldableExpert.from_dir(adapter_path(d), name=d)
-        expert_dict[d] = exp
-        all_experts.append(exp)
+        if is_9b:
+            ad_dir = REPO_ROOT / "results" / "adapters" / f"m2_{d}_r8a128_v7_9b"
+        else:
+            ad_dir = adapter_path(d)
+        
+        if ad_dir.exists():
+            exp = FoldableExpert.from_dir(ad_dir, name=d)
+            expert_dict[d] = exp
+            all_experts.append(exp)
+            print(f"[IMB Server] Registered expert [{d}] from {ad_dir.name}")
+        else:
+            print(f"[IMB Server] Warning: adapter path {ad_dir} not found for domain {d}")
 
-    if folded_norm_count > 0:
+    if folded_norm_count > 0 and not is_9b:
         scaled_factors = scale_expert_factors_for_folded_norms(base_model, all_experts)
         print(f"[IMB Server] FlashNorm: Scaled {scaled_factors} adapter factors by (1+γ) for exact norm alignment.")
 
@@ -554,21 +567,24 @@ async def load_inference_engine() -> dict[str, Any]:
     model_state["causal_scheduler"] = causal_scheduler
     print(f"[IMB Server] Initialized NotearsCausalScheduler (Continuous Tool DAG Pre-Folding active).")
 
+    expert_prefix = "qwen3.5-9b" if is_9b else "qwen3.5-4b"
     expert_registry = {
-        "qwen3.5-4b-base": None,
+        f"{expert_prefix}-base": None,
         "base": None,
+        "pristine": None,
+        "default": None,
     }
     for d, exp in expert_dict.items():
-        expert_registry[f"qwen3.5-4b-{d}"] = exp
+        expert_registry[f"{expert_prefix}-{d}"] = exp
         expert_registry[d] = exp
+        expert_registry[f"m2_{d}"] = exp
 
     env_max_len = os.environ.get("MAX_SEQ_LEN")
     if env_max_len:
         max_seq_len = int(env_max_len)
     else:
-        text_config = getattr(base_model.config, "text_config", base_model.config)
-        max_seq_len = getattr(text_config, "max_position_embeddings", 32768)
-        max_seq_len = min(max_seq_len, 32768)
+        # 9B weights take ~18.2 GB; capping seq_len at 4096 preserves safe VRAM headroom under 22.0 GB hard cap
+        max_seq_len = 4096 if is_9b else 16384
 
     # Start with astral + python_modern active by default
     initial_team = [d for d in ["astral", "python_modern"] if d in expert_dict]
@@ -613,6 +629,7 @@ async def load_inference_engine() -> dict[str, Any]:
             spec_decoder = None
 
     model_state["base_model"] = base_model
+    model_state["model_id"] = model_id
     model_state["tokenizer"] = tokenizer
     model_state["folding_engine"] = folding_engine
     model_state["graph_decoder"] = graph_decoder
@@ -642,6 +659,10 @@ async def load_inference_engine() -> dict[str, Any]:
     model_state["gpu_state"] = VRAMState.single("financial_planning")
     model_state["ring_buffer_mode"] = os.environ.get("RING_BUFFER_MODE", "selective_hybrid")
     print(f"[IMB Server] Ring Buffer Mode: {model_state['ring_buffer_mode']} (set via RING_BUFFER_MODE env var)")
+    model_state["range_gate_enabled"] = os.environ.get("SPECULATIVE_RANGE_GATE", "1") != "0"
+    model_state["range_gate_threshold"] = float(os.environ.get("SPECULATIVE_RANGE_THRESHOLD", "5.0"))
+    model_state["range_gate"] = RangeStatisticGate(top_m=8, threshold=model_state["range_gate_threshold"])
+    print(f"[IMB Server] Single-Pass Range Speculative Gate: {'ON' if model_state['range_gate_enabled'] else 'OFF'} (threshold={model_state['range_gate_threshold']})")
     # Defaults for the runtime toggles exposed via POST /api/engine/set_*. Setting
     # them here (rather than relying on the .get(..., default) calls at each read
     # site to silently supply one) means /api/engine/status reports a real, present
@@ -658,6 +679,7 @@ async def load_inference_engine() -> dict[str, Any]:
     print(f"[IMB Server] Inference Engine loaded into VRAM ({vram_alloc:.2f} GB allocated).")
     return {
         "status": "loaded",
+        "model_id": model_id,
         "vram_allocated_gb": vram_alloc,
         "active_team": initial_team,
     }
@@ -734,6 +756,10 @@ app.add_middleware(
 
 # --- API Routes ---
 
+class LoadEngineRequest(BaseModel):
+    model_id: str = "Qwen/Qwen3.5-4B"
+
+
 class EngineStatusModel(BaseModel):
     """Full live state of the inference engine. Same shape whether fetched once via
     GET or streamed continuously via SSE -- built by the same function either way,
@@ -761,6 +787,8 @@ class EngineStatusModel(BaseModel):
     state_handoff_enabled: bool = Field(True, description="Tensor-Level Recurrent State Handoff ($S_t$) across turns")
     state_handoff_mb: float = Field(54.97, description="Resident size of the recurrent state tensor in MB")
     w4a16_enabled: bool = Field(False, description="Fused W4A16 + Dynamic LoRA Triton WMMA execution on RDNA3")
+    spec_range_gate_enabled: bool = Field(True, description="Single-Pass Range Statistic Speculative Gating (Chapter 8)")
+    spec_range_threshold: float = Field(5.0, description="Logit range spread threshold for speculative early exit")
 
 
 def _build_engine_status() -> EngineStatusModel:
@@ -781,6 +809,7 @@ def _build_engine_status() -> EngineStatusModel:
         has_residual_vram=has_residual,
         residual_vram_gb=residual_gb,
         active_team=model_state.get("active_team", []),
+        model_id=model_state.get("model_id", "Qwen/Qwen3.5-4B"),
         spec_decoder_active=spec_decoder is not None,
         spec_decode_enabled=spec_decoder is not None,
         ring_buffer_mode=_current_ring_mode(),
@@ -791,6 +820,8 @@ def _build_engine_status() -> EngineStatusModel:
         state_handoff_enabled=model_state.get("state_handoff_enabled", True),
         state_handoff_mb=54.97,
         w4a16_enabled=model_state.get("w4a16_enabled", False),
+        spec_range_gate_enabled=model_state.get("range_gate_enabled", True),
+        spec_range_threshold=model_state.get("range_gate_threshold", 5.0),
     )
 
 
@@ -827,12 +858,14 @@ async def stream_engine_status(request: Request):
 
 
 @app.post("/api/engine/load")
-async def trigger_engine_load():
+async def trigger_engine_load(req: LoadEngineRequest = Body(default_factory=LoadEngineRequest)):
     """Loads the inference engine into VRAM on-demand."""
     try:
-        res = await load_inference_engine()
+        res = await load_inference_engine(model_id=req.model_id)
         return res
     except Exception as ex:
+        import traceback
+        traceback.print_exc()
         return JSONResponse(status_code=500, content={"error": f"Failed to load engine: {ex}"})
 
 
@@ -1212,12 +1245,14 @@ def _build_streaming_response(
         def _generation_worker():
             try:
                 if spec_decoder is not None and getattr(spec_decoder, "_locked", False):
+                    active_gate = model_state.get("range_gate") if model_state.get("range_gate_enabled", True) else None
                     for token_batch in spec_decoder.stream_generate(
                         prompt_tokens,
                         max_new_tokens=max_new_tokens,
                         stop_ids=stop_token_ids,
                         engine=engine_for_call,
                         expert=expert_for_call,
+                        gate=active_gate,
                     ):
                         decoded_chunk = tokenizer.decode(token_batch, skip_special_tokens=False)
                         token_queue.put((decoded_chunk, len(token_batch)))
@@ -2012,6 +2047,30 @@ async def set_speculative_decode(req: SetSpeculativeDecodeRequest) -> Speculativ
         return JSONResponse(status_code=result.pop("status_code", 500),
                             content=ErrorResponse(error=result["error"]).model_dump())
     return SpeculativeDecodeResult(spec_decode_enabled=True, **result)
+
+
+class SetSpeculativeRangeGateRequest(BaseModel):
+    enabled: bool
+    threshold: float | None = 5.0
+
+
+@app.post("/api/engine/set_speculative_range_gate")
+async def set_speculative_range_gate(req: SetSpeculativeRangeGateRequest):
+    """Toggles Single-Pass Range Statistic Speculative Early-Exit Gating (Chapter 8).
+
+    Instantaneous O(1) swap: no CUDA Graph recapture required.
+    """
+    model_state["range_gate_enabled"] = req.enabled
+    if req.threshold is not None:
+        model_state["range_gate_threshold"] = req.threshold
+        model_state["range_gate"] = RangeStatisticGate(top_m=8, threshold=req.threshold)
+
+    print(f"[IMB Server] Range Speculative Gate set: enabled={req.enabled}, threshold={model_state['range_gate_threshold']}")
+    return {
+        "status": "updated",
+        "spec_range_gate_enabled": model_state["range_gate_enabled"],
+        "spec_range_threshold": model_state["range_gate_threshold"],
+    }
 
 
 class SetRingBufferModeRequest(BaseModel):

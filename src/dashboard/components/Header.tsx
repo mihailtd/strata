@@ -8,24 +8,49 @@ import { useEngineStatus } from "@/lib/useEngineStatus";
 
 export const AVAILABLE_BASE_MODELS = [
   { id: "Qwen/Qwen3.5-4B", name: "Qwen 3.5 4B (Dense BF16)", vram: "~10.5 GB", adapters_count: 6, available: true },
-  { id: "Qwen/Qwen3.5-2B", name: "Qwen 3.5 2B (Dense BF16)", vram: "~4.8 GB", adapters_count: 0, available: true },
-  { id: "Qwen/Qwen3.5-0.8B", name: "Qwen 3.5 0.8B (Draft Head)", vram: "~2.2 GB", adapters_count: 0, available: true },
-  { id: "Qwen/Qwen3.5-9B", name: "Qwen 3.5 9B (Dense BF16)", vram: "~18.2 GB", adapters_count: 0, available: true },
+  { id: "Qwen/Qwen3.5-9B", name: "Qwen 3.5 9B (Dense BF16)", vram: "~18.2 GB", adapters_count: 6, available: true },
+  { id: "Qwen/Qwen3.5-2B", name: "Qwen 3.5 2B (Dense BF16)", vram: "~4.8 GB", adapters_count: 0, available: false },
+  { id: "Qwen/Qwen3.5-0.8B", name: "Qwen 3.5 0.8B (Draft Head)", vram: "~2.2 GB", adapters_count: 0, available: false },
 ];
 
 export default function Header() {
   const pathname = usePathname();
-  // Live status: one SSE subscription shared across every component via the hook
-  // (see lib/useEngineStatus.ts). Header used to poll GET /api/engine/status on its
-  // own 3s setInterval, independently of whatever chat/page.tsx was doing -- the two
-  // could show different snapshots for up to 3s after any toggle. Both now read the
-  // same push-on-change stream, so nothing here calls fetchStatus() after an action
-  // anymore: the SSE frame for the new state arrives on its own, typically within a
-  // second of the backend committing it.
   const { status, refetch } = useEngineStatus();
   const [isLoading, setIsLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>("Qwen/Qwen3.5-4B");
   const [showModelDropdown, setShowModelDropdown] = useState(false);
+
+  // Sync selectedModel with live loaded model
+  React.useEffect(() => {
+    if (status?.model_id && status?.loaded) {
+      setSelectedModel(status.model_id);
+    }
+  }, [status?.model_id, status?.loaded]);
+
+  const activeModelId = status?.loaded ? (status.model_id || selectedModel) : selectedModel;
+  const activeModelMeta = AVAILABLE_BASE_MODELS.find((m) => m.id === activeModelId) || AVAILABLE_BASE_MODELS[0];
+
+  const handleSelectModel = async (modelId: string) => {
+    setSelectedModel(modelId);
+    setShowModelDropdown(false);
+
+    if (status?.loaded && status?.model_id !== modelId) {
+      // Direct model switch
+      setIsLoading(true);
+      try {
+        await fetch("/api/engine/load", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model_id: modelId }),
+        });
+        await refetch();
+      } catch (e) {
+        alert("Failed to switch model: " + e);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
 
   const toggleEngine = async () => {
     setIsLoading(true);
@@ -113,42 +138,61 @@ export default function Header() {
         <div className="relative">
           <button
             onClick={() => setShowModelDropdown(!showModelDropdown)}
-            disabled={status?.loaded || isLoading}
-            className="flex items-center gap-1.5 rounded-lg border border-[rgba(255,255,255,0.1)] bg-black/40 px-3 py-1.5 text-xs font-mono text-slate-300 hover:border-[#00f2ff]/40 transition-colors disabled:opacity-60"
+            disabled={isLoading}
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-mono transition-all ${
+              status?.loaded
+                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:border-emerald-400"
+                : "border-[rgba(255,255,255,0.1)] bg-black/40 text-slate-300 hover:border-[#00f2ff]/40"
+            } disabled:opacity-60`}
           >
-            <Cpu className="h-3.5 w-3.5 text-[#00f2ff]" />
-            <span className="font-bold">{AVAILABLE_BASE_MODELS.find((m) => m.id === selectedModel)?.name.split(" ")[0]}</span>
+            <Cpu className={`h-3.5 w-3.5 ${status?.loaded ? "text-emerald-400" : "text-[#00f2ff]"}`} />
+            <span className="font-bold">{activeModelMeta.name.split(" (")[0]}</span>
+            {status?.loaded && (
+              <span className="rounded bg-emerald-500/20 px-1.5 py-0.2 text-[10px] text-emerald-300 font-semibold">
+                LIVE
+              </span>
+            )}
             <ChevronDown className="h-3 w-3 text-slate-400" />
           </button>
 
-          {showModelDropdown && !status?.loaded && (
-            <div className="absolute left-0 top-full mt-2 w-64 rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(12,16,24,0.95)] p-2 shadow-2xl backdrop-blur-2xl z-50">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2 py-1">
-                Base Architecture
+          {showModelDropdown && (
+            <div className="absolute left-0 top-full mt-2 w-72 rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(12,16,24,0.98)] p-2 shadow-2xl backdrop-blur-2xl z-50">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2 py-1 flex justify-between">
+                <span>Select Architecture</span>
+                {status?.loaded && <span className="text-emerald-400 font-mono">Live: {status.model_id?.split("/")[1]}</span>}
               </div>
-              {AVAILABLE_BASE_MODELS.map((m) => (
-                <button
-                  key={m.id}
-                  disabled={!m.available}
-                  onClick={() => {
-                    setSelectedModel(m.id);
-                    setShowModelDropdown(false);
-                  }}
-                  className={`w-full text-left rounded-lg p-2 text-xs transition-all flex flex-col gap-0.5 ${
-                    selectedModel === m.id
-                      ? "bg-[#00f2ff]/15 border border-[#00f2ff]/30 text-white font-bold"
-                      : m.available
-                      ? "hover:bg-white/5 text-slate-300"
-                      : "opacity-40 cursor-not-allowed text-slate-500"
-                  }`}
-                >
-                  <div className="flex justify-between items-center">
-                    <span>{m.name}</span>
-                    <span className="font-mono text-[10px] text-[#00f2ff]">{m.vram}</span>
-                  </div>
-                  {!m.available && <span className="text-[10px] text-amber-400">Coming soon</span>}
-                </button>
-              ))}
+              {AVAILABLE_BASE_MODELS.map((m) => {
+                const isCurrentLive = status?.loaded && (status.model_id === m.id);
+                const isSelected = selectedModel === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    disabled={!m.available || isLoading}
+                    onClick={() => handleSelectModel(m.id)}
+                    className={`w-full text-left rounded-lg p-2 text-xs transition-all flex flex-col gap-0.5 mt-1 ${
+                      isCurrentLive
+                        ? "bg-emerald-500/15 border border-emerald-500/40 text-white font-bold"
+                        : isSelected
+                        ? "bg-[#00f2ff]/15 border border-[#00f2ff]/30 text-white font-bold"
+                        : m.available
+                        ? "hover:bg-white/5 text-slate-300"
+                        : "opacity-40 cursor-not-allowed text-slate-500"
+                    }`}
+                  >
+                    <div className="flex justify-between items-center">
+                      <span className="flex items-center gap-1.5">
+                        {isCurrentLive && <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />}
+                        {m.name}
+                      </span>
+                      <span className="font-mono text-[10px] text-[#00f2ff]">{m.vram}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-[10px] text-slate-400">
+                      <span>{m.adapters_count > 0 ? `6 Domain Adapters Ready` : "No Adapters"}</span>
+                      {!m.available && <span className="text-amber-400">Coming soon</span>}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>

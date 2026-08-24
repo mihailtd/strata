@@ -1,0 +1,944 @@
+{
+  "benchmark": "gee_trajectory_drift",
+  "nominal_level": 0.05,
+  "size": {
+    "nominal": 0.05,
+    "K": 30,
+    "T": 20,
+    "rows": [
+      {
+        "rho": 0.0,
+        "K": 30,
+        "T": 20,
+        "naive_independence": {
+          "rejection_rate": 0.061,
+          "mc_standard_error": 0.00436955375295922,
+          "ci95": [
+            0.05243567464419993,
+            0.06956432535580007
+          ]
+        },
+        "independence_sandwich": {
+          "rejection_rate": 0.07533333333333334,
+          "mc_standard_error": 0.004818652032198154,
+          "ci95": [
+            0.06588877535022496,
+            0.08477789131644171
+          ]
+        },
+        "ar1_sandwich": {
+          "rejection_rate": 0.07433333333333333,
+          "mc_standard_error": 0.004789150547118243,
+          "ci95": [
+            0.06494659826098158,
+            0.08372006840568509
+          ]
+        },
+        "ar1_sandwich_df": {
+          "rejection_rate": 0.07133333333333333,
+          "mc_standard_error": 0.004699109450696975,
+          "ci95": [
+            0.06212307880996726,
+            0.0805435878566994
+          ]
+        },
+        "exchangeable_sandwich": {
+          "rejection_rate": 0.07533333333333334,
+          "mc_standard_error": 0.004818652032198154,
+          "ci95": [
+            0.06588877535022496,
+            0.08477789131644171
+          ]
+        },
+        "_diagnostics": {
+          "alpha_hat_mean": -0.0021549969815572558,
+          "alpha_true": 0.0,
+          "fit_ms_median": 0.9508550010650652,
+          "replicates": 3000
+        }
+      },
+      {
+        "rho": 0.3,
+        "K": 30,
+        "T": 20,
+        "naive_independence": {
+          "rejection_rate": 0.13,
+          "mc_standard_error": 0.0061400325732035,
+          "ci95": [
+            0.11796553615652114,
+            0.14203446384347887
+          ]
+        },
+        "independence_sandwich": {
+          "rejection_rate": 0.06166666666666667,
+          "mc_standard_error": 0.0043918063439731675,
+          "ci95": [
+            0.05305872623247926,
+            0.07027460710085408
+          ]
+        },
+        "ar1_sandwich": {
+          "rejection_rate": 0.06233333333333333,
+          "mc_standard_error": 0.004413913187822074,
+          "ci95": [
+            0.05368206348520207,
+            0.0709846031814646
+          ]
+        },
+        "ar1_sandwich_df": {
+          "rejection_rate": 0.057666666666666665,
+          "mc_standard_error": 0.004256024053120558,
+          "ci95": [
+            0.04932485952255037,
+            0.06600847381078295
+          ]
+        },
+        "exchangeable_sandwich": {
+          "rejection_rate": 0.06166666666666667,
+          "mc_standard_error": 0.0043918063439731675,
+          "ci95": [
+            0.05305872623247926,
+            0.07027460710085408
+          ]
+        },
+        "_diagnostics": {
+          "alpha_hat_mean": 0.29549573346879543,
+          "alpha_true": 0.3,
+          "fit_ms_median": 1.2722589999611955,
+          "replicates": 3000
+        }
+      },
+      {
+        "rho": 0.6,
+        "K": 30,
+        "T": 20,
+        "naive_independence": {
+          "rejection_rate": 0.24833333333333332,
+          "mc_standard_error": 0.007888047685980119,
+          "ci95": [
+            0.23287275986881228,
+            0.26379390679785436
+          ]
+        },
+        "independence_sandwich": {
+          "rejection_rate": 0.06433333333333334,
+          "mc_standard_error": 0.0044793807442381865,
+          "ci95": [
+            0.05555374707462649,
+            0.07311291959204018
+          ]
+        },
+        "ar1_sandwich": {
+          "rejection_rate": 0.062,
+          "mc_standard_error": 0.004402877846742211,
+          "ci95": [
+            0.05337035942038527,
+            0.07062964057961474
+          ]
+        },
+        "ar1_sandwich_df": {
+          "rejection_rate": 0.06,
+          "mc_standard_error": 0.0043358966777357595,
+          "ci95": [
+            0.05150164251163791,
+            0.06849835748836208
+          ]
+        },
+        "exchangeable_sandwich": {
+          "rejection_rate": 0.06433333333333334,
+          "mc_standard_error": 0.0044793807442381865,
+          "ci95": [
+            0.05555374707462649,
+            0.07311291959204018
+          ]
+        },
+        "_diagnostics": {
+          "alpha_hat_mean": 0.5944807628177968,
+          "alpha_true": 0.6,
+          "fit_ms_median": 1.2828889994125348,
+          "replicates": 3000
+        }
+      },
+      {
+        "rho": 0.9,
+        "K": 30,
+        "T": 20,
+        "naive_independence": {
+          "rejection_rate": 0.317,
+          "mc_standard_error": 0.008495312432944026,
+          "ci95": [
+            0.3003491876314297,
+            0.3336508123685703
+          ]
+        },
+        "independence_sandwich": {
+          "rejection_rate": 0.060333333333333336,
+          "mc_standard_error": 0.004347153176590485,
+          "ci95": [
+            0.05181291310721599,
+            0.06885375355945068
+          ]
+        },
+        "ar1_sandwich": {
+          "rejection_rate": 0.059666666666666666,
+          "mc_standard_error": 0.004324602315263819,
+          "ci95": [
+            0.05119044612874958,
+            0.06814288720458375
+          ]
+        },
+        "ar1_sandwich_df": {
+          "rejection_rate": 0.05633333333333333,
+          "mc_standard_error": 0.004209508636760705,
+          "ci95": [
+            0.04808269640528235,
+            0.06458397026138432
+          ]
+        },
+        "exchangeable_sandwich": {
+          "rejection_rate": 0.060333333333333336,
+          "mc_standard_error": 0.004347153176590485,
+          "ci95": [
+            0.05181291310721599,
+            0.06885375355945068
+          ]
+        },
+        "_diagnostics": {
+          "alpha_hat_mean": 0.8957817403075397,
+          "alpha_true": 0.9,
+          "fit_ms_median": 1.597735999894212,
+          "replicates": 3000
+        }
+      }
+    ]
+  },
+  "power": {
+    "rho": 0.6,
+    "K": 30,
+    "T": 20,
+    "rows": [
+      {
+        "slope": 0.005,
+        "naive_independence": {
+          "rejection_rate": 0.2713333333333333,
+          "mc_standard_error": 0.008118118738467173,
+          "ci95": [
+            0.25542182060593766,
+            0.287244846060729
+          ]
+        },
+        "independence_sandwich": {
+          "rejection_rate": 0.08333333333333333,
+          "mc_standard_error": 0.0050460839234958196,
+          "ci95": [
+            0.07344300884328152,
+            0.09322365782338514
+          ]
+        },
+        "ar1_sandwich": {
+          "rejection_rate": 0.076,
+          "mc_standard_error": 0.00483818147654674,
+          "ci95": [
+            0.0665171643059684,
+            0.0854828356940316
+          ]
+        },
+        "ar1_sandwich_df": {
+          "rejection_rate": 0.071,
+          "mc_standard_error": 0.004688958661934794,
+          "ci95": [
+            0.061809641022607796,
+            0.08019035897739218
+          ]
+        },
+        "exchangeable_sandwich": {
+          "rejection_rate": 0.08333333333333333,
+          "mc_standard_error": 0.0050460839234958196,
+          "ci95": [
+            0.07344300884328152,
+            0.09322365782338514
+          ]
+        },
+        "_diagnostics": {
+          "alpha_hat_mean": 0.5941547521711851,
+          "alpha_true": 0.6,
+          "fit_ms_median": 1.2811860015062848,
+          "replicates": 3000
+        }
+      },
+      {
+        "slope": 0.01,
+        "naive_independence": {
+          "rejection_rate": 0.3606666666666667,
+          "mc_standard_error": 0.008767101805846335,
+          "ci95": [
+            0.3434831471272079,
+            0.3778501862061255
+          ]
+        },
+        "independence_sandwich": {
+          "rejection_rate": 0.12066666666666667,
+          "mc_standard_error": 0.005947162410825918,
+          "ci95": [
+            0.10901022834144787,
+            0.13232310499188546
+          ]
+        },
+        "ar1_sandwich": {
+          "rejection_rate": 0.13133333333333333,
+          "mc_standard_error": 0.006166708708565396,
+          "ci95": [
+            0.11924658426454515,
+            0.1434200824021215
+          ]
+        },
+        "ar1_sandwich_df": {
+          "rejection_rate": 0.126,
+          "mc_standard_error": 0.006058712734566643,
+          "ci95": [
+            0.11412492304024938,
+            0.13787507695975063
+          ]
+        },
+        "exchangeable_sandwich": {
+          "rejection_rate": 0.12066666666666667,
+          "mc_standard_error": 0.005947162410825918,
+          "ci95": [
+            0.10901022834144787,
+            0.13232310499188546
+          ]
+        },
+        "_diagnostics": {
+          "alpha_hat_mean": 0.5946003098315067,
+          "alpha_true": 0.6,
+          "fit_ms_median": 1.28046049940167,
+          "replicates": 3000
+        }
+      },
+      {
+        "slope": 0.02,
+        "naive_independence": {
+          "rejection_rate": 0.5866666666666667,
+          "mc_standard_error": 0.008990529997148645,
+          "ci95": [
+            0.5690452278722553,
+            0.604288105461078
+          ]
+        },
+        "independence_sandwich": {
+          "rejection_rate": 0.2786666666666667,
+          "mc_standard_error": 0.008185588057791075,
+          "ci95": [
+            0.26262291407339616,
+            0.2947104192599372
+          ]
+        },
+        "ar1_sandwich": {
+          "rejection_rate": 0.303,
+          "mc_standard_error": 0.008390292009221133,
+          "ci95": [
+            0.2865550276619266,
+            0.3194449723380734
+          ]
+        },
+        "ar1_sandwich_df": {
+          "rejection_rate": 0.28933333333333333,
+          "mc_standard_error": 0.00827887986697789,
+          "ci95": [
+            0.2731067287940567,
+            0.30555993787261
+          ]
+        },
+        "exchangeable_sandwich": {
+          "rejection_rate": 0.2786666666666667,
+          "mc_standard_error": 0.008185588057791075,
+          "ci95": [
+            0.26262291407339616,
+            0.2947104192599372
+          ]
+        },
+        "_diagnostics": {
+          "alpha_hat_mean": 0.5945892454644192,
+          "alpha_true": 0.6,
+          "fit_ms_median": 1.2804950019926764,
+          "replicates": 3000
+        }
+      },
+      {
+        "slope": 0.04,
+        "naive_independence": {
+          "rejection_rate": 0.945,
+          "mc_standard_error": 0.004162331077653484,
+          "ci95": [
+            0.9368418310877992,
+            0.9531581689122007
+          ]
+        },
+        "independence_sandwich": {
+          "rejection_rate": 0.7703333333333333,
+          "mc_standard_error": 0.007679407288085214,
+          "ci95": [
+            0.7552816950486863,
+            0.7853849716179804
+          ]
+        },
+        "ar1_sandwich": {
+          "rejection_rate": 0.8193333333333334,
+          "mc_standard_error": 0.0070243913668070965,
+          "ci95": [
+            0.8055655262543915,
+            0.8331011404122752
+          ]
+        },
+        "ar1_sandwich_df": {
+          "rejection_rate": 0.8106666666666666,
+          "mc_standard_error": 0.007152766882408099,
+          "ci95": [
+            0.7966472435771468,
+            0.8246860897561865
+          ]
+        },
+        "exchangeable_sandwich": {
+          "rejection_rate": 0.7703333333333333,
+          "mc_standard_error": 0.007679407288085214,
+          "ci95": [
+            0.7552816950486863,
+            0.7853849716179804
+          ]
+        },
+        "_diagnostics": {
+          "alpha_hat_mean": 0.5948016810516916,
+          "alpha_true": 0.6,
+          "fit_ms_median": 1.2807310013158713,
+          "replicates": 3000
+        }
+      }
+    ]
+  },
+  "cluster_boundary": {
+    "rho": 0.6,
+    "T": 20,
+    "rows": [
+      {
+        "K": 3,
+        "naive_independence": {
+          "rejection_rate": 0.288,
+          "mc_standard_error": 0.01169204858012487,
+          "ci95": [
+            0.26508358478295524,
+            0.3109164152170447
+          ]
+        },
+        "independence_sandwich": {
+          "rejection_rate": 0.2673333333333333,
+          "mc_standard_error": 0.011427050427887393,
+          "ci95": [
+            0.244936314494674,
+            0.2897303521719926
+          ]
+        },
+        "ar1_sandwich": {
+          "rejection_rate": 0.2633333333333333,
+          "mc_standard_error": 0.011372155729057087,
+          "ci95": [
+            0.24104390810438142,
+            0.2856227585622852
+          ]
+        },
+        "ar1_sandwich_df": {
+          "rejection_rate": 0.194,
+          "mc_standard_error": 0.010209929807137101,
+          "ci95": [
+            0.17398853757801128,
+            0.21401146242198874
+          ]
+        },
+        "exchangeable_sandwich": {
+          "rejection_rate": 0.2673333333333333,
+          "mc_standard_error": 0.011427050427887393,
+          "ci95": [
+            0.244936314494674,
+            0.2897303521719926
+          ]
+        },
+        "_diagnostics": {
+          "alpha_hat_mean": 0.5375632359335007,
+          "alpha_true": 0.6,
+          "fit_ms_median": 0.27169899840373546,
+          "replicates": 1500
+        }
+      },
+      {
+        "K": 5,
+        "naive_independence": {
+          "rejection_rate": 0.256,
+          "mc_standard_error": 0.011268362791461766,
+          "ci95": [
+            0.23391400892873493,
+            0.2780859910712651
+          ]
+        },
+        "independence_sandwich": {
+          "rejection_rate": 0.15666666666666668,
+          "mc_standard_error": 0.009385173492348528,
+          "ci95": [
+            0.13827172662166357,
+            0.1750616067116698
+          ]
+        },
+        "ar1_sandwich": {
+          "rejection_rate": 0.15666666666666668,
+          "mc_standard_error": 0.009385173492348528,
+          "ci95": [
+            0.13827172662166357,
+            0.1750616067116698
+          ]
+        },
+        "ar1_sandwich_df": {
+          "rejection_rate": 0.12533333333333332,
+          "mc_standard_error": 0.008548874736435156,
+          "ci95": [
+            0.10857753884992041,
+            0.14208912781674624
+          ]
+        },
+        "exchangeable_sandwich": {
+          "rejection_rate": 0.15666666666666668,
+          "mc_standard_error": 0.009385173492348528,
+          "ci95": [
+            0.13827172662166357,
+            0.1750616067116698
+          ]
+        },
+        "_diagnostics": {
+          "alpha_hat_mean": 0.564427019268019,
+          "alpha_true": 0.6,
+          "fit_ms_median": 0.3367529989191098,
+          "replicates": 1500
+        }
+      },
+      {
+        "K": 10,
+        "naive_independence": {
+          "rejection_rate": 0.25666666666666665,
+          "mc_standard_error": 0.011277969347031964,
+          "ci95": [
+            0.234561846746484,
+            0.2787714865868493
+          ]
+        },
+        "independence_sandwich": {
+          "rejection_rate": 0.09466666666666666,
+          "mc_standard_error": 0.007558875087775468,
+          "ci95": [
+            0.07985127149462674,
+            0.10948206183870658
+          ]
+        },
+        "ar1_sandwich": {
+          "rejection_rate": 0.08666666666666667,
+          "mc_standard_error": 0.007264321741936433,
+          "ci95": [
+            0.07242859605247126,
+            0.10090473728086208
+          ]
+        },
+        "ar1_sandwich_df": {
+          "rejection_rate": 0.07466666666666667,
+          "mc_standard_error": 0.006786828201526618,
+          "ci95": [
+            0.0613644833916745,
+            0.08796884994165885
+          ]
+        },
+        "exchangeable_sandwich": {
+          "rejection_rate": 0.09466666666666666,
+          "mc_standard_error": 0.007558875087775468,
+          "ci95": [
+            0.07985127149462674,
+            0.10948206183870658
+          ]
+        },
+        "_diagnostics": {
+          "alpha_hat_mean": 0.5855080787492042,
+          "alpha_true": 0.6,
+          "fit_ms_median": 0.5813950010633562,
+          "replicates": 1500
+        }
+      },
+      {
+        "K": 20,
+        "naive_independence": {
+          "rejection_rate": 0.262,
+          "mc_standard_error": 0.01135358974069435,
+          "ci95": [
+            0.2397469641082391,
+            0.28425303589176093
+          ]
+        },
+        "independence_sandwich": {
+          "rejection_rate": 0.07266666666666667,
+          "mc_standard_error": 0.006702547884808295,
+          "ci95": [
+            0.05952967281244241,
+            0.08580366052089093
+          ]
+        },
+        "ar1_sandwich": {
+          "rejection_rate": 0.074,
+          "mc_standard_error": 0.006758895373259351,
+          "ci95": [
+            0.06075256506841167,
+            0.08724743493158832
+          ]
+        },
+        "ar1_sandwich_df": {
+          "rejection_rate": 0.06466666666666666,
+          "mc_standard_error": 0.0063500597839122154,
+          "ci95": [
+            0.05222054949019872,
+            0.07711278384313461
+          ]
+        },
+        "exchangeable_sandwich": {
+          "rejection_rate": 0.07266666666666667,
+          "mc_standard_error": 0.006702547884808295,
+          "ci95": [
+            0.05952967281244241,
+            0.08580366052089093
+          ]
+        },
+        "_diagnostics": {
+          "alpha_hat_mean": 0.5916844585680308,
+          "alpha_true": 0.6,
+          "fit_ms_median": 1.0807545022544218,
+          "replicates": 1500
+        }
+      },
+      {
+        "K": 40,
+        "naive_independence": {
+          "rejection_rate": 0.25866666666666666,
+          "mc_standard_error": 0.011306582808913347,
+          "ci95": [
+            0.2365057643611965,
+            0.2808275689721368
+          ]
+        },
+        "independence_sandwich": {
+          "rejection_rate": 0.06466666666666666,
+          "mc_standard_error": 0.0063500597839122154,
+          "ci95": [
+            0.05222054949019872,
+            0.07711278384313461
+          ]
+        },
+        "ar1_sandwich": {
+          "rejection_rate": 0.062,
+          "mc_standard_error": 0.0062266095643348845,
+          "ci95": [
+            0.049795845253903626,
+            0.07420415474609637
+          ]
+        },
+        "ar1_sandwich_df": {
+          "rejection_rate": 0.056,
+          "mc_standard_error": 0.005936553433320268,
+          "ci95": [
+            0.044364355270692275,
+            0.06763564472930772
+          ]
+        },
+        "exchangeable_sandwich": {
+          "rejection_rate": 0.06466666666666666,
+          "mc_standard_error": 0.0063500597839122154,
+          "ci95": [
+            0.05222054949019872,
+            0.07711278384313461
+          ]
+        },
+        "_diagnostics": {
+          "alpha_hat_mean": 0.5963079252191917,
+          "alpha_true": 0.6,
+          "fit_ms_median": 1.6772829985711724,
+          "replicates": 1500
+        }
+      },
+      {
+        "K": 80,
+        "naive_independence": {
+          "rejection_rate": 0.25466666666666665,
+          "mc_standard_error": 0.011249046050089627,
+          "ci95": [
+            0.23261853640849098,
+            0.2767147969248423
+          ]
+        },
+        "independence_sandwich": {
+          "rejection_rate": 0.054,
+          "mc_standard_error": 0.005835751879578158,
+          "ci95": [
+            0.04256192631602681,
+            0.06543807368397318
+          ]
+        },
+        "ar1_sandwich": {
+          "rejection_rate": 0.05333333333333334,
+          "mc_standard_error": 0.005801660043406478,
+          "ci95": [
+            0.04196207964825664,
+            0.06470458701841003
+          ]
+        },
+        "ar1_sandwich_df": {
+          "rejection_rate": 0.050666666666666665,
+          "mc_standard_error": 0.005662717578192503,
+          "ci95": [
+            0.039567740213409364,
+            0.06176559311992397
+          ]
+        },
+        "exchangeable_sandwich": {
+          "rejection_rate": 0.054,
+          "mc_standard_error": 0.005835751879578158,
+          "ci95": [
+            0.04256192631602681,
+            0.06543807368397318
+          ]
+        },
+        "_diagnostics": {
+          "alpha_hat_mean": 0.5973271962227601,
+          "alpha_true": 0.6,
+          "fit_ms_median": 3.2707569989725016,
+          "replicates": 1500
+        }
+      }
+    ]
+  },
+  "latency": {
+    "rows": [
+      {
+        "K": 3,
+        "T": 10,
+        "n_obs": 30,
+        "fit_ms": {
+          "median": 0.16837200018926524,
+          "q1": 0.16763550047471654,
+          "q3": 0.17092650159611367,
+          "iqr": 0.00329100112139713,
+          "min": 0.1673499973549042,
+          "max": 0.17845099864643998,
+          "mean": 0.17018528576175282,
+          "n": 7
+        }
+      },
+      {
+        "K": 3,
+        "T": 20,
+        "n_obs": 60,
+        "fit_ms": {
+          "median": 0.17783899966161698,
+          "q1": 0.17765949996828567,
+          "q3": 0.17978849791688845,
+          "iqr": 0.0021289979486027732,
+          "min": 0.17739900067681447,
+          "max": 0.18508400171413086,
+          "mean": 0.17931685683184437,
+          "n": 7
+        }
+      },
+      {
+        "K": 3,
+        "T": 50,
+        "n_obs": 150,
+        "fit_ms": {
+          "median": 0.2655570024217013,
+          "q1": 0.26532150150160305,
+          "q3": 0.2684975006559398,
+          "iqr": 0.0031759991543367505,
+          "min": 0.26493599943933077,
+          "max": 0.2744740013440605,
+          "mean": 0.2675150010743112,
+          "n": 7
+        }
+      },
+      {
+        "K": 10,
+        "T": 10,
+        "n_obs": 100,
+        "fit_ms": {
+          "median": 0.6651609983236995,
+          "q1": 0.6615039983444149,
+          "q3": 0.6670189995929832,
+          "iqr": 0.005515001248568296,
+          "min": 0.6574759972863831,
+          "max": 0.6693379982607439,
+          "mean": 0.664145855677946,
+          "n": 7
+        }
+      },
+      {
+        "K": 10,
+        "T": 20,
+        "n_obs": 200,
+        "fit_ms": {
+          "median": 0.580750001972774,
+          "q1": 0.5758300012530526,
+          "q3": 0.5836950003867969,
+          "iqr": 0.007864999133744277,
+          "min": 0.5747579998569563,
+          "max": 0.584186000196496,
+          "mean": 0.5798205721865608,
+          "n": 7
+        }
+      },
+      {
+        "K": 10,
+        "T": 50,
+        "n_obs": 500,
+        "fit_ms": {
+          "median": 0.5477470003825147,
+          "q1": 0.5430874989542644,
+          "q3": 0.5511325016414048,
+          "iqr": 0.008045002687140368,
+          "min": 0.5408830002124887,
+          "max": 0.5556710020755418,
+          "mean": 0.5475344291231262,
+          "n": 7
+        }
+      },
+      {
+        "K": 30,
+        "T": 10,
+        "n_obs": 300,
+        "fit_ms": {
+          "median": 1.524811999843223,
+          "q1": 1.5198880009847926,
+          "q3": 1.5304179996746825,
+          "iqr": 0.010529998689889908,
+          "min": 1.5173680003499612,
+          "max": 1.5313049989345018,
+          "mean": 1.5248710000638053,
+          "n": 7
+        }
+      },
+      {
+        "K": 30,
+        "T": 20,
+        "n_obs": 600,
+        "fit_ms": {
+          "median": 1.2622299982467666,
+          "q1": 1.2573414987855358,
+          "q3": 1.2650964981730795,
+          "iqr": 0.0077549993875436485,
+          "min": 1.255117000255268,
+          "max": 1.2745049971272238,
+          "mean": 1.2623897127923556,
+          "n": 7
+        }
+      },
+      {
+        "K": 30,
+        "T": 50,
+        "n_obs": 1500,
+        "fit_ms": {
+          "median": 1.5145629986363929,
+          "q1": 1.5080110024427995,
+          "q3": 1.51614099922881,
+          "iqr": 0.008129996786010452,
+          "min": 1.5052449998620432,
+          "max": 1.5300020022550598,
+          "mean": 1.5140162862995308,
+          "n": 7
+        }
+      }
+    ]
+  },
+  "real_multi_turn": {
+    "source": "results/benchmarks/multi_turn_execution_results_v4.json",
+    "adapter_version": "v4",
+    "arms": {
+      "Arm A (Base 4B)": {
+        "n_turns": 15,
+        "mean": 0.5536
+      },
+      "Arm B (Oracle Swarm)": {
+        "n_turns": 15,
+        "mean": 0.5988666666666667
+      },
+      "Arm C (Autonomous Engine)": {
+        "n_turns": 15,
+        "mean": 0.5988666666666667
+      }
+    },
+    "verdict": {
+      "status": "ok",
+      "drifting": false,
+      "slope": 0.0013053693784328751,
+      "z_robust": 0.787297553666543,
+      "p_robust": 0.4311077014171195,
+      "z_naive": 0.24978740580573344,
+      "p_naive": 0.8027517597954632,
+      "alpha_hat": -0.39700578798641145,
+      "n_clusters": 3,
+      "n_obs": 45,
+      "fit_ms": 0.26712999897426926
+    },
+    "median_fold_latency_ms": 0.92
+  },
+  "verdict": {
+    "naive_worst_false_alarm_rate": 0.317,
+    "ar1_sandwich_worst_false_alarm_rate": 0.07433333333333333,
+    "nominal": 0.05,
+    "false_alarm_reduction": 4.26457399103139
+  },
+  "config": {
+    "ADAPTER_VERSION": "v7",
+    "MAX_NEW_TOKENS": 2048,
+    "BASE_MODEL": "Qwen/Qwen3.5-4B",
+    "VRAM_CAP_GB": 22.0,
+    "GPU_SAFETY_THRESHOLD_GB": 6.0,
+    "GREEDY": true,
+    "LORA_RANK": 8,
+    "LORA_ALPHA": 128,
+    "KV_CACHE_DTYPE": "bfloat16",
+    "ATTENTION_BACKEND": "sdpa"
+  },
+  "cpu_guard": {
+    "applied": true,
+    "threads": 8,
+    "gpu_permitted": false,
+    "device_env_cleared": [
+      "CUDA_VISIBLE_DEVICES",
+      "HIP_VISIBLE_DEVICES",
+      "ROCR_VISIBLE_DEVICES"
+    ],
+    "numpy_imported_before_guard": false,
+    "torch_imported_before_guard": false
+  },
+  "gpu_verification": {
+    "torch_imported": false,
+    "cuda_initialized": false,
+    "verified": true
+  },
+  "platform": {
+    "python": "3.14.7",
+    "platform": "Linux-7.2.0-1-cachyos-x86_64-with-glibc2.44",
+    "processor": "x86_64",
+    "cpu_count": 24,
+    "cpu_model": "AMD Ryzen 9 9900X 12-Core Processor",
+    "numpy": "2.4.6",
+    "scipy": "1.18.0"
+  },
+  "timestamp": "2026-08-24T21:39:08+0300",
+  "run_config": {
+    "out": "/home/mihai/Projects/gnn-experiment/results/benchmarks/gee_trajectory_drift.json",
+    "replicates": 3000,
+    "turns": 20,
+    "clusters": 30,
+    "seed": 20260824,
+    "threads": 8,
+    "repeats": 7,
+    "multi_turn_artifact": "/home/mihai/Projects/gnn-experiment/results/benchmarks/multi_turn_execution_results_v4.json"
+  }
+}

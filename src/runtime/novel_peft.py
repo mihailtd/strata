@@ -1324,7 +1324,20 @@ class WeightFoldingEngine:
         for e in self.experts:
             e.to(ref.device, ref.dtype)
 
-        self.pristine = {k: v.detach().clone() for k, v in self.slots.items()} if keep_pristine else {}
+        # Decide whether to store pristine baseline weights on GPU or CPU host RAM
+        # If total weight bytes exceed 6.0 GB (e.g. 9B/27B/70B models), store on CPU
+        # to avoid duplicating 18+ GB in VRAM.
+        total_slot_bytes = sum(v.numel() * v.element_size() for v in self.slots.values())
+        self.pristine_on_cpu = total_slot_bytes > (6.0 * 1024**3)
+
+        if keep_pristine:
+            if self.pristine_on_cpu:
+                self.pristine = {k: v.detach().to("cpu").pin_memory() for k, v in self.slots.items()}
+            else:
+                self.pristine = {k: v.detach().clone() for k, v in self.slots.items()}
+        else:
+            self.pristine = {}
+
         self.active: str | None = None
 
         if draft_head is not None:
@@ -1342,7 +1355,10 @@ class WeightFoldingEngine:
                 self.draft_slots[k] = p
                 
         if self.keep_pristine and self.draft_slots:
-            self.draft_pristine = {k: v.detach().clone() for k, v in self.draft_slots.items()}
+            if self.pristine_on_cpu:
+                self.draft_pristine = {k: v.detach().to("cpu").pin_memory() for k, v in self.draft_slots.items()}
+            else:
+                self.draft_pristine = {k: v.detach().clone() for k, v in self.draft_slots.items()}
 
     def _get_draft_factor(self, expert: FoldableExpert, draft_key: str) -> tuple[torch.Tensor, torch.Tensor] | None:
         """Maps draft head key (layer.*.weight) to layer 31 factor (model.layers.31.*.weight)."""
@@ -1376,6 +1392,8 @@ class WeightFoldingEngine:
         for key, w in self.slots.items():
             f = expert.factors.get(key)
             w0 = self.pristine[key]
+            if self.pristine_on_cpu:
+                w0 = w0.to(w.device, non_blocking=True)
             if f is None:
                 w.copy_(w0)
                 continue
@@ -1387,12 +1405,13 @@ class WeightFoldingEngine:
             for dkey, dw in self.draft_slots.items():
                 df = self._get_draft_factor(expert, dkey)
                 dw0 = self.draft_pristine[dkey]
+                if self.pristine_on_cpu:
+                    dw0 = dw0.to(dw.device, non_blocking=True)
                 if df is None:
                     dw.copy_(dw0)
                     continue
                 du, dv = df
                 torch.addmm(dw0, du, dv, beta=1.0, alpha=expert.scaling, out=dw)
-
 
         self.active = expert.name
 
@@ -1402,10 +1421,10 @@ class WeightFoldingEngine:
         if not self.keep_pristine:
             raise RuntimeError("restore_pristine() requires keep_pristine=True")
         for key, w in self.slots.items():
-            w.copy_(self.pristine[key])
+            w.copy_(self.pristine[key], non_blocking=True)
         if self.draft_head is not None and self.draft_slots:
             for dkey, dw in self.draft_slots.items():
-                dw.copy_(self.draft_pristine[dkey])
+                dw.copy_(self.draft_pristine[dkey], non_blocking=True)
         self.active = None
 
 
@@ -1444,6 +1463,8 @@ class WeightFoldingEngine:
         # 1. Fold Backbone
         for key, w in self.slots.items():
             w0 = self.pristine[key]
+            if self.pristine_on_cpu:
+                w0 = w0.to(w.device, non_blocking=True)
             mask = notch_masks.get(key) if (notch_masks and scale_mode == "surgical") else None
             first = True
             for e in experts:
@@ -1472,18 +1493,21 @@ class WeightFoldingEngine:
         if self.draft_head is not None and self.draft_slots:
             for dkey, dw in self.draft_slots.items():
                 dw0 = self.draft_pristine[dkey]
+                if self.pristine_on_cpu:
+                    dw0 = dw0.to(dw.device, non_blocking=True)
                 first = True
                 for e in experts:
                     df = self._get_draft_factor(e, dkey)
                     if df is None:
                         continue
                     du, dv = df
-                    eff_alpha = e.scaling * scale_mult
+                    du = du.to(device=dw0.device, dtype=dw0.dtype)
+                    dv = dv.to(device=dw0.device, dtype=dw0.dtype)
                     if first:
-                        torch.addmm(dw0, du, dv, beta=1.0, alpha=eff_alpha, out=dw)
+                        torch.addmm(dw0, du, dv, beta=1.0, alpha=e.scaling, out=dw)
                         first = False
                     else:
-                        dw.addmm_(du, dv, alpha=eff_alpha)
+                        dw.addmm_(du, dv, alpha=e.scaling)
                 if first:
                     dw.copy_(dw0)
 

@@ -1,0 +1,21 @@
+========================================================================================================
+ GEE TRAJECTORY DRIFT DETECTION -- AUTOCORRELATED MULTI-TURN SIGNALS (Ch.6 §6.3)
+ Working correlation + sandwich variance vs an independence detector (3000 Monte Carlo replicates per cell)
+========================================================================================================
+
+[1/5] FALSE ALARMS under NO drift (K=30 conversations, T=20 turns).
+      An honest detector fires 5% of the time. '!!' marks significant inflation.
+  ------------------------------------------------------------------------------------------------------------
+   AR1 rho |    naive_independence | independence_sandwich |          ar1_sandwich |       ar1_sandwich_df | exchangeable_sandwich
+  ------------------------------------------------------------------------------------------------------------
+       0.0 |               6.1%    |               7.5% !! |               7.4% !! |               7.1% !! |               7.5% !!
+       0.3 |              13.0% !! |               6.2%    |               6.2%    |               5.8%    |               6.2%   
+       0.6 |              24.8% !! |               6.4% !! |               6.2%    |               6.0%    |               6.4% !!
+       0.9 |              31.7% !! |               6.0%    |               6.0%    |               5.6%    |               6.0%   
+  ------------------------------------------------------------------------------------------------------------
+      rho=0.0: alpha_hat=-0.002 (true 0.0), fit 0.94 ms
+      rho=0.3: alpha_hat=0.295 (true 0.3), fit 1.27 ms
+      rho=0.6: alpha_hat=0.594 (true 0.6), fit 1.28 ms
+      rho=0.9: alpha_hat=0.896 (true 0.9), fit 1.59 ms
+
+[2/5] POWER against real drift (rho=0.6, K=30, T=20).

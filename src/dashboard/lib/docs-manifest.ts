@@ -9,6 +9,13 @@ export interface DocItem {
 export const DOCS_MANIFEST: DocItem[] = [
   // Core Architecture
   {
+    id: "ledoit-wolf-routing",
+    title: "Ledoit-Wolf & Riemannian Routing (Interactive)",
+    category: "Core Architecture & Decisions",
+    relativePath: "docs/LEDOIT_WOLF_RIEMANNIAN_ROUTING.md",
+    description: "Interactive infographic & theorems for Ledoit-Wolf shrinkage and Riemannian manifold expert routing.",
+  },
+  {
     id: "decisions",
     title: "DECISIONS.md (Architecture & Retirals)",
     category: "Core Architecture & Decisions",

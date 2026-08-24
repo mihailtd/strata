@@ -253,6 +253,7 @@ class BucketedSpeculativeDecoder:
         stop_ids: set[int] | None = None,
         engine=None,
         expert=None,
+        gate=None,
     ):
         """Yields chunks of decoded token IDs list[int] as each speculative chunk is verified."""
         assert self._locked, "capture() first"
@@ -288,27 +289,28 @@ class BucketedSpeculativeDecoder:
         while len(toks) < max_new_tokens and not done:
             H = torch.cat(hids, dim=1)
             dcache = self.head.prefill(H, seq)
-            draft = self.head.draft(H[:, -1:, :], nxt, k=k, start_pos=pos - 1, cache=dcache)
+            draft = self.head.draft(H[:, -1:, :], nxt, k=k, start_pos=pos - 1, cache=dcache, gate=gate)
+            k_actual = draft.shape[1]
 
             # Must capture the returned slot -- rollback_on_rejection needs the EXACT
             # slot this call wrote, not the n_accepted-based guess it falls back to
             # when slot is omitted. See rollback_on_rejection's docstring.
             ckpt_slot = self.ring_engine.checkpoint(self.cache)
             chunk = torch.cat([nxt, draft], dim=-1)
-            logits, hidden = self._replay(k + 1, chunk, pos)
+            logits, hidden = self._replay(k_actual + 1, chunk, pos)
             target = torch.argmax(logits[0], -1)
 
             n_acc = 0
-            for i in range(k):
+            for i in range(k_actual):
                 if draft[0, i].item() == target[i].item():
                     n_acc += 1
                 else:
                     break
             st["steps"] += 1
-            st["drafted"] += k
+            st["drafted"] += k_actual
             st["accepted"] += n_acc
 
-            if n_acc < k:
+            if n_acc < k_actual:
                 # ROLLBACK: restore the fixed-size SSM state, and simply rewind the
                 # position for attention -- StaticCache KV beyond it is stale but
                 # unread and will be overwritten. No crop, so no graph pointer moves.
