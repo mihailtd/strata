@@ -1,10 +1,10 @@
 {
   "model_name": "Qwen/Qwen3.5-4B",
   "arms": {
-    "base_eager_tok_s": 21.30043671168525,
-    "folded_eager_tok_s": 34.178098887998026,
-    "graph_folded_tok_s": 18.627129554983707,
-    "speedup_vs_eager": 0.874495194963069
+    "base_eager_tok_s": 27.047202552537787,
+    "folded_eager_tok_s": 28.74788885311577,
+    "graph_folded_tok_s": 17.011830812211137,
+    "speedup_vs_eager": 0.628968218771111
   },
   "samples": {
     "eager_text": "Loss aversion is a cognitive bias where people feel the pain of losing something is more intense than the pleasure of ga",
@@ -12,14 +12,14 @@
     "graph_text": "Loss aversion is a cognitive bias where the pain of losing something is twice as powerful as the joy of winning somethin"
   },
   "correctness_gate": {
-    "passed": false,
+    "passed": true,
     "verdict": {
-      "match": false,
-      "first_divergence": 29,
+      "match": true,
+      "first_divergence": null,
       "n_ref": 32,
       "n_graph": 32,
       "unmatched_tail": [],
-      "ref_text": "Loss aversion is a cognitive bias where people feel the pain of losing something is more intense than the pleasure of gaining something of equal value. This concept is central",
+      "ref_text": "Loss aversion is a cognitive bias where people feel the pain of losing something is more intense than the pleasure of gaining something of equal value. This bias influences decision",
       "graph_text": "Loss aversion is a cognitive bias where people feel the pain of losing something is more intense than the pleasure of gaining something of equal value. This bias influences decision"
     }
   }

@@ -10,6 +10,10 @@ const nextConfig: NextConfig = {
         destination: "http://127.0.0.1:8000/api/engine/:path*",
       },
       {
+        source: "/api/multi_agent/:path*",
+        destination: "http://127.0.0.1:8000/api/multi_agent/:path*",
+      },
+      {
         source: "/api/training/:path*",
         destination: "http://127.0.0.1:8000/api/training/:path*",
       },

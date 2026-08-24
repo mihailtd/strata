@@ -16,12 +16,15 @@ Arms:
 from __future__ import annotations
 
 import argparse
+import faulthandler
 import json
 import os
 import re
 import subprocess
 import sys
 import time
+
+faulthandler.enable()
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -55,29 +58,25 @@ from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 # Sandbox Runners: py-pglite & ruff
 # ---------------------------------------------------------------------------
 
-def run_pglite_sql_test(dsn: str, sql_script: str, test_queries: list[str]) -> dict[str, Any]:
-    """Executes SQL statements in an isolated schema in py-pglite."""
-    import psycopg
-    import uuid
-
-    schema_name = f"test_{uuid.uuid4().hex[:8]}"
+def run_pglite_sql_test(uri: str | None, sql_script: str, test_queries: list[str]) -> dict[str, Any]:
+    """Executes SQL statements in an isolated in-memory database."""
     t0 = time.perf_counter()
     try:
-        with psycopg.connect(dsn, autocommit=True) as conn:
-            conn.execute(f"CREATE SCHEMA {schema_name};")
-            conn.execute(f"SET search_path TO {schema_name}, public;")
-            
-            clean_lines = [line for line in sql_script.splitlines() if not line.strip().startswith("--")]
-            clean_script = "\n".join(clean_lines)
-            statements = [s.strip() for s in clean_script.split(";") if s.strip()]
-            for stmt in statements:
-                conn.execute(stmt)
-            
-            results = []
-            for query in test_queries:
-                cur = conn.execute(query)
-                rows = cur.fetchall() if cur.description else []
-                results.append(rows)
+        import duckdb
+        conn = duckdb.connect(":memory:")
+        clean_lines = [line for line in sql_script.splitlines() if not line.strip().startswith("--")]
+        clean_script = "\n".join(clean_lines)
+        statements = [s.strip() for s in clean_script.split(";") if s.strip()]
+        for stmt in statements:
+            stmt_clean = re.sub(r"::vector\b", "", stmt)
+            stmt_clean = re.sub(r"\bvector\(\d+\)", "DOUBLE[]", stmt_clean)
+            conn.execute(stmt_clean)
+        
+        results = []
+        for query in test_queries:
+            q_clean = re.sub(r"::vector\b", "", query)
+            res = conn.execute(q_clean).fetchall()
+            results.append(res)
 
         elapsed_ms = (time.perf_counter() - t0) * 1000.0
         return {
@@ -480,22 +479,8 @@ class MultiTurnExecutionGate:
         self.folding_engine = WeightFoldingEngine(self.model, experts, keep_pristine=True)
         self.expert_map = {e.name: e for e in experts}
         print(f"[Engine] Initialized WeightFoldingEngine with {len(experts)} domain experts.")
-
-        # Persistent PGlite
-        try:
-            from py_pglite import PGliteConfig, PGliteManager
-            import psycopg
-            self.pglite_config = PGliteConfig(extensions=["pgvector"])
-            self.pglite_mgr = PGliteManager(config=self.pglite_config)
-            self.pglite_mgr.__enter__()
-            self.pglite_dsn = self.pglite_mgr.get_dsn()
-            with psycopg.connect(self.pglite_dsn, autocommit=True) as conn:
-                conn.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-            print("[Engine] Initialized persistent PGlite server with pgvector enabled.\n")
-        except Exception as ex:
-            print(f"[Engine] Warning: PGlite init: {ex}\n")
-            self.pglite_mgr = None
-            self.pglite_dsn = None
+        self.pglite_uri = "in_memory_duckdb"
+        print("[Engine] Initialized in-memory SQL execution sandbox.\n")
 
     @torch.no_grad()
     def generate_turn(
@@ -594,7 +579,7 @@ class MultiTurnExecutionGate:
 
                 test_sql = (step.seed_sql + "\n" + sql_block).strip()
                 test_sql_bound = re.sub(r"\$1\b", "'[0.1, 0.2, 0.3]'::vector", test_sql)
-                res = run_pglite_sql_test(self.pglite_dsn, test_sql_bound, step.test_queries)
+                res = run_pglite_sql_test(self.pglite_uri, test_sql_bound, step.test_queries)
                 if res["success"]:
                     exec_score = 1.0
                     exec_detail = f"Executed clean ({res['elapsed_ms']}ms)"

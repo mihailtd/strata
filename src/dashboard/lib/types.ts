@@ -15,6 +15,8 @@ export interface EngineStatus {
   spec_k_options?: number[];
   scale_mode?: string;
   prefold_enabled?: boolean;
+  state_handoff_enabled?: boolean;
+  state_handoff_mb?: number;
   intra_team_dr?: number;
   last_morph_ms?: number;
 }

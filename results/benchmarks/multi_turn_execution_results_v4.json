@@ -1,0 +1,781 @@
+{
+  "timestamp": "2026-08-24T12:55:04Z",
+  "adapter_version": "v4",
+  "total_steps": 15,
+  "id_steps": 8,
+  "ood_steps": 7,
+  "mean_scores": {
+    "all": {
+      "base": 0.5536,
+      "oracle": 0.5988666666666667,
+      "auto": 0.5988666666666667,
+      "edge_oracle": 0.04526666666666668,
+      "ci_oracle": [
+        0.003796666666666688,
+        0.08300166666666665
+      ]
+    },
+    "id": {
+      "base": 0.566125,
+      "oracle": 0.6255,
+      "auto": 0.6255,
+      "edge_oracle": 0.05937500000000001,
+      "ci_oracle": [
+        0.028249999999999997,
+        0.0905
+      ]
+    },
+    "ood": {
+      "base": 0.5392857142857143,
+      "oracle": 0.5684285714285714,
+      "auto": 0.5684285714285714,
+      "edge_oracle": 0.029142857142857154,
+      "ci_oracle": [
+        -0.04999999999999995,
+        0.10442857142857141
+      ]
+    }
+  },
+  "token_usage": {
+    "base": 11969,
+    "oracle": 5474,
+    "auto": 5474
+  },
+  "steps": [
+    {
+      "step_id": "p1_t1_migration",
+      "title": "PostgreSQL Table & HNSW Vector Index Migration",
+      "is_ood": false,
+      "results": {
+        "Arm A (Base 4B)": {
+          "step_id": "p1_t1_migration",
+          "title": "PostgreSQL Table & HNSW Vector Index Migration",
+          "is_ood": false,
+          "expert": "base",
+          "composite_score": 0.3,
+          "exec_score": 0.0,
+          "linter_score": 0.0,
+          "modernity_score": 1.0,
+          "prompt_tokens": 119,
+          "gen_tokens": 78,
+          "fold_latency_ms": 0.24,
+          "exec_detail": "Failed: CatalogException: Catalog Error: Type with name bigserial does not exist!\nDid you mean \"bigint\"?\n\nLINE 2:     id bigserial PRIMARY KEY,\n               ^^^^^^^^^"
+        },
+        "Arm B (Oracle Swarm)": {
+          "step_id": "p1_t1_migration",
+          "title": "PostgreSQL Table & HNSW Vector Index Migration",
+          "is_ood": false,
+          "expert": "postgresql",
+          "composite_score": 0.3,
+          "exec_score": 0.0,
+          "linter_score": 0.0,
+          "modernity_score": 1.0,
+          "prompt_tokens": 119,
+          "gen_tokens": 96,
+          "fold_latency_ms": 39.65,
+          "exec_detail": "Failed: ParserException: Parser Error: syntax error at or near \"IDENTITY\""
+        },
+        "Arm C (Autonomous Engine)": {
+          "step_id": "p1_t1_migration",
+          "title": "PostgreSQL Table & HNSW Vector Index Migration",
+          "is_ood": false,
+          "expert": "postgresql",
+          "composite_score": 0.3,
+          "exec_score": 0.0,
+          "linter_score": 0.0,
+          "modernity_score": 1.0,
+          "prompt_tokens": 119,
+          "gen_tokens": 96,
+          "fold_latency_ms": 0.85,
+          "exec_detail": "Failed: ParserException: Parser Error: syntax error at or near \"IDENTITY\""
+        }
+      }
+    },
+    {
+      "step_id": "p1_t2_fastmcp_service",
+      "title": "FastMCP AsyncPG Document Search Server",
+      "is_ood": false,
+      "results": {
+        "Arm A (Base 4B)": {
+          "step_id": "p1_t2_fastmcp_service",
+          "title": "FastMCP AsyncPG Document Search Server",
+          "is_ood": false,
+          "expert": "base",
+          "composite_score": 0.804,
+          "exec_score": 1.0,
+          "linter_score": 0.345,
+          "modernity_score": 1.0,
+          "prompt_tokens": 123,
+          "gen_tokens": 467,
+          "fold_latency_ms": 0.37,
+          "exec_detail": "Compiles=True, Ruff violations=19"
+        },
+        "Arm B (Oracle Swarm)": {
+          "step_id": "p1_t2_fastmcp_service",
+          "title": "FastMCP AsyncPG Document Search Server",
+          "is_ood": false,
+          "expert": "astral",
+          "composite_score": 0.887,
+          "exec_score": 1.0,
+          "linter_score": 0.625,
+          "modernity_score": 1.0,
+          "prompt_tokens": 123,
+          "gen_tokens": 381,
+          "fold_latency_ms": 0.94,
+          "exec_detail": "Compiles=True, Ruff violations=6"
+        },
+        "Arm C (Autonomous Engine)": {
+          "step_id": "p1_t2_fastmcp_service",
+          "title": "FastMCP AsyncPG Document Search Server",
+          "is_ood": false,
+          "expert": "astral",
+          "composite_score": 0.887,
+          "exec_score": 1.0,
+          "linter_score": 0.625,
+          "modernity_score": 1.0,
+          "prompt_tokens": 123,
+          "gen_tokens": 381,
+          "fold_latency_ms": 0.91,
+          "exec_detail": "Compiles=True, Ruff violations=6"
+        }
+      }
+    },
+    {
+      "step_id": "p1_t3_uv_ingest_client",
+      "title": "Standalone PEP 723 Batch Ingestion Script",
+      "is_ood": false,
+      "results": {
+        "Arm A (Base 4B)": {
+          "step_id": "p1_t3_uv_ingest_client",
+          "title": "Standalone PEP 723 Batch Ingestion Script",
+          "is_ood": false,
+          "expert": "base",
+          "composite_score": 0.717,
+          "exec_score": 1.0,
+          "linter_score": 0.256,
+          "modernity_score": 0.7,
+          "prompt_tokens": 91,
+          "gen_tokens": 1329,
+          "fold_latency_ms": 0.48,
+          "exec_detail": "Compiles=True, Ruff violations=29"
+        },
+        "Arm B (Oracle Swarm)": {
+          "step_id": "p1_t3_uv_ingest_client",
+          "title": "Standalone PEP 723 Batch Ingestion Script",
+          "is_ood": false,
+          "expert": "astral",
+          "composite_score": 0.756,
+          "exec_score": 1.0,
+          "linter_score": 0.588,
+          "modernity_score": 0.4,
+          "prompt_tokens": 91,
+          "gen_tokens": 380,
+          "fold_latency_ms": 1.25,
+          "exec_detail": "Compiles=True, Ruff violations=7"
+        },
+        "Arm C (Autonomous Engine)": {
+          "step_id": "p1_t3_uv_ingest_client",
+          "title": "Standalone PEP 723 Batch Ingestion Script",
+          "is_ood": false,
+          "expert": "astral",
+          "composite_score": 0.756,
+          "exec_score": 1.0,
+          "linter_score": 0.588,
+          "modernity_score": 0.4,
+          "prompt_tokens": 91,
+          "gen_tokens": 380,
+          "fold_latency_ms": 0.92,
+          "exec_detail": "Compiles=True, Ruff violations=7"
+        }
+      }
+    },
+    {
+      "step_id": "p2_t1_window_sql",
+      "title": "PostgreSQL Window Function Rolling Average & Partitioning [OOD]",
+      "is_ood": true,
+      "results": {
+        "Arm A (Base 4B)": {
+          "step_id": "p2_t1_window_sql",
+          "title": "PostgreSQL Window Function Rolling Average & Partitioning [OOD]",
+          "is_ood": true,
+          "expert": "base",
+          "composite_score": 0.3,
+          "exec_score": 0.0,
+          "linter_score": 0.0,
+          "modernity_score": 1.0,
+          "prompt_tokens": 109,
+          "gen_tokens": 81,
+          "fold_latency_ms": 0.39,
+          "exec_detail": "Failed: CatalogException: Catalog Error: Type with name serial does not exist!\nDid you mean \"real\"?\n\nLINE 1: CREATE TABLE IF NOT EXISTS device_telemetry (id serial primary key, device_id int, metric_val real, recorde...\n      "
+        },
+        "Arm B (Oracle Swarm)": {
+          "step_id": "p2_t1_window_sql",
+          "title": "PostgreSQL Window Function Rolling Average & Partitioning [OOD]",
+          "is_ood": true,
+          "expert": "postgresql",
+          "composite_score": 0.3,
+          "exec_score": 0.0,
+          "linter_score": 0.0,
+          "modernity_score": 1.0,
+          "prompt_tokens": 109,
+          "gen_tokens": 71,
+          "fold_latency_ms": 0.82,
+          "exec_detail": "Failed: CatalogException: Catalog Error: Type with name serial does not exist!\nDid you mean \"real\"?\n\nLINE 1: CREATE TABLE IF NOT EXISTS device_telemetry (id serial primary key, device_id int, metric_val real, recorde...\n      "
+        },
+        "Arm C (Autonomous Engine)": {
+          "step_id": "p2_t1_window_sql",
+          "title": "PostgreSQL Window Function Rolling Average & Partitioning [OOD]",
+          "is_ood": true,
+          "expert": "postgresql",
+          "composite_score": 0.3,
+          "exec_score": 0.0,
+          "linter_score": 0.0,
+          "modernity_score": 1.0,
+          "prompt_tokens": 109,
+          "gen_tokens": 71,
+          "fold_latency_ms": 0.9,
+          "exec_detail": "Failed: CatalogException: Catalog Error: Type with name serial does not exist!\nDid you mean \"real\"?\n\nLINE 1: CREATE TABLE IF NOT EXISTS device_telemetry (id serial primary key, device_id int, metric_val real, recorde...\n      "
+        }
+      }
+    },
+    {
+      "step_id": "p2_t2_click_cli",
+      "title": "Click CLI Report Generator with Parameter Callbacks [ID]",
+      "is_ood": false,
+      "results": {
+        "Arm A (Base 4B)": {
+          "step_id": "p2_t2_click_cli",
+          "title": "Click CLI Report Generator with Parameter Callbacks [ID]",
+          "is_ood": false,
+          "expert": "base",
+          "composite_score": 0.565,
+          "exec_score": 1.0,
+          "linter_score": 0.217,
+          "modernity_score": 0.0,
+          "prompt_tokens": 94,
+          "gen_tokens": 628,
+          "fold_latency_ms": 0.35,
+          "exec_detail": "Compiles=True, Ruff violations=36"
+        },
+        "Arm B (Oracle Swarm)": {
+          "step_id": "p2_t2_click_cli",
+          "title": "Click CLI Report Generator with Parameter Callbacks [ID]",
+          "is_ood": false,
+          "expert": "astral",
+          "composite_score": 0.658,
+          "exec_score": 1.0,
+          "linter_score": 0.526,
+          "modernity_score": 0.0,
+          "prompt_tokens": 94,
+          "gen_tokens": 252,
+          "fold_latency_ms": 1.39,
+          "exec_detail": "Compiles=True, Ruff violations=9"
+        },
+        "Arm C (Autonomous Engine)": {
+          "step_id": "p2_t2_click_cli",
+          "title": "Click CLI Report Generator with Parameter Callbacks [ID]",
+          "is_ood": false,
+          "expert": "astral",
+          "composite_score": 0.658,
+          "exec_score": 1.0,
+          "linter_score": 0.526,
+          "modernity_score": 0.0,
+          "prompt_tokens": 94,
+          "gen_tokens": 252,
+          "fold_latency_ms": 0.96,
+          "exec_detail": "Compiles=True, Ruff violations=9"
+        }
+      }
+    },
+    {
+      "step_id": "p2_t3_pytest_suite",
+      "title": "Pytest Async Test Suite with Custom Fixtures [OOD]",
+      "is_ood": true,
+      "results": {
+        "Arm A (Base 4B)": {
+          "step_id": "p2_t3_pytest_suite",
+          "title": "Pytest Async Test Suite with Custom Fixtures [OOD]",
+          "is_ood": true,
+          "expert": "base",
+          "composite_score": 0.723,
+          "exec_score": 1.0,
+          "linter_score": 0.078,
+          "modernity_score": 1.0,
+          "prompt_tokens": 83,
+          "gen_tokens": 1651,
+          "fold_latency_ms": 0.38,
+          "exec_detail": "Compiles=True, Ruff violations=118"
+        },
+        "Arm B (Oracle Swarm)": {
+          "step_id": "p2_t3_pytest_suite",
+          "title": "Pytest Async Test Suite with Custom Fixtures [OOD]",
+          "is_ood": true,
+          "expert": "astral",
+          "composite_score": 0.815,
+          "exec_score": 1.0,
+          "linter_score": 0.385,
+          "modernity_score": 1.0,
+          "prompt_tokens": 83,
+          "gen_tokens": 410,
+          "fold_latency_ms": 0.93,
+          "exec_detail": "Compiles=True, Ruff violations=16"
+        },
+        "Arm C (Autonomous Engine)": {
+          "step_id": "p2_t3_pytest_suite",
+          "title": "Pytest Async Test Suite with Custom Fixtures [OOD]",
+          "is_ood": true,
+          "expert": "astral",
+          "composite_score": 0.815,
+          "exec_score": 1.0,
+          "linter_score": 0.385,
+          "modernity_score": 1.0,
+          "prompt_tokens": 83,
+          "gen_tokens": 410,
+          "fold_latency_ms": 1.01,
+          "exec_detail": "Compiles=True, Ruff violations=16"
+        }
+      }
+    },
+    {
+      "step_id": "p3_t1_recursive_cte",
+      "title": "PostgreSQL Recursive CTE Graph Traversal [OOD]",
+      "is_ood": true,
+      "results": {
+        "Arm A (Base 4B)": {
+          "step_id": "p3_t1_recursive_cte",
+          "title": "PostgreSQL Recursive CTE Graph Traversal [OOD]",
+          "is_ood": true,
+          "expert": "base",
+          "composite_score": 0.3,
+          "exec_score": 0.0,
+          "linter_score": 0.0,
+          "modernity_score": 1.0,
+          "prompt_tokens": 98,
+          "gen_tokens": 107,
+          "fold_latency_ms": 0.41,
+          "exec_detail": "Failed: CatalogException: Catalog Error: Type with name serial does not exist!\nDid you mean \"real\"?\n\nLINE 1: CREATE TABLE IF NOT EXISTS categories (id serial primary key, name text, parent_id int references...\n                "
+        },
+        "Arm B (Oracle Swarm)": {
+          "step_id": "p3_t1_recursive_cte",
+          "title": "PostgreSQL Recursive CTE Graph Traversal [OOD]",
+          "is_ood": true,
+          "expert": "postgresql",
+          "composite_score": 0.3,
+          "exec_score": 0.0,
+          "linter_score": 0.0,
+          "modernity_score": 1.0,
+          "prompt_tokens": 98,
+          "gen_tokens": 103,
+          "fold_latency_ms": 0.92,
+          "exec_detail": "Failed: CatalogException: Catalog Error: Type with name serial does not exist!\nDid you mean \"real\"?\n\nLINE 1: CREATE TABLE IF NOT EXISTS categories (id serial primary key, name text, parent_id int references...\n                "
+        },
+        "Arm C (Autonomous Engine)": {
+          "step_id": "p3_t1_recursive_cte",
+          "title": "PostgreSQL Recursive CTE Graph Traversal [OOD]",
+          "is_ood": true,
+          "expert": "postgresql",
+          "composite_score": 0.3,
+          "exec_score": 0.0,
+          "linter_score": 0.0,
+          "modernity_score": 1.0,
+          "prompt_tokens": 98,
+          "gen_tokens": 103,
+          "fold_latency_ms": 0.85,
+          "exec_detail": "Failed: CatalogException: Catalog Error: Type with name serial does not exist!\nDid you mean \"real\"?\n\nLINE 1: CREATE TABLE IF NOT EXISTS categories (id serial primary key, name text, parent_id int references...\n                "
+        }
+      }
+    },
+    {
+      "step_id": "p3_t2_dataclass_tree",
+      "title": "Standard Python Dataclass Tree Navigator with __post_init__ [OOD]",
+      "is_ood": true,
+      "results": {
+        "Arm A (Base 4B)": {
+          "step_id": "p3_t2_dataclass_tree",
+          "title": "Standard Python Dataclass Tree Navigator with __post_init__ [OOD]",
+          "is_ood": true,
+          "expert": "base",
+          "composite_score": 0.607,
+          "exec_score": 1.0,
+          "linter_score": 0.357,
+          "modernity_score": 0.0,
+          "prompt_tokens": 91,
+          "gen_tokens": 247,
+          "fold_latency_ms": 0.32,
+          "exec_detail": "Compiles=True, Ruff violations=18"
+        },
+        "Arm B (Oracle Swarm)": {
+          "step_id": "p3_t2_dataclass_tree",
+          "title": "Standard Python Dataclass Tree Navigator with __post_init__ [OOD]",
+          "is_ood": true,
+          "expert": "astral",
+          "composite_score": 0.82,
+          "exec_score": 1.0,
+          "linter_score": 0.4,
+          "modernity_score": 1.0,
+          "prompt_tokens": 91,
+          "gen_tokens": 272,
+          "fold_latency_ms": 0.94,
+          "exec_detail": "Compiles=True, Ruff violations=15"
+        },
+        "Arm C (Autonomous Engine)": {
+          "step_id": "p3_t2_dataclass_tree",
+          "title": "Standard Python Dataclass Tree Navigator with __post_init__ [OOD]",
+          "is_ood": true,
+          "expert": "astral",
+          "composite_score": 0.82,
+          "exec_score": 1.0,
+          "linter_score": 0.4,
+          "modernity_score": 1.0,
+          "prompt_tokens": 91,
+          "gen_tokens": 272,
+          "fold_latency_ms": 0.94,
+          "exec_detail": "Compiles=True, Ruff violations=15"
+        }
+      }
+    },
+    {
+      "step_id": "p3_t3_async_traverser",
+      "title": "Async Category Subtree Cache & Resolver",
+      "is_ood": false,
+      "results": {
+        "Arm A (Base 4B)": {
+          "step_id": "p3_t3_async_traverser",
+          "title": "Async Category Subtree Cache & Resolver",
+          "is_ood": false,
+          "expert": "base",
+          "composite_score": 0.555,
+          "exec_score": 1.0,
+          "linter_score": 0.182,
+          "modernity_score": 0.0,
+          "prompt_tokens": 85,
+          "gen_tokens": 1253,
+          "fold_latency_ms": 0.39,
+          "exec_detail": "Compiles=True, Ruff violations=45"
+        },
+        "Arm B (Oracle Swarm)": {
+          "step_id": "p3_t3_async_traverser",
+          "title": "Async Category Subtree Cache & Resolver",
+          "is_ood": false,
+          "expert": "astral",
+          "composite_score": 0.671,
+          "exec_score": 1.0,
+          "linter_score": 0.37,
+          "modernity_score": 0.3,
+          "prompt_tokens": 85,
+          "gen_tokens": 460,
+          "fold_latency_ms": 0.93,
+          "exec_detail": "Compiles=True, Ruff violations=17"
+        },
+        "Arm C (Autonomous Engine)": {
+          "step_id": "p3_t3_async_traverser",
+          "title": "Async Category Subtree Cache & Resolver",
+          "is_ood": false,
+          "expert": "astral",
+          "composite_score": 0.671,
+          "exec_score": 1.0,
+          "linter_score": 0.37,
+          "modernity_score": 0.3,
+          "prompt_tokens": 85,
+          "gen_tokens": 460,
+          "fold_latency_ms": 0.93,
+          "exec_detail": "Compiles=True, Ruff violations=17"
+        }
+      }
+    },
+    {
+      "step_id": "p4_t1_schema_vector",
+      "title": "PostgreSQL Product Catalog & Vector Index Migration",
+      "is_ood": false,
+      "results": {
+        "Arm A (Base 4B)": {
+          "step_id": "p4_t1_schema_vector",
+          "title": "PostgreSQL Product Catalog & Vector Index Migration",
+          "is_ood": false,
+          "expert": "base",
+          "composite_score": 0.3,
+          "exec_score": 0.0,
+          "linter_score": 0.0,
+          "modernity_score": 1.0,
+          "prompt_tokens": 97,
+          "gen_tokens": 65,
+          "fold_latency_ms": 0.38,
+          "exec_detail": "Failed: CatalogException: Catalog Error: Type with name bigserial does not exist!\nDid you mean \"bigint\"?\n\nLINE 2:     id bigserial PRIMARY KEY,\n               ^^^^^^^^^"
+        },
+        "Arm B (Oracle Swarm)": {
+          "step_id": "p4_t1_schema_vector",
+          "title": "PostgreSQL Product Catalog & Vector Index Migration",
+          "is_ood": false,
+          "expert": "postgresql",
+          "composite_score": 0.3,
+          "exec_score": 0.0,
+          "linter_score": 0.0,
+          "modernity_score": 1.0,
+          "prompt_tokens": 97,
+          "gen_tokens": 81,
+          "fold_latency_ms": 0.93,
+          "exec_detail": "Failed: CatalogException: Catalog Error: Type with name bigserial does not exist!\nDid you mean \"bigint\"?\n\nLINE 2:     id bigserial PRIMARY KEY,\n               ^^^^^^^^^"
+        },
+        "Arm C (Autonomous Engine)": {
+          "step_id": "p4_t1_schema_vector",
+          "title": "PostgreSQL Product Catalog & Vector Index Migration",
+          "is_ood": false,
+          "expert": "postgresql",
+          "composite_score": 0.3,
+          "exec_score": 0.0,
+          "linter_score": 0.0,
+          "modernity_score": 1.0,
+          "prompt_tokens": 97,
+          "gen_tokens": 81,
+          "fold_latency_ms": 0.85,
+          "exec_detail": "Failed: CatalogException: Catalog Error: Type with name bigserial does not exist!\nDid you mean \"bigint\"?\n\nLINE 2:     id bigserial PRIMARY KEY,\n               ^^^^^^^^^"
+        }
+      }
+    },
+    {
+      "step_id": "p4_t2_fastapi_recommender",
+      "title": "FastAPI Async Recommendation Endpoint with Pydantic v2",
+      "is_ood": false,
+      "results": {
+        "Arm A (Base 4B)": {
+          "step_id": "p4_t2_fastapi_recommender",
+          "title": "FastAPI Async Recommendation Endpoint with Pydantic v2",
+          "is_ood": false,
+          "expert": "base",
+          "composite_score": 0.562,
+          "exec_score": 1.0,
+          "linter_score": 0.208,
+          "modernity_score": 0.0,
+          "prompt_tokens": 83,
+          "gen_tokens": 889,
+          "fold_latency_ms": 0.33,
+          "exec_detail": "Compiles=True, Ruff violations=38"
+        },
+        "Arm B (Oracle Swarm)": {
+          "step_id": "p4_t2_fastapi_recommender",
+          "title": "FastAPI Async Recommendation Endpoint with Pydantic v2",
+          "is_ood": false,
+          "expert": "astral",
+          "composite_score": 0.676,
+          "exec_score": 1.0,
+          "linter_score": 0.588,
+          "modernity_score": 0.0,
+          "prompt_tokens": 83,
+          "gen_tokens": 350,
+          "fold_latency_ms": 1.06,
+          "exec_detail": "Compiles=True, Ruff violations=7"
+        },
+        "Arm C (Autonomous Engine)": {
+          "step_id": "p4_t2_fastapi_recommender",
+          "title": "FastAPI Async Recommendation Endpoint with Pydantic v2",
+          "is_ood": false,
+          "expert": "astral",
+          "composite_score": 0.676,
+          "exec_score": 1.0,
+          "linter_score": 0.588,
+          "modernity_score": 0.0,
+          "prompt_tokens": 83,
+          "gen_tokens": 350,
+          "fold_latency_ms": 1.05,
+          "exec_detail": "Compiles=True, Ruff violations=7"
+        }
+      }
+    },
+    {
+      "step_id": "p4_t3_pep723_batch_updater",
+      "title": "PEP 723 Batch Embedding Reindex Script",
+      "is_ood": false,
+      "results": {
+        "Arm A (Base 4B)": {
+          "step_id": "p4_t3_pep723_batch_updater",
+          "title": "PEP 723 Batch Embedding Reindex Script",
+          "is_ood": false,
+          "expert": "base",
+          "composite_score": 0.726,
+          "exec_score": 1.0,
+          "linter_score": 0.286,
+          "modernity_score": 0.7,
+          "prompt_tokens": 84,
+          "gen_tokens": 739,
+          "fold_latency_ms": 0.4,
+          "exec_detail": "Compiles=True, Ruff violations=25"
+        },
+        "Arm B (Oracle Swarm)": {
+          "step_id": "p4_t3_pep723_batch_updater",
+          "title": "PEP 723 Batch Embedding Reindex Script",
+          "is_ood": false,
+          "expert": "astral",
+          "composite_score": 0.756,
+          "exec_score": 1.0,
+          "linter_score": 0.588,
+          "modernity_score": 0.4,
+          "prompt_tokens": 84,
+          "gen_tokens": 395,
+          "fold_latency_ms": 0.93,
+          "exec_detail": "Compiles=True, Ruff violations=7"
+        },
+        "Arm C (Autonomous Engine)": {
+          "step_id": "p4_t3_pep723_batch_updater",
+          "title": "PEP 723 Batch Embedding Reindex Script",
+          "is_ood": false,
+          "expert": "astral",
+          "composite_score": 0.756,
+          "exec_score": 1.0,
+          "linter_score": 0.588,
+          "modernity_score": 0.4,
+          "prompt_tokens": 84,
+          "gen_tokens": 395,
+          "fold_latency_ms": 0.97,
+          "exec_detail": "Compiles=True, Ruff violations=7"
+        }
+      }
+    },
+    {
+      "step_id": "p5_t1_gist_temporal",
+      "title": "PostgreSQL Temporal GiST Exclusion Constraint & Audit Table [OOD]",
+      "is_ood": true,
+      "results": {
+        "Arm A (Base 4B)": {
+          "step_id": "p5_t1_gist_temporal",
+          "title": "PostgreSQL Temporal GiST Exclusion Constraint & Audit Table [OOD]",
+          "is_ood": true,
+          "expert": "base",
+          "composite_score": 0.3,
+          "exec_score": 0.0,
+          "linter_score": 0.0,
+          "modernity_score": 1.0,
+          "prompt_tokens": 102,
+          "gen_tokens": 61,
+          "fold_latency_ms": 0.38,
+          "exec_detail": "Failed: CatalogException: Catalog Error: Type with name SERIAL does not exist!\nDid you mean \"JSON\"?\n\nLINE 2:     lease_id SERIAL PRIMARY KEY,\n                     ^^^^^^"
+        },
+        "Arm B (Oracle Swarm)": {
+          "step_id": "p5_t1_gist_temporal",
+          "title": "PostgreSQL Temporal GiST Exclusion Constraint & Audit Table [OOD]",
+          "is_ood": true,
+          "expert": "postgresql",
+          "composite_score": 0.3,
+          "exec_score": 0.0,
+          "linter_score": 0.0,
+          "modernity_score": 1.0,
+          "prompt_tokens": 102,
+          "gen_tokens": 63,
+          "fold_latency_ms": 1.01,
+          "exec_detail": "Failed: CatalogException: Catalog Error: Type with name serial does not exist!\nDid you mean \"real\"?\n\nLINE 2:     lease_id serial PRIMARY KEY,\n                     ^^^^^^"
+        },
+        "Arm C (Autonomous Engine)": {
+          "step_id": "p5_t1_gist_temporal",
+          "title": "PostgreSQL Temporal GiST Exclusion Constraint & Audit Table [OOD]",
+          "is_ood": true,
+          "expert": "postgresql",
+          "composite_score": 0.3,
+          "exec_score": 0.0,
+          "linter_score": 0.0,
+          "modernity_score": 1.0,
+          "prompt_tokens": 102,
+          "gen_tokens": 63,
+          "fold_latency_ms": 0.85,
+          "exec_detail": "Failed: CatalogException: Catalog Error: Type with name serial does not exist!\nDid you mean \"real\"?\n\nLINE 2:     lease_id serial PRIMARY KEY,\n                     ^^^^^^"
+        }
+      }
+    },
+    {
+      "step_id": "p5_t2_streaming_generator",
+      "title": "Async Streaming Memory Generator for Audit Diffs [OOD]",
+      "is_ood": true,
+      "results": {
+        "Arm A (Base 4B)": {
+          "step_id": "p5_t2_streaming_generator",
+          "title": "Async Streaming Memory Generator for Audit Diffs [OOD]",
+          "is_ood": true,
+          "expert": "base",
+          "composite_score": 0.815,
+          "exec_score": 1.0,
+          "linter_score": 0.385,
+          "modernity_score": 1.0,
+          "prompt_tokens": 89,
+          "gen_tokens": 2048,
+          "fold_latency_ms": 0.36,
+          "exec_detail": "Compiles=True, Ruff violations=16"
+        },
+        "Arm B (Oracle Swarm)": {
+          "step_id": "p5_t2_streaming_generator",
+          "title": "Async Streaming Memory Generator for Audit Diffs [OOD]",
+          "is_ood": true,
+          "expert": "astral",
+          "composite_score": 0.667,
+          "exec_score": 1.0,
+          "linter_score": 0.556,
+          "modernity_score": 0.0,
+          "prompt_tokens": 89,
+          "gen_tokens": 227,
+          "fold_latency_ms": 0.93,
+          "exec_detail": "Compiles=True, Ruff violations=8"
+        },
+        "Arm C (Autonomous Engine)": {
+          "step_id": "p5_t2_streaming_generator",
+          "title": "Async Streaming Memory Generator for Audit Diffs [OOD]",
+          "is_ood": true,
+          "expert": "astral",
+          "composite_score": 0.667,
+          "exec_score": 1.0,
+          "linter_score": 0.556,
+          "modernity_score": 0.0,
+          "prompt_tokens": 89,
+          "gen_tokens": 227,
+          "fold_latency_ms": 1.01,
+          "exec_detail": "Compiles=True, Ruff violations=8"
+        }
+      }
+    },
+    {
+      "step_id": "p5_t3_pytest_audit_suite",
+      "title": "Pytest Async Test Suite for Ledger Invariants [OOD]",
+      "is_ood": true,
+      "results": {
+        "Arm A (Base 4B)": {
+          "step_id": "p5_t3_pytest_audit_suite",
+          "title": "Pytest Async Test Suite for Ledger Invariants [OOD]",
+          "is_ood": true,
+          "expert": "base",
+          "composite_score": 0.73,
+          "exec_score": 1.0,
+          "linter_score": 0.101,
+          "modernity_score": 1.0,
+          "prompt_tokens": 77,
+          "gen_tokens": 901,
+          "fold_latency_ms": 0.42,
+          "exec_detail": "Compiles=True, Ruff violations=89"
+        },
+        "Arm B (Oracle Swarm)": {
+          "step_id": "p5_t3_pytest_audit_suite",
+          "title": "Pytest Async Test Suite for Ledger Invariants [OOD]",
+          "is_ood": true,
+          "expert": "astral",
+          "composite_score": 0.777,
+          "exec_score": 1.0,
+          "linter_score": 0.256,
+          "modernity_score": 1.0,
+          "prompt_tokens": 77,
+          "gen_tokens": 508,
+          "fold_latency_ms": 0.95,
+          "exec_detail": "Compiles=True, Ruff violations=29"
+        },
+        "Arm C (Autonomous Engine)": {
+          "step_id": "p5_t3_pytest_audit_suite",
+          "title": "Pytest Async Test Suite for Ledger Invariants [OOD]",
+          "is_ood": true,
+          "expert": "astral",
+          "composite_score": 0.777,
+          "exec_score": 1.0,
+          "linter_score": 0.256,
+          "modernity_score": 1.0,
+          "prompt_tokens": 77,
+          "gen_tokens": 508,
+          "fold_latency_ms": 1.17,
+          "exec_detail": "Compiles=True, Ruff violations=29"
+        }
+      }
+    }
+  ]
+}

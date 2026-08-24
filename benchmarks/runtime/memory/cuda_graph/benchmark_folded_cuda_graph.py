@@ -25,7 +25,7 @@ if torch.cuda.is_available():
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from runtime.canon import REPO_ROOT  # noqa: E402
+from runtime.canon import REPO_ROOT, configure_deterministic_attention  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
@@ -45,6 +45,7 @@ def run_benchmark(
     vram_cap_gb: float = 22.0,
     max_new_tokens: int = 256,
 ):
+    configure_deterministic_attention()
     set_hard_vram_cap(vram_cap_gb)
     print("==================================================")
     print(f" Weight Folding + CUDA Graph Synergy Benchmark ({model_name})")

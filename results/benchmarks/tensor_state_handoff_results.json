@@ -1,0 +1,231 @@
+{
+  "device": "AMD Radeon Graphics",
+  "model_id": "Qwen/Qwen3.5-4B",
+  "horizons": [
+    128,
+    512,
+    1024,
+    2048
+  ],
+  "pipelines": [
+    {
+      "name": "Database Schema -> FastMCP Server -> Pytest Suite",
+      "turns_data": [
+        {
+          "pipeline": "Database Schema -> FastMCP Server -> Pytest Suite",
+          "turn": 2,
+          "target_horizon": 128,
+          "arm_a_tokens": 210,
+          "arm_a_prefill_ms": 133.07,
+          "arm_b_tokens": 34,
+          "arm_b_prefill_ms": 124.747,
+          "prefill_speedup": 1.07,
+          "tokens_saved": 176,
+          "token_savings_pct": 83.8,
+          "human_summary": "Here is the complete FastMCP server implementation:"
+        },
+        {
+          "pipeline": "Database Schema -> FastMCP Server -> Pytest Suite",
+          "turn": 2,
+          "target_horizon": 512,
+          "arm_a_tokens": 546,
+          "arm_a_prefill_ms": 232.739,
+          "arm_b_tokens": 34,
+          "arm_b_prefill_ms": 83.486,
+          "prefill_speedup": 2.79,
+          "tokens_saved": 512,
+          "token_savings_pct": 93.8,
+          "human_summary": "Here is the complete FastMCP server implementation:"
+        },
+        {
+          "pipeline": "Database Schema -> FastMCP Server -> Pytest Suite",
+          "turn": 2,
+          "target_horizon": 1024,
+          "arm_a_tokens": 1058,
+          "arm_a_prefill_ms": 342.499,
+          "arm_b_tokens": 34,
+          "arm_b_prefill_ms": 84.924,
+          "prefill_speedup": 4.03,
+          "tokens_saved": 1024,
+          "token_savings_pct": 96.8,
+          "human_summary": "Here is the complete FastMCP server implementation:"
+        },
+        {
+          "pipeline": "Database Schema -> FastMCP Server -> Pytest Suite",
+          "turn": 2,
+          "target_horizon": 2048,
+          "arm_a_tokens": 2082,
+          "arm_a_prefill_ms": 638.835,
+          "arm_b_tokens": 34,
+          "arm_b_prefill_ms": 83.851,
+          "prefill_speedup": 7.62,
+          "tokens_saved": 2048,
+          "token_savings_pct": 98.4,
+          "human_summary": "Here is the complete FastMCP server implementation:"
+        },
+        {
+          "pipeline": "Database Schema -> FastMCP Server -> Pytest Suite",
+          "turn": 3,
+          "target_horizon": 128,
+          "arm_a_tokens": 203,
+          "arm_a_prefill_ms": 130.911,
+          "arm_b_tokens": 27,
+          "arm_b_prefill_ms": 93.765,
+          "prefill_speedup": 1.4,
+          "tokens_saved": 176,
+          "token_savings_pct": 86.7,
+          "human_summary": "Here is the comprehensive async pytest test suite:"
+        },
+        {
+          "pipeline": "Database Schema -> FastMCP Server -> Pytest Suite",
+          "turn": 3,
+          "target_horizon": 512,
+          "arm_a_tokens": 539,
+          "arm_a_prefill_ms": 227.541,
+          "arm_b_tokens": 27,
+          "arm_b_prefill_ms": 83.774,
+          "prefill_speedup": 2.72,
+          "tokens_saved": 512,
+          "token_savings_pct": 95.0,
+          "human_summary": "Here is the comprehensive async pytest test suite:"
+        },
+        {
+          "pipeline": "Database Schema -> FastMCP Server -> Pytest Suite",
+          "turn": 3,
+          "target_horizon": 1024,
+          "arm_a_tokens": 1051,
+          "arm_a_prefill_ms": 344.563,
+          "arm_b_tokens": 27,
+          "arm_b_prefill_ms": 84.991,
+          "prefill_speedup": 4.05,
+          "tokens_saved": 1024,
+          "token_savings_pct": 97.4,
+          "human_summary": "Here is the comprehensive async pytest test suite:"
+        },
+        {
+          "pipeline": "Database Schema -> FastMCP Server -> Pytest Suite",
+          "turn": 3,
+          "target_horizon": 2048,
+          "arm_a_tokens": 2075,
+          "arm_a_prefill_ms": 639.751,
+          "arm_b_tokens": 27,
+          "arm_b_prefill_ms": 84.508,
+          "prefill_speedup": 7.57,
+          "tokens_saved": 2048,
+          "token_savings_pct": 98.7,
+          "human_summary": "Here is the comprehensive async pytest test suite:"
+        }
+      ]
+    },
+    {
+      "name": "Product Catalog -> Recommendation API -> Audit Logger",
+      "turns_data": [
+        {
+          "pipeline": "Product Catalog -> Recommendation API -> Audit Logger",
+          "turn": 2,
+          "target_horizon": 128,
+          "arm_a_tokens": 167,
+          "arm_a_prefill_ms": 115.007,
+          "arm_b_tokens": 35,
+          "arm_b_prefill_ms": 85.359,
+          "prefill_speedup": 1.35,
+          "tokens_saved": 132,
+          "token_savings_pct": 79.0,
+          "human_summary": "Here is the modern FastAPI async router:"
+        },
+        {
+          "pipeline": "Product Catalog -> Recommendation API -> Audit Logger",
+          "turn": 2,
+          "target_horizon": 512,
+          "arm_a_tokens": 544,
+          "arm_a_prefill_ms": 233.02,
+          "arm_b_tokens": 35,
+          "arm_b_prefill_ms": 84.581,
+          "prefill_speedup": 2.75,
+          "tokens_saved": 509,
+          "token_savings_pct": 93.6,
+          "human_summary": "Here is the modern FastAPI async router:"
+        },
+        {
+          "pipeline": "Product Catalog -> Recommendation API -> Audit Logger",
+          "turn": 2,
+          "target_horizon": 1024,
+          "arm_a_tokens": 1056,
+          "arm_a_prefill_ms": 344.608,
+          "arm_b_tokens": 35,
+          "arm_b_prefill_ms": 86.656,
+          "prefill_speedup": 3.98,
+          "tokens_saved": 1021,
+          "token_savings_pct": 96.7,
+          "human_summary": "Here is the modern FastAPI async router:"
+        },
+        {
+          "pipeline": "Product Catalog -> Recommendation API -> Audit Logger",
+          "turn": 2,
+          "target_horizon": 2048,
+          "arm_a_tokens": 2080,
+          "arm_a_prefill_ms": 642.354,
+          "arm_b_tokens": 35,
+          "arm_b_prefill_ms": 84.036,
+          "prefill_speedup": 7.64,
+          "tokens_saved": 2045,
+          "token_savings_pct": 98.3,
+          "human_summary": "Here is the modern FastAPI async router:"
+        },
+        {
+          "pipeline": "Product Catalog -> Recommendation API -> Audit Logger",
+          "turn": 3,
+          "target_horizon": 128,
+          "arm_a_tokens": 156,
+          "arm_a_prefill_ms": 112.428,
+          "arm_b_tokens": 24,
+          "arm_b_prefill_ms": 82.675,
+          "prefill_speedup": 1.36,
+          "tokens_saved": 132,
+          "token_savings_pct": 84.6,
+          "human_summary": "Here is the lightweight async FastAPI middleware module:"
+        },
+        {
+          "pipeline": "Product Catalog -> Recommendation API -> Audit Logger",
+          "turn": 3,
+          "target_horizon": 512,
+          "arm_a_tokens": 533,
+          "arm_a_prefill_ms": 232.298,
+          "arm_b_tokens": 24,
+          "arm_b_prefill_ms": 82.115,
+          "prefill_speedup": 2.83,
+          "tokens_saved": 509,
+          "token_savings_pct": 95.5,
+          "human_summary": "Here is the lightweight async FastAPI middleware module:"
+        },
+        {
+          "pipeline": "Product Catalog -> Recommendation API -> Audit Logger",
+          "turn": 3,
+          "target_horizon": 1024,
+          "arm_a_tokens": 1045,
+          "arm_a_prefill_ms": 340.541,
+          "arm_b_tokens": 24,
+          "arm_b_prefill_ms": 83.341,
+          "prefill_speedup": 4.09,
+          "tokens_saved": 1021,
+          "token_savings_pct": 97.7,
+          "human_summary": "Here is the lightweight async FastAPI middleware module:"
+        },
+        {
+          "pipeline": "Product Catalog -> Recommendation API -> Audit Logger",
+          "turn": 3,
+          "target_horizon": 2048,
+          "arm_a_tokens": 2069,
+          "arm_a_prefill_ms": 641.692,
+          "arm_b_tokens": 24,
+          "arm_b_prefill_ms": 81.901,
+          "prefill_speedup": 7.84,
+          "tokens_saved": 2045,
+          "token_savings_pct": 98.8,
+          "human_summary": "Here is the lightweight async FastAPI middleware module:"
+        }
+      ]
+    }
+  ],
+  "scaling_summary": {}
+}

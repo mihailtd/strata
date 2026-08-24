@@ -48,7 +48,7 @@ if torch.cuda.is_available():  # fla's device probe is @cache'd at import
 
 from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 
-from runtime.canon import REPO_ROOT  # noqa: E402
+from runtime.canon import REPO_ROOT, configure_deterministic_attention  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
@@ -73,9 +73,11 @@ ADAPTER = "results/adapters/m2_astral_r8a128"
 @torch.no_grad()
 def decode_step_ms(model, B, prompt_len, k, reps=20):
     """Median ms for one forward of k token(s) per sequence, with a warm cache."""
+    torch.cuda.empty_cache()
     ids = torch.randint(1000, 50000, (B, prompt_len), device=model.device)
     out = model(ids, use_cache=True)
     cache = out.past_key_values
+    del out, ids
     step = torch.randint(1000, 50000, (B, k), device=model.device)
     for _ in range(5):
         model(step, past_key_values=cache, use_cache=True)
@@ -87,6 +89,8 @@ def decode_step_ms(model, B, prompt_len, k, reps=20):
         model(step, past_key_values=cache, use_cache=True)
         torch.cuda.synchronize()
         ts.append((time.perf_counter() - t0) * 1000)
+    del cache, step
+    torch.cuda.empty_cache()
     ts.sort()
     return ts[len(ts) // 2]
 
@@ -101,6 +105,7 @@ def main():
     ap.add_argument("--out", default="results/batch_scaling.json")
     args = ap.parse_args()
 
+    configure_deterministic_attention()
     set_hard_vram_cap(args.vram_cap_gb)
     AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
     model = AutoModelForCausalLM.from_pretrained(

@@ -53,7 +53,7 @@ if torch.cuda.is_available():
 
 from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 
-from runtime.canon import REPO_ROOT  # noqa: E402
+from runtime.canon import REPO_ROOT, configure_deterministic_attention  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
@@ -239,6 +239,7 @@ def main():
     )
     args = parser.parse_args()
 
+    configure_deterministic_attention()
     set_hard_vram_cap(args.vram_cap_gb)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     dev_name = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"

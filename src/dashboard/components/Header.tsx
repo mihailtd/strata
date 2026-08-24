@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Zap, Activity, MessageSquare, Factory, Network, BookOpen, Cpu, ChevronDown } from "lucide-react";
+import { Zap, Activity, MessageSquare, Factory, Network, BookOpen, Cpu, ChevronDown, Layers } from "lucide-react";
 import { useEngineStatus } from "@/lib/useEngineStatus";
 
 export const AVAILABLE_BASE_MODELS = [
@@ -62,6 +62,7 @@ export default function Header() {
   const navItems = [
     { href: "/", label: "Dynamic Agent Matrix", icon: Activity },
     { href: "/chat", label: "Morphing Studio", icon: MessageSquare },
+    { href: "/pipeline", label: "Multi-Agent Studio", icon: Layers },
     { href: "/dag", label: "NOTEARS Causal Graph", icon: Network },
     { href: "/training", label: "Training Factory & Audit", icon: Factory },
     { href: "/docs", label: "Research Docs", icon: BookOpen },

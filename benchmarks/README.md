@@ -95,6 +95,7 @@ To ensure scientific rigor and prevent regressions, all future experiments **MUS
 * **[`runtime/performance/prefill_vs_decode/`](runtime/performance/prefill_vs_decode/)**: Amdahl's Law audit proving decode governs 94.1% of user latency.
 * **[`runtime/performance/fla_triton_kernels/`](runtime/performance/fla_triton_kernels/)**: ROCm Triton kernel acceleration flattening verification latency to 1.19x.
 * **[`runtime/performance/batch_scaling/`](runtime/performance/batch_scaling/)**: High-batch throughput scaling up to $B=64$ (611 tok/s).
+* **[`runtime/multi_agent/`](runtime/multi_agent/)**: Tensor-Level Recurrent State Handoff ($S_t$) & Hybrid Dual Protocol, delivering **$O(1)$ constant-time handoffs** with **7.84x prefill speedup at $T=2048$** and **98.8% context window capacity preservation**.
 
 ### 2. [`factory/`](factory/) — The Factory & Geometric Probes
 * **[`factory/EVALUATION_LADDER.md`](factory/EVALUATION_LADDER.md)**: The 4-stage fast-to-slow evaluation ladder (SVD checks → micro-loss probes → targeted logprob shift → downstream benchmarks).
@@ -105,5 +106,10 @@ To ensure scientific rigor and prevent regressions, all future experiments **MUS
 * **[`factory/architecture_comparison/`](factory/architecture_comparison/)**: Stock LoRA vs `id_kron` controlled head-to-head evaluation.
 * **[`factory/m1_vs_m2_regime/`](factory/m1_vs_m2_regime/)**: Controlled A/B audit establishing the unified M2 `bfloat16` + Liger pipeline (+3.36 pp win).
 
-### 3. [`superseded/`](superseded/) — Historical Provenance
+### 3. [`multi_turn_execution_benchmark.py`](multi_turn_execution_benchmark.py) — Chained Multi-Turn Execution Gate
+* **15-Step Multi-Pipeline Evaluation**: Tests sequential task handoff across PostgreSQL schemas, FastMCP servers, and test suites with real Ruff linter and DuckDB sandbox execution.
+* **Autonomous Intent Routing (Arm C = Arm B)**: Autonomous Engine matches Oracle Swarm accuracy with statistically significant positive edge over Base 4B (+0.045, 95% CI [+0.004, +0.084]).
+* **Massive Token & Latency Efficiency**: Consumes **5,474 tokens vs 11,969 tokens** on Base 4B (**+54.3% token savings**), with average adapter swap time of **0.94 ms**.
+
+### 4. [`superseded/`](superseded/) — Historical Provenance
 * Retired benchmarks and legacy prototypes preserved with full documentation of why they were superseded (including [`ftq_0.8b_experiments.md`](superseded/ftq_0.8b_experiments.md) and [`AUDIT_HISTORY_2026-08-11.md`](superseded/AUDIT_HISTORY_2026-08-11.md)).

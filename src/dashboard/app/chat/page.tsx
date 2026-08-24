@@ -207,6 +207,23 @@ export default function ChatPage() {
     }
   };
 
+  const toggleStateHandoff = async () => {
+    if (togglesBusy) return;
+    setTogglesBusy("state_handoff");
+    setToggleError(null);
+    try {
+      const data = await postEngine("set_state_handoff", { enabled: !status?.state_handoff_enabled });
+      patchStatus({
+        state_handoff_enabled: data.state_handoff_enabled,
+        state_handoff_mb: data.state_handoff_mb,
+      });
+    } catch (e) {
+      setToggleError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setTogglesBusy(null);
+    }
+  };
+
   const toggleAdapterSelection = (adapterId: string) => {
     if (selectedAdapters.includes(adapterId)) {
       setSelectedAdapters(selectedAdapters.filter((id) => id !== adapterId));
@@ -851,6 +868,31 @@ export default function ChatPage() {
                     {mode === "surgical" ? "Surgical" : "Plain Additive"}
                   </button>
                 ))}
+              </div>
+            </div>
+
+            {/* Tensor State Handoff ($S_t$ SSM) ON/OFF */}
+            <div className="border-t border-white/5 pt-2.5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] font-semibold text-slate-300 flex items-center gap-1">
+                    <Zap className="h-3 w-3 text-[#00f2ff]" /> Tensor State Handoff ($S_t$)
+                  </span>
+                  <span className="text-[9px] text-slate-400 block">
+                    {status?.state_handoff_enabled !== false ? "54.97 MB pinned • 0ms prefill" : "Text re-prefill baseline"}
+                  </span>
+                </div>
+                <button
+                  onClick={toggleStateHandoff}
+                  disabled={!status?.loaded || togglesBusy !== null}
+                  className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[10px] font-bold uppercase transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
+                    status?.state_handoff_enabled !== false
+                      ? "border-[#00f2ff]/40 bg-[#00f2ff]/15 text-[#00f2ff] shadow-[0_0_10px_rgba(0,242,255,0.2)]"
+                      : "border-white/10 bg-black/40 text-slate-400"
+                  }`}
+                >
+                  {togglesBusy === "state_handoff" ? "..." : status?.state_handoff_enabled !== false ? "ON" : "OFF"}
+                </button>
               </div>
             </div>
           </div>
