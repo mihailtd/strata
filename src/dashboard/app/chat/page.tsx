@@ -14,6 +14,7 @@ import {
   Hash,
   RotateCcw,
   Square,
+  Cpu,
 } from "lucide-react";
 import { useEngineStatus } from "@/lib/useEngineStatus";
 import { usePersistentState } from "@/lib/usePersistentState";
@@ -216,6 +217,22 @@ export default function ChatPage() {
       patchStatus({
         state_handoff_enabled: data.state_handoff_enabled,
         state_handoff_mb: data.state_handoff_mb,
+      });
+    } catch (e) {
+      setToggleError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setTogglesBusy(null);
+    }
+  };
+
+  const toggleW4A16 = async () => {
+    if (togglesBusy) return;
+    setTogglesBusy("w4a16");
+    setToggleError(null);
+    try {
+      const data = await postEngine("set_w4a16", { enabled: !status?.w4a16_enabled });
+      patchStatus({
+        w4a16_enabled: data.w4a16_enabled,
       });
     } catch (e) {
       setToggleError(e instanceof Error ? e.message : String(e));
@@ -892,6 +909,31 @@ export default function ChatPage() {
                   }`}
                 >
                   {togglesBusy === "state_handoff" ? "..." : status?.state_handoff_enabled !== false ? "ON" : "OFF"}
+                </button>
+              </div>
+            </div>
+
+            {/* Fused W4A16 + Dynamic LoRA (RDNA3) ON/OFF */}
+            <div className="border-t border-white/5 pt-2.5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] font-semibold text-slate-300 flex items-center gap-1">
+                    <Cpu className="h-3 w-3 text-[#10b981]" /> Fused W4A16 + LoRA
+                  </span>
+                  <span className="text-[9px] text-slate-400 block">
+                    {status?.w4a16_enabled ? "3.88x VRAM • 1.17x decode" : "Standard BF16 baseline"}
+                  </span>
+                </div>
+                <button
+                  onClick={toggleW4A16}
+                  disabled={!status?.loaded || togglesBusy !== null}
+                  className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[10px] font-bold uppercase transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
+                    status?.w4a16_enabled
+                      ? "border-[#10b981]/40 bg-[#10b981]/15 text-[#10b981] shadow-[0_0_10px_rgba(16,185,129,0.2)]"
+                      : "border-white/10 bg-black/40 text-slate-400"
+                  }`}
+                >
+                  {togglesBusy === "w4a16" ? "..." : status?.w4a16_enabled ? "ON" : "OFF"}
                 </button>
               </div>
             </div>

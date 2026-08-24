@@ -1,0 +1,273 @@
+{
+  "device": "AMD Radeon Graphics",
+  "target_arch": "gfx1100",
+  "canon": {
+    "ADAPTER_VERSION": "v7",
+    "MAX_NEW_TOKENS": 2048,
+    "BASE_MODEL": "Qwen/Qwen3.5-4B",
+    "VRAM_CAP_GB": 22.0,
+    "GPU_SAFETY_THRESHOLD_GB": 6.0,
+    "GREEDY": true,
+    "LORA_RANK": 8,
+    "LORA_ALPHA": 128,
+    "KV_CACHE_DTYPE": "bfloat16",
+    "ATTENTION_BACKEND": "sdpa"
+  },
+  "config": {
+    "group_size": 128,
+    "rank": 8,
+    "alpha": 16.0,
+    "n_repeats": 5,
+    "iters": 30
+  },
+  "results": [
+    {
+      "M": 1,
+      "K": 2560,
+      "N": 2560,
+      "desc": "Single-token decode (M=1, K=2560, N=2560)",
+      "bf16_mb": 13.11,
+      "w4_mb": 3.38,
+      "vram_reduction": 3.88,
+      "torch_bf16_ms": 0.0264,
+      "triton_bf16_ms": 0.0288,
+      "triton_w4a16_ms": 0.0225,
+      "fused_w4a16_lora_ms": 0.0351,
+      "torch_bf16_lora_ms": 0.0524,
+      "w4_vs_torch_speedup": 1.17,
+      "fused_vs_torch_lora_speedup": 1.49,
+      "w4_tflops": 0.58,
+      "base_cos_sim": 1.0,
+      "fused_cos_sim": 0.999996,
+      "iqr_torch_bf16": [
+        0.0259,
+        0.0274
+      ],
+      "iqr_triton_w4a16": [
+        0.0224,
+        0.0227
+      ],
+      "iqr_fused_lora": [
+        0.035,
+        0.0352
+      ]
+    },
+    {
+      "M": 2,
+      "K": 2560,
+      "N": 2560,
+      "desc": "MTP Speculative verify K=2 (M=2, K=2560, N=2560)",
+      "bf16_mb": 13.11,
+      "w4_mb": 3.38,
+      "vram_reduction": 3.88,
+      "torch_bf16_ms": 0.027,
+      "triton_bf16_ms": 0.0488,
+      "triton_w4a16_ms": 0.0226,
+      "fused_w4a16_lora_ms": 0.0495,
+      "torch_bf16_lora_ms": 0.0537,
+      "w4_vs_torch_speedup": 1.19,
+      "fused_vs_torch_lora_speedup": 1.08,
+      "w4_tflops": 1.16,
+      "base_cos_sim": 1.0,
+      "fused_cos_sim": 0.999996,
+      "iqr_torch_bf16": [
+        0.0261,
+        0.028
+      ],
+      "iqr_triton_w4a16": [
+        0.0222,
+        0.0228
+      ],
+      "iqr_fused_lora": [
+        0.0482,
+        0.0507
+      ]
+    },
+    {
+      "M": 4,
+      "K": 2560,
+      "N": 2560,
+      "desc": "MTP Speculative verify K=4 (M=4, K=2560, N=2560)",
+      "bf16_mb": 13.11,
+      "w4_mb": 3.38,
+      "vram_reduction": 3.88,
+      "torch_bf16_ms": 0.0268,
+      "triton_bf16_ms": 0.0464,
+      "triton_w4a16_ms": 0.0232,
+      "fused_w4a16_lora_ms": 0.0497,
+      "torch_bf16_lora_ms": 0.0511,
+      "w4_vs_torch_speedup": 1.16,
+      "fused_vs_torch_lora_speedup": 1.03,
+      "w4_tflops": 2.26,
+      "base_cos_sim": 1.0,
+      "fused_cos_sim": 0.999996,
+      "iqr_torch_bf16": [
+        0.0263,
+        0.0268
+      ],
+      "iqr_triton_w4a16": [
+        0.0225,
+        0.0235
+      ],
+      "iqr_fused_lora": [
+        0.0489,
+        0.0512
+      ]
+    },
+    {
+      "M": 16,
+      "K": 2560,
+      "N": 2560,
+      "desc": "Micro-batch B=16 decode (M=16, K=2560, N=2560)",
+      "bf16_mb": 13.11,
+      "w4_mb": 3.38,
+      "vram_reduction": 3.88,
+      "torch_bf16_ms": 0.0272,
+      "triton_bf16_ms": 0.0502,
+      "triton_w4a16_ms": 0.0247,
+      "fused_w4a16_lora_ms": 0.0517,
+      "torch_bf16_lora_ms": 0.053,
+      "w4_vs_torch_speedup": 1.1,
+      "fused_vs_torch_lora_speedup": 1.03,
+      "w4_tflops": 8.48,
+      "base_cos_sim": 1.0,
+      "fused_cos_sim": 0.999996,
+      "iqr_torch_bf16": [
+        0.0266,
+        0.028
+      ],
+      "iqr_triton_w4a16": [
+        0.0245,
+        0.025
+      ],
+      "iqr_fused_lora": [
+        0.0514,
+        0.052
+      ]
+    },
+    {
+      "M": 64,
+      "K": 2560,
+      "N": 7680,
+      "desc": "Prompt prefill QKV proj (M=64, K=2560, N=7680)",
+      "bf16_mb": 39.32,
+      "w4_mb": 10.14,
+      "vram_reduction": 3.88,
+      "torch_bf16_ms": 0.0474,
+      "triton_bf16_ms": 0.0702,
+      "triton_w4a16_ms": 0.0657,
+      "fused_w4a16_lora_ms": 0.0838,
+      "torch_bf16_lora_ms": 0.0754,
+      "w4_vs_torch_speedup": 0.72,
+      "fused_vs_torch_lora_speedup": 0.9,
+      "w4_tflops": 38.29,
+      "base_cos_sim": 1.0,
+      "fused_cos_sim": 0.999996,
+      "iqr_torch_bf16": [
+        0.047,
+        0.0495
+      ],
+      "iqr_triton_w4a16": [
+        0.0655,
+        0.0657
+      ],
+      "iqr_fused_lora": [
+        0.0835,
+        0.0881
+      ]
+    },
+    {
+      "M": 128,
+      "K": 2560,
+      "N": 6912,
+      "desc": "Medium prefill Gate/Up proj (M=128, K=2560, N=6912)",
+      "bf16_mb": 35.39,
+      "w4_mb": 9.12,
+      "vram_reduction": 3.88,
+      "torch_bf16_ms": 0.08,
+      "triton_bf16_ms": 0.0968,
+      "triton_w4a16_ms": 0.1003,
+      "fused_w4a16_lora_ms": 0.1223,
+      "torch_bf16_lora_ms": 0.114,
+      "w4_vs_torch_speedup": 0.8,
+      "fused_vs_torch_lora_speedup": 0.93,
+      "w4_tflops": 45.16,
+      "base_cos_sim": 1.0,
+      "fused_cos_sim": 0.999996,
+      "iqr_torch_bf16": [
+        0.0783,
+        0.082
+      ],
+      "iqr_triton_w4a16": [
+        0.0987,
+        0.1024
+      ],
+      "iqr_fused_lora": [
+        0.1173,
+        0.1224
+      ]
+    },
+    {
+      "M": 256,
+      "K": 6912,
+      "N": 2560,
+      "desc": "Prefill Down proj (M=256, K=6912, N=2560)",
+      "bf16_mb": 35.39,
+      "w4_mb": 9.12,
+      "vram_reduction": 3.88,
+      "torch_bf16_ms": 0.1597,
+      "triton_bf16_ms": 0.1937,
+      "triton_w4a16_ms": 0.1964,
+      "fused_w4a16_lora_ms": 0.2375,
+      "torch_bf16_lora_ms": 0.2111,
+      "w4_vs_torch_speedup": 0.81,
+      "fused_vs_torch_lora_speedup": 0.89,
+      "w4_tflops": 46.14,
+      "base_cos_sim": 1.0,
+      "fused_cos_sim": 0.999996,
+      "iqr_torch_bf16": [
+        0.159,
+        0.1614
+      ],
+      "iqr_triton_w4a16": [
+        0.195,
+        0.1995
+      ],
+      "iqr_fused_lora": [
+        0.2363,
+        0.2394
+      ]
+    },
+    {
+      "M": 1024,
+      "K": 2560,
+      "N": 2560,
+      "desc": "Serving batch / long prefill (M=1024, K=2560, N=2560)",
+      "bf16_mb": 13.11,
+      "w4_mb": 3.38,
+      "vram_reduction": 3.88,
+      "torch_bf16_ms": 0.1644,
+      "triton_bf16_ms": 0.1983,
+      "triton_w4a16_ms": 0.2322,
+      "fused_w4a16_lora_ms": 0.2634,
+      "torch_bf16_lora_ms": 0.212,
+      "w4_vs_torch_speedup": 0.71,
+      "fused_vs_torch_lora_speedup": 0.8,
+      "w4_tflops": 57.81,
+      "base_cos_sim": 1.0,
+      "fused_cos_sim": 0.999996,
+      "iqr_torch_bf16": [
+        0.163,
+        0.1646
+      ],
+      "iqr_triton_w4a16": [
+        0.2316,
+        0.2327
+      ],
+      "iqr_fused_lora": [
+        0.2624,
+        0.2642
+      ]
+    }
+  ]
+}
