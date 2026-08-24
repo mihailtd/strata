@@ -16,6 +16,33 @@ from typing import Any
 from runtime.canon import CANON
 
 
+def get_sysfs_vram_info() -> dict[str, Any] | None:
+    """Reads raw hardware VRAM metrics directly from amdgpu sysfs (independent of PyTorch)."""
+    try:
+        from pathlib import Path
+        # Search for primary discrete card (e.g. card0 / RX 7900 XTX)
+        for card_dev in sorted(Path("/sys/class/drm").glob("card*/device")):
+            used_path = card_dev / "mem_info_vram_used"
+            total_path = card_dev / "mem_info_vram_total"
+            if used_path.exists() and total_path.exists():
+                total_bytes = int(total_path.read_text().strip())
+                used_bytes = int(used_path.read_text().strip())
+                total_gb = total_bytes / (1024**3)
+                if total_gb >= 8.0:  # Identify discrete GPU with >= 8GB VRAM
+                    used_gb = used_bytes / (1024**3)
+                    free_gb = max(0.0, total_gb - used_gb)
+                    return {
+                        "sysfs_available": True,
+                        "used_gb": round(used_gb, 2),
+                        "free_gb": round(free_gb, 2),
+                        "total_gb": round(total_gb, 2),
+                        "device_name": "AMD Discrete GPU (sysfs)",
+                    }
+    except Exception:
+        pass
+    return None
+
+
 def get_gpu_vram_info() -> dict[str, Any]:
     """Queries hardware VRAM status via PyTorch/ROCm."""
     try:
@@ -54,11 +81,34 @@ def get_gpu_vram_info() -> dict[str, Any]:
         }
 
 
+def _get_kfd_compute_pids() -> set[int]:
+    """Finds PIDs holding the native Linux /dev/kfd device node (ROCm compute clients)."""
+    pids = set()
+    try:
+        res = subprocess.run(
+            ["lsof", "-t", "/dev/kfd"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=1.0,
+        )
+        if res.returncode == 0 and res.stdout.strip():
+            for p in res.stdout.strip().split():
+                if p.isdigit():
+                    pids.add(int(p))
+    except Exception:
+        pass
+    return pids
+
+
 def find_conflicting_processes() -> list[dict[str, Any]]:
-    """Finds other Python processes running concurrently that might hold GPU state."""
+    """Finds other Python/compute processes running concurrently that hold GPU state."""
     current_pid = os.getpid()
     parent_pid = os.getppid()
     conflicts = []
+    seen_pids = set()
+    kfd_pids = _get_kfd_compute_pids()
+
     try:
         res = subprocess.run(
             ["ps", "-eo", "pid,ppid,pcpu,pmem,args"],
@@ -77,18 +127,33 @@ def find_conflicting_processes() -> list[dict[str, Any]]:
                         ppid = int(ppid_str)
                     except ValueError:
                         continue
-                    if pid in (current_pid, parent_pid) or ppid == current_pid:
+                    if pid in (current_pid, parent_pid) or ppid == current_pid or pid in seen_pids:
                         continue
-                    # Ignore internal IDE servers and system daemons
-                    if any(ignored in cmd for ignored in ("antigravity-ide-server", "vscode-server", "subiquity", "pylsp", "pyright", "pytest")):
+                    # Ignore internal IDE servers, pytest runner, language servers, and system daemons
+                    if any(ignored in cmd for ignored in (
+                        "antigravity-ide-server", "vscode-server", "subiquity",
+                        "pylsp", "pyright", "pytest", "krunner", "plasmashell",
+                        "plasma-systemmonitor", "Xwayland", "electron"
+                    )):
                         continue
-                    # Check if it's a python command in the current workspace or running torch
-                    if "python" in cmd and any(k in cmd for k in ("gnn", "train", "benchmark", "probe", "torch", "calibrate", "server")):
+
+                    # Direct hardware match: process holds open /dev/kfd compute handle
+                    is_kfd_holder = pid in kfd_pids
+
+                    # Workload keyword match: python training/serving/eval scripts or standalone LLM servers
+                    is_workload = (
+                        ("python" in cmd and any(k in cmd for k in ("gnn", "train", "benchmark", "probe", "torch", "calibrate", "server")))
+                        or any(server_bin in cmd for server_bin in ("llama-server", "vllm", "unsloth"))
+                    )
+
+                    if is_kfd_holder or is_workload:
+                        seen_pids.add(pid)
                         conflicts.append({
                             "pid": pid,
                             "cpu_pct": cpu,
                             "mem_pct": mem,
                             "cmd": cmd[:90] + ("..." if len(cmd) > 90 else ""),
+                            "is_kfd_holder": is_kfd_holder,
                         })
     except Exception:
         pass
