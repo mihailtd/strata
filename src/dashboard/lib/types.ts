@@ -20,6 +20,8 @@ export interface EngineStatus {
   w4a16_enabled?: boolean;
   spec_range_gate_enabled?: boolean;
   spec_range_threshold?: number;
+  cut_set_hedging_enabled?: boolean;
+  cut_set_target_reliability?: number;
   intra_team_dr?: number;
   last_morph_ms?: number;
 }

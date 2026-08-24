@@ -100,6 +100,7 @@ To ensure scientific rigor and prevent regressions, all future experiments **MUS
 * **[`runtime/memory/zero_recapture_swapping/`](runtime/memory/zero_recapture_swapping/)**: Multi-turn expert swapping under single-capture CUDA Graphs with 0 bytes transient churn.
 * **[`runtime/speculative/mtp_speculative/`](runtime/speculative/mtp_speculative/)**: Native MTP speculative engine with 52.5 MB recurrent rollback, delivering **2.20x net speedup at $K=6$**.
 * **[`runtime/speculative/range_statistic_gating/`](runtime/speculative/range_statistic_gating/)**: Single-Pass Range Statistic Early-Exit Gating (Chapter 8) pruning **36.4% of wasted drafts** for **+18.8% decode speedup (68.49 tok/s)**.
+* **[`runtime/speculative/weibull_hazard_gating/`](runtime/speculative/weibull_hazard_gating/)**: Weibull Hazard Spatio-Temporal Speculative Gating (Chapters 3 & 8) pruning **53.8% of doomed drafts** at $K=8$ for **+35.8% net decode speedup (74.60 tok/s)**.
 * **[`runtime/speculative/speculation_matrix/`](runtime/speculative/speculation_matrix/)**: 180-run 3x3 domain matrix audit routing speculative execution.
 * **[`runtime/performance/`](runtime/performance/)**: Native RDNA3 Triton WMMA acceleration and Fused W4A16 + Dynamic LoRA branch kernel (3.88x VRAM compression, 1.17x–1.49x memory-bound decode speedup).
 * **[`runtime/performance/prefill_vs_decode/`](runtime/performance/prefill_vs_decode/)**: Amdahl's Law audit proving decode governs 94.1% of user latency.
@@ -116,11 +117,13 @@ To ensure scientific rigor and prevent regressions, all future experiments **MUS
 * **[`factory/m1_vs_m2_regime/`](factory/m1_vs_m2_regime/)**: Controlled A/B audit establishing the unified M2 `bfloat16` + Liger pipeline (+3.36 pp win).
 * **[`factory/robust_distillation/`](factory/robust_distillation/)**: Breakdown-Bounded Loss (LAD-LASSO & Huber) insulation under $\le 50\%$ noisy synthetic tool trace contamination ($101.60\% \to 2.92\%$ error reduction over $L_2$).
 * **[`factory/speculative_mtp_distillation/`](factory/speculative_mtp_distillation/)**: Domain-Specialized MTP Draft Head continuous distillation preventing representation collapse ($0.003 \to 0.731$ cosine alignment).
+* **[`factory/quantization/`](factory/quantization/)**: High-Dimensional Leverage Scoring for Outlier Channels (Chapter 21, $2.0\text{--}3.6\text{ ms}$ per layer, $100\%$ F1) and Stress–Strength Interference Calibration (Chapter 8.5, $+0.79\text{ dB}$ higher SNR in $0.18\text{--}0.25\text{ ms}$).
 
-### 3. [`multi_turn_execution_benchmark.py`](multi_turn_execution_benchmark.py) — Chained Multi-Turn Execution Gate
+### 3. [`multi_turn_execution_benchmark.py`](multi_turn_execution_benchmark.py) & [`agentic/`](agentic/) — Chained Multi-Turn Execution & DAG Reliability
 * **15-Step Multi-Pipeline Evaluation**: Tests sequential task handoff across PostgreSQL schemas, FastMCP servers, and test suites with real Ruff linter and DuckDB sandbox execution.
 * **Autonomous Intent Routing (Arm C = Arm B)**: Autonomous Engine matches Oracle Swarm accuracy with statistically significant positive edge over Base 4B (+0.045, 95% CI [+0.004, +0.084]).
 * **Massive Token & Latency Efficiency**: Consumes **5,474 tokens vs 11,969 tokens** on Base 4B (**+54.3% token savings**), with average adapter swap time of **0.94 ms**.
+* **[`agentic/CUT_SET_README.md`](agentic/CUT_SET_README.md)**: Minimal Cut Sets & $k$-out-of-$n$ Speculative Tool Hedging (Chapter 6) boosting pipeline completion from $63.2\% \to 93.8\%$ (**+30.6 pp**) while reducing compute by **53.3%** vs blanket swarms.
 
 ### 4. [`superseded/`](superseded/) — Historical Provenance
 * Retired benchmarks and legacy prototypes preserved with full documentation of why they were superseded (including [`ftq_0.8b_experiments.md`](superseded/ftq_0.8b_experiments.md) and [`AUDIT_HISTORY_2026-08-11.md`](superseded/AUDIT_HISTORY_2026-08-11.md)).

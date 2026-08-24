@@ -1,23 +1,18 @@
-"""Single-Pass Range Statistic Speculative Early-Exit Gating.
+"""Single-Pass Range Statistic & Weibull Hazard Speculative Early-Exit Gating.
 
-Grounding: Chapter 8 (Outlier Detection Based on Range Statistic Empirical Evaluation
-and Comparisons, Dania Dallah, Hana Sulieman, Ayman Alzaatreh).
+Theoretical Grounding:
+1. Chapter 8 (Outlier Detection Based on Range Statistic Empirical Evaluation
+   and Comparisons, Dania Dallah, Hana Sulieman, Ayman Alzaatreh):
+   - Fast extreme range spread: R_M = max_{j=1..M} z_(j) - min_{j=1..M} z_(j) in O(1) registers.
+2. Chapter 3 (Lifetime Distributions – Weibull Distribution & Failure Rate,
+   Jaejin Hwang, Reliability Analysis Using MINITAB and Python):
+   - Speculative draft failure exhibits wear-out characteristic (beta > 1):
+     h(k; beta, eta) = (beta / eta) * ((k + 1) / eta)^(beta - 1)
+   - Spatio-temporal dynamic threshold:
+     tau_eff(k) = tau_0 * [1 + gamma * h(k)]
 
-Mathematical Formulation:
-1. Extreme Range Spread Statistic:
-   R_M = max_{j=1..M} z_(j) - min_{j=1..M} z_(j)
-   computed over top-M candidate logits z_(1) >= z_(2) >= ... >= z_(M).
-2. Studentized Range Statistic:
-   q_M = R_M / s_IQR
-   where s_IQR = (Q_3 - Q_1) / 1.349 provides scale-invariant outlier estimation
-   without 2-pass variance computation.
-3. Decision Boundary:
-   If R_M < tau_range:
-     Logit distribution over top candidates is flat/uniform (high uncertainty).
-     -> Abort speculative draft chain immediately to avoid generating junk tokens.
-   Else:
-     Top candidate dominates with high margin.
-     -> Continue multi-token speculative drafting.
+As draft depth k increases (e.g. k=4..8), the confidence bar automatically tightens,
+pruning doomed tail draft tokens and eliminating wasted verification passes.
 """
 
 from __future__ import annotations
@@ -29,20 +24,66 @@ import torch.nn.functional as F
 
 
 class RangeStatisticGate(nn.Module):
-    """Zero-overhead single-pass range statistic early-exit gate for speculative drafting."""
+    """Zero-overhead single-pass range statistic & Weibull hazard early-exit gate for speculative drafting."""
 
     def __init__(
         self,
         top_m: int = 8,
         threshold: float = 3.5,
         mode: Literal["extreme_range", "studentized_range", "iqr_spread"] = "extreme_range",
+        weibull_hazard_enabled: bool = True,
+        weibull_beta: float = 2.2,
+        weibull_eta: float = 4.0,
+        weibull_gamma: float = 0.6,
     ) -> None:
         super().__init__()
         if top_m < 2:
             raise ValueError(f"top_m must be at least 2, got {top_m}")
+        if weibull_beta <= 0:
+            raise ValueError(f"weibull_beta must be > 0, got {weibull_beta}")
+        if weibull_eta <= 0:
+            raise ValueError(f"weibull_eta must be > 0, got {weibull_eta}")
+        if weibull_gamma < 0:
+            raise ValueError(f"weibull_gamma must be >= 0, got {weibull_gamma}")
+
         self.top_m = top_m
         self.threshold = threshold
         self.mode = mode
+        self.weibull_hazard_enabled = weibull_hazard_enabled
+        self.weibull_beta = weibull_beta
+        self.weibull_eta = weibull_eta
+        self.weibull_gamma = weibull_gamma
+
+    def compute_hazard_rate(self, step_idx: int) -> float:
+        """Computes instantaneous Weibull wear-out hazard rate for draft step k (0-indexed).
+
+        Args:
+            step_idx: Zero-indexed draft step (0 for first draft token, 1 for second, etc.)
+
+        Returns:
+            Instantaneous hazard rate h(k) >= 0.0
+        """
+        step = step_idx + 1  # 1-indexed lifetime elapsed
+        hazard = (self.weibull_beta / self.weibull_eta) * (
+            (step / self.weibull_eta) ** (self.weibull_beta - 1.0)
+        )
+        return float(hazard)
+
+    def get_effective_threshold(self, step_idx: int = 0) -> float:
+        """Computes dynamic confidence threshold taking elapsed draft horizon into account.
+
+        Args:
+            step_idx: Zero-indexed draft step
+
+        Returns:
+            Effective threshold tau_eff(k)
+        """
+        if not self.weibull_hazard_enabled:
+            return float(self.threshold)
+
+        h_k = self.compute_hazard_rate(step_idx)
+        tau_eff = self.threshold * (1.0 + self.weibull_gamma * h_k)
+        return float(tau_eff)
 
     @torch.no_grad()
     def compute_range(self, logits: torch.Tensor) -> torch.Tensor:
@@ -81,7 +122,7 @@ class RangeStatisticGate(nn.Module):
         raise ValueError(f"Unknown range statistic mode: {self.mode}")
 
     @torch.no_grad()
-    def should_early_exit(self, logits: torch.Tensor, step_idx: int = 0) -> Tuple[bool, float]:
+    def should_early_exit(self, logits: torch.Tensor, step_idx: int = 0) -> Tuple[bool, float, float]:
         """Decides whether to abort the speculative draft chain on this token.
 
         Args:
@@ -89,14 +130,15 @@ class RangeStatisticGate(nn.Module):
             step_idx: Step index within the speculative window (0..K-1)
 
         Returns:
-            Tuple of (should_abort: bool, range_value: float)
+            Tuple of (should_abort: bool, range_value: float, effective_threshold: float)
         """
         flat_logits = logits.view(-1, logits.shape[-1])
-        range_val = self.compute_range(flat_logits).squeeze().item()
+        range_val = float(self.compute_range(flat_logits).squeeze().item())
+        effective_tau = self.get_effective_threshold(step_idx)
 
-        # If range spread is below critical threshold, distribution is flat -> abort
-        should_abort = bool(range_val < self.threshold)
-        return should_abort, float(range_val)
+        # If range spread is below dynamic threshold, abort
+        should_abort = bool(range_val < effective_tau)
+        return should_abort, range_val, effective_tau
 
     @classmethod
     def calibrate_threshold(
@@ -106,24 +148,29 @@ class RangeStatisticGate(nn.Module):
         top_m: int = 8,
         target_precision: float = 0.90,
         min_support: int = 10,
+        weibull_hazard_enabled: bool = True,
+        weibull_beta: float = 2.2,
+        weibull_eta: float = 4.0,
+        weibull_gamma: float = 0.6,
     ) -> float:
-        """Calibrates optimal range threshold against empirical verification acceptance.
-
-        Finds the smallest range cutoff tau_R such that drafting is permitted only
-        when empirical acceptance probability >= target_precision with sufficient support.
-        """
-        gate = cls(top_m=top_m, mode="extreme_range")
+        """Calibrates optimal baseline range threshold against empirical verification acceptance."""
+        gate = cls(
+            top_m=top_m,
+            mode="extreme_range",
+            weibull_hazard_enabled=weibull_hazard_enabled,
+            weibull_beta=weibull_beta,
+            weibull_eta=weibull_eta,
+            weibull_gamma=weibull_gamma,
+        )
         ranges = gate.compute_range(logits_history).view(-1)
         matches = verification_matches.view(-1).float()
 
-        # Sweep candidate percentiles from 10th to 90th percentile
         sorted_ranges, _ = torch.sort(ranges)
         n = len(sorted_ranges)
 
         best_tau = float(sorted_ranges[int(0.5 * n)].item())
         min_samples = max(min_support, int(0.05 * n))
 
-        # Check candidate cutoffs from lower to higher
         step = max(1, n // 200)
         for i in range(0, n, step):
             tau = float(sorted_ranges[i].item())

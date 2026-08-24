@@ -1,0 +1,22 @@
+{
+  "benchmark": "Chapter 6 Minimal Cut Set & k-out-of-n Hedging",
+  "n_runs": 500,
+  "naive_series": {
+    "completion_rate_pct": 63.2,
+    "avg_tool_calls": 5.0,
+    "time_ms": 23.70720700128004
+  },
+  "blanket_swarm": {
+    "completion_rate_pct": 99.2,
+    "avg_tool_calls": 15.0,
+    "time_ms": 1.7763389987521805
+  },
+  "minimal_cut_set": {
+    "completion_rate_pct": 93.8,
+    "avg_tool_calls": 7.0,
+    "exceptions_averted": 141,
+    "completion_gain_pct": 30.599999999999994,
+    "compute_savings_vs_swarm_pct": 53.333333333333336,
+    "time_ms": 115.41751700133318
+  }
+}

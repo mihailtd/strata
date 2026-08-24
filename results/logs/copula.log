@@ -44,7 +44,7 @@
   --------------------------------------------------------------------------------------------------------
            pearson |     0.227 |      0.839 |          False |      0.009 |      0.1
               tail |     0.297 |      0.438 |          False |      0.009 |      0.3
-   tail_calibrated |     0.219 |     -0.107 |           True |      0.178 |    129.9
+   tail_calibrated |     0.219 |     -0.107 |           True |      0.178 |    132.3
   --------------------------------------------------------------------------------------------------------
 
   Recall on cross-domain tokens at matched wasted-fold budgets:
@@ -55,38 +55,49 @@
               tail |             0.0% |             0.0% |             0.0% |            28.5%
    tail_calibrated |            28.5% |            28.5% |            28.5% |            28.5%
   --------------------------------------------------------------------------------------------------------
-     pearson routing decision: 5.25 us median (IQR 0.10) -- 0.0053 ms/token
-        tail routing decision: 5.23 us median (IQR 0.10) -- 0.0052 ms/token
-  tail_calibrated routing decision: 5.22 us median (IQR 0.10) -- 0.0052 ms/token
+     pearson routing decision: 5.29 us median (IQR 0.10) -- 0.0053 ms/token
+        tail routing decision: 5.24 us median (IQR 0.09) -- 0.0052 ms/token
+  tail_calibrated routing decision: 5.26 us median (IQR 0.09) -- 0.0053 ms/token
 
-[4/4] Real v7 experts: tail dependence between expert response magnitudes.
+[4/4] Real v7 experts, scored on REAL TOKENS.
 (null): No such file or directory
 (null): No such file or directory
 (null): No such file or directory
 (null): No such file or directory
-Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
-Failed to load CPU gemm_4bit_forward from kernels-community: Cannot find a build variant for this system in kernels-community/quantization-bitsandbytes (revision: 25cc9c0993efd3481a4d152f2d867aabba0fc5e6):
+  Routing signal check: domain argmax correct 5/6, per-token top-1 43.3% (chance 16.7%)
+  ------------------------------------------------------------------------------------------------
+    token domain |     astral     duckdb  financial  postgresq  python_mo  python_we | argmax
+  ------------------------------------------------------------------------------------------------
+          astral |      0.681      0.486      0.533      0.467      0.562      0.548 | astral
+          duckdb |      0.418      0.582      0.453      0.488      0.463      0.436 | duckdb
+       financial |      0.432      0.454      0.612      0.431      0.431      0.395 | financial
+      postgresql |      0.478      0.593      0.484      0.620      0.515      0.504 | postgresql
+   python_modern |      0.518      0.450      0.500      0.505      0.562      0.579 | python_web
+      python_web |      0.518      0.394      0.452      0.461      0.479      0.550 | python_web
+  ------------------------------------------------------------------------------------------------
 
-torch211-cxx11-cpu-x86_64-linux: Torch version (2.11) does not match environment Torch version (2.13)
-torch210-cxx11-cpu-x86_64-linux: Torch version (2.10) does not match environment Torch version (2.13)
-torch212-cxx11-cpu-x86_64-linux: Torch version (2.12) does not match environment Torch version (2.13)
-torch213-cxx11-cpu-x86_64-linux: backend (cpu) does not match selected backend (rocm72). Please make sure you already `pip install kernels` and the kernels >= 0.11.1
-  6 experts, 2048 surrogate tokens, k=41
-  ----------------------------------------------------------------------------------------
-                              pair |  lambda_U |  pearson |  null 95% | above null
-  ----------------------------------------------------------------------------------------
-                 duckdb+python_web |     0.073 |    0.031 |     0.049 |       True
-                     astral+duckdb |     0.024 |    0.023 |     0.049 |      False
-                  astral+financial |     0.024 |    0.020 |     0.062 |      False
-                 astral+postgresql |     0.024 |    0.010 |     0.049 |      False
-              astral+python_modern |     0.024 |    0.012 |     0.062 |      False
-                  duckdb+financial |     0.024 |   -0.002 |     0.073 |      False
-                 duckdb+postgresql |     0.024 |    0.006 |     0.049 |      False
-              duckdb+python_modern |     0.024 |    0.001 |     0.073 |      False
-              financial+postgresql |     0.024 |    0.010 |     0.049 |      False
-              financial+python_web |     0.024 |   -0.028 |     0.049 |      False
-  ----------------------------------------------------------------------------------------
-  1 of 15 expert pairs exceed their matched tail-independent null.
+  6 experts, 34465 REAL TOKENS samples, k=689
+  ------------------------------------------------------------------------------------------------
+                            pair |  lambda_U |  pearson |  null 95% |   excess | above
+  ------------------------------------------------------------------------------------------------
+        python_modern+python_web |     0.740 |    0.918 |     0.643 |   +0.097 |   YES
+         financial+python_modern |     0.435 |    0.706 |     0.342 |   +0.094 |   YES
+            financial+python_web |     0.403 |    0.679 |     0.320 |   +0.083 |   YES
+        postgresql+python_modern |     0.527 |    0.798 |     0.446 |   +0.080 |   YES
+               astral+python_web |     0.335 |    0.609 |     0.267 |   +0.069 |   YES
+            astral+python_modern |     0.318 |    0.595 |     0.250 |   +0.068 |   YES
+            financial+postgresql |     0.402 |    0.708 |     0.350 |   +0.052 |   YES
+           postgresql+python_web |     0.435 |    0.788 |     0.434 |   +0.001 |   YES
+               astral+postgresql |     0.226 |    0.572 |     0.237 |   -0.010 |     -
+               duckdb+postgresql |     0.459 |    0.819 |     0.472 |   -0.013 |     -
+                astral+financial |     0.254 |    0.639 |     0.290 |   -0.036 |     -
+                duckdb+financial |     0.277 |    0.668 |     0.313 |   -0.036 |     -
+                   astral+duckdb |     0.115 |    0.508 |     0.194 |   -0.079 |     -
+               duckdb+python_web |     0.340 |    0.774 |     0.422 |   -0.082 |     -
+            duckdb+python_modern |     0.372 |    0.821 |     0.478 |   -0.107 |     -
+  ------------------------------------------------------------------------------------------------
+  8 of 15 expert pairs exceed their matched tail-independent null.
+  Calibration REORDERS the routing table: ['postgresql+python_modern', 'duckdb+postgresql'] drops out of the top 3 once its own correlation-matched null is subtracted.
 
 ==========================================================================================================
  VERDICT
@@ -94,7 +105,7 @@ torch213-cxx11-cpu-x86_64-linux: backend (cpu) does not match selected backend (
   Recall on cross-domain tokens at a <=1% wasted-fold budget -- pearson: 0.0%, tail: 0.0%, tail_calibrated: 28.5%
   Recall on cross-domain tokens at a <=5% wasted-fold budget -- pearson: 28.5%, tail: 28.5%, tail_calibrated: 28.5%
   Ranks the genuinely tail-dependent pair above the merely-correlated distractor: pearson=False, tail=False, tail_calibrated=True
-  Per-token decision cost 5.22 us (0.0052 ms).
+  Per-token decision cost 5.26 us (0.0053 ms).
   lambda_U estimator bias on a TRULY tail-independent pair (n=2048, k/n=0.02): +0.311 -- absolute cutoffs are not usable, calibrated ones are.
 ==========================================================================================================
 

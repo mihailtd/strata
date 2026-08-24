@@ -789,6 +789,8 @@ class EngineStatusModel(BaseModel):
     w4a16_enabled: bool = Field(False, description="Fused W4A16 + Dynamic LoRA Triton WMMA execution on RDNA3")
     spec_range_gate_enabled: bool = Field(True, description="Single-Pass Range Statistic Speculative Gating (Chapter 8)")
     spec_range_threshold: float = Field(5.0, description="Logit range spread threshold for speculative early exit")
+    cut_set_hedging_enabled: bool = Field(True, description="Chapter 6 Minimal Cut Sets & k-out-of-n Speculative Tool Hedging")
+    cut_set_target_reliability: float = Field(0.95, description="Target reliability cutoff for Order-1 Cut Sets")
 
 
 def _build_engine_status() -> EngineStatusModel:
@@ -822,6 +824,8 @@ def _build_engine_status() -> EngineStatusModel:
         w4a16_enabled=model_state.get("w4a16_enabled", False),
         spec_range_gate_enabled=model_state.get("range_gate_enabled", True),
         spec_range_threshold=model_state.get("range_gate_threshold", 5.0),
+        cut_set_hedging_enabled=model_state.get("cut_set_hedging_enabled", True),
+        cut_set_target_reliability=model_state.get("cut_set_target_reliability", 0.95),
     )
 
 
@@ -2052,24 +2056,65 @@ async def set_speculative_decode(req: SetSpeculativeDecodeRequest) -> Speculativ
 class SetSpeculativeRangeGateRequest(BaseModel):
     enabled: bool
     threshold: float | None = 5.0
+    weibull_hazard_enabled: bool | None = True
+    weibull_beta: float | None = 2.2
+    weibull_gamma: float | None = 0.6
 
 
 @app.post("/api/engine/set_speculative_range_gate")
 async def set_speculative_range_gate(req: SetSpeculativeRangeGateRequest):
-    """Toggles Single-Pass Range Statistic Speculative Early-Exit Gating (Chapter 8).
+    """Toggles Single-Pass Range Statistic & Weibull Hazard Speculative Gating (Chapters 3 & 8).
 
     Instantaneous O(1) swap: no CUDA Graph recapture required.
     """
     model_state["range_gate_enabled"] = req.enabled
     if req.threshold is not None:
         model_state["range_gate_threshold"] = req.threshold
-        model_state["range_gate"] = RangeStatisticGate(top_m=8, threshold=req.threshold)
+    
+    weibull_on = req.weibull_hazard_enabled if req.weibull_hazard_enabled is not None else True
+    beta = req.weibull_beta if req.weibull_beta is not None else 2.2
+    gamma = req.weibull_gamma if req.weibull_gamma is not None else 0.6
 
-    print(f"[IMB Server] Range Speculative Gate set: enabled={req.enabled}, threshold={model_state['range_gate_threshold']}")
+    model_state["range_gate"] = RangeStatisticGate(
+        top_m=8,
+        threshold=model_state["range_gate_threshold"],
+        weibull_hazard_enabled=weibull_on,
+        weibull_beta=beta,
+        weibull_gamma=gamma,
+    )
+
+    print(f"[IMB Server] Range Speculative Gate set: enabled={req.enabled}, threshold={model_state['range_gate_threshold']}, weibull_hazard={weibull_on} (beta={beta}, gamma={gamma})")
     return {
         "status": "updated",
         "spec_range_gate_enabled": model_state["range_gate_enabled"],
         "spec_range_threshold": model_state["range_gate_threshold"],
+        "weibull_hazard_enabled": weibull_on,
+        "weibull_beta": beta,
+        "weibull_gamma": gamma,
+    }
+
+
+class SetCutSetHedgingRequest(BaseModel):
+    enabled: bool
+    target_reliability: float | None = 0.95
+    max_workers: int | None = 4
+
+
+@app.post("/api/engine/set_cut_set_hedging")
+async def set_cut_set_hedging(req: SetCutSetHedgingRequest):
+    """Configures Chapter 6 Minimal Cut Set & k-out-of-n Speculative Tool Hedging middleware."""
+    model_state["cut_set_hedging_enabled"] = req.enabled
+    if req.target_reliability is not None:
+        model_state["cut_set_target_reliability"] = req.target_reliability
+    if req.max_workers is not None:
+        model_state["cut_set_max_workers"] = req.max_workers
+
+    print(f"[IMB Server] Cut-Set Speculative Hedging set: enabled={req.enabled}, target_reliability={model_state.get('cut_set_target_reliability', 0.95)}")
+    return {
+        "status": "updated",
+        "cut_set_hedging_enabled": model_state["cut_set_hedging_enabled"],
+        "cut_set_target_reliability": model_state.get("cut_set_target_reliability", 0.95),
+        "cut_set_max_workers": model_state.get("cut_set_max_workers", 4),
     }
 
 

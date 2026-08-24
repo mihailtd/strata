@@ -1,0 +1,28 @@
+{
+  "benchmark": "Live 15-Step Multi-Turn Sandbox Benchmark",
+  "sandboxes": [
+    "DuckDB In-Memory OLAP",
+    "PostgreSQL DDL/SQL",
+    "Rust Ruff Linter",
+    "Python AST Compiler"
+  ],
+  "n_runs": 100,
+  "naive_sequential": {
+    "completion_rate_pct": 57.99999999999999,
+    "avg_sandbox_calls": 10.38,
+    "total_time_s": 7.636830148003355
+  },
+  "blanket_swarm": {
+    "completion_rate_pct": 73.0,
+    "avg_sandbox_calls": 45.0,
+    "total_time_s": 0.00029380199703155085
+  },
+  "minimal_cut_set": {
+    "completion_rate_pct": 100.0,
+    "avg_sandbox_calls": 18.0,
+    "exceptions_averted": 50,
+    "completion_gain_pct": 42.00000000000001,
+    "compute_reduction_vs_swarm_pct": 60.0,
+    "total_time_s": 9.844356235997111
+  }
+}

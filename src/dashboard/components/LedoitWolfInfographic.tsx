@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import katex from "katex";
+import "katex/dist/katex.min.css";
 import {
   Compass,
   Layers,
@@ -16,6 +18,32 @@ import {
   TrendingDown,
   Atom,
 } from "lucide-react";
+
+/**
+ * KaTeX inline/block renderer component for crisp mathematical typography.
+ */
+function Tex({
+  math,
+  block = false,
+  className = "",
+}: {
+  math: string;
+  block?: boolean;
+  className?: string;
+}) {
+  const html = useMemo(() => {
+    try {
+      return katex.renderToString(math, {
+        displayMode: block,
+        throwOnError: false,
+      });
+    } catch {
+      return math;
+    }
+  }, [math, block]);
+
+  return <span className={className} dangerouslySetInnerHTML={{ __html: html }} />;
+}
 
 interface ExpertData {
   id: string;
@@ -60,7 +88,7 @@ export default function LedoitWolfInfographic() {
     const delta = Math.min(1.0, Math.max(0.0, raw_delta));
 
     const isSingular = sampleN < p_dim;
-    const conditionNumberSample = isSingular ? "∞ (Singular / Non-Invertible)" : (15.2 * (sampleN / (sampleN - p_dim))).toFixed(1);
+    const conditionNumberSample = isSingular ? "∞" : (15.2 * (sampleN / (sampleN - p_dim))).toFixed(1);
     const conditionNumberLW = (3.2 + 2.1 * (1 - delta)).toFixed(2);
 
     return {
@@ -105,7 +133,7 @@ export default function LedoitWolfInfographic() {
   }, [selectedExpertA, selectedExpertB]);
 
   return (
-    <div className="flex flex-col gap-6 w-full">
+    <div className="flex flex-col gap-6 w-full font-sans">
       {/* Header Banner & Mode Switcher */}
       <div className="relative overflow-hidden rounded-2xl border border-[rgba(0,242,255,0.2)] bg-gradient-to-br from-[#0c121e] via-[#101a2d] to-[#0a0f1d] p-6 shadow-2xl">
         <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[#00f2ff]/10 blur-3xl pointer-events-none" />
@@ -122,8 +150,9 @@ export default function LedoitWolfInfographic() {
             <h2 className="text-2xl font-black tracking-tight text-white flex items-center gap-2">
               <span>Ledoit-Wolf Shrinkage &amp; Riemannian Manifold Router</span>
             </h2>
-            <p className="text-sm text-slate-300 max-w-2xl mt-1">
-              Mathematical foundation for zero-reallocation dynamic expert team routing on the curved cone of Positive Definite matrices ($\mathcal{S}_{++}^p$).
+            <p className="text-sm text-slate-300 max-w-2xl mt-1.5 flex items-center gap-1 flex-wrap">
+              <span>Mathematical foundation for zero-reallocation dynamic expert team routing on the curved cone of Positive Definite matrices</span>
+              <Tex math="\mathcal{S}_{++}^p" className="text-cyan-300 font-bold" />.
             </p>
           </div>
 
@@ -163,19 +192,32 @@ export default function LedoitWolfInfographic() {
               <Sliders className="h-4 w-4" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">
-                Interactive Simulator: Ledoit-Wolf Shrinkage Intensity ($\delta^*$)
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <span>Interactive Simulator: Ledoit-Wolf Shrinkage Intensity</span>
+                <Tex math="\delta^*" className="text-cyan-300 font-bold" />
               </h3>
-              <p className="text-xs text-slate-400">
-                {viewMode === "layman"
-                  ? "See how the algorithm prevents crashes when you only have a few token samples ($n < p$)."
-                  : "Continuous convex combination: \\(\\Sigma_{\\text{LW}} = (1 - \\delta^*) S + \\delta^* F\\) with minimal Frobenius risk."}
+              <p className="text-xs text-slate-400 mt-0.5">
+                {viewMode === "layman" ? (
+                  <span className="flex items-center gap-1">
+                    <span>See how the algorithm prevents crashes when you only have a few token samples</span>
+                    <Tex math="(n < p)" className="text-amber-300" />.
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1">
+                    <span>Convex combination:</span>
+                    <Tex math="\Sigma_{\text{LW}} = (1 - \delta^*) S + \delta^* F" className="text-cyan-300 font-semibold" />
+                    <span>with minimal Frobenius quadratic risk.</span>
+                  </span>
+                )}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="font-mono text-xs text-slate-400">Dimension $p = {p_dim}$</span>
+            <span className="font-mono text-xs text-slate-400 flex items-center gap-1">
+              <span>Dimension</span>
+              <Tex math={`p = ${p_dim}`} className="text-slate-300 font-bold" />
+            </span>
           </div>
         </div>
 
@@ -184,15 +226,27 @@ export default function LedoitWolfInfographic() {
           <div className="md:col-span-6 flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-mono text-slate-300 flex items-center gap-1.5">
-                <span>Sample Size ($n$ Tokens):</span>
+                <span>Sample Size (</span>
+                <Tex math="n" className="text-cyan-300" />
+                <span> Tokens):</span>
                 <span className="text-cyan-300 font-bold text-sm bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/30">
                   {sampleN} tokens
                 </span>
               </span>
-              <span className="text-[11px] font-mono text-slate-400">
-                Regime:{" "}
+              <span className="text-[11px] font-mono text-slate-400 flex items-center gap-1">
+                <span>Regime:</span>
                 <strong className={shrinkageData.isSingular ? "text-rose-400" : "text-emerald-400"}>
-                  {shrinkageData.isSingular ? "$n < p$ (Sample Starved / Singular)" : "$n \\ge p$ (Overdetermined)"}
+                  {shrinkageData.isSingular ? (
+                    <span className="flex items-center gap-1">
+                      <Tex math="n < p" />
+                      <span>(Sample Starved / Singular)</span>
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1">
+                      <Tex math="n \ge p" />
+                      <span>(Overdetermined)</span>
+                    </span>
+                  )}
                 </strong>
               </span>
             </div>
@@ -217,19 +271,38 @@ export default function LedoitWolfInfographic() {
           {/* Live Meter Outputs */}
           <div className="md:col-span-6 grid grid-cols-2 sm:grid-cols-3 gap-3">
             <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3 flex flex-col">
-              <span className="text-[10px] font-mono uppercase text-slate-400">Shrinkage ($\delta^*$)</span>
+              <span className="text-[10px] font-mono uppercase text-slate-400 flex items-center gap-1">
+                <span>Shrinkage (</span>
+                <Tex math="\delta^*" className="text-cyan-300" />
+                <span>)</span>
+              </span>
               <span className="text-lg font-black font-mono text-cyan-300 mt-1">{shrinkageData.deltaPercent}%</span>
-              <span className="text-[10px] text-slate-400 mt-auto">Weight on Sphere ($F$)</span>
+              <span className="text-[10px] text-slate-400 mt-auto flex items-center gap-1">
+                <span>Weight on Sphere (</span>
+                <Tex math="F" className="text-cyan-300" />
+                <span>)</span>
+              </span>
             </div>
 
             <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 flex flex-col">
-              <span className="text-[10px] font-mono uppercase text-slate-400">Sample Weight</span>
+              <span className="text-[10px] font-mono uppercase text-slate-400 flex items-center gap-1">
+                <span>Sample Weight (</span>
+                <Tex math="1 - \delta^*" className="text-blue-300" />
+                <span>)</span>
+              </span>
               <span className="text-lg font-black font-mono text-blue-300 mt-1">{shrinkageData.sampleWeight}%</span>
-              <span className="text-[10px] text-slate-400 mt-auto">Weight on Data ($S$)</span>
+              <span className="text-[10px] text-slate-400 mt-auto flex items-center gap-1">
+                <span>Weight on Data (</span>
+                <Tex math="S" className="text-blue-300" />
+                <span>)</span>
+              </span>
             </div>
 
             <div className="col-span-2 sm:col-span-1 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 flex flex-col">
-              <span className="text-[10px] font-mono uppercase text-slate-400">Condition Number</span>
+              <span className="text-[10px] font-mono uppercase text-slate-400 flex items-center gap-1">
+                <span>Condition</span>
+                <Tex math="\kappa(\Sigma)" className="text-emerald-300" />
+              </span>
               <span className="text-base font-black font-mono text-emerald-300 mt-1">κ = {shrinkageData.conditionNumberLW}</span>
               <span className="text-[10px] text-emerald-400/80 mt-auto">Strictly Invertible ✅</span>
             </div>
@@ -241,18 +314,18 @@ export default function LedoitWolfInfographic() {
           {/* Box 1: Sample Covariance S */}
           <div className="flex-1 w-full text-center p-3 rounded-lg border border-slate-700 bg-slate-900/50">
             <span className="text-[11px] font-mono font-bold text-slate-300 block mb-1">
-              Sample Covariance ($S$)
+              Sample Covariance (<Tex math="S = \frac{1}{n-1}X^T X" />)
             </span>
             <div className="h-16 flex items-center justify-center font-mono text-xs text-slate-400 border border-dashed border-slate-700 rounded bg-black/30">
               {shrinkageData.isSingular ? (
-                <span className="text-rose-400 text-[11px] px-2 font-bold">
+                <span className="text-rose-400 text-[11px] px-2 font-bold leading-tight">
                   ⚠️ Rank Deficient (Rank ≤ {sampleN})<br />
-                  Determinant = 0.00
+                  det(S) = 0.00 | Non-Invertible
                 </span>
               ) : (
-                <span className="text-slate-300 text-[11px]">
-                  Full Rank ($p={p_dim}$)<br />
-                  Noisy off-diagonals
+                <span className="text-slate-300 text-[11px] leading-tight">
+                  Full Rank (<Tex math={`p=${p_dim}`} />)<br />
+                  Noisy Off-Diagonals
                 </span>
               )}
             </div>
@@ -264,10 +337,10 @@ export default function LedoitWolfInfographic() {
           {/* Box 2: Target Sphere F */}
           <div className="flex-1 w-full text-center p-3 rounded-lg border border-cyan-500/30 bg-cyan-950/20">
             <span className="text-[11px] font-mono font-bold text-cyan-300 block mb-1">
-              Target Sphere ($F = \mu I_p$)
+              Target Sphere (<Tex math="F = \mu I_p" />)
             </span>
             <div className="h-16 flex items-center justify-center font-mono text-xs text-cyan-400 border border-dashed border-cyan-500/30 rounded bg-black/30">
-              <span className="text-[11px]">
+              <span className="text-[11px] leading-tight">
                 Isotropic Diagonal Sphere<br />
                 Condition Number = 1.00
               </span>
@@ -280,12 +353,15 @@ export default function LedoitWolfInfographic() {
           {/* Box 3: Shrunk Covariance LW */}
           <div className="flex-1 w-full text-center p-3 rounded-lg border border-emerald-500/40 bg-emerald-950/20 shadow-[0_0_15px_rgba(16,185,129,0.15)]">
             <span className="text-[11px] font-mono font-bold text-emerald-300 block mb-1">
-              Ledoit-Wolf ($\Sigma_{\text{LW}}$)
+              Ledoit-Wolf (<Tex math="\Sigma_{\text{LW}}" />)
             </span>
             <div className="h-16 flex items-center justify-center font-mono text-xs text-emerald-300 border border-emerald-500/40 rounded bg-emerald-950/40">
-              <span className="text-[11px] font-bold">
-                ✅ Strictly Positive Definite ($\mathcal{S}_{++}^p$)<br />
-                κ = {shrinkageData.conditionNumberLW} | Non-Singular
+              <span className="text-[11px] font-bold leading-tight flex flex-col items-center">
+                <span className="flex items-center gap-1">
+                  <span>✅ Positive Definite</span>
+                  <Tex math="\mathcal{S}_{++}^p" className="text-emerald-300" />
+                </span>
+                <span>κ = {shrinkageData.conditionNumberLW} | Well-Conditioned</span>
               </span>
             </div>
             <span className="text-[10px] text-emerald-400 font-mono mt-1 block">Guaranteed Invertible Operator</span>
@@ -301,11 +377,14 @@ export default function LedoitWolfInfographic() {
               <Compass className="h-4 w-4" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">
-                Live 6-Expert Riemannian Geodesic Distance Matrix ($d_R$)
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <span>Live 6-Expert Riemannian Geodesic Distance Matrix</span>
+                <Tex math="d_R(\Sigma_1, \Sigma_2)" className="text-purple-300 font-bold" />
               </h3>
-              <p className="text-xs text-slate-400">
-                Click any pair of experts to evaluate their geodesic distance on $\mathcal{S}_{++}^p$ and dynamic stacking synergy.
+              <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
+                <span>Click any pair of experts to evaluate their geodesic distance on</span>
+                <Tex math="\mathcal{S}_{++}^p" className="text-purple-300 font-semibold" />
+                <span>and dynamic stacking synergy.</span>
               </p>
             </div>
           </div>
@@ -338,7 +417,6 @@ export default function LedoitWolfInfographic() {
                         (selectedExpertA === row.id && selectedExpertB === col.id) ||
                         (selectedExpertA === col.id && selectedExpertB === row.id);
 
-                      // Heatmap color logic: low distance = green/cyan synergy, high distance = rose isolation
                       let cellStyle = "text-slate-300 hover:bg-white/10";
                       if (d === 0) cellStyle = "bg-white/5 text-slate-500";
                       else if (d <= 4.5) cellStyle = "bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40";
@@ -368,14 +446,20 @@ export default function LedoitWolfInfographic() {
             </table>
 
             <div className="flex items-center gap-4 mt-3 text-[11px] font-mono text-slate-400">
-              <span className="flex items-center gap-1">
-                <span className="h-2.5 w-2.5 rounded bg-emerald-500/30 border border-emerald-500" /> $d_R \le 4.5$ (High Synergy)
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded bg-emerald-500/30 border border-emerald-500" />
+                <Tex math="d_R \le 4.5" />
+                <span>(High Synergy)</span>
               </span>
-              <span className="flex items-center gap-1">
-                <span className="h-2.5 w-2.5 rounded bg-blue-500/20 border border-blue-500" /> $4.5 &lt; d_R \le 12.0$ (Moderate)
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded bg-blue-500/20 border border-blue-500" />
+                <Tex math="4.5 < d_R \le 12.0" />
+                <span>(Moderate)</span>
               </span>
-              <span className="flex items-center gap-1">
-                <span className="h-2.5 w-2.5 rounded bg-rose-500/20 border border-rose-500" /> $d_R &gt; 15.0$ (Isolated)
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded bg-rose-500/20 border border-rose-500" />
+                <Tex math="d_R > 15.0" />
+                <span>(Isolated)</span>
               </span>
             </div>
           </div>
@@ -397,7 +481,10 @@ export default function LedoitWolfInfographic() {
                 </div>
 
                 <div className="flex flex-col items-center">
-                  <span className="text-xs font-mono text-slate-400">$d_R$ Geodesic</span>
+                  <span className="text-xs font-mono text-slate-400 flex items-center gap-1">
+                    <Tex math="d_R" className="text-slate-400" />
+                    <span>Geodesic</span>
+                  </span>
                   <span className="text-xl font-black font-mono text-cyan-300">{pairAnalysis.dist.toFixed(3)}</span>
                 </div>
 
@@ -410,7 +497,10 @@ export default function LedoitWolfInfographic() {
               <div className="space-y-2 text-xs text-slate-300">
                 <div className="flex justify-between py-1 border-b border-white/5">
                   <span className="text-slate-400">Affine Invariance:</span>
-                  <span className="font-mono text-emerald-400">Preserved under GL(p)</span>
+                  <span className="font-mono text-emerald-400 flex items-center gap-1">
+                    <span>Preserved under</span>
+                    <Tex math="\text{GL}(p)" />
+                  </span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-white/5">
                   <span className="text-slate-400">Volume Swelling:</span>
@@ -437,11 +527,18 @@ export default function LedoitWolfInfographic() {
             <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
             <h4 className="font-bold text-white text-sm">The Euclidean Flaw (Flat Space Assumption)</h4>
           </div>
-          <p className="text-xs text-slate-300 leading-relaxed mb-3">
-            Computing simple Euclidean distance $\|W_1 - W_2\|_F$ or linear covariance midpoint $\frac{\Sigma_1 + \Sigma_2}{2}$ ignores the non-linear curvature of positive-definite matrices.
+          <p className="text-xs text-slate-300 leading-relaxed mb-3 flex items-center gap-1 flex-wrap">
+            <span>Computing Euclidean distance</span>
+            <Tex math="\|W_1 - W_2\|_F" className="text-rose-300" />
+            <span>or linear midpoint</span>
+            <Tex math="\frac{\Sigma_1 + \Sigma_2}{2}" className="text-rose-300" />
+            <span>ignores the non-linear curvature of positive-definite matrices.</span>
           </p>
-          <div className="rounded-lg bg-black/40 border border-rose-500/20 p-3 font-mono text-[11px] text-rose-300 space-y-1">
-            <div>❌ <strong>Determinant Swelling:</strong> $\det\left(\frac{\Sigma_1 + \Sigma_2}{2}\right) &gt; \sqrt{\det(\Sigma_1) \det(\Sigma_2)}$</div>
+          <div className="rounded-lg bg-black/40 border border-rose-500/20 p-3 font-mono text-[11px] text-rose-300 space-y-2">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span>❌ <strong>Determinant Swelling:</strong></span>
+              <Tex math="\det\left(\frac{\Sigma_1 + \Sigma_2}{2}\right) > \sqrt{\det(\Sigma_1) \det(\Sigma_2)}" />
+            </div>
             <div>❌ <strong>Lacks Scale Invariance:</strong> Rescaling activations changes distances artificially.</div>
             <div>❌ <strong>Boundary Violations:</strong> Straight lines leave the positive-definite cone.</div>
           </div>
@@ -452,12 +549,20 @@ export default function LedoitWolfInfographic() {
             <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
             <h4 className="font-bold text-white text-sm">The Riemannian Solution (AIRM Geodesic)</h4>
           </div>
-          <p className="text-xs text-slate-300 leading-relaxed mb-3">
-            AIRM projects matrices onto the Riemannian manifold of Symmetric Positive Definite operators ($\mathcal{S}_{++}^p$), measuring distances along true shortest-path curves.
+          <p className="text-xs text-slate-300 leading-relaxed mb-3 flex items-center gap-1 flex-wrap">
+            <span>AIRM projects matrices onto the Riemannian manifold</span>
+            <Tex math="\mathcal{S}_{++}^p" className="text-emerald-300" />
+            <span>measuring distances along true shortest-path curves.</span>
           </p>
-          <div className="rounded-lg bg-black/40 border border-emerald-500/20 p-3 font-mono text-[11px] text-emerald-300 space-y-1">
-            <div>✅ <strong>Zero Volume Distortion:</strong> $\det(\Gamma(1/2)) = \sqrt{\det(\Sigma_1) \det(\Sigma_2)}$</div>
-            <div>✅ <strong>Affine Invariance:</strong> $d_R(A \Sigma_1 A^T, A \Sigma_2 A^T) = d_R(\Sigma_1, \Sigma_2)$</div>
+          <div className="rounded-lg bg-black/40 border border-emerald-500/20 p-3 font-mono text-[11px] text-emerald-300 space-y-2">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span>✅ <strong>Zero Volume Distortion:</strong></span>
+              <Tex math="\det(\Gamma(1/2)) = \sqrt{\det(\Sigma_1) \det(\Sigma_2)}" />
+            </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span>✅ <strong>Affine Invariance:</strong></span>
+              <Tex math="d_R(A \Sigma_1 A^T, A \Sigma_2 A^T) = d_R(\Sigma_1, \Sigma_2)" />
+            </div>
             <div>✅ <strong>Physics Guaranteed:</strong> All points along the geodesic remain strictly invertible.</div>
           </div>
         </div>

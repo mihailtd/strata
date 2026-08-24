@@ -20,6 +20,7 @@ import {
   FileCode,
   Terminal,
   Activity,
+  ShieldAlert,
 } from "lucide-react";
 import { useEngineStatus } from "@/lib/useEngineStatus";
 
@@ -99,6 +100,27 @@ export default function MultiAgentPipelinePage() {
   const [results, setResults] = useState<any>(null);
   const [selectedStepTab, setSelectedStepTab] = useState<number>(0);
   const [copiedCode, setCopiedCode] = useState<boolean>(false);
+  const [cutSetHedging, setCutSetHedging] = useState<boolean>(true);
+
+  React.useEffect(() => {
+    if (status?.cut_set_hedging_enabled !== undefined) {
+      setCutSetHedging(status.cut_set_hedging_enabled);
+    }
+  }, [status?.cut_set_hedging_enabled]);
+
+  const handleToggleCutSet = async () => {
+    const nextVal = !cutSetHedging;
+    setCutSetHedging(nextVal);
+    try {
+      await fetch("/api/engine/set_cut_set_hedging", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: nextVal, target_reliability: 0.95 }),
+      });
+    } catch (err) {
+      console.error("Failed to toggle cut-set hedging:", err);
+    }
+  };
 
   const handleSelectPreset = (index: number) => {
     setActivePresetIndex(index);
@@ -417,6 +439,34 @@ export default function MultiAgentPipelinePage() {
                       {tok}
                     </button>
                   ))}
+                </div>
+              </div>
+
+              {/* Chapter 6 Minimal Cut-Set Speculative Hedging Toggle */}
+              <div className="rounded-xl border border-purple-500/30 bg-purple-950/20 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert className="h-4 w-4 text-purple-400" />
+                    <span className="text-xs font-bold text-white">Cut-Set Speculative Hedging</span>
+                  </div>
+                  <button
+                    onClick={handleToggleCutSet}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      cutSetHedging ? "bg-purple-600 shadow-[0_0_10px_rgba(168,85,247,0.5)]" : "bg-slate-700"
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        cutSetHedging ? "translate-x-4" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-slate-300">
+                  <span>Chapter 6 SPOF $k=1/n=2$ Race</span>
+                  <span className="font-mono text-purple-300 font-bold">
+                    {cutSetHedging ? "ACTIVE (R≥95%)" : "DISABLED"}
+                  </span>
                 </div>
               </div>
 

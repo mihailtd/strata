@@ -16,6 +16,13 @@ export const DOCS_MANIFEST: DocItem[] = [
     description: "Interactive infographic & theorems for Ledoit-Wolf shrinkage and Riemannian manifold expert routing.",
   },
   {
+    id: "surgical-stacking",
+    title: "Surgical Multi-Expert Stacking (Interactive)",
+    category: "Core Architecture & Decisions",
+    relativePath: "docs/SURGICAL_MULTI_EXPERT_STACKING.md",
+    description: "Interactive infographic for LV-GLasso conflict routing + POET channel notching in activate_many().",
+  },
+  {
     id: "decisions",
     title: "DECISIONS.md (Architecture & Retirals)",
     category: "Core Architecture & Decisions",
@@ -95,6 +102,20 @@ export const DOCS_MANIFEST: DocItem[] = [
     description: "MTP draft head latency and CUDA graph capture.",
   },
   {
+    id: "bench-range-gate",
+    title: "Range Speculative Gate Benchmark",
+    category: "Runtime & Speculative",
+    relativePath: "benchmarks/runtime/speculative/range_statistic_gating/README.md",
+    description: "Single-pass O(1) register range statistics for speculative draft early-exit.",
+  },
+  {
+    id: "bench-weibull-hazard",
+    title: "Weibull Hazard Speculative Gate (Ch. 3)",
+    category: "Runtime & Speculative",
+    relativePath: "benchmarks/runtime/speculative/weibull_hazard_gating/README.md",
+    description: "Discrete Weibull wear-out hazard modeling for spatio-temporal draft truncation.",
+  },
+  {
     id: "bench-runtime-memory",
     title: "Runtime Memory & Residency",
     category: "Runtime & Speculative",
@@ -140,9 +161,30 @@ export const DOCS_MANIFEST: DocItem[] = [
   },
   {
     id: "bench-poet-decomposition",
-    title: "POET Decomposition Benchmark",
+    title: "POET Decomposition & Pruning",
     category: "Factory & Geometry",
-    relativePath: "benchmarks/factory/geometry/poet_decomposition/README.md",
-    description: "Factor load extraction and matrix reconstruction fidelity.",
+    relativePath: "benchmarks/factory/agentic/poet_decomposition/README.md",
+    description: "Surgical neuron pruning and collision resolution.",
+  },
+  {
+    id: "bench-leverage-quant",
+    title: "Leverage Outlier Quantization (Ch. 21)",
+    category: "Factory & Geometry",
+    relativePath: "benchmarks/factory/quantization/README.md",
+    description: "Single-pass diagnostic leverage projection for W4A16 outlier channel protection without grid search.",
+  },
+  {
+    id: "bench-ssi-quant",
+    title: "SSI Quantization Calibration (Ch. 8.5)",
+    category: "Factory & Geometry",
+    relativePath: "benchmarks/factory/quantization/SSI_README.md",
+    description: "Closed-form Stress-Strength Interference optimal clipping for low-bit quantization scaling.",
+  },
+  {
+    id: "bench-cut-set-reliability",
+    title: "Minimal Cut-Set DAG Reliability (Ch. 6)",
+    category: "Runtime & Speculative",
+    relativePath: "benchmarks/agentic/CUT_SET_README.md",
+    description: "Chapter 6 Minimal Cut Sets & k-out-of-n speculative hedging for agent tool DAGs.",
   },
 ];

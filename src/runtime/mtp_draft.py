@@ -262,9 +262,9 @@ class Qwen35MTPDraftHead(nn.Module):
             h = self._run_layer(fused, positions, cache)
             logits = self._lm_head(h)[:, -1, :]
 
-            # Single-Pass Range Statistic Early-Exit Gate (Chapter 8)
+            # Single-Pass Range Statistic & Weibull Hazard Gate (Chapters 3 & 8)
             if gate is not None and i > 0:
-                should_abort, _ = gate.should_early_exit(logits, step_idx=i)
+                should_abort, *_ = gate.should_early_exit(logits, step_idx=i)
                 if should_abort:
                     break
 

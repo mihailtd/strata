@@ -1,0 +1,40 @@
+{
+  "model_id": "Qwen/Qwen3.5-9B",
+  "experts_loaded": [
+    "postgresql",
+    "astral",
+    "duckdb"
+  ],
+  "gpu_generation_latencies_ms": {
+    "p1_postgresql": 3449.722475001181,
+    "p2_astral": 6429.85571698955,
+    "p3_duckdb": 1941.636429000937
+  },
+  "sandbox_execution": {
+    "status": "ANALYTICS_FALLBACK_SUCCESS",
+    "rows": 1,
+    "data": [
+      [
+        "ACC_100",
+        8200.0,
+        4100.0
+      ]
+    ]
+  },
+  "cut_set_telemetry": {
+    "total_nodes": 3,
+    "order_1_cut_sets": [
+      "step2",
+      "step3",
+      "step1"
+    ],
+    "hedged_nodes": [
+      "step2",
+      "step3"
+    ],
+    "total_tool_calls": 5,
+    "exceptions_averted": 1,
+    "failed_nodes": [],
+    "execution_time_ms": 14.51563600130612
+  }
+}

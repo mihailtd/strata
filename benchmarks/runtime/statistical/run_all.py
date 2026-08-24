@@ -46,9 +46,12 @@ BENCHMARKS: dict[str, dict[str, object]] = {
         "args": ["--replicates", "3000"],
     },
     "copula": {
+        # Captures too: --gpu-capture scores the experts on REAL tokens (a base-model
+        # forward pass) instead of the Gaussian surrogate. Without it the real-expert arm
+        # silently falls back to the surrogate, which finds 1 of 15 pairs instead of 8.
         "script": HERE / "copula_routing" / "benchmark_copula_tail_routing.py",
         "artifact": "copula_tail_routing.json",
-        "captures_activations": False,
+        "captures_activations": True,
         "args": ["--replicates", "300"],
     },
 }

@@ -49,12 +49,12 @@ def test_early_exit_decision():
     # 1. Peaked distribution: top logit = 20.0, others ~ 0.0 -> Range = 20.0 >= 5.0 -> Do NOT abort
     peaked_logits = torch.zeros(1, 100)
     peaked_logits[0, 0] = 20.0
-    should_abort_peaked, r_peaked = gate.should_early_exit(peaked_logits)
+    should_abort_peaked, r_peaked, _ = gate.should_early_exit(peaked_logits)
     assert not should_abort_peaked, f"Peaked distribution was incorrectly aborted (range={r_peaked})"
 
     # 2. Flat / Uniform distribution: all top logits = 1.0 -> Range = 0.0 < 5.0 -> MUST abort
     flat_logits = torch.ones(1, 100) + torch.randn(1, 100) * 0.01
-    should_abort_flat, r_flat = gate.should_early_exit(flat_logits)
+    should_abort_flat, r_flat, _ = gate.should_early_exit(flat_logits)
     assert should_abort_flat, f"Flat distribution was not aborted (range={r_flat})"
 
 

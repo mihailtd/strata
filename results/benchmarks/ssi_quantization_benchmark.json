@@ -1,0 +1,62 @@
+{
+  "4B Layer": {
+    "D_in": 2560,
+    "D_out": 4096,
+    "naive_max": {
+      "weight_snr_db": 15.897802114486694,
+      "output_snr_db": 15.896129608154297,
+      "time_ms": 0.37419699947349727
+    },
+    "heuristic_percentile": {
+      "weight_snr_db": 16.098339557647705,
+      "output_snr_db": 16.091080904006958,
+      "time_ms": 97.71504499803996
+    },
+    "ssi_closed_form": {
+      "weight_snr_db": 16.678617000579834,
+      "output_snr_db": 16.673743724822998,
+      "time_ms": 0.25343499873997644,
+      "snr_gain_db": 0.7776141166687012
+    }
+  },
+  "9B Layer": {
+    "D_in": 4096,
+    "D_out": 4096,
+    "naive_max": {
+      "weight_snr_db": 15.897083282470703,
+      "output_snr_db": 15.887662172317505,
+      "time_ms": 0.27432500064605847
+    },
+    "heuristic_percentile": {
+      "weight_snr_db": 16.097768545150757,
+      "output_snr_db": 16.092947721481323,
+      "time_ms": 0.26564899599179626
+    },
+    "ssi_closed_form": {
+      "weight_snr_db": 16.677409410476685,
+      "output_snr_db": 16.6733717918396,
+      "time_ms": 0.18074599938699976,
+      "snr_gain_db": 0.7857096195220947
+    }
+  },
+  "70B Layer": {
+    "D_in": 8192,
+    "D_out": 8192,
+    "naive_max": {
+      "weight_snr_db": 15.897537469863892,
+      "output_snr_db": 15.898275375366211,
+      "time_ms": 0.24893599766073748
+    },
+    "heuristic_percentile": {
+      "weight_snr_db": 16.097660064697266,
+      "output_snr_db": 16.102826595306396,
+      "time_ms": 0.3340499970363453
+    },
+    "ssi_closed_form": {
+      "weight_snr_db": 16.67608141899109,
+      "output_snr_db": 16.68547749519348,
+      "time_ms": 0.19583500397857279,
+      "snr_gain_db": 0.7872021198272705
+    }
+  }
+}

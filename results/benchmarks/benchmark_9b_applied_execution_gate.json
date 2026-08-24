@@ -1,6 +1,6 @@
 {
   "model_id": "Qwen/Qwen3.5-9B",
-  "timestamp": "2026-08-24T17:55:42Z",
+  "timestamp": "2026-08-24T20:12:58Z",
   "problems": [
     {
       "problem_id": "p1_pgvector_hnsw_hybrid",

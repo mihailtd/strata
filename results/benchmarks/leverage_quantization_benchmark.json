@@ -1,0 +1,65 @@
+{
+  "4B Architecture": {
+    "D_in": 2560,
+    "D_out": 4096,
+    "k_outliers": 16,
+    "naive_max": {
+      "f1_pct": 100.0,
+      "latency_ms": 0.06361099804053083,
+      "snr_db": 50.37493705749512
+    },
+    "awq_grid": {
+      "f1_pct": 100.0,
+      "latency_ms": 9.451662997889798,
+      "snr_db": 50.37493705749512
+    },
+    "chapter21_leverage": {
+      "f1_pct": 100.0,
+      "latency_ms": 2.015536003455054,
+      "snr_db": 50.37493705749512,
+      "speedup_vs_grid": 4.689404199025795
+    }
+  },
+  "9B Architecture": {
+    "D_in": 4096,
+    "D_out": 4096,
+    "k_outliers": 16,
+    "naive_max": {
+      "f1_pct": 100.0,
+      "latency_ms": 0.023275002604350448,
+      "snr_db": 47.99998760223389
+    },
+    "awq_grid": {
+      "f1_pct": 100.0,
+      "latency_ms": 6.898448998981621,
+      "snr_db": 47.99998760223389
+    },
+    "chapter21_leverage": {
+      "f1_pct": 100.0,
+      "latency_ms": 2.0903690019622445,
+      "snr_db": 47.99998760223389,
+      "speedup_vs_grid": 3.300110646735575
+    }
+  },
+  "70B Architecture": {
+    "D_in": 8192,
+    "D_out": 8192,
+    "k_outliers": 32,
+    "naive_max": {
+      "f1_pct": 100.0,
+      "latency_ms": 0.05076699744677171,
+      "snr_db": 48.12212944030762
+    },
+    "awq_grid": {
+      "f1_pct": 100.0,
+      "latency_ms": 9.475720005866606,
+      "snr_db": 48.12212944030762
+    },
+    "chapter21_leverage": {
+      "f1_pct": 100.0,
+      "latency_ms": 3.664620999188628,
+      "snr_db": 48.12212944030762,
+      "speedup_vs_grid": 2.5857298771045065
+    }
+  }
+}
