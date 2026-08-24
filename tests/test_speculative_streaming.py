@@ -1,5 +1,6 @@
 import asyncio
 import json
+import threading
 import torch
 import pytest
 from unittest.mock import MagicMock, patch
@@ -56,6 +57,7 @@ async def test_server_streaming_sse_generator():
     server.model_state["stop_token_ids"] = {151643}
     server.model_state["active_team"] = ["astral"]
     server.model_state["causal_scheduler"] = None
+    server.model_state["stop_event"] = threading.Event()
 
     req = ChatCompletionRequest(
         model="dynamic",

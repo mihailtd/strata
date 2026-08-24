@@ -1,160 +1,130 @@
-# System Details (WSL2 Dev Environment)
+# System Details (Native CachyOS Linux Workstation)
 
-Snapshot taken 2026-08-10. Kept here as a reference for environment setup, especially since ML tooling (PyTorch, ROCm, ONNX Runtime) is version- and vendor-sensitive.
+Snapshot updated 2026-08-24. This document serves as the authoritative reference for the development environment, compute stack, and runtime toolchain across the `gnn-experiment` repository.
 
 ---
 
-## Host / WSL
+## 1. Operating System & Host Environment
 
-- **Windows**: Windows 11, version 25H2, build 26200 (registry reports `ProductName: Windows 10 Pro`, but build 26200 is a Windows 11 branch — likely an in-place-upgrade licensing artifact, not actually Windows 10).
-- **WSL**: version 2.7.11.0, kernel 6.18.33.2-microsoft-standard-WSL2
-- **Distro**: Ubuntu 22.04.5 LTS (jammy)
-- **WSLg**: 1.0.73.2, Direct3D 1.611.1, DXCore 10.0.26100.1
+- **OS**: CachyOS Linux (Arch-based rolling release)
+- **Kernel**: `7.2.0-1-cachyos` (x86_64, `PREEMPT_DYNAMIC`, optimized BORE/EEVDF scheduler)
+- **Architecture**: Native bare-metal Linux workstation — **no WSL2, no virtualization overhead, no Direct3D translation layers, and no guest memory/CPU caps**.
+- **User & Groups**: User `mihai` with active membership in `render`, `video`, `wheel`, `kvm`, and `storage` groups for direct hardware access.
 
-### `.wslconfig` resource limits (`C:\Users\farca\.wslconfig`)
+---
+
+## 2. Hardware Architecture
+
+- **CPU**: AMD Ryzen 9 9900X (12 Cores / 24 Threads, Zen 5 architecture)
+  - All 24 logical threads available natively with full boost clock performance.
+- **System Memory (RAM)**: 64 GB DDR5 (~60 GiB usable physical RAM)
+  - Configured with 60 GiB fast NVMe swap space for high-concurrency datagen and large dataset caching.
+- **Storage**: 2.0 TB PCIe Gen4 NVMe SSD (`/dev/nvme1n1p2`, ~1.8 TB free space). Direct native Linux I/O performance (no 9P/VHDX bottlenecks).
+
+---
+
+## 3. GPU & AMD Compute Stack
+
+### Primary Compute Hardware
+- **Card**: AMD Radeon RX 7900 XTX (Navi 31 / RDNA3 architecture, `gfx1100` target)
+- **VRAM**: **24 GB GDDR6** dedicated VRAM
+- **Integrated Graphics**: AMD Granite Ridge Radeon Graphics (2 GB shared)
+
+### Native Driver & Device Interfaces
+- **Direct KFD Node**: `/dev/kfd` (Kernel Fusion Driver) natively present with full topology access.
+- **Direct DRM Render Nodes**: `/dev/dri/renderD128`, `/dev/dri/renderD129` (card0, card1).
+- **Direct Hardware Compute**: Native Linux amdgpu kernel driver. All WSL-specific DXCore shims, Direct3D translation wrappers, and `LD_PRELOAD` workarounds have been completely eliminated.
+
+### ROCm Installation
+- **ROCm Version**: **ROCm 7.2.4** installed natively at `/opt/rocm` (includes `rocminfo`, `hipcc`, `llvm/bin/clang`, `llvm/bin/clang++`).
+- **GPU Agent Detection**: System `rocminfo` and PyTorch natively identify the `gfx1100` compute agent without requiring `HSA_OVERRIDE_GFX_VERSION`.
+
+### GPU Preflight Verification
+To verify hardware compute status and run a live 4096×4096 GPU matmul:
+```bash
+uv run python scripts/audit/check_gpu.py
 ```
-[wsl2]
-processors=4
-memory=24GB
-swap=2GB
-```
-Host actually has **24 logical processors** and **~61.6 GB RAM** total — WSL is currently capped to only 4 cores / 24 GB. Worth raising `processors` (and possibly `memory`) in `.wslconfig` before running CPU-heavy data loading or multi-process training; requires `wsl --shutdown` + restart to take effect.
+Expected output:
+- `torch.cuda.is_available(): True`
+- `device count: 2`
+- `[0] AMD Ryzen 9 9900X / AMD Radeon RX 7900 XTX — 24.0 GB Total`
+- Clean execution with 0 leftover GPU resident processes.
 
-## CPU / Memory / Disk (as seen inside WSL)
+---
 
-- **CPU**: AMD Ryzen 9 9900X (12-core / 24-thread host part; only 4 threads exposed to WSL per config above)
-- **RAM**: 23 GiB visible in WSL (per `.wslconfig` cap), 2 GiB swap
-- **Disk**: `/` on `/dev/sdd`, 1007 GB total, 641 GB available (33% used)
+## 4. Language Runtimes & Toolchains
 
-## GPU
+### Python & uv
+- **Python Version**: Python 3.14.7 (managed via `uv 0.12.5`).
+- **Package Manager**: `uv` is used for all Python workspace resolution, dependency locking (`uv.lock`), and virtual environment management (`.venv`).
+- **Interpreter Isolation**: Native Linux x86_64 interpreter (`sys_platform == 'linux'`).
 
-- **Card**: AMD Radeon RX 7900 XTX — **24 GB VRAM** (matches user-stated spec)
-- Also present: integrated AMD Radeon Graphics (2 GB shared), and a "Meta Virtual Monitor" (Oculus/Quest Link virtual display, unrelated to compute)
-- **No NVIDIA GPU in this machine** — `nvidia-smi`, CUDA, etc. do not apply here.
+### JavaScript / Web Toolchain
+- **Node.js**: Node v26.7.0 (managed via `fnm`).
+- **Package Managers**: `pnpm 11.22.0` (primary for `src/dashboard`), `npm 11.19.0`.
 
-### WSL GPU passthrough status
-- `/dev/dxg` present (`crw-rw-rw- ... 10, 258`) — the GPU paravirtualization device node WSL uses for all vendors is active.
-- `/usr/lib/wsl/lib/` has `libd3d12.so`, `libd3d12core.so`, `libdxcore.so` — the DirectX/DXCore translation layer is installed and working.
-- **Conclusion**: the GPU is correctly exposed to WSL at the OS level. This is the AMD equivalent of what `nvidia-smi` would confirm for an NVIDIA card — but it only proves passthrough, not that an ML compute stack is installed yet.
-- **Not installed yet**: `rocminfo`, `rocm-smi`, `clinfo` — no ROCm or OpenCL runtime is present in WSL currently, so no compute framework has actually exercised the GPU.
+### Compilers & Build Tools
+- **C/C++**: Clang 21 (`/usr/bin/clang`, `/usr/bin/clang++`), GCC 15 (`/usr/bin/gcc`, `/usr/bin/g++`), Make.
+- **HIP Compiler**: HIP-Clang (`/opt/rocm/bin/hipcc`).
+- **Git**: Git 2.53.0 on native Linux filesystem (`core.fileMode = false` configured, author `Mihai Farcas <farcasmihai91@gmail.com>`).
 
-### What's needed to actually run ML workloads on this GPU
-The 7900 XTX (RDNA3, `gfx1100`) has official AMD ROCm-for-WSL support (ROCm ≥ 6.1). Two practical paths:
-1. **ROCm + PyTorch (rocm build)** — install AMD's WSL-targeted ROCm packages (`amdgpu-install --usecase=wsl,rocm`) then `pip install torch --index-url https://download.pytorch.org/whl/rocm6.x`. Best performance, most compatible with the PEFT/MoE-LoRA stack (bitsandbytes' ROCm support is spottier — check before relying on 4-bit/8-bit quantization).
-2. **DirectML** (`torch-directml`) — works on any DX12 GPU with no ROCm install, easier setup, but slower and less feature-complete than native ROCm for training.
-Given this repo's roadmap (QLoRA, quantized adapters, custom CUDA/HIP-adjacent kernels), ROCm is the better long-term investment; DirectML is fine for quick smoke tests.
+---
 
-Windows GPU driver: 32.0.31035.1003 (recent Adrenalin branch, should support ROCm-for-WSL, but not independently verified against AMD's supported-driver list).
+## 5. Repository Subprojects & Isolated Environments
 
-**Update (2026-08-10): GPU compute confirmed working end to end.** The project targets ROCm 7.2 (`gfx1100`/RX 7900 XTX is called out by name in AMD's official ROCm 7.2 WSL docs). User ran `sudo bash scripts/install_rocm_wsl.sh` (needed a fix — see script history / the `logname` note below — then a rerun completed cleanly, apt reported ROCm 7.2.0.70200 + `hsa-runtime-rocr4wsl-amdgpu` installed, `rocminfo` listed the `gfx1100` agent).
+The codebase uses cleanly isolated environments for distinct dependency constraints:
 
-**Non-obvious problem hit after install**: even with ROCm installed and the user in the `render`/`video` groups, `torch.cuda.is_available()` still returned `False` (`RuntimeError: No CUDA GPUs are available` from `torch.cuda.init()`), while system `rocminfo` correctly detected the GPU (it even prints `WSL environment detected`). Root cause: **the PyTorch pip wheel bundles its own `libamdhip64.so`/`libhsa-runtime64.so`** inside `torch/lib/`, separate from the system ROCm install — and that bundled copy doesn't have WSL/DXCore support, only the native-Linux `/sys/class/kfd/kfd/topology/nodes` path (which doesn't exist in WSL, hence the `sysfs nodes path ... does not exist` warning that appears even when everything works). The system's `hsa-runtime-rocr4wsl-amdgpu` package (at `/opt/rocm-7.2.0/lib/libhsa-runtime64.so`) is the actual WSL-aware runtime.
+### 1. Root Engine (`runtime`)
+- **Manifest**: `pyproject.toml`, `uv.lock`
+- **Virtualenv**: `/.venv`
+- **Purpose**: Autonomous Runtime Engine with dynamic weight folding, speculative decoding, Riemannian dynamic routing, data generation, and evaluation suites.
+- **Key Dependencies**:
+  - `torch==2.13.0+rocm7.2`, `triton-rocm==3.7.1`, `torchvision==0.28.0+rocm7.2` (from `https://download.pytorch.org/whl/rocm7.2`)
+  - `vllm==0.23.1.dev1+rocm7.14.0.g9ddef7117.d20260715`, `flash-attn==2.8.3` (from `https://rocm.frameworks.amd.com/whl-multi-arch/vllm-rdna`)
+  - `transformers>=5.14.1`, `peft>=0.20.0`, `accelerate>=1.14.0`, `bitsandbytes>=0.50.0`
+  - `liger-kernel>=0.8.1`, `py-pglite[extensions]>=0.5.3`, `psycopg>=3.3.4`, `pgvector>=0.5.0`
+- **Test Suite**:
+  ```bash
+  uv run pytest tests/
+  ```
 
-**Fix**: force torch to load the system runtime instead of its bundled one via `LD_PRELOAD=/opt/rocm-7.2.0/lib/libhsa-runtime64.so`. Added to `.env` (alongside `HF_TOKEN`) so it's automatic via `uv run --env-file .env <script>` — **all script docstrings now say `--env-file .env`, this is required, not optional, for GPU scripts.** `HSA_OVERRIDE_GFX_VERSION=11.0.0` was tried too (commonly cited for RDNA3) but turned out to be unnecessary — `LD_PRELOAD` alone was sufficient; gfx1100 is natively recognized.
+### 2. Training Engine (`training/`)
+- **Manifest**: `training/pyproject.toml`, `training/uv.lock`
+- **Virtualenv**: `training/.venv`
+- **Purpose**: Isolated fine-tuning harness for `unsloth` and Unsloth Studio. Kept isolated because `unsloth` pins `torch<2.12.0`.
+- **Key Dependencies**:
+  - `torch==2.11.0+rocm7.2`, `triton-rocm==3.6.0`, `torchvision==0.26.0+rocm7.2`
+  - `unsloth[amd,studio]`, `gguf>=0.19.0`, `av>=18.0.0`
+- **Sync Command**:
+  ```bash
+  cd training && uv sync
+  ```
 
-Verified: `uv run --env-file .env scripts/audit/check_gpu.py` → `torch.cuda.is_available(): True`, device `AMD Radeon RX 7900 XTX — 23.9 GB VRAM`, ran a real 4096×4096 matmul on GPU successfully.
+### 3. Serving Engine (`serving/`)
+- **Manifest**: `serving/pyproject.toml`, `serving/uv.lock`
+- **Virtualenv**: `serving/.venv`
+- **Purpose**: Isolated serving environment for OpenAI-compatible endpoints and native llama.cpp HIP builds on `gfx1100`.
 
-**Script gotcha (fixed)**: `scripts/install_rocm_wsl.sh` originally used `usermod -aG render,video "$(logname)"` to add the invoking user to the required groups — `logname` failed (`no login name`) when run via `sudo bash script.sh` in this WSL setup, which combined with `set -e` aborted the script before the group-add and `rocminfo` verification steps ran (apt/ROCm install itself had already completed by that point, so it wasn't wasted — just needed a rerun). Fixed to use `$SUDO_USER` instead, which `sudo` sets reliably.
+### 4. Interactive Web Dashboard (`src/dashboard/`)
+- **Manifest**: `src/dashboard/package.json`, `src/dashboard/pnpm-lock.yaml`
+- **Node Modules**: `src/dashboard/node_modules`
+- **Purpose**: Next.js 16 web application for real-time telemetry, interactive DAG visualization, adapter training goldilocks curves, and chat interface.
+- **Tech Stack**:
+  - Next.js 16.3.1 (Turbopack), React 19.2.8, TailwindCSS v4
+  - Apache ECharts 6.1.0, `@xyflow/react` 12.11.3, KaTeX math typesetting, MDX documentation loader
+- **Development & Build Commands**:
+  ```bash
+  cd src/dashboard
+  pnpm dev     # Launch development server on http://localhost:3000
+  pnpm build   # Optimized production Turbopack build
+  ```
 
-## Python
+---
 
-- **Version manager**: pyenv 2.5.4 (was stale — last synced March 2025, so its list of installable versions stopped at 3.13.2/3.14.0a6; ran `git pull` in `~/.pyenv` to refresh)
-- **System-wide default**: `pyenv global 3.13.15` — `python3` / `python3 -m pip` resolve to this outside the project.
-- **The `gnn-experiment` uv project itself now runs on Python 3.14.7**, not 3.13 — see the uv section below for why. This only affects the project's own `.venv`; the pyenv global (3.13.15) is unchanged for anything outside this project.
-- Python 3.15 is **not stable yet** as of 2026-08-10 (only alphas exist, `3.15.0a1`–`a5`+, on python.org) — not viable to build a real dependency stack on, even though some wheel builders (e.g. PyTorch) already publish forward-looking `cp315` wheels opportunistically.
+## 6. Authentication & Environment Configuration
 
-### Known gotcha: bare `pip` does not follow pyenv
-`~/.local/bin` is listed **before** `~/.pyenv/shims` in `$PATH`, and `~/.local/bin/pip` is a leftover pip tied to a **python3.10** install (dated June 2025). So:
-- `python3 --version` / `python3 -m pip` → correctly use pyenv's 3.13.15 ✅
-- bare `pip` / `pip3` → silently use the stale python3.10 pip ❌
-
-**Always invoke `python3 -m pip ...` instead of bare `pip` in this environment**, or fix PATH ordering / remove `~/.local/bin/pip*` if you want bare `pip` to be trustworthy again.
-
-## uv (2026-08-10)
-
-- Was already installed at 0.11.7; upgraded via `uv self update` to **0.12.3**.
-- Project is uv-native end to end: `uv init --package`, `uv python pin 3.13.15` (uv manages its own interpreter, separate from the pyenv one — it reused the pyenv 3.13.15 build since it's newer than anything in uv's own python-build-standalone registry at the time), `uv add ...` for every dependency, `.venv` created by `uv sync`. No manual `pip install` was used anywhere in this project.
-- `requires-python` is pinned tight (`>=3.13,<3.14`), and `torch`/`triton-rocm` are sourced from an explicit `pytorch-rocm` index (`download.pytorch.org/whl/rocm7.2`) via `[tool.uv.sources]` in `pyproject.toml` — this is required because PyTorch's ROCm builds only exist for Linux/cp313, and a loose `requires-python` makes uv's universal resolver fail trying to satisfy other Python/OS combinations that don't have ROCm wheels.
-- **uv quirk hit during setup**: `[tool.uv.sources]` overrides didn't apply to `triton-rocm` as long as it was only a *transitive* dependency of `torch` — uv kept resolving it against PyPI (where it tops out at `3.0.0rc1`) instead of the pinned ROCm index, even though the sources entry was present and correctly named. Fix: add `triton-rocm` as an explicit **direct** dependency (`uv add torch --index pytorch-rocm=...` followed by adding `triton-rocm` directly) — sources overrides reliably apply to direct/root dependencies. **Confirmed again** when adding vLLM: `torchvision` came in transitively (via vllm) from plain PyPI as a CUDA/generic build, silently mismatched against our ROCm `torch` build, and broke every `transformers` import (`RuntimeError: operator torchvision::nms does not exist`) — fixed the same way, by adding `torchvision` as an explicit direct dependency sourced from the `pytorch-rocm` index. **Rule of thumb for this project: any package sourced from a non-default index must be added as a direct dependency, even if it would otherwise only be pulled in transitively** — don't rely on `[tool.uv.sources]` alone for transitive deps.
-- Also needed `[tool.uv] environments = ["sys_platform == 'linux'"]` — without it uv's universal resolver tries to satisfy win32/darwin too, which fails since ROCm wheels are Linux-only (and some custom package indexes return `403` instead of `404` for unknown projects on non-Linux forks, which uv treats as fatal rather than "not found here").
-
-## LoRA/PEFT benchmark project (2026-08-10)
-
-Project layout (all uv-managed):
-
-- `src/runtime/peft_methods.py` — registry of PEFT configs: lora, dora, pissa, qlora, adalora, vera, ia3, prefix_tuning
-- `src/runtime/bench.py` — loads a base model (`model_name` is a required argument, no default; small-model runs use `Qwen/Qwen3.5-0.8B` per `configs/benchmark.yaml`), applies one PEFT method, runs a short training loop, reports wall time / peak VRAM / trainable-param % / final loss
-- `scripts/run_benchmark.py` — CLI that loops over methods from `configs/benchmark.yaml`, writes `results/benchmark_results.csv`
-- `scripts/audit/check_gpu.py` — GPU smoke test (`uv run scripts/audit/check_gpu.py`)
-- `scripts/install_rocm_wsl.sh` — the sudo-gated system install, see GPU section above
-
-Verified so far (no GPU yet, pending the ROCm install): `uv sync` resolves cleanly, all 8 PEFT method configs build without error (`adalora` needed a `total_step` fix, now wired to `max_steps`), `check_gpu.py` runs end to end and correctly reports no GPU. Not yet verified: an actual training run (needs ROCm installed + model/dataset download).
-
-HF auth: `.env` (gitignored) holds `HF_TOKEN=` for gated models (e.g. Gemma) or higher HF Hub rate limits — not auto-loaded by plain `uv run`, since uv doesn't read `.env` from the working directory by default; use `uv run --env-file .env scripts/run_benchmark.py`, or `export HF_TOKEN=...` in the shell if you'd rather not pass the flag each time.
-
-Known caveat: bitsandbytes (used for `qlora`) logged a warning that it couldn't find a precompiled `kernels-community` gemm binary for this exact torch 2.13/ROCm 7.2 combo and will fall back to a slower path — 4-bit quant works but may not be fully optimized on this stack yet. Worth rechecking after a bitsandbytes/kernels update.
-
-## Python 3.13 → 3.14 migration + vLLM + chat (2026-08-10, same day)
-
-User asked whether we could avoid being "stuck" on an old Python and use 3.14 (or 3.15) for everything, partly motivated by wanting vLLM for interactive chat with trained models — and AMD's dedicated consumer-GPU vLLM wheel (`vllm-rdna`) turns out to require Python **3.14**, not 3.13.
-
-Verified empirically (not guessed) before switching: `torch==2.13.0+rocm7.2` (already installed), `triton-rocm==3.7.1`, and `pyarrow` all ship `cp314` wheels; `bitsandbytes` ships a version-agnostic (`py3-none-any`) wheel so Python version doesn't matter for it. On that basis, bumped the **whole project** to Python 3.14.7 (`requires-python = ">=3.14,<3.15"`, `uv python pin 3.14.7`) rather than keeping a second isolated env just for vLLM — `uv sync` resolved and installed all 94 packages cleanly on the first try, and the PEFT harness (`peft_methods.py` config builders, `check_gpu.py`) was re-verified working identically after the switch.
-
-**vLLM install**: added a second explicit uv index, `vllm-rdna` (`https://rocm.frameworks.amd.com/whl-multi-arch/vllm-rdna`, `explicit = true`), sourcing `vllm` and `flash-attn` from it (both added as direct dependencies per the transitive-sources rule above). Required `[tool.uv] prerelease = "allow"` since the only available wheel is `vllm==0.23.1.dev1+rocm7.14.0.g9ddef7117.d20260715` (pre-release). Pulled in ~130 additional packages (full serving stack: FastAPI/uvicorn, opentelemetry, grpc, redis, cloud storage clients, etc.) — normal for vLLM, not a mistake.
-
-**Two things flagged but not yet resolved (need a live GPU to check, blocked on the sudo ROCm install)**:
-
-1. The only `vllm-rdna` wheel available (`0.23.1.dev1`) falls inside the version range (v0.21.0–v0.25.0) that AMD's own ROCm docs say has "significantly longer warmup times... on AMD Radeon GPUs" — their fix is "upgrade to v0.26.0+", which isn't available on this index yet.
-2. Version-tag mismatch: our system ROCm install target is **7.2** (`scripts/install_rocm_wsl.sh`), but the vLLM wheel is tagged **rocm7.14.0** — unclear if these use compatible versioning schemes or if vLLM expects a different/newer system ROCm than what's about to be installed. Recheck after running `scripts/install_rocm_wsl.sh` and trying `vllm serve` for real.
-
-**Chat**: per user's choice, built a plain `transformers`-based interactive terminal chat instead of standing up a vLLM server for now — `scripts/serve/chat.py` (`uv run scripts/serve/chat.py [--model ...] [--adapter path/to/trained/adapter]`), streams tokens via `TextStreamer`, keeps conversation history, optionally loads a PEFT adapter on top of the base model. vLLM is installed and available for a faster/serving-oriented chat path later (e.g. `vllm serve <model> --enable-lora`), once the two caveats above are checked against the real GPU.
-
-## vLLM abandoned; llama.cpp + opencode eval harness built instead (2026-08-10, later same day)
-
-**vLLM verdict: genuinely broken, not a config problem.** Chased it through four independent, compounding bugs — `vllm._C.abi3.so` ABI mismatch against pytorch.org's torch → switched to AMD's own exact matching `torch==2.12.0+rocm7.14.0` (long transitive-package whack-a-mole: `rocm`, `rocm-sdk-core/device-gfx1100/libraries`, `triton`, matched `torchvision`, all needed explicit `[tool.uv.sources]` entries, same pattern as the earlier `triton-rocm`/`torchvision` issue) → **still** ABI-mismatched (different symbol) → traced to AMD's bundled `_rocm_sdk_core` package only shipping a static `libhsakmt.a` (no runtime `.so`, built for native `/dev/kfd` which doesn't exist in WSL) → tried LD_PRELOADing the system's WSL-aware HSA runtime, but torch's own `_rocm_init` bypasses that and dlopens its own bundled libs directly, which have a **version-mismatched exported symbol** against each other in the same AMD package. That's AMD shipping internally-inconsistent binaries — not fixable from our side. User chose to try llama.cpp instead of digging further.
-
-**llama.cpp: worked cleanly, first try, no fighting.** Built from source with HIP for gfx1100 (`serving/setup_llamacpp.sh`, ~15-20min on WSL's 4-core limit): `cmake -B build -G Ninja -DCMAKE_C_COMPILER=/opt/rocm-7.2.0/llvm/bin/clang -DCMAKE_CXX_COMPILER=/opt/rocm-7.2.0/llvm/bin/clang++ -DGGML_HIP=ON -DAMDGPU_TARGETS=gfx1100 -DCMAKE_BUILD_TYPE=Release`. `cmake`/`ninja` fetched via `uv tool install` (no sudo needed). Compiles against the *system* ROCm install directly — no AMD pip-wheel version-matching problems at all. `llama-server` (OpenAI-compatible endpoint) confirmed serving `Qwen/Qwen3.5-4B` (Q8_0 GGUF from `bartowski/Qwen_Qwen3.5-4B-GGUF`, ~4.6GB, base/unaltered model) at ~90 tok/s generation, ~1200 tok/s prompt processing on the RX 7900 XTX.
-
-**opencode must be the WSL-native install, not the Windows one.** `opencode` on PATH originally resolved to `/mnt/c/Program Files/nodejs/opencode` — confirmed via testing that it runs **on the Windows side**, driving its `bash` tool through PowerShell against the WSL filesystem over `\\wsl.localhost\...` UNC paths. This cost a real eval run ~6x the time and tokens (136s/65.7K tokens vs 53s/10.9K tokens for the identical task) purely from the model fumbling `find`/`head`/`ls -la` failing under PowerShell before falling back to `Get-ChildItem`/`Get-Content`. Fixed with `npm install -g opencode-ai` using WSL's own node/npm (confirm `which opencode` resolves under `~/.nvm/...`) — despite the installed binary being literally named `opencode.exe`, it's a genuine ELF Linux binary (that's just the npm package's cross-platform naming convention). One other non-obvious thing: Windows→WSL `127.0.0.1` port forwarding worked by default in both cases (no WSL mirrored-networking config needed) — only the reverse direction (WSL→Windows, e.g. reaching Windows Ollama from WSL) failed earlier in this session.
-
-**Eval harness**: `tests/opencode_evals/` — fully isolated from both `gnn-experiment` and `serving`'s own uv config (fixture `pyproject.toml`s are written via direct Python file I/O, never `uv init`, which is what caused uv to auto-register a nested project as a workspace member the one time it was tried — see project memory). Generates a fresh broken uv workspace (real `pydantic>=2.0` vs `pydantic<2.0` PubGrub conflict across workspace members) per run, drives opencode non-interactively (`opencode run <prompt> --dir <fixture> --model <provider>/<model> --auto --format json`), grades success by actually running `uv lock` in the fixture afterward (not by trusting the model's self-report), writes `runs/<timestamp>/{transcript.md,report.json}`.
-
-**Token-accounting bug found and fixed**: opencode's per-step `tokens.total` field is the full context size at that point (including cached-read tokens), not an incremental cost — summing it across a multi-step run over-counts by ~10-16x (one run showed "1,024,650 tokens" that was actually 65,758). Correct total = `sum(step.tokens.input) + sum(step.tokens.output)` across steps, ignoring the pre-summed `total` field entirely.
-
-**Verified end to end**: Qwen3.5-4B (unaltered base model) given the open-ended prompt "explain what is the problem with the dependencies, and fix it." — correctly diagnosed the `pydantic` version conflict, chose to upgrade the legacy constraint (not downgrade the modern one), applied a real file edit, and the fixture's `uv lock` genuinely exits 0 afterward. 52.7s, 10,945 tokens, on WSL-native opencode.
-
-## Astral docs → SFT dataset pipeline (2026-08-10, later same day)
-
-Built `src/runtime/datagen/` — generates instruction-tuning data from uv/ruff/ty's official docs (source markdown lives in each tool's own repo's `docs/` folder, e.g. `astral-sh/uv/docs/`, **not** `astral-sh/docs`, which is the *built* HTML/Next.js site output) using the local llama-server, augmentoolkit-inspired 3-stage flow (question → verify → answer), tracked via MLflow. Config: `configs/datagen.yaml`, entry point: `scripts/old/run_datagen.py`. Full plan at `.claude/plans/ok-can-we-now-serene-fox.md` (in `~/.claude/plans/`, not repo-tracked).
-
-Two real bugs hit and fixed during verification:
-
-1. **`uv add mlflow` silently resolved to `mlflow==1.27.0`** (a 2022-era release) instead of latest (3.15.1) — root cause: root `pyproject.toml` already pinned `pandas>=3.0.5`, but every modern MLflow 3.x release requires `pandas<3`, so uv picked the newest mlflow satisfying *both* constraints, which was ancient. Fixed by loosening the pandas pin to `>=2.0,<3` (our pandas usage is trivial — just building a results DataFrame for CSV output, nothing 3.x-specific) via `uv add "pandas>=2.0,<3"`, then `uv add --dev mlflow` correctly got 3.15.1. **Lesson: an unrelated dependency's version pin can silently cap an unrelated new package to a wildly outdated version — if a fresh `uv add` gives a suspiciously old result, check for a transitive pin conflict before assuming that's just what's available.**
-2. **MLflow 3.x deprecated the plain filesystem tracking store** (`mlruns/`) — raises `MlflowException` unless you either set `MLFLOW_ALLOW_FILE_STORE=true` or migrate to a DB-backed tracking URI. Used `sqlite:///mlruns.db` (still fully local, no server) rather than the env-var opt-out.
-3. **Qwen3.5-4B is a reasoning model** — by default it puts real output in a separate `reasoning_content` field and burns the entire `max_tokens` budget on `<think>...</think>` content first, leaving `content` empty if that budget runs out before reasoning finishes (which it did, every time, at `max_tokens=128`). `/no_think` in the prompt text did **not** suppress this (the model just reasoned about whether to obey it). Fix: pass `"chat_template_kwargs": {"enable_thinking": false}` in the `/v1/chat/completions` request body — confirmed via direct curl test, went from empty `content` to a clean 9-token direct answer. Wired into `runtime/datagen/llm_client.py`; **any future direct API usage of this model (not through opencode, which apparently handles this itself) needs the same flag or will silently get empty responses.**
-
-Verified working end to end: fetch (1041 chunks across all 3 repos, idempotent re-fetch confirmed), chunking (zero fenced-code-block violations), a `--limit 5` generation run (4/5 chunks passed the verifier, produced genuinely good grounded Q&A pairs — e.g. real `uv` CLI flags and config snippets, not generic summaries), MLflow run correctly logged (params/metrics/artifacts all present), and a real LoRA training smoke run against the output through the existing `bench.py`/`run_benchmark.py` harness (`configs/datagen_smoke_benchmark.yaml`) — ran on GPU (2.4GB VRAM), loss decreased 2.367→1.882 over 3 steps, proving the generated dataset is genuinely trainable, not just schema-valid.
-
-Not yet run: the full (non-`--limit`) pass over all three repos' ~1041 chunks (~3100 LLM calls). Rough sizing from the smoke test's measured per-chunk latency — extrapolate before committing to the full run.
-
-**Update**: full run completed with Gemma4-E2B (fastest + most reliable of 4 models compared — Qwen3.5-4B, Gemma4-12B, Gemma4-E4B, Gemma4-E2B) — 1041/1041 chunks, 793 QA pairs (76% pass), 29.3 min. `data/astral_docs/sft/astral_expert_sft.jsonl` is real training data now. Also added: MLflow tracing (every LLM call wrapped in `mlflow.start_span`, browsable per-call in the Traces tab), an `extraction_nudge` config field (steers question/answer prompts, logged as an MLflow param), and `verify_base_url`/`verify_model` config for pointing the verifier at an independent model (defaults to self-verification, now tagged `self_verified`/`verifier_model` per run so this is visible rather than silent).
-
-**MLflow gotcha hit twice**: `rm -f mlruns.db` before test runs (to keep things clean) orphaned the file handle the already-running `mlflow ui` server had open — new runs landed in a fresh file the server never saw, so the UI showed stale/single-run history despite multiple real runs existing. Fix: never delete `mlruns.db` while the UI is running; restart the UI after any such reset. Also: MLflow 3.x's plain filesystem store is deprecated (raises unless `MLFLOW_ALLOW_FILE_STORE=true`) — using `sqlite:///mlruns.db` instead, still fully local.
-
-## unsloth (AMD/ROCm training) + Unsloth Studio (2026-08-10, later same day)
-
-Added a third isolated uv project, `training/` (same reasoning as `serving/`: `unsloth` pins `torch<2.12.0,>=2.4.0` unconditionally, incompatible with root's `torch==2.13.0+rocm7.2`). Verified via PyPI metadata that the pasted marketing-style claims about AMD support were mostly real (not hallucinated) before touching anything — `unsloth[amd]` is a real published extra, official AMD docs exist at `unsloth.ai/docs/get-started/install/amd`.
-
-**Setup**: `torch==2.11.0+rocm7.2` + `torchvision==0.26.0+rocm7.2` + `triton-rocm==3.6.0` (same `pytorch-rocm` index, same transitive-sources-needs-direct-dependency pattern hit for the Nth time this session — torchvision came in unmatched again until pinned explicitly). `bitsandbytes` resolved to `0.50.0` automatically, above the `<=0.49.2` version with a documented AMD NaN bug, so the special preview wheel from Unsloth's docs wasn't needed. GPU confirmed: `torch.cuda.is_available() == True`, `AMD Radeon RX 7900 XTX`, and `import unsloth` itself printed its own "2x faster finetuning" patch message for real.
-
-**Unsloth Studio**: the `unsloth[studio]` pip extra only provides the CLI dispatcher — the actual Studio backend is a **separate install** via `curl -fsSL https://unsloth.ai/install.sh | sh`, which sets up its own venv at `~/.unsloth/studio/unsloth_studio`. That installer's own hardware auto-detection **defaulted to CPU-only** on this machine: it wants Ubuntu 24.04 + a `librocdxg`-based ROCm-on-WSL mechanism we don't have (we're on 22.04, using the working-but-different system ROCm 7.2 + `LD_PRELOAD` approach). Fixed by manually installing the same matched ROCm torch/torchvision/triton-rocm build into Studio's own venv via `pip install --index-url https://download.pytorch.org/whl/rocm7.2` — confirmed via the startup log line changing from `Hardware detected: CPU training backend` to `Hardware detected: ROCm (HIP 7.2.26015) -- AMD Radeon RX 7900 XTX`. Full commands in `training/README.md`.
-
-Confirmed against official docs/the CLI's own `--help` (not just trusting the pasted text): port 8888 default, drag-and-drop doc-to-dataset ("Data Recipes"), live training metrics, Model Arena, `unsloth start <agent>` CLI integration, self-healing tool-call JSON correction, `--disable-tools` flag, and — via the CLI help text itself, which the docs page didn't mention — genuine dual OpenAI (`/v1/chat/completions`) + Anthropic (`/v1/messages`) endpoint support on the same port. Running at `http://127.0.0.1:8888`, GPU-enabled.
-
-## VRAM cleanup (2026-08-10, later same day)
-
-User asked to free VRAM from stray processes and have the datagen pipeline unload models automatically when done. Found two GPU-resident processes left running from earlier work (`llama-server` serving Gemma4-E2B from the full datagen run, and `unsloth studio`) — both killed manually first.
-
-Added automatic cleanup to `runtime.datagen`: `llm_client.stop_llama_server(port)` finds and stops (SIGTERM, then SIGKILL after a 5s grace period) the llama-server process bound to a given port, matched by port in its command line so it only touches the server actually in use, not unrelated instances. `LocalLLMClient.shutdown_server()` wraps this using its own configured port. `pipeline.run_pipeline()` calls this on the generator and (if different) verifier client once it finishes, gated by `llm.unload_after_run` in `configs/datagen.yaml` (**default `true`**) — override with `--no-unload` on `scripts/old/run_datagen.py` to leave the server running (e.g. to chat with it right after a run). Verified end to end: started a server, ran a `--dry-run`, confirmed the pipeline printed `Unloaded model from VRAM (stopped llama-server on port 8080)` and the port was actually unreachable afterward, not just assumed.
-
-Note: this only covers `runtime.datagen`'s own pipeline runs. `scripts/serve/chat.py`, manually-started servers for `tests/opencode_evals/`, and Unsloth Studio are still started/stopped manually — no automatic cleanup exists for those yet.
+- **`.env`** (Repository root, gitignored):
+  ```bash
+  HF_TOKEN=hf_...  # HuggingFace token for model access & gated weights
+  ```
+- **Note on `LD_PRELOAD`**: The previous WSL workaround `LD_PRELOAD=/opt/rocm-7.2.0/lib/libhsa-runtime64.so` is **not required** on CachyOS native Linux. Native KFD driver integration handles all HSA runtime communications automatically.

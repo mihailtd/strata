@@ -1154,7 +1154,7 @@ def _build_streaming_response(
         token_queue: queue.Queue[tuple[str, int] | None] = queue.Queue()
         # Cleared HERE, not at server startup: a previous response's Stop click sets
         # this event, and it must not carry over and instantly kill the NEXT request.
-        stop_event: threading.Event = model_state["stop_event"]
+        stop_event: threading.Event = model_state.setdefault("stop_event", threading.Event())
         stop_event.clear()
         is_dynamic = qr is not None and qr.expert == "dynamic"
         engine_for_call = None if is_dynamic else folding_engine
