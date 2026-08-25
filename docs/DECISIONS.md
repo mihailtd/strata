@@ -3062,9 +3062,26 @@ inflate latency. The CLIME thread-scaling figure is load-sensitive and ranged 1.
 across five runs against a bound of 13–60×; the conclusion (a small single-digit fraction
 of a large bound) is robust to that spread.
 
-- **Files**: `src/runtime/{vecchia_precision,gee_trajectory,copula_routing,activation_features,cpu_bench}.py`,
-  `src/runtime/clime_precision.py` (glasso live, CLIME path retired)
-- **Benchmarks**: `benchmarks/runtime/statistical/` (3 active, each with its own README),
-  `benchmarks/superseded/clime_head_crosstalk/` (retired, with its evidence)
-- **Tests**: `tests/test_statistical_estimators.py` (41 tests)
 - **Reports**: `results/benchmarks/{vecchia_layer_horizon,gee_trajectory_drift,copula_tail_routing,clime_precision_inversion}.json`
+
+---
+
+## 51. LAW OF MATCHED SPECULATIVE CO-ADAPTATION (§23, §61)
+
+**Rule:** Every domain LoRA adapter trained for the base backbone requires an accompanying MTP micro-adapter ($r=64, \alpha=64$) trained on the draft head. Un-adapted speculative draft heads on fine-tuned backbones are strictly prohibited in production serving.
+
+### 1. Cause & Empirical Phenomenon (MEASURED)
+When a specialized domain LoRA (e.g. `astral`, `postgresql`, `python_web`) is folded into the backbone:
+* The target backbone's token distribution and residual representations shift into the domain-specialized manifold.
+* If the speculative draft head remains on generic pre-trained weights, it generates draft proposals according to the un-adapted base distribution.
+* **Empirical Result:** Acceptance rate $\tau$ collapses from $>70\%$ down to $0\text{--}20\%$. Under speculative verification with rejection rollback, repeated rollback and bonus-token insertion induces repetitive header loops (e.g. `from pydantic import BaseModel`, `router = APIRouter`) and drops generation throughput below plain greedy decoding (e.g. 8.3–12.0 tok/s vs 19.2 tok/s).
+
+### 2. The Decision & Architecture (SHIPPED)
+1. **Matched Fleet Co-Mutation (§23)**:
+   * Whenever a new domain LoRA is created, `scripts/train/train_mtp_adapters_fleet.py` trains a matched 1-layer MTP micro-adapter via representation distillation (Cosine Geometry + Smooth L1 + Cross-Entropy) in ~25 seconds per domain.
+2. **Atomic In-Place Co-Mutation**:
+   * `FoldableExpert` automatically discovers and loads matched MTP micro-adapter factors (`mtp_{domain}_r64_a64_v7_9b` or `mtp_{domain}_r64_a64_v7`).
+   * When `WeightFoldingEngine.activate(expert)` executes, it applies fused `addmm` updates to both the 32/36 backbone layers and the 1-layer MTP draft head (`layer.*.weight` and `fc.weight`) in a single atomic dispatch.
+3. **Runtime Protection**:
+   * Speculative draft heads strictly match the backbone dimension ($D=2560$ for 4B, $D=4096$ for 9B) and auto-link domain micro-adapters during expert switching.
+

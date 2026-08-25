@@ -91,6 +91,11 @@ def load_mtp_weights(model_id: str = "Qwen/Qwen3.5-4B") -> dict[str, torch.Tenso
     return out
 
 
+class IncompatibleDraftHeadError(ValueError):
+    """Raised when a draft head does not match the base model architecture or dimension."""
+    pass
+
+
 class Qwen35MTPDraftHead(nn.Module):
     """The shipped MTP head, wired to draft tokens from a hidden state.
 
@@ -100,7 +105,7 @@ class Qwen35MTPDraftHead(nn.Module):
         h'     = norm(decoder_layer(fused))
         logits = lm_head(h')
     and h' feeds the next draft step, so drafting is autoregressive in the
-    head's own 2560-dim feature space and never touches the base model.
+    head's own feature space (2560 on 4B, 4096 on 9B) and never touches the base model.
     """
 
     def __init__(self, model: nn.Module, model_id: str = "Qwen/Qwen3.5-4B"):
@@ -113,6 +118,8 @@ class Qwen35MTPDraftHead(nn.Module):
         cfg = model.config.get_text_config()
         h = cfg.hidden_size
         self.hidden_size = h
+        self.target_model_id = model_id
+        self.target_hidden_size = h
 
         # The head's single block must be full attention; build a config whose
         # layer 0 is typed that way rather than inheriting the base model's

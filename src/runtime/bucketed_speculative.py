@@ -74,6 +74,21 @@ class BucketedSpeculativeDecoder:
         self.model = model
         self.tokenizer = tokenizer
         self.head = draft_head
+
+        # Enforce strict architecture and hidden dimension compatibility
+        base_cfg = getattr(model, "config", None)
+        if base_cfg is not None and hasattr(base_cfg, "get_text_config"):
+            base_cfg = base_cfg.get_text_config()
+        head_hidden = getattr(draft_head, "target_hidden_size", None)
+        base_hidden = getattr(base_cfg, "hidden_size", None)
+        if isinstance(head_hidden, int) and isinstance(base_hidden, int) and head_hidden != base_hidden:
+            from runtime.mtp_draft import IncompatibleDraftHeadError
+            head_id = getattr(draft_head, "target_model_id", "unknown")
+            raise IncompatibleDraftHeadError(
+                f"Speculative draft head incompatible: Draft head '{head_id}' has hidden_size={head_hidden}, "
+                f"but base model has hidden_size={base_hidden}. Cannot pair mismatched draft head with base model."
+            )
+
         self.k = k
         self.max_seq_len = max_seq_len
         self.device = torch.device(device or next(model.parameters()).device)
@@ -112,14 +127,12 @@ class BucketedSpeculativeDecoder:
             self.model(prompt_tokens, past_key_values=self.cache,
                        cache_position=torch.arange(0, cur, device=self.device), use_cache=True)
 
-        # FULL-LENGTH mask, never sliced: slicing bakes a fixed mask width into the
-        # graph and later positions then decode against a mask that stops short of
-        # them (measured divergence at token 12 in the single-width decoder).
-        self.attn_mask = torch.ones((1, self.max_seq_len), dtype=torch.long, device=self.device)
-
         for width in range(1, self.k + 2):
             self._capture_width(width, cur, warmup_steps)
             cur += 0  # positions are set per-replay; capture position is arbitrary
+
+        # Reset cache fresh after warmups and graph recordings
+        self.cache.reset()
 
         ring_mode = os.environ.get("RING_BUFFER_MODE", "selective_hybrid")
         self.ring_engine = RingBufferReplayEngine(self.cache, max_depth=64, mode=ring_mode)
@@ -132,13 +145,19 @@ class BucketedSpeculativeDecoder:
         pos_ids = torch.arange(start_pos, start_pos + width, device=self.device).view(1, width)
         cache_pos = torch.arange(start_pos, start_pos + width, device=self.device)
 
+        # Dynamic 4D Causal Mask Buffer (prevents StaticCache boundary and stale slot pollution)
+        min_val = torch.finfo(torch.bfloat16).min
+        mask = torch.full((1, 1, width, self.max_seq_len), min_val, dtype=torch.bfloat16, device=self.device)
+        for i in range(width):
+            mask[:, :, i, : start_pos + i + 1] = 0.0
+
         # WARM FIRST -- fla autotunes on first sight of a shape, and autotuning
         # inside capture is a host sync.
         s = torch.cuda.Stream(device=self.device)
         s.wait_stream(torch.cuda.current_stream(device=self.device))
         with torch.cuda.stream(s), torch.no_grad():
             for _ in range(warmup_steps):
-                self.model(ids, attention_mask=self.attn_mask, position_ids=pos_ids,
+                self.model(ids, attention_mask=mask, position_ids=pos_ids,
                            cache_position=cache_pos, past_key_values=self.cache,
                            use_cache=True, output_hidden_states=True)
         torch.cuda.current_stream(device=self.device).wait_stream(s)
@@ -159,7 +178,7 @@ class BucketedSpeculativeDecoder:
                if (self._pool is not None and self._share_pool)
                else torch.cuda.graph(g, stream=s))
         with ctx, torch.no_grad():
-            out = self.model(ids, attention_mask=self.attn_mask, position_ids=pos_ids,
+            out = self.model(ids, attention_mask=mask, position_ids=pos_ids,
                              cache_position=cache_pos, past_key_values=self.cache,
                              use_cache=True, output_hidden_states=True)
             logits = out.logits
@@ -169,7 +188,7 @@ class BucketedSpeculativeDecoder:
             self._pool = g.pool()
 
         self.buckets[width] = {"graph": g, "ids": ids, "pos_ids": pos_ids,
-                               "cache_pos": cache_pos, "logits": logits, "hidden": hidden}
+                               "cache_pos": cache_pos, "mask": mask, "logits": logits, "hidden": hidden}
 
     # ------------------------------------------------------------- SSM state
     # RingBufferReplayEngine handles snapshotting and rollback.
@@ -223,6 +242,14 @@ class BucketedSpeculativeDecoder:
         p = torch.arange(start_pos, start_pos + width, device=self.device)
         b["pos_ids"].copy_(p.view(1, width))
         b["cache_pos"].copy_(p)
+
+        # Dynamic causal mask update: unmask prefix up to each token in chunk
+        min_val = torch.finfo(torch.bfloat16).min
+        mask = b["mask"]
+        for i in range(width):
+            mask[:, :, i, : start_pos + i + 1] = 0.0
+            mask[:, :, i, start_pos + i + 1 :] = min_val
+
         # Pin the captured counter to the TRUE position -- but ONLY when it has
         # actually drifted. The graph leaves the counter at start_pos + width, which
         # is exactly where the NEXT sequential replay wants it, so the common path
@@ -265,6 +292,8 @@ class BucketedSpeculativeDecoder:
         swap_ms = apply_expert_state(engine, expert)
 
         self.cache.reset()
+        if self.ring_engine is not None:
+            self.ring_engine.reset()
         cur = prompt_tokens.shape[1]
         torch.cuda.synchronize()
         t0 = time.perf_counter()
@@ -286,10 +315,17 @@ class BucketedSpeculativeDecoder:
 
         yield [toks[0]]
 
+        # Build the initial draft head KV cache over the full prompt hidden states.
+        # (one-time O(context) cost). After this, we extend it incrementally.
+        # `full_hids` tracks all backbone hidden states so we can rebuild dcache on rollback.
+        full_hids = hids[0]  # shape [1, cur, H]
+        dcache = self.head.prefill(full_hids, seq)
+
         while len(toks) < max_new_tokens and not done:
-            H = torch.cat(hids, dim=1)
-            dcache = self.head.prefill(H, seq)
-            draft = self.head.draft(H[:, -1:, :], nxt, k=k, start_pos=pos - 1, cache=dcache, gate=gate)
+            # Incremental draft: pass only the last backbone hidden state and the
+            # current next-token. dcache already has KV for all previous positions,
+            # so draft() only appends new KV entries for the K draft positions.
+            draft = self.head.draft(full_hids[:, -1:, :], nxt, k=k, start_pos=pos - 1, cache=dcache, gate=gate)
             k_actual = draft.shape[1]
 
             # Must capture the returned slot -- rollback_on_rejection needs the EXACT
@@ -318,10 +354,22 @@ class BucketedSpeculativeDecoder:
                 committed = torch.cat([nxt, draft[:, :n_acc]], dim=-1)
                 _, hidden = self._replay(n_acc + 1, committed, pos)
                 new_h = hidden
+                # dcache has k_actual stale KV entries from the rejected draft tokens.
+                # DynamicCache is append-only, so we can't truncate it. Rebuild from
+                # the full committed hidden state history (full_hids ++ new_h committed slice).
+                # This is O(current_len) but only happens on rejections, which are rare.
+                new_full = torch.cat([full_hids, new_h], dim=1)
+                committed_seq = torch.cat([seq, committed], dim=-1)
+                dcache = self.head.prefill(new_full, committed_seq)
+                full_hids = new_full
             else:
                 new_h = hidden[:, : n_acc + 1, :]
                 committed = chunk
-                
+                # All K+1 drafts accepted. draft() already wrote K new KV entries to dcache
+                # for the draft positions. dcache is now up-to-date through position pos+k.
+                # Just extend full_hids with the new committed hidden states.
+                full_hids = torch.cat([full_hids, new_h], dim=1)
+
             self.ring_engine.commit_on_acceptance(n_acc + 1)
 
             bonus = target[n_acc].item()
@@ -338,10 +386,11 @@ class BucketedSpeculativeDecoder:
             if new_batch:
                 yield new_batch
 
-            hids.append(new_h.clone())
             seq = torch.cat([seq, committed], dim=-1)
             pos += n_acc + 1
             nxt = torch.tensor([[bonus]], device=self.device)
+
+
 
         torch.cuda.synchronize()
         elapsed = time.perf_counter() - t0

@@ -110,10 +110,10 @@ export const DOCS_MANIFEST: DocItem[] = [
   },
   {
     id: "bench-weibull-hazard",
-    title: "Weibull Hazard Speculative Gate (Ch. 3)",
+    title: "Weibull Hazard & Bollinger Gating (Ch. 3 & 5)",
     category: "Runtime & Speculative",
     relativePath: "benchmarks/runtime/speculative/weibull_hazard_gating/README.md",
-    description: "Discrete Weibull wear-out hazard modeling for spatio-temporal draft truncation.",
+    description: "Discrete Weibull wear-out hazard & rolling Bollinger Bands volatility gating for speculative draft truncation.",
   },
   {
     id: "bench-runtime-memory",

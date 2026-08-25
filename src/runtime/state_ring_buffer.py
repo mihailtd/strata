@@ -98,6 +98,11 @@ class StateRingBuffer:
         self.write_ptr = self.commit_ptr
         return self.commit_ptr
 
+    def reset(self) -> None:
+        """Reset pointers."""
+        self.write_ptr = 0
+        self.commit_ptr = 0
+
 
 class PointerStateRingBuffer:
     """Zero-copy fast-path state ring buffer.
@@ -331,6 +336,11 @@ class POETCompressedStateRingBuffer:
         self.write_ptr = self.commit_ptr
         return self.commit_ptr
 
+    def reset(self) -> None:
+        """Reset pointers."""
+        self.write_ptr = 0
+        self.commit_ptr = 0
+
 
 class SelectiveHybridPOETRingBuffer:
     """Selective Hybrid State Ring Buffer (Best of Both Worlds).
@@ -380,20 +390,34 @@ class SelectiveHybridPOETRingBuffer:
         self.write_ptr = long_slot
         return long_slot
 
+    def reset(self) -> None:
+        """Reset write and commit pointers for a new generation turn."""
+        if hasattr(self.short_ring, "reset"):
+            self.short_ring.reset()
+        else:
+            self.short_ring.write_ptr = 0
+            self.short_ring.commit_ptr = 0
+
+        if hasattr(self.long_poet_ring, "reset"):
+            self.long_poet_ring.reset()
+        else:
+            self.long_poet_ring.write_ptr = 0
+            self.long_poet_ring.commit_ptr = 0
+
+        self.write_ptr = 0
+        self.commit_ptr = 0
+
     def rollback(self, cache, slot: int | None = None, n_accepted: int = 0) -> int:
         """Rollback state. Uses short dense ring if within short window (bit-exact), else POET decompress."""
         if slot is None:
-            distance_from_commit = n_accepted
-            if distance_from_commit < self.short_window_depth:
-                # Use lossless short dense ring
-                return self.short_ring.rollback(cache, n_accepted=n_accepted)
-            else:
-                # Use POET decompression for long history rollback
-                return self.long_poet_ring.rollback(cache, n_accepted=n_accepted)
-        else:
-            if slot < self.short_window_depth:
-                return self.short_ring.rollback(cache, slot=slot)
-            return self.long_poet_ring.rollback(cache, slot=slot)
+            slot = (self.commit_ptr + n_accepted) % self.max_depth
+
+        # Distance from commit boundary
+        dist_from_commit = (slot - self.commit_ptr) % self.max_depth
+        if dist_from_commit < self.short_window_depth:
+            short_slot = slot % self.short_window_depth
+            return self.short_ring.rollback(cache, slot=short_slot)
+        return self.long_poet_ring.rollback(cache, slot=slot)
 
     def commit(self, n_accepted: int) -> int:
         """Advance commit boundary across both rings."""
@@ -458,4 +482,12 @@ class RingBufferReplayEngine:
     def commit_on_acceptance(self, n_accepted: int) -> None:
         """Advance consensus commit boundary when tokens are accepted."""
         self.ring.commit(n_accepted)
+
+    def reset(self) -> None:
+        """Reset write and commit pointers for a new generation turn."""
+        if hasattr(self.ring, "reset"):
+            self.ring.reset()
+        else:
+            self.ring.write_ptr = 0
+            self.ring.commit_ptr = 0
 

@@ -31,6 +31,33 @@ from runtime.riemannian_covariance import (
 
 
 
+class RenkoBrickSmoother:
+    """Filters high-frequency latent noise during continuous streaming generation.
+    
+    Tracks accumulated displacement in Riemannian latent space. Only emits a routing
+    re-classification event when displacement breaks a discrete Renko Brick Boundary.
+    """
+    def __init__(self, epsilon_box: float = 5.0):
+        self.epsilon_box = epsilon_box
+        self.last_brick: torch.Tensor | None = None
+        self.accumulated_displacement: float = 0.0
+
+    def step(self, h_t: torch.Tensor) -> bool:
+        """Returns True if a routing re-classification event should be emitted."""
+        if self.last_brick is None:
+            self.last_brick = h_t.detach().clone()
+            return True  # Always trigger on the very first token
+
+        displacement = torch.norm(h_t - self.last_brick, p=2).item()
+        self.accumulated_displacement += displacement
+        self.last_brick = h_t.detach().clone()
+
+        if self.accumulated_displacement >= self.epsilon_box:
+            self.accumulated_displacement = 0.0
+            return True
+        return False
+
+
 class RiemannianTeamRouter:
     """Dynamically selects synergistic teams of experts using precomputed Riemannian distances."""
 

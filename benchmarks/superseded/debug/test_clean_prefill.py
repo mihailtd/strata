@@ -1,0 +1,97 @@
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, StaticCache
+from runtime.state_ring_buffer import RingBufferReplayEngine
+
+def test_graph_clean_prefill():
+    model_id = "Qwen/Qwen3.5-9B"
+    print(f"Loading {model_id}...")
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_id, torch_dtype=torch.bfloat16, device_map="cuda:0"
+    )
+    model.eval()
+
+    prompt = "Add ruff and ty as dev dependencies, then format and lint the whole codebase."
+    formatted = f"<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+    input_ids = tokenizer.encode(formatted, return_tensors="pt").cuda()
+    cur = input_ids.shape[1]
+
+    # Run 1: Eager baseline for 10 steps
+    cache_eager = StaticCache(config=model.config, max_batch_size=1, max_cache_len=2048, device="cuda:0", dtype=torch.bfloat16)
+    with torch.no_grad():
+        out_eager = model(
+            input_ids,
+            past_key_values=cache_eager,
+            cache_position=torch.arange(0, cur, device="cuda:0"),
+            use_cache=True,
+        )
+    eager_toks = []
+    nxt = torch.argmax(out_eager.logits[:, -1, :], -1, keepdim=True)
+    eager_toks.append(nxt.item())
+    pos = cur
+    for _ in range(15):
+        with torch.no_grad():
+            out = model(nxt, past_key_values=cache_eager, cache_position=torch.tensor([pos], device="cuda:0"), use_cache=True)
+        nxt = torch.argmax(out.logits[:, -1, :], -1, keepdim=True)
+        eager_toks.append(nxt.item())
+        pos += 1
+    print("Eager tokens:", eager_toks)
+    print("Eager text:\n", repr(tokenizer.decode(eager_toks)))
+
+    # Run 2: Graph capture with CLEAN prefill after capture
+    cache_graph = StaticCache(config=model.config, max_batch_size=1, max_cache_len=2048, device="cuda:0", dtype=torch.bfloat16)
+    
+    ids_buf = torch.zeros((1, 1), dtype=torch.long, device="cuda:0")
+    pos_ids_buf = torch.zeros((1, 1), dtype=torch.long, device="cuda:0")
+    cache_pos_buf = torch.zeros((1,), dtype=torch.long, device="cuda:0")
+
+    # Capture first
+    s = torch.cuda.Stream()
+    s.wait_stream(torch.cuda.current_stream())
+    with torch.cuda.stream(s), torch.no_grad():
+        for _ in range(3):
+            model(ids_buf, position_ids=pos_ids_buf, cache_position=cache_pos_buf, past_key_values=cache_graph, use_cache=True)
+    torch.cuda.current_stream().wait_stream(s)
+
+    g = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(g, stream=s), torch.no_grad():
+        out_g = model(ids_buf, position_ids=pos_ids_buf, cache_position=cache_pos_buf, past_key_values=cache_graph, use_cache=True)
+        g_logits = out_g.logits
+    torch.cuda.current_stream().wait_stream(s)
+
+    # NOW RESET AND PREFILL PROMPT FRESH INTO CACHE_GRAPH!
+    cache_graph.reset()
+    with torch.no_grad():
+        out_graph = model(
+            input_ids,
+            past_key_values=cache_graph,
+            cache_position=torch.arange(0, cur, device="cuda:0"),
+            use_cache=True,
+        )
+
+    # Replay 15 steps
+    len_counters = [getattr(l, "cumulative_length", None) for l in cache_graph.layers if isinstance(getattr(l, "cumulative_length", None), torch.Tensor)]
+    ctr_src = torch.zeros_like(len_counters[0])
+    ctr_srcs = [ctr_src] * len(len_counters)
+
+    graph_toks = []
+    nxt = torch.argmax(out_graph.logits[:, -1, :], -1, keepdim=True)
+    graph_toks.append(nxt.item())
+    pos = cur
+    for _ in range(15):
+        ids_buf.copy_(nxt)
+        pos_ids_buf.copy_(torch.tensor([[pos]], device="cuda:0"))
+        cache_pos_buf.copy_(torch.tensor([pos], device="cuda:0"))
+        ctr_src.fill_(pos)
+        torch._foreach_copy_(len_counters, ctr_srcs)
+        g.replay()
+        nxt = torch.argmax(g_logits[0, -1, :], -1, keepdim=True)
+        graph_toks.append(nxt.item())
+        pos += 1
+
+    print("\nGraph tokens:", graph_toks)
+    print("Graph text:\n", repr(tokenizer.decode(graph_toks)))
+    print("EXACT MATCH:", eager_toks == graph_toks)
+
+if __name__ == "__main__":
+    test_graph_clean_prefill()

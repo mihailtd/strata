@@ -119,7 +119,7 @@ class FoldedCudaGraphDecoder:
         with torch.no_grad():
             cache_pos = torch.arange(0, cur_pos, device=self.device, dtype=torch.long)
             outputs = self.model(
-                prompt_tokens, past_key_values=self.past_key_values, cache_position=cache_pos, use_cache=True
+                prompt_tokens, past_key_values=self.past_key_values, cache_position=cache_pos, use_cache=True, output_hidden_states=True
             )
             next_token = torch.argmax(outputs.logits[:, -1, :], dim=-1, keepdim=True)
 
@@ -151,6 +151,7 @@ class FoldedCudaGraphDecoder:
                         cache_position=self.static_cache_position,
                         past_key_values=self.past_key_values,
                         use_cache=True,
+                        output_hidden_states=True,
                     )
                     _ = out.logits
                     # advance AFTER the forward -- the decode loop must use this
@@ -171,15 +172,17 @@ class FoldedCudaGraphDecoder:
                 cache_position=self.static_cache_position,
                 past_key_values=self.past_key_values,
                 use_cache=True,
+                output_hidden_states=True,
             )
             self.static_logits = out.logits
+            self.static_hidden_states = out.hidden_states[-1]
 
         torch.cuda.current_stream(device=self.device).wait_stream(s)
         self._is_captured = True
         self._capture_count += 1
         self._is_locked = True
 
-    def prefill(self, prompt_tokens: torch.Tensor) -> torch.Tensor:
+    def prefill(self, prompt_tokens: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Prefills prompt KV cache in-place into StaticCache without re-capturing CUDA Graph."""
         prompt_tokens = prompt_tokens.to(self.device)
         cur_pos = prompt_tokens.shape[1]
@@ -191,14 +194,14 @@ class FoldedCudaGraphDecoder:
         with torch.no_grad():
             cache_pos = torch.arange(0, cur_pos, device=self.device, dtype=torch.long)
             outputs = self.model(
-                prompt_tokens, past_key_values=self.past_key_values, cache_position=cache_pos, use_cache=True
+                prompt_tokens, past_key_values=self.past_key_values, cache_position=cache_pos, use_cache=True, output_hidden_states=True
             )
             next_token = torch.argmax(outputs.logits[:, -1, :], dim=-1, keepdim=True)
 
         self.static_input_ids.copy_(next_token)
         self.static_position_ids.copy_(torch.tensor([[cur_pos]], dtype=torch.long, device=self.device))
         self.static_cache_position.copy_(torch.tensor([cur_pos], dtype=torch.long, device=self.device))
-        return outputs.logits
+        return outputs.logits, outputs.hidden_states[-1]
 
     def generate_with_graph(
         self,
@@ -324,7 +327,7 @@ class FoldedCudaGraphDecoder:
 
         apply_expert_state(engine, expert)
 
-        self.prefill(prompt_tokens)
+        _, prefill_h_t = self.prefill(prompt_tokens)
 
         stop_token_ids = set()
         if self.tokenizer.eos_token_id is not None:
@@ -336,15 +339,16 @@ class FoldedCudaGraphDecoder:
 
         first_tok_id = self.static_input_ids.item()
         if first_tok_id not in stop_token_ids:
-            yield self.tokenizer.decode([first_tok_id])
+            yield self.tokenizer.decode([first_tok_id]), prefill_h_t
 
         for _ in range(max_new_tokens - 1):
             self.graph.replay()  # replay first, then advance -- see generate_with_graph
             next_token = torch.argmax(self.static_logits[:, -1, :], dim=-1, keepdim=True)
+            h_t = self.static_hidden_states.clone()
             self.static_input_ids.copy_(next_token)
             self.static_position_ids += 1
             self.static_cache_position += 1
             tok_id = next_token.item()
             if tok_id in stop_token_ids:
                 break
-            yield self.tokenizer.decode([tok_id])
+            yield self.tokenizer.decode([tok_id]), h_t

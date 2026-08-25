@@ -1017,7 +1017,14 @@ async def _execute_single_request(qr: QueuedRequest) -> Any:
         causal_scheduler = model_state.get("causal_scheduler")
         if team_router is not None:
             scores = classify_prompt_intent(prompt_text)
-            selected_team, meta = team_router.select_team(scores, max_team_size=2)
+            # Spec decoder CUDA graphs are captured for a single expert weight state.
+            # Stacking multiple LoRA deltas simultaneously via activate_many() shifts
+            # the effective weight matrix into an uncalibrated regime and causes the
+            # speculative draft head to produce degenerate repeated output.
+            # When the spec decoder is active, limit dynamic routing to one expert.
+            _spec_active = model_state.get("spec_decoder") is not None and getattr(model_state.get("spec_decoder"), "_locked", False)
+            _max_team = 1 if _spec_active else 2
+            selected_team, meta = team_router.select_team(scores, max_team_size=_max_team)
             current_team = model_state.get("active_team", [])
 
             # Check if previous turn's predictive pre-fold hit
@@ -1268,12 +1275,19 @@ def _build_streaming_response(
                         if stop_event.is_set():
                             break
                 elif graph_decoder is not None and getattr(graph_decoder, "_is_captured", False):
-                    for text_tok in graph_decoder.generate_tokens_stream(
+                    from runtime.dynamic_team_router import RenkoBrickSmoother
+                    smoother = RenkoBrickSmoother(epsilon_box=5.0) if is_dynamic else None
+                    
+                    for text_tok, h_t in graph_decoder.generate_tokens_stream(
                         prompt_tokens,
                         engine=engine_for_call,
                         expert=expert_for_call,
                         max_new_tokens=max_new_tokens,
                     ):
+                        if smoother is not None:
+                            if smoother.step(h_t):
+                                print(f"[RenkoRouter] Boundary broken (\u0394D \u2265 5.0) on token '{text_tok}'. Triggering latent evaluation...")
+                                
                         token_queue.put((text_tok, 1))
                         if stop_event.is_set():
                             break
@@ -1974,7 +1988,8 @@ async def _rebuild_spec_decoder(k: int) -> dict:
             from runtime.bucketed_speculative import BucketedSpeculativeDecoder
             from runtime.mtp_draft import Qwen35MTPDraftHead
 
-            draft_head = Qwen35MTPDraftHead(base_model, "Qwen/Qwen3.5-4B")
+            current_model_id = model_state.get("model_id", "Qwen/Qwen3.5-4B")
+            draft_head = Qwen35MTPDraftHead(base_model, current_model_id)
             if folding_engine is not None:
                 folding_engine.register_draft_head(draft_head)
 
@@ -2055,15 +2070,18 @@ async def set_speculative_decode(req: SetSpeculativeDecodeRequest) -> Speculativ
 
 class SetSpeculativeRangeGateRequest(BaseModel):
     enabled: bool
-    threshold: float | None = 5.0
+    threshold: float | None = 3.5
     weibull_hazard_enabled: bool | None = True
     weibull_beta: float | None = 2.2
     weibull_gamma: float | None = 0.6
+    bollinger_bands_enabled: bool | None = True
+    bollinger_k: float | None = 2.0
+    bollinger_gamma: float | None = 0.5
 
 
 @app.post("/api/engine/set_speculative_range_gate")
 async def set_speculative_range_gate(req: SetSpeculativeRangeGateRequest):
-    """Toggles Single-Pass Range Statistic & Weibull Hazard Speculative Gating (Chapters 3 & 8).
+    """Toggles Single-Pass Range Statistic, Weibull Hazard & Bollinger Volatility Gating (Chapters 3, 5 & 8).
 
     Instantaneous O(1) swap: no CUDA Graph recapture required.
     """
@@ -2073,24 +2091,33 @@ async def set_speculative_range_gate(req: SetSpeculativeRangeGateRequest):
     
     weibull_on = req.weibull_hazard_enabled if req.weibull_hazard_enabled is not None else True
     beta = req.weibull_beta if req.weibull_beta is not None else 2.2
-    gamma = req.weibull_gamma if req.weibull_gamma is not None else 0.6
+    gamma_w = req.weibull_gamma if req.weibull_gamma is not None else 0.6
+    boll_on = req.bollinger_bands_enabled if req.bollinger_bands_enabled is not None else True
+    boll_k = req.bollinger_k if req.bollinger_k is not None else 2.0
+    gamma_b = req.bollinger_gamma if req.bollinger_gamma is not None else 0.5
 
     model_state["range_gate"] = RangeStatisticGate(
         top_m=8,
         threshold=model_state["range_gate_threshold"],
         weibull_hazard_enabled=weibull_on,
         weibull_beta=beta,
-        weibull_gamma=gamma,
+        weibull_gamma=gamma_w,
+        bollinger_bands_enabled=boll_on,
+        bollinger_k=boll_k,
+        bollinger_gamma=gamma_b,
     )
 
-    print(f"[IMB Server] Range Speculative Gate set: enabled={req.enabled}, threshold={model_state['range_gate_threshold']}, weibull_hazard={weibull_on} (beta={beta}, gamma={gamma})")
+    print(f"[IMB Server] Range Speculative Gate set: enabled={req.enabled}, threshold={model_state['range_gate_threshold']}, weibull_hazard={weibull_on}, bollinger_bands={boll_on}")
     return {
         "status": "updated",
         "spec_range_gate_enabled": model_state["range_gate_enabled"],
         "spec_range_threshold": model_state["range_gate_threshold"],
         "weibull_hazard_enabled": weibull_on,
         "weibull_beta": beta,
-        "weibull_gamma": gamma,
+        "weibull_gamma": gamma_w,
+        "bollinger_bands_enabled": boll_on,
+        "bollinger_k": boll_k,
+        "bollinger_gamma": gamma_b,
     }
 
 

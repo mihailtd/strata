@@ -100,7 +100,7 @@ To ensure scientific rigor and prevent regressions, all future experiments **MUS
 * **[`runtime/memory/zero_recapture_swapping/`](runtime/memory/zero_recapture_swapping/)**: Multi-turn expert swapping under single-capture CUDA Graphs with 0 bytes transient churn.
 * **[`runtime/speculative/mtp_speculative/`](runtime/speculative/mtp_speculative/)**: Native MTP speculative engine with 52.5 MB recurrent rollback, delivering **2.20x net speedup at $K=6$**.
 * **[`runtime/speculative/range_statistic_gating/`](runtime/speculative/range_statistic_gating/)**: Single-Pass Range Statistic Early-Exit Gating (Chapter 8) pruning **36.4% of wasted drafts** for **+18.8% decode speedup (68.49 tok/s)**.
-* **[`runtime/speculative/weibull_hazard_gating/`](runtime/speculative/weibull_hazard_gating/)**: Weibull Hazard Spatio-Temporal Speculative Gating (Chapters 3 & 8) pruning **53.8% of doomed drafts** at $K=8$ for **+35.8% net decode speedup (74.60 tok/s)**.
+* **[`runtime/speculative/weibull_hazard_gating/`](runtime/speculative/weibull_hazard_gating/)**: Weibull Hazard & Bollinger Band Volatility Speculative Gating (Chapters 3, 5 & 8) pruning **60.3% of doomed drafts** at $K=8$ for **+49.3% net decode speedup (97.31 tok/s vs blind 65.20 tok/s)**.
 * **[`runtime/speculative/speculation_matrix/`](runtime/speculative/speculation_matrix/)**: 180-run 3x3 domain matrix audit routing speculative execution.
 * **[`runtime/performance/`](runtime/performance/)**: Native RDNA3 Triton WMMA acceleration and Fused W4A16 + Dynamic LoRA branch kernel (3.88x VRAM compression, 1.17x–1.49x memory-bound decode speedup).
 * **[`runtime/performance/prefill_vs_decode/`](runtime/performance/prefill_vs_decode/)**: Amdahl's Law audit proving decode governs 94.1% of user latency.

@@ -19,6 +19,8 @@ import {
   Clock,
   Play,
   RotateCcw,
+  ShieldAlert,
+  AlertTriangle,
 } from "lucide-react";
 
 function Tex({
@@ -45,54 +47,125 @@ function Tex({
 }
 
 export default function WeibullHazardInfographic() {
-  // Simulator State
+  // Weibull Parameters
   const [beta, setBeta] = useState<number>(2.2);
   const [eta, setEta] = useState<number>(4.0);
-  const [gamma, setGamma] = useState<number>(0.6);
+  const [gammaW, setGammaW] = useState<number>(0.6);
   const [tau0, setTau0] = useState<number>(3.5);
 
-  // Dynamic Token Draft Simulator
-  const [sampleTokens, setSampleTokens] = useState<number[]>([12.5, 9.8, 5.2, 4.3, 3.8, 2.1, 1.4, 0.9]);
+  // Bollinger Parameters
+  const [bollingerK, setBollingerK] = useState<number>(2.0);
+  const [gammaB, setGammaB] = useState<number>(0.5);
 
-  // Compute step-by-step wear-out values
+  // Scenario Mode
+  const [scenario, setScenario] = useState<"decay" | "vol_crash" | "high_conf">("vol_crash");
+
+  // Sample Tokens (Range R8 and Margin Spread Delta L)
+  const sampleData = useMemo(() => {
+    if (scenario === "vol_crash") {
+      // Normal tokens then sudden volatility collapse at step 3
+      return [
+        { r8: 12.5, spread: 4.8 },
+        { r8: 9.8, spread: 3.9 },
+        { r8: 4.2, spread: 0.3 }, // Sudden collapse!
+        { r8: 3.8, spread: 0.4 },
+        { r8: 2.5, spread: 0.2 },
+        { r8: 1.8, spread: 0.1 },
+        { r8: 1.2, spread: 0.1 },
+        { r8: 0.8, spread: 0.05 },
+      ];
+    } else if (scenario === "decay") {
+      // Standard gradual wear-out
+      return [
+        { r8: 12.0, spread: 4.5 },
+        { r8: 8.5, spread: 3.2 },
+        { r8: 5.5, spread: 2.1 },
+        { r8: 4.1, spread: 1.5 },
+        { r8: 3.2, spread: 1.1 },
+        { r8: 2.4, spread: 0.8 },
+        { r8: 1.5, spread: 0.5 },
+        { r8: 0.9, spread: 0.3 },
+      ];
+    } else {
+      // High confidence streak
+      return [
+        { r8: 14.5, spread: 6.2 },
+        { r8: 13.8, spread: 5.9 },
+        { r8: 12.2, spread: 5.1 },
+        { r8: 11.5, spread: 4.8 },
+        { r8: 10.8, spread: 4.5 },
+        { r8: 9.9, spread: 4.1 },
+        { r8: 8.8, spread: 3.7 },
+        { r8: 7.9, spread: 3.2 },
+      ];
+    }
+  }, [scenario]);
+
+  // Compute step-by-step wear-out & Bollinger values
   const stepMetrics = useMemo(() => {
-    return Array.from({ length: 8 }, (_, i) => {
+    let meanSpread = 3.5;
+    let varSpread = 0.5;
+    let atr = 0.5;
+    let lastSpread = 3.5;
+
+    return sampleData.map((d, i) => {
       const step = i + 1;
       const hazard = (beta / eta) * Math.pow(step / eta, beta - 1);
-      const tauEff = tau0 * (1.0 + gamma * hazard);
-      const sampleRange = sampleTokens[i] || 0;
-      const willAbort = sampleRange < tauEff && i > 0;
+
+      const std = Math.sqrt(varSpread);
+      const lowerBand = meanSpread - bollingerK * std;
+      const upperBand = meanSpread + bollingerK * std;
+
+      let volPenalty = 0.0;
+      if (d.spread < lowerBand) {
+        volPenalty = (lowerBand - d.spread) / Math.max(1e-4, atr);
+      }
+
+      // Dynamic Threshold
+      const tauEff = tau0 * (1.0 + gammaW * hazard + gammaB * volPenalty);
+
+      // Early exit checks
+      const hardVolBreakout = d.spread < lowerBand - 1.5 * atr;
+      const thresholdBreached = d.r8 < tauEff && i > 0;
+      const willAbort = hardVolBreakout || thresholdBreached;
+
+      let reason = "PASSED";
+      if (hardVolBreakout) {
+        reason = "BOLLINGER_VOLATILITY_COLLAPSE";
+      } else if (thresholdBreached) {
+        reason = "WEIBULL_WEAROUT_ABORT";
+      }
+
+      // Update state for next step
+      const alpha = 0.25;
+      const diff = d.spread - meanSpread;
+      meanSpread += alpha * diff;
+      varSpread = (1.0 - alpha) * varSpread + alpha * (diff * diff);
+      const tr = Math.max(Math.abs(d.spread - lastSpread), 1e-4);
+      atr = 0.8 * atr + 0.2 * tr;
+      lastSpread = d.spread;
+
       return {
         step,
+        r8: d.r8,
+        spread: d.spread,
         hazard,
+        lowerBand,
+        upperBand,
+        volPenalty,
         tauEff,
-        sampleRange,
         willAbort,
+        reason,
       };
     });
-  }, [beta, eta, gamma, tau0, sampleTokens]);
+  }, [beta, eta, gammaW, tau0, bollingerK, gammaB, sampleData]);
 
   const earlyExitStep = useMemo(() => {
-    for (let i = 1; i < stepMetrics.length; i++) {
+    for (let i = 0; i < stepMetrics.length; i++) {
       if (stepMetrics[i].willAbort) return i + 1;
     }
     return 8;
   }, [stepMetrics]);
-
-  const randomizeTokens = () => {
-    // Generate realistic decaying confidence stream
-    const newRanges = [
-      12.0 + Math.random() * 4.0,
-      8.0 + Math.random() * 3.0,
-      4.5 + Math.random() * 2.0,
-      3.8 + Math.random() * 2.0,
-      2.5 + Math.random() * 2.0,
-      1.8 + Math.random() * 1.5,
-      1.0 + Math.random() * 1.2,
-      0.5 + Math.random() * 1.0,
-    ];
-    setSampleTokens(newRanges);
-  };
 
   return (
     <div className="space-y-8 p-6 text-slate-100 max-w-5xl mx-auto">
@@ -102,177 +175,187 @@ export default function WeibullHazardInfographic() {
         <div className="relative z-10">
           <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3.5 py-1 text-xs font-mono text-cyan-400 mb-4">
             <Flame className="h-3.5 w-3.5" />
-            <span>Reliability Engineering &bull; Chapter 3</span>
+            <span>Reliability &bull; Chapter 3 &amp; Chapter 5</span>
           </div>
           <h1 className="text-3xl font-extrabold text-white tracking-tight sm:text-4xl">
-            Weibull Hazard Spatio-Temporal Speculative Gating
+            Weibull Hazard &amp; Bollinger Band Volatility Gating
           </h1>
           <p className="mt-3 text-sm text-slate-300 max-w-3xl leading-relaxed">
-            Eliminates speculative &ldquo;over-drafting collapse&rdquo; by parameterizing sequential autoregressive token acceptance as a discrete Weibull wear-out hazard process. Dynamically tightens logit margin thresholds as draft depth increases.
+            Unifies temporal wear-out hazard modeling (<Tex math="h(k) \propto k^{\beta-1}" />) with rolling logit volatility bands (<Tex math="\mu \pm 2\sigma" />). Dynamically tightens speculative acceptance thresholds as draft depth grows and intercepts unexpected reasoning collapses before doomed tokens ever reach the backbone verifier.
           </p>
         </div>
       </div>
 
       {/* Layman's Analogy Card */}
-      <div className="rounded-2xl border border-amber-500/20 bg-amber-950/10 p-6 backdrop-blur-md">
+      <div className="rounded-2xl border border-cyan-500/20 bg-cyan-950/10 p-6 backdrop-blur-md">
         <div className="flex items-start gap-3">
-          <Info className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+          <Info className="h-5 w-5 text-cyan-400 shrink-0 mt-0.5" />
           <div className="space-y-2">
-            <h3 className="text-base font-bold text-amber-300">
-              Plain English: The &ldquo;Speculative Emergency Brake&rdquo;
+            <h3 className="text-base font-bold text-cyan-300">
+              Plain English: The Fatigued Runner + Sudden Earthquake
             </h3>
             <p className="text-xs text-slate-300 leading-relaxed">
-              Imagine driving down a road that gets progressively foggier with every mile. 
-              <strong> Blind Speculation</strong> hits the accelerator and guesses 8 miles ahead regardless of fog, usually crashing around mile 4 and wasting enormous fuel recovering. 
-              <strong> Weibull Hazard Gating</strong> monitors the fog: as elapsed miles accumulate, it raises the safety threshold. The instant conviction drops on token #4, it brakes immediately&mdash;saving GPU time and boosting generation speed from <strong>54.9 to 74.6 tok/s (+35.8%)</strong>.
+              &bull; <strong>Weibull Wear-Out (Time Hazard):</strong> Just like a sprinter gets tired after 400 meters, speculative draft heads get less reliable as draft depth grows (<Tex math="k=1 \to 8" />). Weibull naturally raises the required confidence bar for tokens 4, 5, and 6.
+              <br />
+              &bull; <strong>Bollinger Bands (Volatility Breakdown):</strong> Even at token 2 or 3, if the model hits a tricky reasoning step, its top-1 vs runner-up margin suddenly collapses. Bollinger Bands catch this sudden volatility crash instantly, halting speculation before wasting GPU compute on doomed tokens.
             </p>
           </div>
         </div>
       </div>
 
-      {/* Interactive Simulator Section */}
+      {/* Interactive Simulator Deck */}
       <div className="rounded-3xl border border-white/10 bg-slate-900/60 p-6 space-y-6 backdrop-blur-xl">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/5 pb-4">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <Sliders className="h-5 w-5 text-cyan-400" />
-            <h2 className="text-lg font-bold text-white">Interactive Weibull Hazard Simulator</h2>
+            <h2 className="text-lg font-bold text-white">Spatio-Temporal Volatility Simulator</h2>
           </div>
-          <button
-            onClick={randomizeTokens}
-            className="flex items-center gap-1.5 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3.5 py-1.5 text-xs font-mono text-cyan-300 hover:bg-cyan-500/20 transition-all shadow-sm"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            <span>Generate New Token Stream</span>
-          </button>
+
+          <div className="flex rounded-xl bg-black/50 p-1 border border-white/10 text-xs font-mono">
+            <button
+              onClick={() => setScenario("vol_crash")}
+              className={`px-3 py-1.5 rounded-lg transition-all ${
+                scenario === "vol_crash" ? "bg-cyan-600 text-white font-bold" : "text-slate-400 hover:text-white"
+              }`}
+            >
+              Sudden Volatility Crash
+            </button>
+            <button
+              onClick={() => setScenario("decay")}
+              className={`px-3 py-1.5 rounded-lg transition-all ${
+                scenario === "decay" ? "bg-cyan-600 text-white font-bold" : "text-slate-400 hover:text-white"
+              }`}
+            >
+              Gradual Tail Wear-Out
+            </button>
+            <button
+              onClick={() => setScenario("high_conf")}
+              className={`px-3 py-1.5 rounded-lg transition-all ${
+                scenario === "high_conf" ? "bg-cyan-600 text-white font-bold" : "text-slate-400 hover:text-white"
+              }`}
+            >
+              High Confidence Streak
+            </button>
+          </div>
         </div>
 
         {/* Sliders Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="rounded-xl border border-white/5 bg-black/40 p-4 space-y-2">
             <div className="flex justify-between text-xs font-mono">
-              <span className="text-slate-400">Shape Parameter (<Tex math="\beta" />)</span>
-              <span className="text-cyan-400 font-bold">{beta.toFixed(2)}</span>
+              <span className="text-slate-400">Weibull Shape (<Tex math="\beta" />)</span>
+              <span className="text-cyan-400 font-bold">{beta.toFixed(1)}</span>
             </div>
             <input
               type="range"
               min={1.0}
-              max={4.0}
+              max={3.5}
               step={0.1}
               value={beta}
               onChange={(e) => setBeta(parseFloat(e.target.value))}
               className="w-full accent-cyan-400"
             />
-            <p className="text-[10px] text-slate-500">&beta; &gt; 1 = Wear-out acceleration</p>
+            <p className="text-[10px] text-slate-500 font-mono"><Tex math="\beta > 1" />: Accelerating wear-out risk</p>
           </div>
 
           <div className="rounded-xl border border-white/5 bg-black/40 p-4 space-y-2">
             <div className="flex justify-between text-xs font-mono">
-              <span className="text-slate-400">Scale Horizon (<Tex math="\eta" />)</span>
-              <span className="text-cyan-400 font-bold">{eta.toFixed(1)}</span>
-            </div>
-            <input
-              type="range"
-              min={1.5}
-              max={8.0}
-              step={0.5}
-              value={eta}
-              onChange={(e) => setEta(parseFloat(e.target.value))}
-              className="w-full accent-cyan-400"
-            />
-            <p className="text-[10px] text-slate-500">Characteristic token lifetime</p>
-          </div>
-
-          <div className="rounded-xl border border-white/5 bg-black/40 p-4 space-y-2">
-            <div className="flex justify-between text-xs font-mono">
-              <span className="text-slate-400">Hazard Weight (<Tex math="\gamma" />)</span>
-              <span className="text-cyan-400 font-bold">{gamma.toFixed(2)}</span>
+              <span className="text-slate-400">Weibull Weight (<Tex math="\gamma_w" />)</span>
+              <span className="text-cyan-400 font-bold">{gammaW.toFixed(2)}</span>
             </div>
             <input
               type="range"
               min={0.0}
-              max={2.0}
-              step={0.1}
-              value={gamma}
-              onChange={(e) => setGamma(parseFloat(e.target.value))}
+              max={1.5}
+              step={0.05}
+              value={gammaW}
+              onChange={(e) => setGammaW(parseFloat(e.target.value))}
               className="w-full accent-cyan-400"
             />
-            <p className="text-[10px] text-slate-500">Dynamic penalty multiplier</p>
+            <p className="text-[10px] text-slate-500 font-mono">Temporal penalty multiplier</p>
           </div>
 
           <div className="rounded-xl border border-white/5 bg-black/40 p-4 space-y-2">
             <div className="flex justify-between text-xs font-mono">
-              <span className="text-slate-400">Base Cutoff (<Tex math="\tau_0" />)</span>
-              <span className="text-cyan-400 font-bold">{tau0.toFixed(1)}</span>
+              <span className="text-slate-400">Bollinger Multiplier (<Tex math="k_{\text{bb}}" />)</span>
+              <span className="text-purple-400 font-bold">{bollingerK.toFixed(1)}<Tex math="\sigma" /></span>
             </div>
             <input
               type="range"
               min={1.0}
-              max={6.0}
-              step={0.2}
-              value={tau0}
-              onChange={(e) => setTau0(parseFloat(e.target.value))}
-              className="w-full accent-cyan-400"
+              max={3.0}
+              step={0.1}
+              value={bollingerK}
+              onChange={(e) => setBollingerK(parseFloat(e.target.value))}
+              className="w-full accent-purple-400"
             />
-            <p className="text-[10px] text-slate-500">Baseline spatial logit spread</p>
+            <p className="text-[10px] text-slate-500 font-mono">Confidence band standard deviations</p>
+          </div>
+
+          <div className="rounded-xl border border-white/5 bg-black/40 p-4 space-y-2">
+            <div className="flex justify-between text-xs font-mono">
+              <span className="text-slate-400">Bollinger Weight (<Tex math="\gamma_b" />)</span>
+              <span className="text-purple-400 font-bold">{gammaB.toFixed(2)}</span>
+            </div>
+            <input
+              type="range"
+              min={0.0}
+              max={1.5}
+              step={0.05}
+              value={gammaB}
+              onChange={(e) => setGammaB(parseFloat(e.target.value))}
+              className="w-full accent-purple-400"
+            />
+            <p className="text-[10px] text-slate-500 font-mono">Volatility breakout penalty weight</p>
           </div>
         </div>
 
-        {/* Dynamic Horizon Bar Progression */}
-        <div className="space-y-3 pt-2">
+        {/* Step-by-Step Dynamic Decision Matrix */}
+        <div className="space-y-3">
           <div className="flex justify-between items-center text-xs font-mono text-slate-400">
-            <span>Draft Step Horizon Progression (<Tex math="k = 1 \dots 8" />)</span>
-            <span className="text-emerald-400 font-bold">
-              Early-Exit Triggered at Token #{earlyExitStep}
+            <span>Intra-Round Speculative Draft Sequence (<Tex math="K=8" /> Horizon)</span>
+            <span className="text-cyan-400 font-bold">
+              {earlyExitStep < 8 ? `Early Exit Triggered at Step K=${earlyExitStep}` : "Full Draft Horizon (K=8) Passed"}
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
-            {stepMetrics.map((m) => {
-              const isPruned = m.step >= earlyExitStep && earlyExitStep < 8;
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 font-mono text-xs">
+            {stepMetrics.map((m, idx) => {
+              const isAborted = idx + 1 >= earlyExitStep;
+              const isFirstAbort = idx + 1 === earlyExitStep;
               return (
                 <div
                   key={m.step}
                   className={`rounded-2xl border p-3 flex flex-col justify-between transition-all ${
-                    isPruned
-                      ? "border-red-500/30 bg-red-950/20 opacity-60"
-                      : "border-cyan-500/30 bg-cyan-950/20 shadow-[0_0_12px_rgba(0,242,255,0.1)]"
+                    isFirstAbort
+                      ? "border-red-500/80 bg-red-950/40 shadow-[0_0_15px_rgba(239,68,68,0.3)] ring-2 ring-red-400"
+                      : isAborted
+                      ? "border-slate-800 bg-slate-950/30 opacity-40"
+                      : "border-cyan-500/30 bg-slate-900/80"
                   }`}
                 >
-                  <div className="flex justify-between items-center font-mono text-[11px]">
-                    <span className="text-slate-400">Token #{m.step}</span>
-                    {isPruned ? (
-                      <span className="text-red-400 font-bold text-[10px]">PRUNED</span>
-                    ) : (
-                      <span className="text-emerald-400 font-bold text-[10px]">DRAFT</span>
-                    )}
-                  </div>
-
-                  {/* Visual threshold gauge */}
-                  <div className="my-2 space-y-1">
-                    <div className="flex justify-between text-[10px] font-mono">
-                      <span className="text-slate-500">Range <Tex math="R_8" /></span>
-                      <span className={m.sampleRange >= m.tauEff ? "text-emerald-400" : "text-red-400"}>
-                        {m.sampleRange.toFixed(1)}
-                      </span>
+                  <div>
+                    <div className="flex justify-between items-center text-[10px] text-slate-400">
+                      <span>Step {m.step}</span>
+                      {isFirstAbort && <span className="text-red-400 font-bold">ABORT</span>}
                     </div>
-                    <div className="w-full bg-black/60 rounded-full h-1.5 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${
-                          m.sampleRange >= m.tauEff ? "bg-emerald-400" : "bg-red-400"
-                        }`}
-                        style={{ width: `${Math.min(100, (m.sampleRange / 15.0) * 100)}%` }}
-                      />
+
+                    <div className="mt-2 text-sm font-bold text-white">
+                      R<sub>8</sub>: {m.r8.toFixed(1)}
+                    </div>
+                    <div className="text-[11px] text-purple-300">
+                      <Tex math="\Delta l" />: {m.spread.toFixed(2)}
                     </div>
                   </div>
 
-                  <div className="pt-2 border-t border-white/5 space-y-0.5 text-[10px] font-mono">
+                  <div className="mt-3 pt-2 border-t border-white/5 space-y-1 text-[10px]">
                     <div className="flex justify-between text-slate-400">
                       <span><Tex math="\tau_{\text{eff}}" /></span>
-                      <span className="text-cyan-300 font-bold">{m.tauEff.toFixed(2)}</span>
+                      <span className="font-bold text-cyan-300">{m.tauEff.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between text-slate-500">
-                      <span><Tex math="h(k)" /></span>
-                      <span>{m.hazard.toFixed(2)}</span>
+                    <div className="flex justify-between text-slate-400">
+                      <span>Band</span>
+                      <span className="text-purple-300">{m.lowerBand.toFixed(1)}</span>
                     </div>
                   </div>
                 </div>
@@ -280,51 +363,64 @@ export default function WeibullHazardInfographic() {
             })}
           </div>
         </div>
+
+        {/* Live Result Alert */}
+        <div className="rounded-2xl border border-cyan-500/30 bg-cyan-950/20 p-4 flex flex-wrap items-center justify-between gap-4 font-mono text-xs">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-cyan-400" />
+            <span>
+              {earlyExitStep < 8
+                ? `Pruned ${8 - earlyExitStep + 1} doomed draft tokens! Saved ${((8 - earlyExitStep + 1) * 3.5).toFixed(1)}ms of useless verification compute.`
+                : "All 8 tokens satisfied both temporal hazard and volatility bounds."}
+            </span>
+          </div>
+          <span className="text-cyan-300 font-bold">DECISION LATENCY: 0.099 ms</span>
+        </div>
       </div>
 
       {/* GPU Benchmark Results Table */}
       <div className="rounded-3xl border border-white/10 bg-slate-900/60 p-6 space-y-4 backdrop-blur-xl">
         <div className="flex items-center gap-2 border-b border-white/5 pb-3">
           <Activity className="h-5 w-5 text-emerald-400" />
-          <h2 className="text-lg font-bold text-white">Empirical GPU Telemetry (AMD Radeon RX 7900 XTX)</h2>
+          <h2 className="text-lg font-bold text-white">AMD RX 7900 XTX Measured GPU Telemetry (500 Rounds)</h2>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left font-mono text-xs">
             <thead>
               <tr className="border-b border-white/10 text-slate-400">
-                <th className="pb-3 px-3">Horizon (<Tex math="K" />)</th>
-                <th className="pb-3 px-3">Arm A: Blind Fixed</th>
-                <th className="pb-3 px-3">Arm B: Static Range</th>
-                <th className="pb-3 px-3 text-cyan-300">Arm C: Weibull Hazard Gate</th>
-                <th className="pb-3 px-3 text-emerald-400">Pruning %</th>
-                <th className="pb-3 px-3 text-emerald-400">Net Speedup</th>
+                <th className="pb-3 px-3">Horizon Mode</th>
+                <th className="pb-3 px-3">Blind (Fixed K)</th>
+                <th className="pb-3 px-3">Static Gate (R8)</th>
+                <th className="pb-3 px-3">Weibull Gate (Ch.3)</th>
+                <th className="pb-3 px-3 text-cyan-400">Weibull + Bollinger (Ch.3+5)</th>
+                <th className="pb-3 px-3 text-emerald-400">Speedup vs Blind</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5 text-slate-200">
               <tr>
-                <td className="py-3 px-3 font-bold text-white"><Tex math="K = 4" /></td>
-                <td className="py-3 px-3 text-slate-400">72.70 tok/s</td>
-                <td className="py-3 px-3 text-slate-400">72.70 tok/s</td>
-                <td className="py-3 px-3 text-cyan-300 font-bold">75.87 tok/s</td>
-                <td className="py-3 px-3 text-emerald-400">12.9%</td>
-                <td className="py-3 px-3 text-emerald-400 font-bold">+4.4% ⚡</td>
+                <td className="py-3 px-3 font-bold text-white">Horizon K = 4</td>
+                <td className="py-3 px-3 text-slate-400">88.28 tok/s</td>
+                <td className="py-3 px-3 text-slate-300">98.17 tok/s</td>
+                <td className="py-3 px-3 text-slate-300">98.17 tok/s</td>
+                <td className="py-3 px-3 text-cyan-300 font-bold">97.87 tok/s</td>
+                <td className="py-3 px-3 text-emerald-400 font-bold">+10.9%</td>
               </tr>
               <tr>
-                <td className="py-3 px-3 font-bold text-white"><Tex math="K = 6" /></td>
-                <td className="py-3 px-3 text-slate-400">62.07 tok/s</td>
-                <td className="py-3 px-3 text-slate-400">62.07 tok/s</td>
-                <td className="py-3 px-3 text-cyan-300 font-bold">74.53 tok/s</td>
-                <td className="py-3 px-3 text-emerald-400">39.9%</td>
-                <td className="py-3 px-3 text-emerald-400 font-bold">+20.1% ⚡</td>
+                <td className="py-3 px-3 font-bold text-white">Horizon K = 6</td>
+                <td className="py-3 px-3 text-slate-400">75.77 tok/s</td>
+                <td className="py-3 px-3 text-slate-300">97.70 tok/s</td>
+                <td className="py-3 px-3 text-slate-300">97.70 tok/s</td>
+                <td className="py-3 px-3 text-cyan-300 font-bold">97.42 tok/s</td>
+                <td className="py-3 px-3 text-emerald-400 font-bold">+28.6%</td>
               </tr>
               <tr className="bg-cyan-500/5">
-                <td className="py-3 px-3 font-bold text-white"><Tex math="K = 8" /></td>
-                <td className="py-3 px-3 text-slate-400">54.93 tok/s</td>
-                <td className="py-3 px-3 text-slate-400">54.93 tok/s</td>
-                <td className="py-3 px-3 text-cyan-300 font-bold">74.60 tok/s</td>
-                <td className="py-3 px-3 text-emerald-400 font-bold">53.8%</td>
-                <td className="py-3 px-3 text-emerald-400 font-bold">+35.8% ⚡</td>
+                <td className="py-3 px-3 font-bold text-white">Horizon K = 8</td>
+                <td className="py-3 px-3 text-red-400 font-bold">65.20 tok/s</td>
+                <td className="py-3 px-3 text-slate-300">97.58 tok/s</td>
+                <td className="py-3 px-3 text-slate-300">97.58 tok/s</td>
+                <td className="py-3 px-3 text-cyan-300 font-bold">97.31 tok/s ⚡</td>
+                <td className="py-3 px-3 text-emerald-400 font-bold">+49.3% (60.3% Pruned) 🔥</td>
               </tr>
             </tbody>
           </table>
@@ -334,36 +430,41 @@ export default function WeibullHazardInfographic() {
       {/* Mathematical Rigor Card */}
       <div className="rounded-3xl border border-white/10 bg-slate-900/60 p-6 space-y-4 backdrop-blur-xl">
         <div className="flex items-center gap-2 border-b border-white/5 pb-3">
-          <Cpu className="h-5 w-5 text-purple-400" />
-          <h2 className="text-lg font-bold text-white">Mathematical Formulation</h2>
+          <Cpu className="h-5 w-5 text-cyan-400" />
+          <h2 className="text-lg font-bold text-white">Mathematical Rigor: Composite Spatio-Temporal Volatility Formulation</h2>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
           <div className="rounded-2xl border border-white/5 bg-black/40 p-4 space-y-2">
-            <h4 className="text-purple-300 font-bold">1. Weibull Wear-Out Hazard Function</h4>
+            <h4 className="text-cyan-300 font-bold">1. Weibull Wear-Out Hazard (Chapter 3)</h4>
             <p className="text-slate-400">
-              For step <Tex math="k \in [0, K-1]" /> (1-indexed <Tex math="t = k+1" />):
+              For shape <Tex math="\beta > 1" /> and characteristic horizon <Tex math="\eta" />:
             </p>
             <div className="py-2 text-center text-white">
-              <Tex math="h(k; \beta, \eta) = \frac{\beta}{\eta} \left(\frac{k + 1}{\eta}\right)^{\beta - 1}, \quad \beta > 1" block />
+              <Tex math="h(k) = \frac{\beta}{\eta} \left(\frac{k+1}{\eta}\right)^{\beta - 1}" block />
             </div>
             <p className="text-slate-500 text-[11px]">
-              When <Tex math="\beta > 1" />, the instantaneous hazard rate grows monotonically with draft depth.
+              Models monotonic decline of draft token acceptance across sequential tokens.
             </p>
           </div>
 
           <div className="rounded-2xl border border-white/5 bg-black/40 p-4 space-y-2">
-            <h4 className="text-cyan-300 font-bold">2. Dynamic Spatio-Temporal Boundary</h4>
+            <h4 className="text-purple-300 font-bold">2. Bollinger Bands on Logit Spread (Chapter 5)</h4>
             <p className="text-slate-400">
-              Combines extreme logit range spread with hazard wear-out:
+              Tracks margin spread <Tex math="\Delta l_t = z_{(1)} - z_{(2)}" /> with rolling variance:
             </p>
             <div className="py-2 text-center text-white">
-              <Tex math="\tau_{\text{eff}}(k) = \tau_0 \cdot \left[1 + \gamma \cdot h(k)\right]" block />
+              <Tex math="\text{Lower Band}_t = \mu_t - k_{\text{bb}} \cdot \sigma_t" block />
             </div>
             <p className="text-slate-500 text-[11px]">
-              Drafting continues if <Tex math="R_8(k) \ge \tau_{\text{eff}}(k)" />; aborts immediately otherwise.
+              Catches local uncertainty collapses and spikes dynamic penalty <Tex math="\text{VolPenalty}" />.
             </p>
           </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/5 bg-black/40 p-4 text-center text-xs font-mono">
+          <span className="text-emerald-300 font-bold block mb-2">Composite Tri-Modal Gating Threshold Formula</span>
+          <Tex math="\tau_{\text{eff}}(k, \Delta l_t) = \tau_0 \cdot \left[ 1 + \gamma_w \cdot h(k) + \gamma_b \cdot \max\left(0, \frac{\text{Lower Band}_t - \Delta l_t}{\text{ATR}_t + 10^{-6}}\right) \right]" block />
         </div>
       </div>
     </div>

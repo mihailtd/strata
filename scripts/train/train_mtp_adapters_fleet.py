@@ -162,7 +162,7 @@ def train_single_mtp_expert(
     device = next(base_model.parameters()).device
 
     def collate_fn(batch):
-        texts = [b["text"] for b in batch]
+        texts = [b if isinstance(b, str) else b.get("text", "") for b in batch]
         enc = tokenizer(texts, truncation=True, max_length=1024, padding=True, return_tensors="pt")
         return enc.input_ids.to(device)
 
@@ -196,7 +196,7 @@ def train_single_mtp_expert(
 
         mtp_logits, draft_hidden, _ = mtp_head(h_in, next_ids, return_hidden=True)
 
-        # 1. Geometry Alignment: Cosine Distance on 2560-dim residual stream
+        # 1. Geometry Alignment: Cosine Distance on residual stream
         mask = (next_ids != tokenizer.pad_token_id).float()  # (B, N-1)
         cos_sim = torch.nn.functional.cosine_similarity(draft_hidden.float(), target_hidden.float(), dim=-1)
         loss_cos = 1.0 - (cos_sim * mask).sum() / mask.sum().clamp(min=1.0)
@@ -226,7 +226,8 @@ def train_single_mtp_expert(
             print(f"  Step {step:4d}/{steps} | Total: {loss.item():.4f} (Cos: {loss_cos.item():.4f}, L1: {loss_l1.item():.4f}) | {rate:.2f} steps/s")
 
     # 4. Save MTP adapter
-    out_dir = mtp_adapter_path(domain, version="v7")
+    version_tag = "v7_9b" if ("9B" in str(base_model.config.name_or_path) or "9b" in str(base_model.config.name_or_path) or base_model.config.get_text_config().hidden_size == 4096) else "v7"
+    out_dir = mtp_adapter_path(domain, version=version_tag)
     save_mtp_adapter(wrapped, out_dir, rank=rank, alpha=alpha)
 
     # 5. Clean up LoRA layers and restore pristine MTP head
@@ -252,10 +253,12 @@ def main():
     ensure_gpu_exclusive()
     set_hard_vram_cap(CANON.VRAM_CAP_GB)
 
+    is_9b = "9B" in args.model_id or "9b" in args.model_id
     print("=" * 80)
-    print("🚀 MTP DRAFT HEAD FLEET ADAPTATION (v7 Fleet)")
+    print(f"🚀 MTP DRAFT HEAD FLEET ADAPTATION ({'9B' if is_9b else '4B'} Fleet)")
+    print(f"   Model:   {args.model_id}")
     print(f"   Domains: {', '.join(args.domains)}")
-    print(f"   Config: rank={args.rank}, alpha={args.alpha}, steps={args.steps}, lr={args.lr}")
+    print(f"   Config:  rank={args.rank}, alpha={args.alpha}, steps={args.steps}, lr={args.lr}")
     print("=" * 80)
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_id)
@@ -269,8 +272,19 @@ def main():
     base_model.eval()
     base_model.requires_grad_(False)
 
-    # Load all backbone domain experts into FoldingEngine
-    experts = [FoldableExpert.from_dir(adapter_path(d), d) for d in args.domains]
+    # Load all backbone domain experts matching the architecture scale
+    experts = []
+    for d in args.domains:
+        if is_9b:
+            ad_dir = REPO_ROOT / "results" / "adapters" / f"m2_{d}_r8a128_v7_9b"
+        else:
+            ad_dir = adapter_path(d)
+        if ad_dir.exists():
+            exp = FoldableExpert.from_dir(ad_dir, d)
+            experts.append(exp)
+        else:
+            print(f"Warning: Backbone adapter not found at {ad_dir}")
+
     engine = WeightFoldingEngine(base_model, experts, keep_pristine=True)
 
     # Load MTP draft head

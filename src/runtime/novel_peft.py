@@ -1095,22 +1095,33 @@ class FoldableExpert:
                                               -> U = b_lora^T,        V = A^T
     """
 
-    def __init__(self, factors: dict[str, tuple[torch.Tensor, torch.Tensor]], scaling: float, name: str = ""):
+    def __init__(
+        self,
+        factors: dict[str, tuple[torch.Tensor, torch.Tensor]],
+        scaling: float,
+        name: str = "",
+        draft_factors: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None,
+    ):
         self.factors = factors
         self.scaling = float(scaling)
         self.name = name
+        self.draft_factors = draft_factors or {}
 
     @property
     def nbytes(self) -> int:
-        return sum(u.numel() * u.element_size() + v.numel() * v.element_size() for u, v in self.factors.values())
+        b = sum(u.numel() * u.element_size() + v.numel() * v.element_size() for u, v in self.factors.values())
+        b += sum(u.numel() * u.element_size() + v.numel() * v.element_size() for u, v in self.draft_factors.values())
+        return b
 
     def to(self, device, dtype) -> FoldableExpert:
         self.factors = {k: (u.to(device, dtype), v.to(device, dtype)) for k, (u, v) in self.factors.items()}
+        self.draft_factors = {k: (u.to(device, dtype), v.to(device, dtype)) for k, (u, v) in self.draft_factors.items()}
         return self
 
     def __repr__(self) -> str:
+        mtp_str = f", {len(self.draft_factors)} mtp modules" if self.draft_factors else ""
         return (
-            f"FoldableExpert({self.name!r}, {len(self.factors)} modules, "
+            f"FoldableExpert({self.name!r}, {len(self.factors)} modules{mtp_str}, "
             f"scaling={self.scaling}, {self.nbytes / 1e6:.1f} MB)"
         )
 
@@ -1120,20 +1131,60 @@ class FoldableExpert:
         return f"{module_path}.weight"
 
     @classmethod
+    def _load_matching_mtp_factors(cls, adapter_dir: Path, name: str) -> tuple[dict[str, tuple[torch.Tensor, torch.Tensor]], float]:
+        """Loads matched MTP micro-adapter factors (§23) if available on disk."""
+        draft_factors = {}
+        draft_scaling = 1.0
+        clean_domain = name.replace("m2_", "").replace("_r8a128_v7_9b", "").replace("_r8a128_v7", "").replace("_v7_9b", "").replace("_v7", "")
+        for candidate_name in [
+            f"mtp_{clean_domain}_r64_a64_v7_9b",
+            f"mtp_{name}_r64_a64_v7_9b",
+            f"mtp_{clean_domain}_r64_a64_v7",
+            f"mtp_{name}_r64_a64_v7",
+        ]:
+            mtp_path = adapter_dir.parent / candidate_name
+            if (mtp_path / "novel_adapter.pt").exists() and (mtp_path / "novel_adapter_config.json").exists():
+                try:
+                    mtp_cfg = json.loads((mtp_path / "novel_adapter_config.json").read_text())
+                    draft_scaling = float(mtp_cfg.get("scaling", 1.0))
+                    mtp_state = torch.load(mtp_path / "novel_adapter.pt", map_location="cpu")
+                    for k, v in mtp_state.items():
+                        if k.endswith(".lora_a"):
+                            mod_base = k.replace(".lora_a", "")
+                            b_key = f"{mod_base}.lora_b"
+                            if b_key in mtp_state:
+                                clean_mod = mod_base.replace("mtp.", "") + ".weight"
+                                u = mtp_state[b_key].float().T  # (out, r)
+                                v_mat = mtp_state[k].float().T   # (r, in)
+                                draft_factors[clean_mod] = (u, v_mat)
+                    if draft_factors:
+                        break
+                except Exception:
+                    pass
+        return draft_factors, draft_scaling
+
+    @classmethod
     def from_dir(cls, adapter_dir: str | Path, name: str = "") -> FoldableExpert:
         adapter_dir = Path(adapter_dir)
         name = name or adapter_dir.name
+        draft_factors, draft_scaling = cls._load_matching_mtp_factors(adapter_dir, name)
 
         if (adapter_dir / "novel_adapter_config.json").exists():
             cfg = json.loads((adapter_dir / "novel_adapter_config.json").read_text())
             state = torch.load(adapter_dir / "novel_adapter.pt", map_location="cpu")
-            return cls._from_novel(state, cfg, name)
+            expert = cls._from_novel(state, cfg, name)
+            expert.draft_factors = draft_factors
+            expert.draft_scaling = draft_scaling
+            return expert
 
         if (adapter_dir / "adapter_config.json").exists():
             from peft.utils import load_peft_weights
 
             cfg = json.loads((adapter_dir / "adapter_config.json").read_text())
-            return cls._from_peft(load_peft_weights(str(adapter_dir)), cfg, name)
+            expert = cls._from_peft(load_peft_weights(str(adapter_dir)), cfg, name)
+            expert.draft_factors = draft_factors
+            expert.draft_scaling = draft_scaling
+            return expert
 
         raise FileNotFoundError(f"No novel_adapter_config.json or adapter_config.json in {adapter_dir}")
 
@@ -1339,6 +1390,7 @@ class WeightFoldingEngine:
             self.pristine = {}
 
         self.active: str | None = None
+        self.expert_map: dict[str, FoldableExpert] = {e.name: e for e in self.experts}
 
         if draft_head is not None:
             self.register_draft_head(draft_head)
@@ -1349,9 +1401,9 @@ class WeightFoldingEngine:
         draft_params = dict(draft_head.named_parameters())
         self.draft_slots = {}
         
-        # Layer 31 is the last shape-compatible backbone layer folded into draft_head.layer
+        # Register both layer and fc projection weights on draft head
         for k, p in draft_params.items():
-            if "layer." in k and k.endswith(".weight"):
+            if ("layer." in k or "fc." in k) and k.endswith(".weight"):
                 self.draft_slots[k] = p
                 
         if self.keep_pristine and self.draft_slots:
@@ -1361,8 +1413,17 @@ class WeightFoldingEngine:
                 self.draft_pristine = {k: v.detach().clone() for k, v in self.draft_slots.items()}
 
     def _get_draft_factor(self, expert: FoldableExpert, draft_key: str) -> tuple[torch.Tensor, torch.Tensor] | None:
-        """Maps draft head key (layer.*.weight) to layer 31 factor (model.layers.31.*.weight)."""
-        # Look for layer 31 counterpart
+        """Maps draft head key to dedicated MTP adapter factor, or falls back to layer 31 factor."""
+        # 1. First priority: dedicated matched MTP micro-adapter (§23)
+        if expert.draft_factors:
+            if draft_key in expert.draft_factors:
+                return expert.draft_factors[draft_key]
+            clean_key = draft_key.replace("layer.", "")
+            for dk, factor in expert.draft_factors.items():
+                if dk.endswith(clean_key):
+                    return factor
+
+        # 2. Fallback: layer 31 counterpart from backbone
         suffix = draft_key.replace("layer.", "")
         candidates = [
             f"model.layers.31.{suffix}",
@@ -1385,10 +1446,12 @@ class WeightFoldingEngine:
         return b
 
     @torch.no_grad()
-    def activate(self, expert: FoldableExpert) -> None:
+    def activate(self, expert: FoldableExpert | str) -> None:
         """W_live = W0 + scaling * (U @ V), one fused addmm per module on backbone and draft head."""
         if not self.keep_pristine:
             raise RuntimeError("activate() requires keep_pristine=True; use activate_delta() otherwise")
+        if isinstance(expert, str):
+            expert = self.expert_map[expert]
         for key, w in self.slots.items():
             f = expert.factors.get(key)
             w0 = self.pristine[key]
@@ -1411,7 +1474,8 @@ class WeightFoldingEngine:
                     dw.copy_(dw0)
                     continue
                 du, dv = df
-                torch.addmm(dw0, du, dv, beta=1.0, alpha=expert.scaling, out=dw)
+                d_alpha = getattr(expert, "draft_scaling", 1.0)
+                torch.addmm(dw0, du, dv, beta=1.0, alpha=d_alpha, out=dw)
 
         self.active = expert.name
 
