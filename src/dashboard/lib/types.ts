@@ -22,6 +22,13 @@ export interface EngineStatus {
   spec_range_threshold?: number;
   cut_set_hedging_enabled?: boolean;
   cut_set_target_reliability?: number;
+  renko_smoothing_enabled?: boolean;
+  renko_epsilon?: number;
+  renko_epsilon_options?: number[];
+  spec_circuit_breaker_enabled?: boolean;
+  macd_disengage_threshold?: number;
+  macd_reengage_threshold?: number;
+  thinking_supervisor_enabled?: boolean;
   intra_team_dr?: number;
   last_morph_ms?: number;
 }

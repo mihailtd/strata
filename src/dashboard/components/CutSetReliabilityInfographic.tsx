@@ -92,7 +92,7 @@ export default function CutSetReliabilityInfographic() {
       return {
         order1: ["Source Node", "Sink Node"],
         order2: ["{Worker A, Worker B}"],
-        hedged: [],
+        hedged: [] as string[],
         r_unhedged,
         r_hedged: r_unhedged,
         gainPct: 0.0,

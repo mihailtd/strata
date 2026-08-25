@@ -791,6 +791,13 @@ class EngineStatusModel(BaseModel):
     spec_range_threshold: float = Field(5.0, description="Logit range spread threshold for speculative early exit")
     cut_set_hedging_enabled: bool = Field(True, description="Chapter 6 Minimal Cut Sets & k-out-of-n Speculative Tool Hedging")
     cut_set_target_reliability: float = Field(0.95, description="Target reliability cutoff for Order-1 Cut Sets")
+    renko_smoothing_enabled: bool = Field(True, description="Renko Brick Smoothing for Continuous Latent Routing (Chapter 4)")
+    renko_epsilon: float = Field(5.0, description="Epsilon box size for Renko Boundary")
+    renko_epsilon_options: list[float] = [3.0, 5.0, 8.0]
+    spec_circuit_breaker_enabled: bool = Field(True, description="Dual-EMA / MACD Speculation Circuit-Breaker (Chapters 5 & 8)")
+    macd_disengage_threshold: float = Field(1.8, description="Bearish crossover threshold to disengage speculative drafting")
+    macd_reengage_threshold: float = Field(2.2, description="Bullish crossover threshold to re-engage speculative drafting")
+    thinking_supervisor_enabled: bool = Field(True, description="Runtime Thinking Supervisor with Latent Loop Breaking and Logit Masking")
 
 
 def _build_engine_status() -> EngineStatusModel:
@@ -803,6 +810,7 @@ def _build_engine_status() -> EngineStatusModel:
 
     spec_decoder = model_state.get("spec_decoder")
     ring_engine = getattr(spec_decoder, "ring_engine", None)
+    cb = getattr(spec_decoder, "circuit_breaker", None)
 
     return EngineStatusModel(
         loaded=is_loaded,
@@ -826,6 +834,13 @@ def _build_engine_status() -> EngineStatusModel:
         spec_range_threshold=model_state.get("range_gate_threshold", 5.0),
         cut_set_hedging_enabled=model_state.get("cut_set_hedging_enabled", True),
         cut_set_target_reliability=model_state.get("cut_set_target_reliability", 0.95),
+        renko_smoothing_enabled=model_state.get("renko_smoothing_enabled", True),
+        renko_epsilon=model_state.get("renko_epsilon", 5.0),
+        renko_epsilon_options=[3.0, 5.0, 8.0],
+        spec_circuit_breaker_enabled=getattr(cb, "enabled", True) if cb else True,
+        macd_disengage_threshold=getattr(cb, "disengage_threshold", 1.8) if cb else 1.8,
+        macd_reengage_threshold=getattr(cb, "reengage_threshold", 2.2) if cb else 2.2,
+        thinking_supervisor_enabled=model_state.get("thinking_supervisor_enabled", True),
     )
 
 
@@ -1253,6 +1268,25 @@ def _build_streaming_response(
         engine_for_call = None if is_dynamic else folding_engine
         expert_for_call = None if is_dynamic else (expert if isinstance(expert, FoldableExpert) else None)
 
+        from runtime.thinking_supervisor import ThinkingRuntimeSupervisor
+        effort = (req.thinking_effort or "medium").lower()
+        think_end_id = tokenizer.convert_tokens_to_ids("</think>")
+        if not isinstance(think_end_id, int) or think_end_id < 0:
+            think_end_id = 248069
+        think_start_id = tokenizer.convert_tokens_to_ids("<think>")
+        if not isinstance(think_start_id, int) or think_start_id < 0:
+            think_start_id = 248068
+        trans_ids = tokenizer.encode("\n</think>\n\n", add_special_tokens=False) or [198, 248069, 271]
+
+        sup_enabled = model_state.get("thinking_supervisor_enabled", True) and (effort != "off")
+        supervisor = ThinkingRuntimeSupervisor(
+            think_end_token_id=think_end_id,
+            think_start_token_id=think_start_id,
+            transition_token_ids=trans_ids,
+            budget_tier=effort,
+            enabled=sup_enabled,
+        )
+
         def _generation_worker():
             try:
                 if spec_decoder is not None and getattr(spec_decoder, "_locked", False):
@@ -1264,29 +1298,28 @@ def _build_streaming_response(
                         engine=engine_for_call,
                         expert=expert_for_call,
                         gate=active_gate,
+                        supervisor=supervisor,
                     ):
                         decoded_chunk = tokenizer.decode(token_batch, skip_special_tokens=False)
                         token_queue.put((decoded_chunk, len(token_batch)))
-                        # stream_generate is a plain generator: not calling next()
-                        # again on it (breaking here) simply leaves it paused at its
-                        # last yield forever, to be garbage-collected -- no unfinished
-                        # torch op is left running the way the generate()-thread
-                        # branch below has to worry about.
                         if stop_event.is_set():
                             break
                 elif graph_decoder is not None and getattr(graph_decoder, "_is_captured", False):
                     from runtime.dynamic_team_router import RenkoBrickSmoother
-                    smoother = RenkoBrickSmoother(epsilon_box=5.0) if is_dynamic else None
+                    renko_enabled = model_state.get("renko_smoothing_enabled", True)
+                    renko_eps = model_state.get("renko_epsilon", 5.0)
+                    smoother = RenkoBrickSmoother(epsilon_box=renko_eps) if (is_dynamic and renko_enabled) else None
                     
                     for text_tok, h_t in graph_decoder.generate_tokens_stream(
                         prompt_tokens,
                         engine=engine_for_call,
                         expert=expert_for_call,
                         max_new_tokens=max_new_tokens,
+                        supervisor=supervisor,
                     ):
                         if smoother is not None:
                             if smoother.step(h_t):
-                                print(f"[RenkoRouter] Boundary broken (\u0394D \u2265 5.0) on token '{text_tok}'. Triggering latent evaluation...")
+                                print(f"[RenkoRouter] Boundary broken (ΔD ≥ {renko_eps}) on token '{text_tok}'. Triggering latent evaluation...")
                                 
                         token_queue.put((text_tok, 1))
                         if stop_event.is_set():
@@ -1349,11 +1382,11 @@ def _build_streaming_response(
         if effort == "off":
             think_budget = 0
         elif effort == "low":
-            think_budget = 256
+            think_budget = 512
         elif effort == "high":
             think_budget = 4096
         else:  # medium / default
-            think_budget = 1024
+            think_budget = 2048
 
         in_thinking = (effort != "off")
         thinking_tokens_emitted = 0
@@ -2142,6 +2175,68 @@ async def set_cut_set_hedging(req: SetCutSetHedgingRequest):
         "cut_set_hedging_enabled": model_state["cut_set_hedging_enabled"],
         "cut_set_target_reliability": model_state.get("cut_set_target_reliability", 0.95),
         "cut_set_max_workers": model_state.get("cut_set_max_workers", 4),
+    }
+
+
+class SetRenkoSmoothingRequest(BaseModel):
+    enabled: bool
+    epsilon: float | None = 5.0
+
+
+@app.post("/api/engine/set_renko_smoothing")
+async def set_renko_smoothing(req: SetRenkoSmoothingRequest):
+    """Toggles Renko Brick Smoothing for Continuous Latent LoRA Routing (Chapter 4)."""
+    model_state["renko_smoothing_enabled"] = req.enabled
+    if req.epsilon is not None:
+        model_state["renko_epsilon"] = req.epsilon
+
+    print(f"[IMB Server] Renko Smoothing set: enabled={req.enabled}, epsilon={model_state.get('renko_epsilon', 5.0)}")
+    return {
+        "status": "updated",
+        "renko_smoothing_enabled": model_state["renko_smoothing_enabled"],
+        "renko_epsilon": model_state.get("renko_epsilon", 5.0),
+    }
+
+
+class SetSpecCircuitBreakerRequest(BaseModel):
+    enabled: bool
+    disengage_threshold: float | None = 1.8
+    reengage_threshold: float | None = 2.2
+
+
+@app.post("/api/engine/set_spec_circuit_breaker")
+async def set_spec_circuit_breaker(req: SetSpecCircuitBreakerRequest):
+    """Toggles Dual-EMA / MACD Speculation Circuit-Breaker (Chapters 5 & 8)."""
+    spec_decoder = model_state.get("spec_decoder")
+    if spec_decoder and hasattr(spec_decoder, "circuit_breaker"):
+        spec_decoder.circuit_breaker.enabled = req.enabled
+        if req.disengage_threshold is not None:
+            spec_decoder.circuit_breaker.disengage_threshold = req.disengage_threshold
+        if req.reengage_threshold is not None:
+            spec_decoder.circuit_breaker.reengage_threshold = req.reengage_threshold
+
+    model_state["spec_circuit_breaker_enabled"] = req.enabled
+    print(f"[IMB Server] Speculation Circuit-Breaker set: enabled={req.enabled}, disengage={req.disengage_threshold or 1.8}, reengage={req.reengage_threshold or 2.2}")
+    return {
+        "status": "updated",
+        "spec_circuit_breaker_enabled": req.enabled,
+        "disengage_threshold": req.disengage_threshold or 1.8,
+        "reengage_threshold": req.reengage_threshold or 2.2,
+    }
+
+
+class SetThinkingSupervisorRequest(BaseModel):
+    enabled: bool
+
+
+@app.post("/api/engine/set_thinking_supervisor")
+async def set_thinking_supervisor(req: SetThinkingSupervisorRequest):
+    """Toggles Runtime Thinking Supervisor (Chapters 3, 4, 5 & 8)."""
+    model_state["thinking_supervisor_enabled"] = req.enabled
+    print(f"[IMB Server] Thinking Supervisor set: enabled={req.enabled}")
+    return {
+        "status": "updated",
+        "thinking_supervisor_enabled": req.enabled,
     }
 
 

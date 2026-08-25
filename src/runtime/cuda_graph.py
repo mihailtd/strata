@@ -320,6 +320,7 @@ class FoldedCudaGraphDecoder:
         engine: WeightFoldingEngine | None = None,
         expert: FoldableExpert | None = None,
         max_new_tokens: int = 64,
+        supervisor: Any | None = None,
     ):
         """Yields decoded token text pieces token-by-token during CUDA Graph replay."""
         if not self._is_captured:
@@ -339,16 +340,38 @@ class FoldedCudaGraphDecoder:
 
         first_tok_id = self.static_input_ids.item()
         if first_tok_id not in stop_token_ids:
+            if supervisor is not None:
+                supervisor.notify_token_emitted(first_tok_id)
             yield self.tokenizer.decode([first_tok_id]), prefill_h_t
 
         for _ in range(max_new_tokens - 1):
             self.graph.replay()  # replay first, then advance -- see generate_with_graph
-            next_token = torch.argmax(self.static_logits[:, -1, :], dim=-1, keepdim=True)
+            raw_logits = self.static_logits[:, -1, :]
             h_t = self.static_hidden_states.clone()
+
+            if supervisor is not None and getattr(supervisor, "in_thinking_mode", False):
+                action = supervisor.process_step(raw_logits, h_t)
+                if action.should_force_transition:
+                    # Atomic injection of structured delimiter sequence \n</think>\n\n
+                    for trans_tok in action.transition_token_ids:
+                        trans_tensor = torch.tensor([[trans_tok]], dtype=torch.long, device=self.device)
+                        self.static_input_ids.copy_(trans_tensor)
+                        self.static_position_ids += 1
+                        self.static_cache_position += 1
+                        self.graph.replay()
+                        yield self.tokenizer.decode([trans_tok]), h_t
+                    continue
+                next_token = torch.argmax(action.modified_logits, dim=-1, keepdim=True)
+            else:
+                next_token = torch.argmax(raw_logits, dim=-1, keepdim=True)
+
+            tok_id = next_token.item()
+            if supervisor is not None:
+                supervisor.notify_token_emitted(tok_id)
+
             self.static_input_ids.copy_(next_token)
             self.static_position_ids += 1
             self.static_cache_position += 1
-            tok_id = next_token.item()
             if tok_id in stop_token_ids:
                 break
             yield self.tokenizer.decode([tok_id]), h_t

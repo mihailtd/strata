@@ -57,6 +57,7 @@ import torch
 from transformers import PreTrainedModel, PreTrainedTokenizerBase, StaticCache
 
 from runtime.state_ring_buffer import RingBufferReplayEngine
+from runtime.macd_speculation_circuit_breaker import MACDSpeculationCircuitBreaker
 
 
 class BucketedSpeculativeDecoder:
@@ -103,6 +104,13 @@ class BucketedSpeculativeDecoder:
         self._counter_pos = -1  # value the device counters currently hold
         self._ctr_src: torch.Tensor | None = None
         self._ctr_srcs: list[torch.Tensor] = []
+        self.circuit_breaker = MACDSpeculationCircuitBreaker(
+            alpha_fast=0.25,
+            alpha_slow=0.08,
+            disengage_threshold=1.8,
+            reengage_threshold=2.2,
+            enabled=True,
+        )
         self._locked = False
 
     # ---------------------------------------------------------------- capture
@@ -281,6 +289,7 @@ class BucketedSpeculativeDecoder:
         engine=None,
         expert=None,
         gate=None,
+        supervisor: Any | None = None,
     ):
         """Yields chunks of decoded token IDs list[int] as each speculative chunk is verified."""
         assert self._locked, "capture() first"
@@ -294,6 +303,7 @@ class BucketedSpeculativeDecoder:
         self.cache.reset()
         if self.ring_engine is not None:
             self.ring_engine.reset()
+        self.circuit_breaker.reset()
         cur = prompt_tokens.shape[1]
         torch.cuda.synchronize()
         t0 = time.perf_counter()
@@ -313,6 +323,9 @@ class BucketedSpeculativeDecoder:
         st = {"steps": 0, "accepted": 0, "drafted": 0}
         done = toks[0] in stop_ids
 
+        if supervisor is not None:
+            supervisor.notify_token_emitted(toks[0])
+
         yield [toks[0]]
 
         # Build the initial draft head KV cache over the full prompt hidden states.
@@ -322,10 +335,51 @@ class BucketedSpeculativeDecoder:
         dcache = self.head.prefill(full_hids, seq)
 
         while len(toks) < max_new_tokens and not done:
-            # Incremental draft: pass only the last backbone hidden state and the
-            # current next-token. dcache already has KV for all previous positions,
-            # so draft() only appends new KV entries for the K draft positions.
-            draft = self.head.draft(full_hids[:, -1:, :], nxt, k=k, start_pos=pos - 1, cache=dcache, gate=gate)
+            # Check Thinking Runtime Supervisor before drafting
+            if supervisor is not None and getattr(supervisor, "in_thinking_mode", False):
+                # Inspect last logits and hidden state
+                last_logits = out.logits[:, -1, :] if len(toks) == 1 else logits[:, -1, :]
+                sup_action = supervisor.process_step(last_logits, full_hids[:, -1:, :])
+                if sup_action.should_force_transition:
+                    for trans_tok in sup_action.transition_token_ids:
+                        trans_t = torch.tensor([[trans_tok]], device=self.device)
+                        toks.append(trans_tok)
+                        yield [trans_tok]
+                        logits, hidden = self._replay(1, trans_t, pos)
+                        full_hids = torch.cat([full_hids, hidden[:, -1:, :]], dim=1)
+                        self.ring_engine.commit_on_acceptance(1)
+                        seq = torch.cat([seq, trans_t], dim=-1)
+                        pos += 1
+                        if supervisor is not None:
+                            supervisor.notify_token_emitted(trans_tok)
+                    nxt = torch.tensor([[sup_action.transition_token_ids[-1]]], device=self.device)
+                    continue
+            run_draft, k_to_use = self.circuit_breaker.should_draft()
+
+            # DISENGAGED (Circuit-Breaker Tripped): Raw W=1 CUDA Graph decode
+            if not run_draft:
+                logits, hidden = self._replay(1, nxt, pos)
+                nxt_val = torch.argmax(logits[0, -1, :], -1).item()
+                committed = nxt
+                full_hids = torch.cat([full_hids, hidden[:, -1:, :]], dim=1)
+                self.ring_engine.commit_on_acceptance(1)
+                self.circuit_breaker.update_acceptance(1.0)
+                st["steps"] += 1
+
+                toks.append(nxt_val)
+                yield [nxt_val]
+                if nxt_val in stop_ids:
+                    done = True
+                    break
+
+                seq = torch.cat([seq, committed], dim=-1)
+                pos += 1
+                nxt = torch.tensor([[nxt_val]], device=self.device)
+                continue
+
+            # ENGAGED or PROBE STEP: Speculative drafting & verification
+            k_eff = k_to_use if k_to_use > 0 else k
+            draft = self.head.draft(full_hids[:, -1:, :], nxt, k=k_eff, start_pos=pos - 1, cache=dcache, gate=gate)
             k_actual = draft.shape[1]
 
             # Must capture the returned slot -- rollback_on_rejection needs the EXACT
@@ -345,6 +399,9 @@ class BucketedSpeculativeDecoder:
             st["steps"] += 1
             st["drafted"] += k_actual
             st["accepted"] += n_acc
+
+            # Update MACD circuit breaker with this step's acceptance yield
+            self.circuit_breaker.update_acceptance(float(n_acc + 1))
 
             if n_acc < k_actual:
                 # ROLLBACK: restore the fixed-size SSM state, and simply rewind the
@@ -390,14 +447,13 @@ class BucketedSpeculativeDecoder:
             pos += n_acc + 1
             nxt = torch.tensor([[bonus]], device=self.device)
 
-
-
         torch.cuda.synchronize()
         elapsed = time.perf_counter() - t0
         st["elapsed"] = elapsed
         st["tau"] = st["accepted"] / max(1, st["steps"])
         st["swap_ms"] = swap_ms
         st["tok_s"] = len(toks[:max_new_tokens]) / max(1e-9, elapsed)
+        st["circuit_breaker"] = self.circuit_breaker.get_summary()
         self.last_stats = st
 
     @torch.no_grad()

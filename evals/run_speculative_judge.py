@@ -20,6 +20,11 @@ from pathlib import Path
 import sys
 import urllib.request
 
+# Ensure repository root is on sys.path
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from evals.judge_harness import E2EJudgeHarness
 from evals.prompts import DASHBOARD_MULTITURN_SEQUENCE, EvalPrompt
 
@@ -167,7 +172,7 @@ def run_speculative_comparative_eval(
 def main():
     parser = argparse.ArgumentParser(description="Run Speculative vs Eager Comparative Judge Evaluation")
     parser.add_argument("--url", type=str, default="http://127.0.0.1:8000", help="Server base URL")
-    parser.add_argument("--max-tokens", type=int, default=250, help="Max completion tokens")
+    parser.add_argument("--max-tokens", type=int, default=400, help="Max completion tokens")
     args = parser.parse_args()
 
     run_speculative_comparative_eval(base_url=args.url, max_tokens=args.max_tokens)

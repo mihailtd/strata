@@ -300,7 +300,7 @@ async def main():
     parser = argparse.ArgumentParser(description="VRAM State Router E2E A/B benchmark")
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     parser.add_argument("--num-requests", type=int, default=30)
-    parser.add_argument("--max-tokens", type=int, default=32)
+    parser.add_argument("--max-tokens", type=int, default=400)
     parser.add_argument("--concurrency", type=int, default=10)
     parser.add_argument("--repeats", type=int, default=2, help="ABAB... alternations per arm")
     parser.add_argument("--batch-window-ms", type=float, default=50.0)

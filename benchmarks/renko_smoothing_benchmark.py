@@ -7,7 +7,7 @@ import argparse
 def main():
     parser = argparse.ArgumentParser(description="Benchmark Renko Brick Smoothing for Latent Routing")
     parser.add_argument("--epsilon", type=float, default=5.0, help="Epsilon box size for Renko Boundary")
-    parser.add_argument("--max-tokens", type=int, default=200, help="Number of tokens to generate")
+    parser.add_argument("--max-tokens", type=int, default=400, help="Number of tokens to generate")
     args = parser.parse_args()
 
     model_id = "Qwen/Qwen3.5-9B"
