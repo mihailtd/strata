@@ -64,3 +64,4 @@
 * **`fused_qkv_rope/`**: In-register Wave32 complex rotary embedding ($0.058\text{ ms}$ per layer).
 * **`outlier_protection/`**: Top-16 BF16 channel isolation reducing INT4 error by $6.4\times$ with zero latency penalty.
 * **`tree_speculation/`**: 2x2 branching candidate tree decoding at **$202.3\text{ tokens/sec}$ ($4.15\times$ Ollama speed)**.
+* **`adaptive_tree_speculation/`**: Shannon entropy dynamic topology modulation burst decoding at **up to $221.1\text{ tokens/sec}$ ($4.54\times$ Ollama speed)**.

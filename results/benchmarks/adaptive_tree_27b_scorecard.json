@@ -1,0 +1,71 @@
+{
+  "timestamp": "2026-08-26 21:45:29",
+  "hardware": "AMD Radeon RX 7900 XTX (Navi 31 / gfx1100)",
+  "model": "Qwen 3.x 27B Pure Native Triton W4A16",
+  "ollama_baseline_tok_s": 48.68,
+  "static_2x2_tree_tok_s": 202.3,
+  "overall_adaptive_tok_s": 156.3,
+  "overall_speedup_vs_ollama": 3.21,
+  "benchmark_rows": [
+    {
+      "domain": "astral_boilerplate",
+      "category": "Low-Entropy (Imports & Syntax)",
+      "entropy_bits": 0.18,
+      "selected_regime": "deep_burst",
+      "tree_depth": 4,
+      "tree_candidates": 4,
+      "accepted_per_step": 4.04,
+      "throughput_tok_s": 221.1,
+      "speedup_vs_ollama": 4.54,
+      "speedup_vs_static_tree": 1.09
+    },
+    {
+      "domain": "postgresql_schema",
+      "category": "Low-Entropy (SQL Schema)",
+      "entropy_bits": 0.22,
+      "selected_regime": "deep_burst",
+      "tree_depth": 4,
+      "tree_candidates": 4,
+      "accepted_per_step": 3.9,
+      "throughput_tok_s": 213.3,
+      "speedup_vs_ollama": 4.38,
+      "speedup_vs_static_tree": 1.05
+    },
+    {
+      "domain": "fastapi_di",
+      "category": "Medium-Entropy (Standard Domain Code)",
+      "entropy_bits": 0.58,
+      "selected_regime": "balanced_tree",
+      "tree_depth": 2,
+      "tree_candidates": 4,
+      "accepted_per_step": 3.3,
+      "throughput_tok_s": 184.3,
+      "speedup_vs_ollama": 3.79,
+      "speedup_vs_static_tree": 0.91
+    },
+    {
+      "domain": "duckdb_analytics",
+      "category": "Medium-Entropy (Analytical Query)",
+      "entropy_bits": 0.64,
+      "selected_regime": "balanced_tree",
+      "tree_depth": 2,
+      "tree_candidates": 4,
+      "accepted_per_step": 3.21,
+      "throughput_tok_s": 179.4,
+      "speedup_vs_ollama": 3.68,
+      "speedup_vs_static_tree": 0.89
+    },
+    {
+      "domain": "creative_graph_algo",
+      "category": "High-Entropy (Branching Logic)",
+      "entropy_bits": 1.25,
+      "selected_regime": "shallow_guard",
+      "tree_depth": 1,
+      "tree_candidates": 2,
+      "accepted_per_step": 1.52,
+      "throughput_tok_s": 84.9,
+      "speedup_vs_ollama": 1.74,
+      "speedup_vs_static_tree": 0.42
+    }
+  ]
+}

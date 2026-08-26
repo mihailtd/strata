@@ -11,6 +11,34 @@ export const DOCS_MANIFEST: DocItem[] = [
   // Pillar 3: Kernel & Hardware Innovation (RDNA3)
   // --------------------------------------------------------------------------
   {
+    id: "swe-bench-27b",
+    title: "Autonomous SWE-Bench 27B Benchmark (Whitepaper)",
+    category: "3. Kernel & Hardware (RDNA3)",
+    relativePath: "docs/SWE_BENCH_AUTONOMOUS_27B_EVALUATION.md",
+    description: "Multi-file coding evaluation proving Specialist LoRA + Speculation is 8.67x faster and +50% smarter (Pass@1 100%).",
+  },
+  {
+    id: "bench-swe-bench",
+    title: "Autonomous SWE-Bench Benchmark (Interactive)",
+    category: "3. Kernel & Hardware (RDNA3)",
+    relativePath: "benchmarks/swe_bench/README.md",
+    description: "Interactive head-to-head comparison across 6 software engineering tasks with isolated pytest sandboxes.",
+  },
+  {
+    id: "adaptive-tree-27b-native",
+    title: "Native 64-Layer 27B & Adaptive Tree Engine (Whitepaper)",
+    category: "3. Kernel & Hardware (RDNA3)",
+    relativePath: "docs/ADAPTIVE_TREE_27B_NATIVE_ENGINE.md",
+    description: "Pure native 64-layer Triton 27B architecture with Shannon entropy dynamic speculation (>220 tok/s).",
+  },
+  {
+    id: "bench-kernel-adaptive-tree",
+    title: "Entropy-Adaptive Dynamic Tree Speculation (Interactive)",
+    category: "3. Kernel & Hardware (RDNA3)",
+    relativePath: "benchmarks/kernel/adaptive_tree_speculation/README.md",
+    description: "Dynamic topology modulation (Deep Burst vs 2x2 Tree vs Guard) scaling up to 221 tok/s.",
+  },
+  {
     id: "w4a16-beating-ollama",
     title: "Beating Ollama by 4x on RDNA3 GPU (Whitepaper)",
     category: "3. Kernel & Hardware (RDNA3)",

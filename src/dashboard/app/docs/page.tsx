@@ -31,8 +31,14 @@ import KernelGemvInfographic from "@/components/KernelGemvInfographic";
 import TreeSpeculationInfographic from "@/components/TreeSpeculationInfographic";
 import FusedSwigluInfographic from "@/components/FusedSwigluInfographic";
 import SurgicalStackingInfographic from "@/components/SurgicalStackingInfographic";
+import AdaptiveTreeInfographic from "@/components/AdaptiveTreeInfographic";
+import SweBenchInfographic from "@/components/SweBenchInfographic";
 
 const INTERACTIVE_DOC_IDS = [
+  "swe-bench-27b",
+  "bench-swe-bench",
+  "adaptive-tree-27b-native",
+  "bench-kernel-adaptive-tree",
   "w4a16-beating-ollama",
   "bench-kernel-gemv-m1",
   "bench-kernel-tree-speculation",
@@ -125,6 +131,12 @@ export default function DocsPage() {
 
   const renderInteractiveComponent = () => {
     switch (selectedDocId) {
+      case "swe-bench-27b":
+      case "bench-swe-bench":
+        return <SweBenchInfographic />;
+      case "adaptive-tree-27b-native":
+      case "bench-kernel-adaptive-tree":
+        return <AdaptiveTreeInfographic />;
       case "w4a16-beating-ollama":
       case "bench-kernel-gemv-m1":
         return <KernelGemvInfographic />;
