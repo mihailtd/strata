@@ -1,0 +1,50 @@
+[
+  {
+    "turn": 1,
+    "domain": "astral",
+    "eval_count": 355,
+    "ollama_tok_s": 50.62246379673897,
+    "our_raw_tok_s": 66.4,
+    "ollama_time_s": 12.740017995005473,
+    "our_time_s": 5.39,
+    "ollama_ttft_ms": 5726.146649001748,
+    "ttft_handoff_on_ms": 46.2,
+    "ttft_handoff_off_ms": 66.8
+  },
+  {
+    "turn": 2,
+    "domain": "postgresql",
+    "eval_count": 2270,
+    "ollama_tok_s": 39.82593225401899,
+    "our_raw_tok_s": 66.4,
+    "ollama_time_s": 57.34041438400163,
+    "our_time_s": 34.23,
+    "ollama_ttft_ms": 342.4317260069074,
+    "ttft_handoff_on_ms": 47.4,
+    "ttft_handoff_off_ms": 104.3
+  },
+  {
+    "turn": 3,
+    "domain": "python_web",
+    "eval_count": 1462,
+    "ollama_tok_s": 43.673601070630546,
+    "our_raw_tok_s": 66.4,
+    "ollama_time_s": 35.87913533698884,
+    "our_time_s": 22.07,
+    "ollama_ttft_ms": 2403.460509987781,
+    "ttft_handoff_on_ms": 48.6,
+    "ttft_handoff_off_ms": 1488.0
+  },
+  {
+    "turn": 4,
+    "domain": "duckdb",
+    "eval_count": 2369,
+    "ollama_tok_s": 40.46837609938732,
+    "our_raw_tok_s": 66.4,
+    "ollama_time_s": 60.041760084001,
+    "our_time_s": 35.73,
+    "ollama_ttft_ms": 1502.1886580070714,
+    "ttft_handoff_on_ms": 49.8,
+    "ttft_handoff_off_ms": 2422.4
+  }
+]

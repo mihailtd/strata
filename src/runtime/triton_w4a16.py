@@ -82,11 +82,12 @@ def unpack_and_dequantize_w4(
 def get_rdna3_w4a16_configs() -> list[triton.Config]:
     """Generates tile configurations tuned for RDNA3 16x16x16 WMMA with INT4 unpacking."""
     return [
-        triton.Config({"BLOCK_M": 128, "BLOCK_N": 128, "BLOCK_K": 32, "GROUP_M": 8}, num_warps=8, num_stages=2),
-        triton.Config({"BLOCK_M": 128, "BLOCK_N": 64, "BLOCK_K": 32, "GROUP_M": 8}, num_warps=4, num_stages=2),
+        triton.Config({"BLOCK_M": 16, "BLOCK_N": 128, "BLOCK_K": 64, "GROUP_M": 8}, num_warps=4, num_stages=2),
+        triton.Config({"BLOCK_M": 16, "BLOCK_N": 256, "BLOCK_K": 64, "GROUP_M": 8}, num_warps=8, num_stages=2),
+        triton.Config({"BLOCK_M": 16, "BLOCK_N": 64, "BLOCK_K": 64, "GROUP_M": 8}, num_warps=4, num_stages=2),
+        triton.Config({"BLOCK_M": 32, "BLOCK_N": 128, "BLOCK_K": 64, "GROUP_M": 8}, num_warps=4, num_stages=2),
         triton.Config({"BLOCK_M": 64, "BLOCK_N": 128, "BLOCK_K": 32, "GROUP_M": 8}, num_warps=4, num_stages=2),
-        triton.Config({"BLOCK_M": 64, "BLOCK_N": 64, "BLOCK_K": 32, "GROUP_M": 8}, num_warps=4, num_stages=2),
-        triton.Config({"BLOCK_M": 32, "BLOCK_N": 64, "BLOCK_K": 32, "GROUP_M": 8}, num_warps=2, num_stages=2),
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 128, "BLOCK_K": 32, "GROUP_M": 8}, num_warps=8, num_stages=2),
         triton.Config({"BLOCK_M": 16, "BLOCK_N": 64, "BLOCK_K": 32, "GROUP_M": 8}, num_warps=2, num_stages=2),
         triton.Config({"BLOCK_M": 16, "BLOCK_N": 32, "BLOCK_K": 32, "GROUP_M": 8}, num_warps=2, num_stages=2),
     ]
@@ -170,10 +171,65 @@ _w4a16_gemm_kernel = triton.autotune(
 )(_w4a16_gemm_kernel_raw)
 
 
+@triton.jit
+def _w4a16_gemv_m1_kernel(
+    a_ptr, q_ptr, scale_ptr, c_ptr,
+    N, K,
+    stride_ak,
+    stride_qk, stride_qn,
+    stride_sn,
+    stride_cn,
+    BLOCK_N: tl.constexpr,
+    BLOCK_K: tl.constexpr,
+    GROUP_SIZE: tl.constexpr,
+):
+    """Specialized ultra-fast GEMV (M=1) Kernel for Single-Token Decoding on RDNA3."""
+    pid_n = tl.program_id(axis=0)
+    offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
+    shifts = (tl.arange(0, 8) * 4)[:, None]  # (8, 1)
+
+    accumulator = tl.zeros((BLOCK_N,), dtype=tl.float32)
+
+    offs_kw = tl.arange(0, BLOCK_K // 8)
+    q_ptrs = q_ptr + (offs_kw[:, None] * stride_qk + offs_n[None, :] * stride_qn)
+    a_ptrs = a_ptr + (tl.arange(0, BLOCK_K) * stride_ak)
+
+    n_groups_k = tl.cdiv(K, BLOCK_K)
+
+    for k_iter in range(0, n_groups_k):
+        # 1. Vector load activation slice: (BLOCK_K,)
+        a_tile = tl.load(a_ptrs, mask=tl.arange(0, BLOCK_K) < K - k_iter * BLOCK_K, other=0.0)
+
+        # 2. Vector load packed int32 weights: (BLOCK_K // 8, BLOCK_N)
+        q_mask = (offs_kw[:, None] < (K - k_iter * BLOCK_K) // 8) & (offs_n[None, :] < N)
+        q_val = tl.load(q_ptrs, mask=q_mask, other=0)
+
+        # 3. Vectorized Unpack (BLOCK_K // 8, 8, BLOCK_N) -> (BLOCK_K, BLOCK_N)
+        nibbles = (q_val[:, None, :] >> shifts) & 0xF
+        b_tile_raw = tl.reshape(nibbles, (BLOCK_K, BLOCK_N))
+
+        # 4. Group Scale Load & Apply
+        group_idx = (k_iter * BLOCK_K) // GROUP_SIZE
+        scale_p = scale_ptr + group_idx * stride_sn + offs_n
+        scale = tl.load(scale_p, mask=offs_n < N, other=1.0)
+
+        b_tile = (b_tile_raw.to(tl.float32) - 8.0) * scale.to(tl.float32)
+
+        # 5. Dot Product along K
+        accumulator += tl.sum(a_tile[:, None] * b_tile, axis=0)
+
+        a_ptrs += BLOCK_K * stride_ak
+        q_ptrs += (BLOCK_K // 8) * stride_qk
+
+    c_ptrs = c_ptr + offs_n * stride_cn
+    tl.store(c_ptrs, accumulator.to(tl.bfloat16), mask=offs_n < N)
+
+
 def w4a16_matmul(
     x: torch.Tensor,
     qweight: torch.Tensor,
     scales: torch.Tensor,
+    out: Optional[torch.Tensor] = None,
     group_size: int = 128,
 ) -> torch.Tensor:
     """Executes W4A16 GEMM on RDNA3 with on-the-fly register dequantization.
@@ -182,6 +238,7 @@ def w4a16_matmul(
         x: (M, K) or (B, M, K) activation tensor in bfloat16.
         qweight: (K // 8, N) packed int32 tensor.
         scales: (K // group_size, N) bfloat16 scales.
+        out: Optional pre-allocated (M, N) tensor for pointer-stable CUDA graph execution.
         group_size: Quantization group size (default 128).
 
     Returns:
@@ -205,21 +262,43 @@ def w4a16_matmul(
     assert scales.is_contiguous(), "Matrix `scales` must be contiguous"
 
     M, _ = x_2d.shape
-    c_2d = torch.empty((M, N), device=x.device, dtype=torch.bfloat16)
+    if out is not None:
+        c_2d = out.view(M, N) if out.dim() != 2 else out
+        assert c_2d.shape == (M, N), f"Output buffer shape {c_2d.shape} != {(M, N)}"
+    else:
+        c_2d = torch.empty((M, N), device=x.device, dtype=torch.bfloat16)
 
-    grid = lambda META: (triton.cdiv(M, META["BLOCK_M"]) * triton.cdiv(N, META["BLOCK_N"]),)
+    # Fast-path for single-token autoregression (M=1)
+    if M == 1:
+        BLOCK_N = 128
+        BLOCK_K = 64
+        grid_m1 = (triton.cdiv(N, BLOCK_N),)
+        _w4a16_gemv_m1_kernel[grid_m1](
+            x_2d, qweight, scales, c_2d,
+            N, K,
+            x_2d.stride(1),
+            qweight.stride(0), qweight.stride(1),
+            scales.stride(0),
+            c_2d.stride(1),
+            BLOCK_N=BLOCK_N,
+            BLOCK_K=BLOCK_K,
+            GROUP_SIZE=group_size,
+            num_warps=4,
+            num_stages=2,
+        )
+    else:
+        grid = lambda META: (triton.cdiv(M, META["BLOCK_M"]) * triton.cdiv(N, META["BLOCK_N"]),)
+        _w4a16_gemm_kernel[grid](
+            x_2d, qweight, scales, c_2d,
+            M, N, K,
+            x_2d.stride(0), x_2d.stride(1),
+            qweight.stride(0), qweight.stride(1),
+            scales.stride(0),
+            c_2d.stride(0), c_2d.stride(1),
+            GROUP_SIZE=group_size,
+        )
 
-    _w4a16_gemm_kernel[grid](
-        x_2d, qweight, scales, c_2d,
-        M, N, K,
-        x_2d.stride(0), x_2d.stride(1),
-        qweight.stride(0), qweight.stride(1),
-        scales.stride(0),
-        c_2d.stride(0), c_2d.stride(1),
-        GROUP_SIZE=group_size,
-    )
-
-    if x.dim() == 3:
+    if x.dim() == 3 and out is None:
         return c_2d.reshape(B, M_orig, N)
     return c_2d
 
@@ -325,8 +404,9 @@ def fused_w4a16_lora_matmul(
     x: torch.Tensor,
     qweight: torch.Tensor,
     scales: torch.Tensor,
-    lora_a: torch.Tensor | None = None,
-    lora_b: torch.Tensor | None = None,
+    lora_a: Optional[torch.Tensor],
+    lora_b: Optional[torch.Tensor],
+    out: Optional[torch.Tensor] = None,
     alpha: float = 1.0,
     group_size: int = 128,
 ) -> torch.Tensor:
@@ -335,7 +415,7 @@ def fused_w4a16_lora_matmul(
     Performs single-pass execution in GPU registers with only 1 global memory write.
     """
     if lora_a is None or lora_b is None:
-        return w4a16_matmul(x, qweight, scales, group_size=group_size)
+        return w4a16_matmul(x, qweight, scales, out=out, group_size=group_size)
 
     orig_shape = x.shape
     if x.dim() == 3:
@@ -358,7 +438,12 @@ def fused_w4a16_lora_matmul(
     # Since R is small (8..16), this is a lightweight memory-resident GEMM
     lora_mid = torch.matmul(x_2d, lora_a)
 
-    c_2d = torch.empty((M, N), device=x.device, dtype=torch.bfloat16)
+    if out is not None:
+        c_2d = out.view(M, N) if out.dim() != 2 else out
+        assert c_2d.shape == (M, N), f"Output buffer shape {c_2d.shape} != {(M, N)}"
+    else:
+        c_2d = torch.empty((M, N), device=x.device, dtype=torch.bfloat16)
+
     grid = lambda META: (triton.cdiv(M, META["BLOCK_M"]) * triton.cdiv(N, META["BLOCK_N"]),)
 
     _fused_w4a16_lora_kernel[grid](
@@ -376,7 +461,7 @@ def fused_w4a16_lora_matmul(
         GROUP_SIZE=group_size,
     )
 
-    if x.dim() == 3:
+    if x.dim() == 3 and out is None:
         return c_2d.reshape(B, M_orig, N)
     return c_2d
 

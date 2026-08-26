@@ -1,6 +1,6 @@
 {
   "title": "Qwen3.5-9B Complete 6-Expert Autonomous Fleet & Evaluation",
-  "timestamp": "2026-08-24T17:42:46Z",
+  "timestamp": "2026-08-26T05:44:15Z",
   "canon": {
     "ADAPTER_VERSION": "v7",
     "MAX_NEW_TOKENS": 2048,
@@ -82,28 +82,28 @@
     },
     "folding_latency": {
       "postgresql": {
-        "activate_ms": 847.8,
-        "deactivate_ms": 751.67
+        "activate_ms": 1627.19,
+        "deactivate_ms": 1008.22
       },
       "astral": {
-        "activate_ms": 806.01,
-        "deactivate_ms": 751.97
+        "activate_ms": 1132.96,
+        "deactivate_ms": 1056.47
       },
       "python_web": {
-        "activate_ms": 805.58,
-        "deactivate_ms": 755.6
+        "activate_ms": 816.6,
+        "deactivate_ms": 754.02
       },
       "python_modern": {
-        "activate_ms": 805.78,
-        "deactivate_ms": 751.76
+        "activate_ms": 973.22,
+        "deactivate_ms": 999.35
       },
       "duckdb": {
-        "activate_ms": 804.99,
-        "deactivate_ms": 752.07
+        "activate_ms": 807.56,
+        "deactivate_ms": 752.14
       },
       "financial_planning": {
-        "activate_ms": 804.92,
-        "deactivate_ms": 755.84
+        "activate_ms": 806.41,
+        "deactivate_ms": 752.04
       }
     },
     "overlap_matrix": {

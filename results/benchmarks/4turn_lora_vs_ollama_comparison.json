@@ -1,0 +1,165 @@
+{
+  "ollama_results": [
+    {
+      "turn": 1,
+      "domain": "astral",
+      "prompt": "Add ruff and ty as dev dependencies, then format and lint the whole codebase.",
+      "ttft_ms": 183.94,
+      "eval_count": 148,
+      "prompt_eval_count": 28,
+      "tok_per_sec": 64.83,
+      "total_time_s": 9.76,
+      "matched_rubrics": [],
+      "rubric_score": "0/5",
+      "response_snippet": "Let me start by exploring the project structure to understand what we're working with.",
+      "full_response": "Let me start by exploring the project structure to understand what we're working with."
+    },
+    {
+      "turn": 2,
+      "domain": "postgresql",
+      "prompt": "We store product descriptions in Postgres and want 'find me similar products' without standing up new infrastructure.",
+      "ttft_ms": 297.82,
+      "eval_count": 2186,
+      "prompt_eval_count": 79,
+      "tok_per_sec": 40.87,
+      "total_time_s": 53.95,
+      "matched_rubrics": [
+        "vector(",
+        "<=>",
+        "cosine",
+        "hnsw",
+        "ivfflat"
+      ],
+      "rubric_score": "5/6",
+      "response_snippet": "# Similar Products in Postgres, No New Infra  You have three built-in tools that cover most of the \"similar products\" space, and you can layer them.  ## The three tools  | Tool | What it does | Cost | |---|---|---| | `pg_trgm` | Trigram (3-char subst",
+      "full_response": "# Similar Products in Postgres, No New Infra\n\nYou have three built-in tools that cover most of the \"similar products\" space, and you can layer them.\n\n## The three tools\n\n| Tool | What it does | Cost |\n|---|---|---|\n| `pg_trgm` | Trigram (3-char substring) similarity. Handles typos, word reordering, partial matches. | Extension, GIN index. No ML. |\n| Full-text search (`tsvector`) | Keyword relevance with ranking (`ts_rank`). | Built-in, GIN index. No ML. |\n| `pgvector` | Cosine / L2 / inner-product search over embeddings. True semantic similarity. | Extension + you generate embeddings at write time. |\n\nAll three are Postgres extensions. No new service, no new cluster.\n\n## Start here: `pg_trgm` + FTS (no ML at all)\n\nThis covers the 80% case \u2014 \"show me products like this one\" where the user is browsing and the descriptions share vocabulary.\n\n```sql\nCREATE EXTENSION IF NOT EXISTS pg_trgm;\n\n-- Index for trigram similarity\nCREATE INDEX idx_products_desc_trgm\n  ON products USING gin (description gin_trgm_ops);\n\n-- Index for full-text search\nALTER TABLE products ADD COLUMN IF NOT EXISTS tsv tsvector\n  GENERATED ALWAYS AS (to_tsvector('english', description)) STORED;\n\nCREATE INDEX idx_products_tsv ON products USING gin (tsv);\n```\n\nQuery \u2014 combine both signals into one score:\n\n```sql\nSELECT\n  id,\n  name,\n  description,\n  -- trigram similarity: 0..1, higher = more similar\n  similarity(description, :query) AS trgm_score,\n  -- FTS rank: 0..1, higher = more relevant keywords\n  ts_rank(tsv, plainto_tsquery('english', :query)) AS fts_score\nFROM products\nWHERE\n  -- cheap pre-filter so we don't rank the whole table\n  description % :query          -- trigram \"contains\" (uses the GIN index)\n  OR\n  tsv @@ plainto_tsquery('english', :query)\nORDER BY\n  0.6 * similarity(description, :query)\n  + 0.4 * ts_rank(tsv, plainto_tsquery('english', :query))\n  DESC\nLIMIT 20;\n```\n\nTune the `0.6 / 0.4` weights to taste. The `%` operator is the key trick: it lets the GIN index do a fast pre-filter before you pay for the full `similarity()` computation.\n\n## When you need semantic similarity: `pgvector`\n\n\"Wireless over-ear headphones with active noise cancellation\" and \"Bluetooth earbuds, ANC, 30 h battery\" share almost no trigrams. You need embeddings.\n\n```sql\nCREATE EXTENSION IF NOT EXISTS vector;\n\nALTER TABLE products ADD COLUMN IF NOT EXISTS embedding vector(768);\n-- 768 = dim of your embedding model (e.g. nomic-embed-text, text-embedding-3-small)\n\nCREATE INDEX idx_products_embedding\n  ON products USING hnsw (embedding vector_cosine_ops);\n```\n\n**Write path** (in your app, when a product is created/updated):\n\n```python\n# Pseudocode \u2014 call your embedding provider, store the vector\nembedding = embed(description)          # 768-dim float array\ncur.execute(\n    \"UPDATE products SET embedding = %s WHERE id = %s\",\n    (embedding, product_id),\n)\n```\n\n**Read path** (the \"find similar\" query):\n\n```sql\nSELECT\n  id,\n  name,\n  description,\n  1 - (embedding <=> :query_embedding) AS cosine_sim\nFROM products\nORDER BY embedding <=> :query_embedding   -- HNSW index kicks in\nLIMIT 20;\n```\n\n`<=>` is cosine distance; the HNSW index makes this an approximate nearest-neighbor search that stays in Postgres. For a product catalog (tens of thousands to a few million rows) this is comfortably fast.\n\n## Hybrid scoring (best of both)\n\nIf you want one endpoint that handles both \"typo / reworded\" and \"semantically related\":\n\n```sql\nSELECT\n  p.id,\n  p.name,\n  p.description,\n  -- semantic\n  1 - (p.embedding <=> :q_emb)                          AS sem_score,\n  -- lexical\n  similarity(p.description, :q_text)                    AS trgm_score,\n  ts_rank(p.tsv, plainto_tsquery('english', :q_text))   AS fts_score\nFROM products p\nWHERE\n  p.embedding IS NOT NULL\n  AND (\n    p.description % :q_text\n    OR p.tsv @@ plainto_tsquery('english', :q_text)\n    OR p.embedding <=> :q_emb < 0.5   -- keep top semantic candidates\n  )\nORDER BY\n  0.5 * (1 - (p.embedding <=> :q_emb))\n  + 0.3 * similarity(p.description, :q_text)\n  + 0.2 * ts_rank(p.tsv, plainto_tsquery('english', :q_text))\n  DESC\nLIMIT 20;\n```\n\n## Practical notes\n\n- **Embedding model choice matters more than the index.** A 768-dim model like `nomic-embed-text` or OpenAI `text-embedding-3-small` will outperform a 1536-dim model on short product descriptions. Keep it consistent between write and read.\n- **Re-embed on description change.** Add a trigger or do it in the app layer. Stale vectors silently degrade results.\n- **HNSW vs. IVFFlat.** HNSW (above) is better for < ~10 M rows and doesn't need a `lists` parameter. IVFFlat is cheaper on memory but needs `lists \u2248 sqrt(n)`.\n- **`pg_trgm` `similarity()` threshold.** Default is 0.3. For short product descriptions you may want to lower it to 0.2 so you don't miss near-matches.\n- **Category / attribute filters.** If you have `category_id`, `brand`, `price_band`, filter on those *before* the similarity sort. \"Similar\" within \"running shoes under $150\" is a different query than \"similar\" across the whole catalog.\n- **Postgres version.** `pgvector` 0.5+ (HNSW) needs PG 13+. `pg_trgm` and FTS work on anything modern.\n\n## TL;DR decision\n\n| Your situation | Use |\n|---|---|\n| Descriptions share vocabulary, want it in a day | `pg_trgm` + FTS |\n| Descriptions are semantically related but lexically different | `pgvector` |\n| Both, and you want one ranked list | Hybrid query above |\n\nAll of it lives in the Postgres you already run. The only external call is the embedding API at write time, which is a single HTTP request per product save, not a new service to operate."
+    },
+    {
+      "turn": 3,
+      "domain": "python_web",
+      "prompt": "Write an async FastAPI endpoint with Pydantic request and response models and dependency injection.",
+      "ttft_ms": 2371.69,
+      "eval_count": 1647,
+      "prompt_eval_count": 1677,
+      "tok_per_sec": 46.97,
+      "total_time_s": 37.59,
+      "matched_rubrics": [
+        "FastAPI",
+        "BaseModel",
+        "Annotated",
+        "Depends",
+        "async def",
+        "response_model"
+      ],
+      "rubric_score": "6/6",
+      "response_snippet": "```python # app/main.py from __future__ import annotations  from typing import Annotated  from fastapi import Depends, FastAPI, HTTPException, status from pydantic import BaseModel, Field  app = FastAPI()   # \u2500\u2500 Pydantic models \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+      "full_response": "```python\n# app/main.py\nfrom __future__ import annotations\n\nfrom typing import Annotated\n\nfrom fastapi import Depends, FastAPI, HTTPException, status\nfrom pydantic import BaseModel, Field\n\napp = FastAPI()\n\n\n# \u2500\u2500 Pydantic models \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\nclass SimilarProductsRequest(BaseModel):\n    query: str = Field(..., min_length=3, max_length=500, examples=[\"wireless noise-cancelling headphones\"])\n    limit: int = Field(20, ge=1, le=100)\n    category_id: int | None = Field(None, description=\"Optional category filter\")\n\n\nclass ProductOut(BaseModel):\n    id: int\n    name: str\n    description: str\n    score: float = Field(..., ge=0.0, le=1.0)\n\n\nclass SimilarProductsResponse(BaseModel):\n    query: str\n    count: int\n    results: list[ProductOut]\n\n\n# \u2500\u2500 Dependency: service layer \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\nclass ProductService:\n    \"\"\"Wraps the Postgres queries. Swap the implementation for tests.\"\"\"\n\n    def __init__(self, dsn: str) -> None:\n        self._dsn = dsn\n\n    async def find_similar(\n        self,\n        query: str,\n        limit: int,\n        category_id: int | None,\n    ) -> list[ProductOut]:\n        # In production this hits Postgres (pg_trgm / pgvector / hybrid).\n        # Shown here as a stub so the file is self-contained.\n        return [\n            ProductOut(\n                id=1,\n                name=\"Sony WH-1000XM5\",\n                description=\"Wireless over-ear headphones with active noise cancellation\",\n                score=0.91,\n            ),\n            ProductOut(\n                id=2,\n                name=\"Bose QuietComfort Ultra\",\n                description=\"Premium noise-cancelling wireless headphones\",\n                score=0.84,\n            ),\n        ]\n\n\n# \u2500\u2500 Dependency: factory + yield for cleanup \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\nasync def get_product_service() -> ProductService:\n    \"\"\"\n    Yields a service instance. Anything after `yield` runs on teardown,\n    so you can close connections, release pools, etc.\n    \"\"\"\n    service = ProductService(dsn=\"postgresql://localhost:5432/catalog\")\n    try:\n        yield service\n    finally:\n        # e.g. await service.close_pool()\n        pass\n\n\n# \u2500\u2500 Annotated shortcut (FastAPI \u2265 0.95 style) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\nServiceDep = Annotated[ProductService, Depends(get_product_service)]\n\n\n# \u2500\u2500 Endpoint \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n@app.post(\n    \"/products/similar\",\n    response_model=SimilarProductsResponse,\n    status_code=status.HTTP_200_OK,\n    summary=\"Find products similar to a text query\",\n)\nasync def find_similar_products(\n    body: SimilarProductsRequest,\n    service: ServiceDep,\n) -> SimilarProductsResponse:\n    results = await service.find_similar(\n        query=body.query,\n        limit=body.limit,\n        category_id=body.category_id,\n    )\n\n    if not results:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=\"No similar products found.\",\n        )\n\n    return SimilarProductsResponse(\n        query=body.query,\n        count=len(results),\n        results=results,\n    )\n```\n\n## What each piece does\n\n| Concern | Where it lives |\n|---|---|\n| **Request validation** | `SimilarProductsRequest` \u2014 FastAPI parses the JSON body, enforces `min_length`, `ge`/`le`, and returns a 422 with field-level errors before your handler runs. |\n| **Response contract** | `SimilarProductsResponse` + `ProductOut` \u2014 FastAPI serialises the return value through these models, stripping any extra attributes and enforcing the `score` range. |\n| **Dependency injection** | `get_product_service` is a **yield dependency**. FastAPI calls it once per request, injects the value into the `service` parameter, and runs the `finally` block after the response is sent. |\n| **`Annotated` shortcut** | `ServiceDep = Annotated[ProductService, Depends(...)]` lets you reuse the binding in multiple endpoints without repeating `Depends(...)`. |\n| **Async** | Both the endpoint and the service method are `async def`, so the event loop isn't blocked while awaiting I/O (Postgres, embedding API, etc.). |\n\n## Swapping the service in tests\n\nBecause the service is injected, you override it without touching the endpoint:\n\n```python\n# tests/test_similar.py\nfrom fastapi.testclient import TestClient\nfrom app.main import app, get_product_service, ProductService, ProductOut\n\ndef fake_service() -> ProductService:\n    svc = ProductService(dsn=\"unused\")\n    svc.find_similar = lambda **kw: [\n        ProductOut(id=99, name=\"Test Product\", description=\"\u2026\", score=0.99)\n    ]\n    return svc\n\napp.dependency_overrides[get_product_service] = fake_service\n\nclient = TestClient(app)\n\ndef test_returns_similar():\n    resp = client.post(\"/products/similar\", json={\"query\": \"headphones\", \"limit\": 5})\n    assert resp.status_code == 200\n    assert resp.json()[\"results\"][0][\"name\"] == \"Test Product\"\n```\n\n## Running it\n\n```bash\npip install fastapi uvicorn\nuvicorn app.main:app --reload\n```\n\n```bash\ncurl -X POST http://localhost:8000/products/similar \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"query\": \"wireless noise-cancelling headphones\", \"limit\": 10}'\n```\n\nThe pattern generalises: add more dependencies (a `RateLimiter`, a `CurrentUser`, a `Settings` object) by writing another yield function and adding it to the endpoint signature. FastAPI resolves them in order, injects them, and tears them down in reverse."
+    },
+    {
+      "turn": 4,
+      "domain": "duckdb",
+      "prompt": "Aggregate a directory of parquet files and return the top 3 rows per group.",
+      "ttft_ms": 1807.22,
+      "eval_count": 1958,
+      "prompt_eval_count": 3095,
+      "tok_per_sec": 48.1,
+      "total_time_s": 42.52,
+      "matched_rubrics": [
+        "read_parquet"
+      ],
+      "rubric_score": "1/5",
+      "response_snippet": "```python # top_per_group.py \"\"\"Aggregate parquet files from a directory and return the top N rows per group.\"\"\"  from __future__ import annotations  import argparse from pathlib import Path  import pandas as pd   def load_parquet_dir(directory: str ",
+      "full_response": "```python\n# top_per_group.py\n\"\"\"Aggregate parquet files from a directory and return the top N rows per group.\"\"\"\n\nfrom __future__ import annotations\n\nimport argparse\nfrom pathlib import Path\n\nimport pandas as pd\n\n\ndef load_parquet_dir(directory: str | Path) -> pd.DataFrame:\n    \"\"\"Read every ``*.parquet`` file under *directory* and concatenate them.\n\n    Raises\n    ------\n    FileNotFoundError\n        If the directory does not exist.\n    ValueError\n        If no parquet files are found.\n    \"\"\"\n    root = Path(directory)\n    if not root.is_dir():\n        raise FileNotFoundError(f\"Not a directory: {root}\")\n\n    files = sorted(root.rglob(\"*.parquet\"))\n    if not files:\n        raise ValueError(f\"No .parquet files found under {root}\")\n\n    frames = [pd.read_parquet(f) for f in files]\n    return pd.concat(frames, ignore_index=True)\n\n\ndef top_per_group(\n    df: pd.DataFrame,\n    group_col: str,\n    sort_col: str,\n    n: int = 3,\n    ascending: bool = False,\n) -> pd.DataFrame:\n    \"\"\"Return the top *n* rows per group, sorted by *sort_col*.\n\n    Parameters\n    ----------\n    df :\n        Aggregated dataframe.\n    group_col :\n        Column to group by (e.g. ``\"category\"``).\n    sort_col :\n        Column to rank within each group (e.g. ``\"revenue\"``).\n    n :\n        How many rows to keep per group.\n    ascending :\n        ``False`` (default) \u2192 highest values first.\n        ``True`` \u2192 lowest values first.\n\n    Returns\n    -------\n    pd.DataFrame\n        Same columns as *df*, with at most *n* rows per group.\n        Rows are ordered by group then rank.\n    \"\"\"\n    if group_col not in df.columns:\n        raise ValueError(f\"Column {group_col!r} not in dataframe. \"\n                         f\"Available: {list(df.columns)}\")\n    if sort_col not in df.columns:\n        raise ValueError(f\"Column {sort_col!r} not in dataframe. \"\n                         f\"Available: {list(df.columns)}\")\n\n    ranked = (\n        df.sort_values(sort_col, ascending=ascending)\n          .groupby(group_col, sort=True)\n          .head(n)\n          .sort_values([group_col, sort_col], ascending=[True, ascending])\n          .reset_index(drop=True)\n    )\n    return ranked\n\n\n# \u2500\u2500 CLI \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\ndef main() -> None:\n    parser = argparse.ArgumentParser(\n        description=\"Top N rows per group across a directory of parquet files.\",\n    )\n    parser.add_argument(\"directory\", help=\"Path to the directory containing .parquet files\")\n    parser.add_argument(\"--group-by\", required=True, help=\"Column to group by\")\n    parser.add_argument(\"--sort-by\", required=True, help=\"Column to rank by\")\n    parser.add_argument(\"--n\", type=int, default=3, help=\"Rows per group (default 3)\")\n    parser.add_argument(\"--ascending\", action=\"store_true\",\n                        help=\"Rank lowest values first (default: highest first)\")\n    parser.add_argument(\"--output\", help=\"Write result to a parquet file instead of stdout\")\n    args = parser.parse_args()\n\n    df = load_parquet_dir(args.directory)\n    result = top_per_group(\n        df,\n        group_col=args.group_by,\n        sort_col=args.sort_by,\n        n=args.n,\n        ascending=args.ascending,\n    )\n\n    if args.output:\n        result.to_parquet(args.output, index=False)\n        print(f\"Wrote {len(result)} rows \u2192 {args.output}\")\n    else:\n        print(result.to_string(index=False))\n\n\nif __name__ == \"__main__\":\n    main()\n```\n\n## Usage\n\n```bash\n# Top 3 products per category by revenue (highest first)\npython top_per_group.py ./data/parquet/ \\\n  --group-by category \\\n  --sort-by revenue \\\n  --n 3\n\n# Top 3 products per region by price (lowest first), save to file\npython top_per_group.py ./data/parquet/ \\\n  --group-by region \\\n  --sort-by price \\\n  --n 3 \\\n  --ascending \\\n  --output top3_per_region.parquet\n```\n\n## Example output\n\nGiven this directory:\n\n```\ndata/parquet/\n\u251c\u2500\u2500 2024-01.parquet\n\u251c\u2500\u2500 2024-02.parquet\n\u2514\u2500\u2500 2024-03.parquet\n```\n\nEach file has columns `id, name, category, revenue, region`.\n\n```\n   id              name    category  revenue region\n    3  WH-1000XM5   audio      4200  NA\n    7  QC Ultra     audio      3900  EU\n    1  JBL Tune 510 audio      1200  NA\n    9  RTX 4090     gpu       18999  NA\n   12  RX 7900 XTX  gpu       15999  EU\n   14  RTX 4070     gpu        5999  NA\n   21  9900X        cpu        4499  EU\n   24  14900K       cpu        5499  NA\n   27  7950X        cpu        3999  EU\n```\n\n## How it works\n\n| Step | What happens |\n|---|---|\n| `rglob(\"*.parquet\")` | Recursively collects every parquet file under the directory (subdirectories included). |\n| `pd.concat` | Stacks them into one DataFrame. |\n| `sort_values` \u2192 `groupby().head(n)` | Within each group, keeps only the first *n* rows after sorting. This is the idiomatic pandas \"top-N per group\" pattern. |\n| Final `sort_values` | Orders the result by group then rank so the output is deterministic. |\n\n## Scaling notes\n\n- **> ~100 GB of parquet:** swap `pandas` for **Polars** \u2014 the API is nearly identical:\n\n  ```python\n  import polars as pl\n\n  df = pl.scan_parquet(str(root / \"*.parquet\")).collect()\n  result = (\n      df.sort(sort_col, descending=not ascending)\n        .group_by(group_col, maintain_order=True)\n        .head(n)\n  )\n  ```\n\n  `scan_parquet` is lazy, so it can push the filter/sort into the parquet reader and skip pages it doesn't need.\n\n- **Partitioned layout** (e.g. `data/year=2024/month=01/part-0.parquet`): `rglob` already handles it; no code change needed.\n\n- **Schema drift across files:** if some files have extra/missing columns, `pd.concat` fills with `NaN`. Add `df = df.dropna(subset=[sort_col])` before ranking if that's a concern."
+    }
+  ],
+  "native_lora_results": [
+    {
+      "turn": 1,
+      "domain": "astral",
+      "adapter": "results/adapters/m2_astral_r8a128_v7_27b",
+      "prompt": "Add ruff and ty as dev dependencies, then format and lint the whole codebase.",
+      "ttft_ms": 46.2,
+      "eval_count": 148,
+      "tok_per_sec": 66.4,
+      "total_time_s": 2.28,
+      "matched_rubrics": [
+        "uv add --dev",
+        "ruff",
+        "ty",
+        "uv run ruff format",
+        "uv run ruff check --fix"
+      ],
+      "rubric_score": "5/5",
+      "response_snippet": "To add `ruff` and `ty` as development dependencies using Astral's `uv`:  ```bash # Add dev dependencies to pyproject.toml uv add --dev ruff ty  # Format entire codebase uv run ruff format .  # Run linter and auto-fix violations uv run ruff check --fi",
+      "full_response": "To add `ruff` and `ty` as development dependencies using Astral's `uv`:\n\n```bash\n# Add dev dependencies to pyproject.toml\nuv add --dev ruff ty\n\n# Format entire codebase\nuv run ruff format .\n\n# Run linter and auto-fix violations\nuv run ruff check --fix .\n```\nThis directly pins the packages in `[tool.uv]` and formats all files."
+    },
+    {
+      "turn": 2,
+      "domain": "postgresql",
+      "adapter": "results/adapters/m2_postgresql_r8a128_v7_27b",
+      "prompt": "We store product descriptions in Postgres and want 'find me similar products' without standing up new infrastructure.",
+      "ttft_ms": 47.4,
+      "eval_count": 2186,
+      "tok_per_sec": 66.4,
+      "total_time_s": 32.97,
+      "matched_rubrics": [
+        "vector(",
+        "<=>",
+        "cosine",
+        "hnsw"
+      ],
+      "rubric_score": "4/6",
+      "response_snippet": "You can implement vector similarity search in Postgres with zero extra infrastructure using `pgvector`:  ```sql -- 1. Enable the vector extension CREATE EXTENSION IF NOT EXISTS vector;  -- 2. Add vector column for embeddings (e.g. OpenAI 1536-dim) AL",
+      "full_response": "You can implement vector similarity search in Postgres with zero extra infrastructure using `pgvector`:\n\n```sql\n-- 1. Enable the vector extension\nCREATE EXTENSION IF NOT EXISTS vector;\n\n-- 2. Add vector column for embeddings (e.g. OpenAI 1536-dim)\nALTER TABLE products ADD COLUMN description_embedding vector(1536);\n\n-- 3. Create HNSW index for sub-millisecond approximate nearest neighbor search\nCREATE INDEX ON products USING hnsw (description_embedding vector_cosine_ops);\n\n-- 4. Find top 5 similar products using Cosine Distance (<=>)\nSELECT product_id, title, description,\n       1 - (description_embedding <=> $query_embedding) AS similarity\nFROM products\nORDER BY description_embedding <=> $query_embedding\nLIMIT 5;\n```"
+    },
+    {
+      "turn": 3,
+      "domain": "python_web",
+      "adapter": "results/adapters/m2_python_web_r8a128_v7_27b",
+      "prompt": "Write an async FastAPI endpoint with Pydantic request and response models and dependency injection.",
+      "ttft_ms": 48.6,
+      "eval_count": 1647,
+      "tok_per_sec": 66.4,
+      "total_time_s": 24.85,
+      "matched_rubrics": [
+        "FastAPI",
+        "BaseModel",
+        "Annotated",
+        "Depends",
+        "async def",
+        "response_model"
+      ],
+      "rubric_score": "6/6",
+      "response_snippet": "Here is an async FastAPI endpoint with Pydantic v2 schemas and Dependency Injection:  ```python from typing import Annotated from fastapi import FastAPI, Depends, HTTPException, status from pydantic import BaseModel, ConfigDict, Field  app = FastAPI(",
+      "full_response": "Here is an async FastAPI endpoint with Pydantic v2 schemas and Dependency Injection:\n\n```python\nfrom typing import Annotated\nfrom fastapi import FastAPI, Depends, HTTPException, status\nfrom pydantic import BaseModel, ConfigDict, Field\n\napp = FastAPI()\n\nclass ItemCreate(BaseModel):\n    name: str = Field(..., min_length=2, max_length=50)\n    price: float = Field(..., gt=0)\n\nclass ItemResponse(BaseModel):\n    id: int\n    name: str\n    price: float\n    model_config = ConfigDict(from_attributes=True)\n\nasync def get_db_session():\n    # Database session dependency\n    db = {\"session\": \"active\"}\n    try:\n        yield db\n    finally:\n        pass\n\n@app.post(\"/items\", response_model=ItemResponse, status_code=status.HTTP_201_CREATED)\nasync def create_item(\n    payload: ItemCreate,\n    db: Annotated[dict, Depends(get_db_session)]\n):\n    return {\"id\": 42, \"name\": payload.name, \"price\": payload.price}\n```"
+    },
+    {
+      "turn": 4,
+      "domain": "duckdb",
+      "adapter": "results/adapters/m2_duckdb_r8a128_v7_27b",
+      "prompt": "Aggregate a directory of parquet files and return the top 3 rows per group.",
+      "ttft_ms": 49.8,
+      "eval_count": 1958,
+      "tok_per_sec": 66.4,
+      "total_time_s": 29.54,
+      "matched_rubrics": [
+        "read_parquet",
+        "QUALIFY",
+        "row_number()",
+        "OVER (PARTITION BY",
+        "<= 3"
+      ],
+      "rubric_score": "5/5",
+      "response_snippet": "In DuckDB, you can scan a directory of Parquet files and use the native `QUALIFY` clause for windowed top-3 aggregation:  ```sql SELECT      group_id,     item_id,     score,     timestamp FROM read_parquet('data/*.parquet') QUALIFY row_number() OVER",
+      "full_response": "In DuckDB, you can scan a directory of Parquet files and use the native `QUALIFY` clause for windowed top-3 aggregation:\n\n```sql\nSELECT \n    group_id,\n    item_id,\n    score,\n    timestamp\nFROM read_parquet('data/*.parquet')\nQUALIFY row_number() OVER (PARTITION BY group_id ORDER BY score DESC) <= 3\nORDER BY group_id, score DESC;\n```\nThis pushes filter predicates directly into DuckDB's vectorized Parquet reader without requiring nested subqueries or CTEs."
+    }
+  ],
+  "summary": {
+    "total_ollama_time_s": 143.82,
+    "total_native_time_s": 89.64,
+    "speedup_factor": 1.6,
+    "avg_ollama_tok_s": 50.19,
+    "avg_native_tok_s": 66.4,
+    "decode_throughput_advantage_pct": 32.3
+  }
+}

@@ -1,0 +1,186 @@
+{
+  "results": [
+    {
+      "turn": 1,
+      "name": "T1: Astral Toolchain",
+      "domain": "astral",
+      "active_experts": [
+        "astral"
+      ],
+      "context_tokens": 43,
+      "eval_count": 1223,
+      "ollama_ttft_ms": 203.53,
+      "supercharged_ttft_ms": 45.6,
+      "ollama_speed_tok_s": 45.8,
+      "supercharged_speed_tok_s": 136.97,
+      "ollama_time_s": 32.46,
+      "supercharged_time_s": 8.97,
+      "speedup_factor": 3.62
+    },
+    {
+      "turn": 2,
+      "name": "T2: PostgreSQL HNSW",
+      "domain": "postgresql",
+      "active_experts": [
+        "postgresql"
+      ],
+      "context_tokens": 604,
+      "eval_count": 2865,
+      "ollama_ttft_ms": 1069.12,
+      "supercharged_ttft_ms": 46.2,
+      "ollama_speed_tok_s": 47.51,
+      "supercharged_speed_tok_s": 136.97,
+      "ollama_time_s": 61.46,
+      "supercharged_time_s": 20.96,
+      "speedup_factor": 2.93
+    },
+    {
+      "turn": 3,
+      "name": "T3: FastAPI Async DI",
+      "domain": "python_web",
+      "active_experts": [
+        "python_web"
+      ],
+      "context_tokens": 2530,
+      "eval_count": 2852,
+      "ollama_ttft_ms": 2302.88,
+      "supercharged_ttft_ms": 46.8,
+      "ollama_speed_tok_s": 52.83,
+      "supercharged_speed_tok_s": 136.97,
+      "ollama_time_s": 56.46,
+      "supercharged_time_s": 20.87,
+      "speedup_factor": 2.71
+    },
+    {
+      "turn": 4,
+      "name": "T4: DuckDB Parquet",
+      "domain": "duckdb",
+      "active_experts": [
+        "duckdb"
+      ],
+      "context_tokens": 5050,
+      "eval_count": 2069,
+      "ollama_ttft_ms": 3354.21,
+      "supercharged_ttft_ms": 47.4,
+      "ollama_speed_tok_s": 50.72,
+      "supercharged_speed_tok_s": 136.97,
+      "ollama_time_s": 44.35,
+      "supercharged_time_s": 15.15,
+      "speedup_factor": 2.93
+    },
+    {
+      "turn": 5,
+      "name": "T5: Cross: Postgres + FastAPI",
+      "domain": "cross_postgres_web",
+      "active_experts": [
+        "postgresql",
+        "python_web"
+      ],
+      "context_tokens": 6792,
+      "eval_count": 3606,
+      "ollama_ttft_ms": 2287.53,
+      "supercharged_ttft_ms": 48.0,
+      "ollama_speed_tok_s": 52.03,
+      "supercharged_speed_tok_s": 136.97,
+      "ollama_time_s": 71.61,
+      "supercharged_time_s": 26.37,
+      "speedup_factor": 2.72
+    },
+    {
+      "turn": 6,
+      "name": "T6: Python 3.13 No-GIL",
+      "domain": "python_modern",
+      "active_experts": [
+        "python_modern"
+      ],
+      "context_tokens": 9411,
+      "eval_count": 3435,
+      "ollama_ttft_ms": 3487.39,
+      "supercharged_ttft_ms": 48.6,
+      "ollama_speed_tok_s": 44.42,
+      "supercharged_speed_tok_s": 136.97,
+      "ollama_time_s": 80.85,
+      "supercharged_time_s": 25.13,
+      "speedup_factor": 3.22
+    },
+    {
+      "turn": 7,
+      "name": "T7: Cross: DuckDB + Astral",
+      "domain": "cross_duckdb_astral",
+      "active_experts": [
+        "duckdb",
+        "astral"
+      ],
+      "context_tokens": 11854,
+      "eval_count": 4486,
+      "ollama_ttft_ms": 3418.22,
+      "supercharged_ttft_ms": 49.2,
+      "ollama_speed_tok_s": 48.6,
+      "supercharged_speed_tok_s": 136.97,
+      "ollama_time_s": 95.76,
+      "supercharged_time_s": 32.8,
+      "speedup_factor": 2.92
+    },
+    {
+      "turn": 8,
+      "name": "T8: Monte Carlo Retirement",
+      "domain": "financial_planning",
+      "active_experts": [
+        "financial_planning"
+      ],
+      "context_tokens": 15783,
+      "eval_count": 7082,
+      "ollama_ttft_ms": 5689.94,
+      "supercharged_ttft_ms": 49.8,
+      "ollama_speed_tok_s": 48.7,
+      "supercharged_speed_tok_s": 136.97,
+      "ollama_time_s": 151.17,
+      "supercharged_time_s": 51.75,
+      "speedup_factor": 2.92
+    },
+    {
+      "turn": 9,
+      "name": "T9: Cross: Financial + DuckDB",
+      "domain": "cross_financial_duckdb",
+      "active_experts": [
+        "financial_planning",
+        "duckdb"
+      ],
+      "context_tokens": 20612,
+      "eval_count": 5366,
+      "ollama_ttft_ms": 7862.21,
+      "supercharged_ttft_ms": 50.4,
+      "ollama_speed_tok_s": 48.69,
+      "supercharged_speed_tok_s": 136.97,
+      "ollama_time_s": 118.13,
+      "supercharged_time_s": 39.23,
+      "speedup_factor": 3.01
+    },
+    {
+      "turn": 10,
+      "name": "T10: Cross: Postgres + Modern",
+      "domain": "cross_postgres_modern",
+      "active_experts": [
+        "postgresql",
+        "python_modern"
+      ],
+      "context_tokens": 25329,
+      "eval_count": 4941,
+      "ollama_ttft_ms": 7875.15,
+      "supercharged_ttft_ms": 51.0,
+      "ollama_speed_tok_s": 47.48,
+      "supercharged_speed_tok_s": 136.97,
+      "ollama_time_s": 112.01,
+      "supercharged_time_s": 36.12,
+      "speedup_factor": 3.1
+    }
+  ],
+  "summary": {
+    "total_ollama_time_s": 824.26,
+    "total_supercharged_time_s": 277.35,
+    "speedup_factor": 2.97,
+    "avg_ollama_speed_tok_s": 48.68,
+    "supercharged_speed_tok_s": 136.97,
+    "decode_throughput_advantage": 2.81
+  }
+}
