@@ -8,18 +8,44 @@ import rehypeHighlight from "rehype-highlight";
 import rehypeSlug from "rehype-slug";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
-import { BookOpen, FileText, ChevronRight, Sparkles, Layers, Cpu, Compass, Atom, Flame } from "lucide-react";
+import {
+  BookOpen,
+  FileText,
+  ChevronRight,
+  Sparkles,
+  Layers,
+  Cpu,
+  Compass,
+  Atom,
+  Flame,
+  Zap,
+  GitBranch,
+} from "lucide-react";
 import { DOCS_MANIFEST, DocItem } from "@/lib/docs-manifest";
 import { useMDXComponents } from "@/mdx-components";
 import LedoitWolfInfographic from "@/components/LedoitWolfInfographic";
 import WeibullHazardInfographic from "@/components/WeibullHazardInfographic";
 import SSIQuantizationInfographic from "@/components/SSIQuantizationInfographic";
 import CutSetReliabilityInfographic from "@/components/CutSetReliabilityInfographic";
+import KernelGemvInfographic from "@/components/KernelGemvInfographic";
+import TreeSpeculationInfographic from "@/components/TreeSpeculationInfographic";
+import FusedSwigluInfographic from "@/components/FusedSwigluInfographic";
+import SurgicalStackingInfographic from "@/components/SurgicalStackingInfographic";
 
-const INTERACTIVE_DOC_IDS = ["ledoit-wolf-routing", "bench-weibull-hazard", "bench-ssi-quant", "bench-cut-set-reliability"];
+const INTERACTIVE_DOC_IDS = [
+  "w4a16-beating-ollama",
+  "bench-kernel-gemv-m1",
+  "bench-kernel-tree-speculation",
+  "bench-kernel-fused-swiglu",
+  "ledoit-wolf-routing",
+  "surgical-stacking",
+  "bench-weibull-hazard",
+  "bench-ssi-quant",
+  "bench-cut-set-reliability",
+];
 
 export default function DocsPage() {
-  const [selectedDocId, setSelectedDocId] = useState<string>("decisions");
+  const [selectedDocId, setSelectedDocId] = useState<string>("w4a16-beating-ollama");
   const [docMetadata, setDocMetadata] = useState<DocItem | null>(null);
   const [content, setContent] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -57,7 +83,7 @@ export default function DocsPage() {
   };
 
   useEffect(() => {
-    loadDoc("bench-cut-set-reliability");
+    loadDoc("bench-kernel-tree-speculation");
   }, []);
 
   const categories = ["All", ...Array.from(new Set(DOCS_MANIFEST.map((d) => d.category)))];
@@ -69,14 +95,29 @@ export default function DocsPage() {
 
   const getCategoryIcon = (cat: string) => {
     switch (cat) {
+      case "3. Kernel & Hardware (RDNA3)":
+        return Zap;
+      case "2. Runtime & Speculative":
+        return Cpu;
+      case "1. Factory & Geometry":
+        return Layers;
       case "Core Architecture & Decisions":
         return Compass;
-      case "Runtime & Speculative":
-        return Cpu;
-      case "Factory & Geometry":
-        return Layers;
       default:
         return FileText;
+    }
+  };
+
+  const getCategoryBadgeClass = (cat: string) => {
+    switch (cat) {
+      case "3. Kernel & Hardware (RDNA3)":
+        return "bg-cyan-500/20 border-cyan-500/40 text-cyan-300";
+      case "2. Runtime & Speculative":
+        return "bg-purple-500/20 border-purple-500/40 text-purple-300";
+      case "1. Factory & Geometry":
+        return "bg-emerald-500/20 border-emerald-500/40 text-emerald-300";
+      default:
+        return "bg-amber-500/20 border-amber-500/40 text-amber-300";
     }
   };
 
@@ -84,8 +125,17 @@ export default function DocsPage() {
 
   const renderInteractiveComponent = () => {
     switch (selectedDocId) {
+      case "w4a16-beating-ollama":
+      case "bench-kernel-gemv-m1":
+        return <KernelGemvInfographic />;
+      case "bench-kernel-tree-speculation":
+        return <TreeSpeculationInfographic />;
+      case "bench-kernel-fused-swiglu":
+        return <FusedSwigluInfographic />;
       case "ledoit-wolf-routing":
         return <LedoitWolfInfographic />;
+      case "surgical-stacking":
+        return <SurgicalStackingInfographic />;
       case "bench-weibull-hazard":
         return <WeibullHazardInfographic />;
       case "bench-ssi-quant":
@@ -190,7 +240,11 @@ export default function DocsPage() {
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-black/50 px-6 py-4">
             <div>
               <div className="flex items-center gap-2">
-                <span className="rounded bg-[#a855f7]/20 border border-[#a855f7]/40 px-2 py-0.5 font-mono text-[11px] font-bold text-[#a855f7]">
+                <span
+                  className={`rounded border px-2 py-0.5 font-mono text-[11px] font-bold ${getCategoryBadgeClass(
+                    docMetadata.category
+                  )}`}
+                >
                   {docMetadata.category}
                 </span>
                 <span className="font-mono text-xs text-slate-400">

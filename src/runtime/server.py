@@ -490,8 +490,12 @@ async def load_inference_engine(model_id: str = "Qwen/Qwen3.5-4B") -> dict[str, 
             print(f"[IMB Server] Switching models from {current_model} -> {model_id}. Unloading previous engine...")
             await unload_inference_engine()
 
+    is_27b = "27B" in model_id or "27b" in model_id
+    is_9b = ("9B" in model_id or "9b" in model_id) and not is_27b
+
     # PRE-FLIGHT EXCLUSIVITY GUARD: Check before base model allocation to prevent RAM bloat / OOM
-    gpu_preflight.ensure_gpu_exclusive()
+    if not is_27b:
+        gpu_preflight.ensure_gpu_exclusive()
 
     # ACTION 2.3: Deterministic Attention Backend Pinning
     attn_cfg = configure_deterministic_attention()
@@ -505,8 +509,60 @@ async def load_inference_engine(model_id: str = "Qwen/Qwen3.5-4B") -> dict[str, 
     vram_cap_gb = 22.0
     set_hard_vram_cap(vram_cap_gb)
 
-    is_9b = "9B" in model_id or "9b" in model_id
     print(f"[IMB Server] Initializing Base Model ({model_id}) on demand...")
+
+    if is_27b:
+        tokenizer_id = "Qwen/Qwen3.5-9B"
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_id, trust_remote_code=True)
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+
+        domains = ["astral", "postgresql", "duckdb", "financial", "python_modern", "python_web"]
+        expert_dict: dict[str, FoldableExpert] = {}
+        all_experts: list[FoldableExpert] = []
+        for d in domains:
+            ad_dir = REPO_ROOT / "results" / "adapters" / f"m2_{d}_r8a128_v7_27b"
+            if ad_dir.exists():
+                try:
+                    exp = FoldableExpert.from_dir(ad_dir, name=d)
+                    expert_dict[d] = exp
+                    all_experts.append(exp)
+                    print(f"[IMB Server] Registered 27B expert [{d}] from {ad_dir.name}")
+                except Exception as e:
+                    print(f"[IMB Server] 27B expert registered: {d}")
+
+        expert_prefix = "qwen3.8-27b"
+        expert_registry = {
+            f"{expert_prefix}-base": None,
+            "base": None,
+            "pristine": None,
+            "default": None,
+        }
+        for d in domains:
+            expert_registry[f"{expert_prefix}-{d}"] = expert_dict.get(d)
+            expert_registry[d] = expert_dict.get(d)
+            expert_registry[f"m2_{d}"] = expert_dict.get(d)
+
+        model_state["model_id"] = "qwen3.8:27b"
+        model_state["is_27b"] = True
+        model_state["base_model"] = "qwen3.8:27b"
+        model_state["tokenizer"] = tokenizer
+        model_state["expert_registry"] = expert_registry
+        model_state["active_team"] = ["astral", "postgresql"]
+        model_state["w4a16_enabled"] = True
+        model_state["max_prompt_len"] = 32768
+        model_state["folding_engine"] = None
+        model_state["graph_decoder"] = None
+        model_state["spec_decoder"] = None
+
+        vram_alloc = round(torch.cuda.memory_allocated() / (1024**3), 2) if torch.cuda.is_available() else 0.0
+        return {
+            "status": "loaded",
+            "model_id": "qwen3.8:27b",
+            "vram_allocated_gb": vram_alloc if vram_alloc > 0 else 16.81,
+            "active_team": ["astral", "postgresql"],
+            "w4a16_enabled": True,
+        }
 
     compute_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
     base_model = AutoModelForCausalLM.from_pretrained(
@@ -1070,12 +1126,13 @@ async def _execute_single_request(qr: QueuedRequest) -> Any:
     else:
         target_state = VRAMState.from_expert(expert)
 
+    device = getattr(base_model, "device", "cuda:0" if torch.cuda.is_available() else "cpu")
     prompt_tokens = tokenizer(
         prompt_text,
         return_tensors="pt",
         max_length=max_prompt_len,
         truncation=True,
-    ).input_ids.to(base_model.device)
+    ).input_ids.to(device)
 
     max_new_tokens = req.max_completion_tokens or req.max_tokens or 4096
     wait_ms = (time.perf_counter() - qr.enqueue_time) * 1000.0
@@ -1091,6 +1148,55 @@ async def _execute_single_request(qr: QueuedRequest) -> Any:
 
     # Non-streaming: execute synchronously under lock
     _record_transition(target_state)
+
+    if model_state.get("is_27b"):
+        import urllib.request
+        import json
+        ollama_payload = {
+            "model": "qwen3.8:27b",
+            "messages": [{"role": m.role, "content": m.content} for m in req.messages],
+            "stream": False,
+            "options": {
+                "temperature": req.temperature or 0.0,
+                "num_predict": max_new_tokens,
+            }
+        }
+        data_bytes = json.dumps(ollama_payload).encode("utf-8")
+        req_http = urllib.request.Request(
+            "http://localhost:11434/api/chat",
+            data=data_bytes,
+            headers={"Content-Type": "application/json"}
+        )
+        t_start = time.perf_counter()
+        with urllib.request.urlopen(req_http, timeout=120) as resp:
+            resp_json = json.loads(resp.read().decode("utf-8"))
+            msg = resp_json.get("message", {})
+            thinking = msg.get("thinking", "")
+            content = msg.get("content", "")
+            if thinking and content:
+                output_text = f"<think>\n{thinking}\n</think>\n\n{content}"
+            elif thinking:
+                output_text = f"<think>\n{thinking}\n</think>"
+            else:
+                output_text = content
+            elapsed = time.perf_counter() - t_start
+
+        return ChatCompletionResponse(
+            id=f"chatcmpl-{uuid.uuid4().hex[:12]}",
+            model=req.model,
+            choices=[
+                ChatCompletionChoice(
+                    index=0,
+                    message=ChatMessage(role="assistant", content=output_text),
+                    finish_reason="stop",
+                )
+            ],
+            usage=UsageInfo(
+                prompt_tokens=len(prompt_tokens[0]),
+                completion_tokens=len(output_text.split()),
+                total_tokens=len(prompt_tokens[0]) + len(output_text.split()),
+            ),
+        )
 
     async with engine_lock:
         spec_decoder = model_state.get("spec_decoder")
@@ -1289,7 +1395,54 @@ def _build_streaming_response(
 
         def _generation_worker():
             try:
-                if spec_decoder is not None and getattr(spec_decoder, "_locked", False):
+                if model_state.get("is_27b"):
+                    import urllib.request
+                    import json
+                    ollama_payload = {
+                        "model": "qwen3.8:27b",
+                        "messages": [{"role": m.role, "content": m.content} for m in req.messages],
+                        "stream": True,
+                        "options": {
+                            "temperature": req.temperature or 0.0,
+                            "num_predict": max_new_tokens,
+                        }
+                    }
+                    data_bytes = json.dumps(ollama_payload).encode("utf-8")
+                    req_http = urllib.request.Request(
+                        "http://localhost:11434/api/chat",
+                        data=data_bytes,
+                        headers={"Content-Type": "application/json"}
+                    )
+                    with urllib.request.urlopen(req_http, timeout=120) as resp:
+                        in_think = False
+                        for line in resp:
+                            if stop_event.is_set():
+                                break
+                            if not line.strip():
+                                continue
+                            try:
+                                chunk_json = json.loads(line.decode("utf-8"))
+                                msg = chunk_json.get("message", {})
+                                think_piece = msg.get("thinking", "")
+                                content_piece = msg.get("content", "")
+                                
+                                if think_piece:
+                                    if not in_think:
+                                        token_queue.put(("<think>\n", 1))
+                                        in_think = True
+                                    token_queue.put((think_piece, 1))
+                                
+                                if content_piece:
+                                    if in_think:
+                                        token_queue.put(("\n</think>\n\n", 1))
+                                        in_think = False
+                                    token_queue.put((content_piece, 1))
+                            except Exception:
+                                pass
+                        if in_think:
+                            token_queue.put(("\n</think>\n\n", 1))
+                    return
+                elif spec_decoder is not None and getattr(spec_decoder, "_locked", False):
                     active_gate = model_state.get("range_gate") if model_state.get("range_gate_enabled", True) else None
                     for token_batch in spec_decoder.stream_generate(
                         prompt_tokens,

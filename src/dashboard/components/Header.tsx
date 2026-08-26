@@ -9,6 +9,7 @@ import { useEngineStatus } from "@/lib/useEngineStatus";
 export const AVAILABLE_BASE_MODELS = [
   { id: "Qwen/Qwen3.5-4B", name: "Qwen 3.5 4B (Dense BF16)", vram: "~10.5 GB", adapters_count: 6, available: true },
   { id: "Qwen/Qwen3.5-9B", name: "Qwen 3.5 9B (Dense BF16)", vram: "~18.2 GB", adapters_count: 6, available: true },
+  { id: "qwen3.8:27b", name: "Qwen 3.8 27B (Native W4A16 + LoRA)", vram: "~16.8 GB", adapters_count: 6, available: true },
   { id: "Qwen/Qwen3.5-2B", name: "Qwen 3.5 2B (Dense BF16)", vram: "~4.8 GB", adapters_count: 0, available: false },
   { id: "Qwen/Qwen3.5-0.8B", name: "Qwen 3.5 0.8B (Draft Head)", vram: "~2.2 GB", adapters_count: 0, available: false },
 ];

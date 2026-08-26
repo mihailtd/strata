@@ -1,47 +1,180 @@
 export interface DocItem {
   id: string;
   title: string;
-  category: "Core Architecture & Decisions" | "Benchmark Reports" | "Runtime & Speculative" | "Factory & Geometry";
+  category: "1. Factory & Geometry" | "2. Runtime & Speculative" | "3. Kernel & Hardware (RDNA3)" | "Core Architecture & Decisions";
   relativePath: string; // relative to repo root
   description?: string;
 }
 
 export const DOCS_MANIFEST: DocItem[] = [
-  // Core Architecture
+  // --------------------------------------------------------------------------
+  // Pillar 3: Kernel & Hardware Innovation (RDNA3)
+  // --------------------------------------------------------------------------
   {
-    id: "ledoit-wolf-routing",
-    title: "Ledoit-Wolf & Riemannian Routing (Interactive)",
-    category: "Core Architecture & Decisions",
-    relativePath: "docs/LEDOIT_WOLF_RIEMANNIAN_ROUTING.md",
-    description: "Interactive infographic & theorems for Ledoit-Wolf shrinkage and Riemannian manifold expert routing.",
+    id: "w4a16-beating-ollama",
+    title: "Beating Ollama by 4x on RDNA3 GPU (Whitepaper)",
+    category: "3. Kernel & Hardware (RDNA3)",
+    relativePath: "docs/W4A16_RDNA3_BEATING_OLLAMA.md",
+    description: "Full engineering whitepaper documenting 128-bit memory coalescing, fused SwiGLU, and tree speculation on RX 7900 XTX.",
+  },
+  {
+    id: "bench-kernel-gemv-m1",
+    title: "128-Bit Coalesced W4A16 GEMV Kernel (Interactive)",
+    category: "3. Kernel & Hardware (RDNA3)",
+    relativePath: "benchmarks/kernel/w4a16_gemv_m1/README.md",
+    description: "620.4 GB/s GDDR6 bus saturation via 128-bit int32x4 vector transactions and Wave32 VGPR register bit-shifts.",
+  },
+  {
+    id: "bench-kernel-fused-swiglu",
+    title: "Fused SwiGLU In-Register GEMV Kernel (Interactive)",
+    category: "3. Kernel & Hardware (RDNA3)",
+    relativePath: "benchmarks/kernel/fused_swiglu/README.md",
+    description: "733.3 GB/s (76.4% bus saturation) in-register SiLU activation eliminating 4 intermediate VRAM roundtrips (5.19x speedup).",
+  },
+  {
+    id: "bench-kernel-tree-speculation",
+    title: "Tree-Based Speculative Decoder 2x2 (Interactive)",
+    category: "3. Kernel & Hardware (RDNA3)",
+    relativePath: "benchmarks/kernel/tree_speculation/README.md",
+    description: "2x2 branching speculative tree generating 3.48 accepted tokens per cycle, achieving 202.3 tok/s (4.15x Ollama speed).",
+  },
+  {
+    id: "bench-kernel-fused-qkv-rope",
+    title: "Fused QKV + RoPE Wave32 Projection",
+    category: "3. Kernel & Hardware (RDNA3)",
+    relativePath: "benchmarks/kernel/fused_qkv_rope/README.md",
+    description: "0.058 ms per layer in-register complex exponential rotary position embedding.",
+  },
+  {
+    id: "bench-kernel-outlier-protection",
+    title: "Outlier-Protected W4A16 (Zero Precision Loss)",
+    category: "3. Kernel & Hardware (RDNA3)",
+    relativePath: "benchmarks/kernel/outlier_protection/README.md",
+    description: "Top-16 BF16 channel slice isolation reducing INT4 quantization error by 6.4x with zero latency penalty.",
+  },
+  {
+    id: "bench-kernel-root",
+    title: "Kernel & Hardware Pillar Overview",
+    category: "3. Kernel & Hardware (RDNA3)",
+    relativePath: "benchmarks/kernel/README.md",
+    description: "Comprehensive overview of physical hardware saturation, micro-kernels, and memory layout on AMD RDNA3.",
+  },
+
+  // --------------------------------------------------------------------------
+  // Pillar 2: Runtime Engine & Speculative Dynamics
+  // --------------------------------------------------------------------------
+  {
+    id: "the-runtime",
+    title: "THE RUNTIME (Surgical Stacking & Dynamics)",
+    category: "2. Runtime & Speculative",
+    relativePath: "docs/THE_RUNTIME_SURGICAL_STACKING_AND_TEMPORAL_DYNAMICS.md",
+    description: "In-place weight-folding, transactional pristine state buffer, and low-latency serving dynamics.",
   },
   {
     id: "surgical-stacking",
     title: "Surgical Multi-Expert Stacking (Interactive)",
-    category: "Core Architecture & Decisions",
+    category: "2. Runtime & Speculative",
     relativePath: "docs/SURGICAL_MULTI_EXPERT_STACKING.md",
     description: "Interactive infographic for LV-GLasso conflict routing + POET channel notching in activate_many().",
   },
+  {
+    id: "bench-weibull-hazard",
+    title: "Weibull Hazard & Bollinger Gating (Interactive)",
+    category: "2. Runtime & Speculative",
+    relativePath: "benchmarks/runtime/speculative/weibull_hazard_gating/README.md",
+    description: "Discrete Weibull wear-out hazard & rolling Bollinger Bands volatility gating for speculative draft truncation.",
+  },
+  {
+    id: "bench-cut-set-reliability",
+    title: "Minimal Cut-Set DAG Reliability (Interactive)",
+    category: "2. Runtime & Speculative",
+    relativePath: "benchmarks/agentic/CUT_SET_README.md",
+    description: "Chapter 6 Minimal Cut Sets & k-out-of-n speculative hedging for agent tool DAGs.",
+  },
+  {
+    id: "thinking-supervisor",
+    title: "Dynamic Thinking Supervisor & Renko Exit",
+    category: "2. Runtime & Speculative",
+    relativePath: "docs/THINKING_SUPERVISOR.md",
+    description: "Entropy-bounded early exit saving 70-90% token overhead when reasoning converges.",
+  },
+  {
+    id: "bench-speculative-root",
+    title: "Runtime Engine Overview",
+    category: "2. Runtime & Speculative",
+    relativePath: "benchmarks/runtime/README.md",
+    description: "Full overview of speculative graph decoding, S_t state handoff, and VRAM residency.",
+  },
+  {
+    id: "bench-runtime-memory",
+    title: "Runtime Memory & Factor Residency",
+    category: "2. Runtime & Speculative",
+    relativePath: "benchmarks/runtime/memory/README.md",
+    description: "Factor-based standby residency achieving 200.6x memory reduction (200+ resident LoRAs).",
+  },
+
+  // --------------------------------------------------------------------------
+  // Pillar 1: Factory & Geometric Fine-Tuning
+  // --------------------------------------------------------------------------
+  {
+    id: "the-factory",
+    title: "THE FACTORY (Fine-Tuning & Geometry)",
+    category: "1. Factory & Geometry",
+    relativePath: "docs/THE_FACTORY_FINE_TUNING_AND_GEOMETRY.md",
+    description: "Adapter factory training, geometric stopping, and Ledoit-Wolf precision.",
+  },
+  {
+    id: "ledoit-wolf-routing",
+    title: "Ledoit-Wolf & Riemannian Routing (Interactive)",
+    category: "1. Factory & Geometry",
+    relativePath: "docs/LEDOIT_WOLF_RIEMANNIAN_ROUTING.md",
+    description: "Interactive infographic & theorems for Ledoit-Wolf shrinkage and Riemannian manifold expert routing.",
+  },
+  {
+    id: "bench-ssi-quant",
+    title: "SSI Quantization Calibration (Interactive)",
+    category: "1. Factory & Geometry",
+    relativePath: "benchmarks/factory/quantization/SSI_README.md",
+    description: "Closed-form Stress-Strength Interference optimal clipping for low-bit quantization scaling.",
+  },
+  {
+    id: "bench-riemannian-metric",
+    title: "Riemannian AIRM Metric Benchmark",
+    category: "1. Factory & Geometry",
+    relativePath: "benchmarks/factory/geometry/riemannian_metric/README.md",
+    description: "6x6 geodesic distance manifold and Ledoit-Wolf shrinkage.",
+  },
+  {
+    id: "bench-alpha-calibration",
+    title: "Dynamic Alpha Calibration Benchmark",
+    category: "1. Factory & Geometry",
+    relativePath: "benchmarks/factory/geometry/dynamic_alpha_calibration/README.md",
+    description: "IEEE 754 precision floor and perturbation Goldilocks band (alpha=128).",
+  },
+  {
+    id: "bench-poet-causal-graph",
+    title: "POET Tool Causal DAG Benchmark",
+    category: "1. Factory & Geometry",
+    relativePath: "benchmarks/factory/agentic/poet_tool_causal_graph/README.md",
+    description: "NOTEARS continuous acyclicity and tool-to-expert transitions.",
+  },
+  {
+    id: "bench-factory-root",
+    title: "Factory Benchmarks Overview",
+    category: "1. Factory & Geometry",
+    relativePath: "benchmarks/factory/README.md",
+    description: "Suite overview of training, calibration, and geometric evaluation.",
+  },
+
+  // --------------------------------------------------------------------------
+  // Core Architecture & Decisions
+  // --------------------------------------------------------------------------
   {
     id: "decisions",
     title: "DECISIONS.md (Architecture & Retirals)",
     category: "Core Architecture & Decisions",
     relativePath: "docs/DECISIONS.md",
     description: "Measurement-backed architecture decisions, retirements, and speculative replay benchmarks.",
-  },
-  {
-    id: "the-runtime",
-    title: "THE RUNTIME (Surgical Stacking & Dynamics)",
-    category: "Core Architecture & Decisions",
-    relativePath: "docs/THE_RUNTIME_SURGICAL_STACKING_AND_TEMPORAL_DYNAMICS.md",
-    description: "In-place weight-folding and low-latency serving dynamics.",
-  },
-  {
-    id: "the-factory",
-    title: "THE FACTORY (Fine-Tuning & Geometry)",
-    category: "Core Architecture & Decisions",
-    relativePath: "docs/THE_FACTORY_FINE_TUNING_AND_GEOMETRY.md",
-    description: "Adapter factory training, geometric stopping, and Ledoit-Wolf precision.",
   },
   {
     id: "research-roadmap",
@@ -63,128 +196,5 @@ export const DOCS_MANIFEST: DocItem[] = [
     category: "Core Architecture & Decisions",
     relativePath: "docs/CORPUS_DESIGN.md",
     description: "Domain dataset curation and synthetic generation methodology.",
-  },
-
-  // Runtime & Speculative
-  {
-    id: "bench-speculative-root",
-    title: "Speculative Engine Suite Overview",
-    category: "Runtime & Speculative",
-    relativePath: "benchmarks/runtime/speculative/README.md",
-    description: "Full overview of speculative graph decoding and ring buffers.",
-  },
-  {
-    id: "bench-poet-temporal",
-    title: "POET Temporal Compression Benchmark",
-    category: "Runtime & Speculative",
-    relativePath: "benchmarks/runtime/speculative/poet_temporal_compression/README.md",
-    description: "Dynamic factor compression on recurrent state trajectories.",
-  },
-  {
-    id: "bench-live-speculative",
-    title: "Live Speculative Engine Benchmark",
-    category: "Runtime & Speculative",
-    relativePath: "benchmarks/runtime/speculative/live_speculative_engine/README.md",
-    description: "End-to-end token verification and speedup benchmarks.",
-  },
-  {
-    id: "bench-cache-counter",
-    title: "Cache Length Counter Pinning Benchmark",
-    category: "Runtime & Speculative",
-    relativePath: "benchmarks/runtime/speculative/cache_length_counter/README.md",
-    description: "StaticCache cumulative_length graph-safety attribution.",
-  },
-  {
-    id: "bench-graphed-draft",
-    title: "Graphed Draft Head Benchmark",
-    category: "Runtime & Speculative",
-    relativePath: "benchmarks/runtime/speculative/graphed_draft_head/README.md",
-    description: "MTP draft head latency and CUDA graph capture.",
-  },
-  {
-    id: "bench-range-gate",
-    title: "Range Speculative Gate Benchmark",
-    category: "Runtime & Speculative",
-    relativePath: "benchmarks/runtime/speculative/range_statistic_gating/README.md",
-    description: "Single-pass O(1) register range statistics for speculative draft early-exit.",
-  },
-  {
-    id: "bench-weibull-hazard",
-    title: "Weibull Hazard & Bollinger Gating (Ch. 3 & 5)",
-    category: "Runtime & Speculative",
-    relativePath: "benchmarks/runtime/speculative/weibull_hazard_gating/README.md",
-    description: "Discrete Weibull wear-out hazard & rolling Bollinger Bands volatility gating for speculative draft truncation.",
-  },
-  {
-    id: "bench-runtime-memory",
-    title: "Runtime Memory & Residency",
-    category: "Runtime & Speculative",
-    relativePath: "benchmarks/runtime/memory/README.md",
-    description: "Zero-recapture VRAM residency and state management.",
-  },
-
-  // Factory & Geometry
-  {
-    id: "bench-factory-root",
-    title: "Factory Benchmarks Overview",
-    category: "Factory & Geometry",
-    relativePath: "benchmarks/factory/README.md",
-    description: "Suite overview of training, calibration, and evaluation.",
-  },
-  {
-    id: "bench-pissa-assessment",
-    title: "PiSSA & SVD Probe Assessment",
-    category: "Factory & Geometry",
-    relativePath: "benchmarks/factory/geometry/preflight_svd_probe/PISSA_ASSESSMENT.md",
-    description: "Empirical refutation of PiSSA initialisation hypothesis.",
-  },
-  {
-    id: "bench-alpha-calibration",
-    title: "Dynamic Alpha Calibration Benchmark",
-    category: "Factory & Geometry",
-    relativePath: "benchmarks/factory/geometry/dynamic_alpha_calibration/README.md",
-    description: "IEEE 754 precision floor and perturbation Goldilocks band.",
-  },
-  {
-    id: "bench-poet-causal-graph",
-    title: "POET Tool Causal DAG Benchmark",
-    category: "Factory & Geometry",
-    relativePath: "benchmarks/factory/agentic/poet_tool_causal_graph/README.md",
-    description: "NOTEARS continuous acyclicity and tool-to-expert transitions.",
-  },
-  {
-    id: "bench-riemannian-metric",
-    title: "Riemannian AIRM Metric Benchmark",
-    category: "Factory & Geometry",
-    relativePath: "benchmarks/factory/geometry/riemannian_metric/README.md",
-    description: "6x6 geodesic distance manifold and Ledoit-Wolf shrinkage.",
-  },
-  {
-    id: "bench-poet-decomposition",
-    title: "POET Decomposition & Pruning",
-    category: "Factory & Geometry",
-    relativePath: "benchmarks/factory/agentic/poet_decomposition/README.md",
-    description: "Surgical neuron pruning and collision resolution.",
-  },
-  {
-    id: "bench-leverage-quant",
-    title: "Leverage Outlier Quantization (Ch. 21)",
-    category: "Factory & Geometry",
-    relativePath: "benchmarks/factory/quantization/README.md",
-    description: "Single-pass diagnostic leverage projection for W4A16 outlier channel protection without grid search.",
-  },
-  {
-    id: "bench-ssi-quant",
-    title: "SSI Quantization Calibration (Ch. 8.5)",
-    category: "Factory & Geometry",
-    relativePath: "benchmarks/factory/quantization/SSI_README.md",
-    description: "Closed-form Stress-Strength Interference optimal clipping for low-bit quantization scaling.",
-  },
-  {
-    id: "bench-cut-set-reliability",
-    title: "Minimal Cut-Set DAG Reliability (Ch. 6)",
-    category: "Runtime & Speculative",
-    relativePath: "benchmarks/agentic/CUT_SET_README.md",
-    description: "Chapter 6 Minimal Cut Sets & k-out-of-n speculative hedging for agent tool DAGs.",
   },
 ];

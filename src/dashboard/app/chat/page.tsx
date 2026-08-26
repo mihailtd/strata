@@ -446,9 +446,10 @@ export default function ChatPage() {
     let targetModel = "dynamic";
     let displayedTeam: string[] = [];
 
-    const is9b = status?.model_id?.includes("9B") || status?.model_id?.includes("9b");
-    const baseAlias = is9b ? "qwen3.5-9b-base" : "qwen3.5-4b-base";
-    const expertPrefix = is9b ? "qwen3.5-9b" : "qwen3.5-4b";
+    const is27b = status?.model_id?.includes("27B") || status?.model_id?.includes("27b");
+    const is9b = (status?.model_id?.includes("9B") || status?.model_id?.includes("9b")) && !is27b;
+    const baseAlias = is27b ? "qwen3.8-27b-base" : is9b ? "qwen3.5-9b-base" : "qwen3.5-4b-base";
+    const expertPrefix = is27b ? "qwen3.8-27b" : is9b ? "qwen3.5-9b" : "qwen3.5-4b";
 
     if (routingMode === "base") {
       targetModel = baseAlias;
