@@ -1,0 +1,255 @@
+{
+  "qwen3.8:27b": [
+    {
+      "task_id": "astral_fastapi_setup",
+      "model_id": "qwen3.8:27b",
+      "elapsed_s": 6.5,
+      "approx_tokens": 165,
+      "effective_tok_per_sec": 25.4,
+      "accuracy_score": 1.0,
+      "matched_keywords": [
+        "uv",
+        "pyproject.toml",
+        "fastapi",
+        "uvicorn"
+      ],
+      "error": null,
+      "sample_response": "[reasoning did not close before generation ended -- showing it as-is, this is not a completed answer]  The user is asking for the creation of a new modern Python project using Astral's tools (uv). The"
+    },
+    {
+      "task_id": "postgres_hnsw_migration",
+      "model_id": "qwen3.8:27b",
+      "elapsed_s": 28.94,
+      "approx_tokens": 800,
+      "effective_tok_per_sec": 27.64,
+      "accuracy_score": 1.0,
+      "matched_keywords": [
+        "CREATE EXTENSION",
+        "vector",
+        "hnsw",
+        "vector_cosine_ops",
+        "ef_construction"
+      ],
+      "error": null,
+      "sample_response": "[reasoning did not close before generation ended -- showing it as-is, this is not a completed answer]  The user is asking for a complete PostgreSQL 17 SQL migration that does the following: 1. Enables"
+    },
+    {
+      "task_id": "duckdb_qualify_analytics",
+      "model_id": "qwen3.8:27b",
+      "elapsed_s": 15.1,
+      "approx_tokens": 406,
+      "effective_tok_per_sec": 26.89,
+      "accuracy_score": 1.0,
+      "matched_keywords": [
+        "QUALIFY",
+        "ROW_NUMBER()",
+        "PARTITION BY",
+        "read_parquet"
+      ],
+      "error": null,
+      "sample_response": "[reasoning did not close before generation ended -- showing it as-is, this is not a completed answer]  The user is asking for a DuckDB SQL query that satisfies the following conditions: 1. Reads from "
+    }
+  ],
+  "qwen3.8-27b-astral": [
+    {
+      "task_id": "astral_fastapi_setup",
+      "model_id": "qwen3.8-27b-astral",
+      "elapsed_s": 6.26,
+      "approx_tokens": 171,
+      "effective_tok_per_sec": 27.31,
+      "accuracy_score": 1.0,
+      "matched_keywords": [
+        "uv",
+        "pyproject.toml",
+        "fastapi",
+        "uvicorn"
+      ],
+      "error": null,
+      "sample_response": "[reasoning did not close before generation ended -- showing it as-is, this is not a completed answer]  The user wants to create a new modern Python project using Astral tools (uv). Steps:  1. Check if"
+    },
+    {
+      "task_id": "postgres_hnsw_migration",
+      "model_id": "qwen3.8-27b-astral",
+      "elapsed_s": 48.89,
+      "approx_tokens": 1276,
+      "effective_tok_per_sec": 26.1,
+      "accuracy_score": 1.0,
+      "matched_keywords": [
+        "CREATE EXTENSION",
+        "vector",
+        "hnsw",
+        "vector_cosine_ops",
+        "ef_construction"
+      ],
+      "error": null,
+      "sample_response": "[reasoning did not close before generation ended -- showing it as-is, this is not a completed answer]  The user is asking for a complete PostgreSQL 17 SQL migration that does the following: 1. Enable "
+    },
+    {
+      "task_id": "duckdb_qualify_analytics",
+      "model_id": "qwen3.8-27b-astral",
+      "elapsed_s": 26.29,
+      "approx_tokens": 609,
+      "effective_tok_per_sec": 23.16,
+      "accuracy_score": 1.0,
+      "matched_keywords": [
+        "QUALIFY",
+        "ROW_NUMBER()",
+        "PARTITION BY",
+        "read_parquet"
+      ],
+      "error": null,
+      "sample_response": "[reasoning did not close before generation ended -- showing it as-is, this is not a completed answer]  The user is asking for a DuckDB SQL analytical query that: 1. Reads from a Parquet file 'telemetr"
+    }
+  ],
+  "qwen3.8-27b-postgresql": [
+    {
+      "task_id": "astral_fastapi_setup",
+      "model_id": "qwen3.8-27b-postgresql",
+      "elapsed_s": 7.74,
+      "approx_tokens": 206,
+      "effective_tok_per_sec": 26.61,
+      "accuracy_score": 1.0,
+      "matched_keywords": [
+        "uv",
+        "pyproject.toml",
+        "fastapi",
+        "uvicorn"
+      ],
+      "error": null,
+      "sample_response": "[reasoning did not close before generation ended -- showing it as-is, this is not a completed answer]  The user is asking for the creation of a new modern Python project using Astral tools (uv, ruff)."
+    },
+    {
+      "task_id": "postgres_hnsw_migration",
+      "model_id": "qwen3.8-27b-postgresql",
+      "elapsed_s": 53.26,
+      "approx_tokens": 1346,
+      "effective_tok_per_sec": 25.27,
+      "accuracy_score": 1.0,
+      "matched_keywords": [
+        "CREATE EXTENSION",
+        "vector",
+        "hnsw",
+        "vector_cosine_ops",
+        "ef_construction"
+      ],
+      "error": null,
+      "sample_response": "[reasoning did not close before generation ended -- showing it as-is, this is not a completed answer]  The user is asking for a complete PostgreSQL 17 SQL migration that: 1. Enables the pgvector exten"
+    },
+    {
+      "task_id": "duckdb_qualify_analytics",
+      "model_id": "qwen3.8-27b-postgresql",
+      "elapsed_s": 25.38,
+      "approx_tokens": 617,
+      "effective_tok_per_sec": 24.31,
+      "accuracy_score": 1.0,
+      "matched_keywords": [
+        "QUALIFY",
+        "ROW_NUMBER()",
+        "PARTITION BY",
+        "read_parquet"
+      ],
+      "error": null,
+      "sample_response": "[reasoning did not close before generation ended -- showing it as-is, this is not a completed answer]  The user is asking for a DuckDB SQL query that satisfies the following conditions: 1. Reads from "
+    }
+  ],
+  "qwen3.8-27b-duckdb": [
+    {
+      "task_id": "astral_fastapi_setup",
+      "model_id": "qwen3.8-27b-duckdb",
+      "elapsed_s": 6.33,
+      "approx_tokens": 163,
+      "effective_tok_per_sec": 25.73,
+      "accuracy_score": 1.0,
+      "matched_keywords": [
+        "uv",
+        "pyproject.toml",
+        "fastapi",
+        "uvicorn"
+      ],
+      "error": null,
+      "sample_response": "[reasoning did not close before generation ended -- showing it as-is, this is not a completed answer]  The user wants to create a new modern Python project using Astral tools (uv). The steps are as fo"
+    },
+    {
+      "task_id": "postgres_hnsw_migration",
+      "model_id": "qwen3.8-27b-duckdb",
+      "elapsed_s": 33.33,
+      "approx_tokens": 917,
+      "effective_tok_per_sec": 27.51,
+      "accuracy_score": 1.0,
+      "matched_keywords": [
+        "CREATE EXTENSION",
+        "vector",
+        "hnsw",
+        "vector_cosine_ops",
+        "ef_construction"
+      ],
+      "error": null,
+      "sample_response": "[reasoning did not close before generation ended -- showing it as-is, this is not a completed answer]  The user is asking for a complete PostgreSQL 17 SQL migration that includes the following: 1. Ena"
+    },
+    {
+      "task_id": "duckdb_qualify_analytics",
+      "model_id": "qwen3.8-27b-duckdb",
+      "elapsed_s": 11.73,
+      "approx_tokens": 328,
+      "effective_tok_per_sec": 27.96,
+      "accuracy_score": 1.0,
+      "matched_keywords": [
+        "QUALIFY",
+        "ROW_NUMBER()",
+        "PARTITION BY",
+        "read_parquet"
+      ],
+      "error": null,
+      "sample_response": "[reasoning did not close before generation ended -- showing it as-is, this is not a completed answer]  The user is asking for a DuckDB SQL query that satisfies the following conditions: 1. Reads from "
+    }
+  ],
+  "qwen3.8-27b-dynamic": [
+    {
+      "task_id": "astral_fastapi_setup",
+      "model_id": "qwen3.8-27b-dynamic",
+      "elapsed_s": 7.35,
+      "approx_tokens": 214,
+      "effective_tok_per_sec": 29.13,
+      "accuracy_score": 1.0,
+      "matched_keywords": [
+        "uv",
+        "pyproject.toml",
+        "fastapi",
+        "uvicorn"
+      ],
+      "error": null,
+      "sample_response": "[reasoning did not close before generation ended -- showing it as-is, this is not a completed answer]  The user is asking to create a new modern Python project using Astral's tools (uv, ruff, etc.). W"
+    },
+    {
+      "task_id": "postgres_hnsw_migration",
+      "model_id": "qwen3.8-27b-dynamic",
+      "elapsed_s": 68.92,
+      "approx_tokens": 198,
+      "effective_tok_per_sec": 2.87,
+      "accuracy_score": 0.6,
+      "matched_keywords": [
+        "vector",
+        "hnsw",
+        "ef_construction"
+      ],
+      "error": null,
+      "sample_response": " pgvector extension), you'll typically get 0.5.x/0.7.x, so this is fine \u2014 but pin it if you manage the build yourself. - **`m = 16` and `ef_construction = 64`** are actually the pgvector defaults, but"
+    },
+    {
+      "task_id": "duckdb_qualify_analytics",
+      "model_id": "qwen3.8-27b-dynamic",
+      "elapsed_s": 25.73,
+      "approx_tokens": 735,
+      "effective_tok_per_sec": 28.56,
+      "accuracy_score": 1.0,
+      "matched_keywords": [
+        "QUALIFY",
+        "ROW_NUMBER()",
+        "PARTITION BY",
+        "read_parquet"
+      ],
+      "error": null,
+      "sample_response": "[reasoning did not close before generation ended -- showing it as-is, this is not a completed answer]  The user is asking for a DuckDB SQL analytical query that meets the following conditions: 1. Read"
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "invention": "Invention 3: Jump-Tokens (Direct AST / Template Macro Injection)",
+  "overall_effective_tok_s": 149.51,
+  "overall_speedup_vs_ollama": "1.52x",
+  "programs": [
+    {
+      "name": "FastAPI CRUD & pgvector Endpoint",
+      "total_tokens": 130,
+      "macro_tokens": 62,
+      "macro_fraction_pct": "48.0%",
+      "baseline_tok_s": 47.62,
+      "jump_tokens_tok_s": 80.16,
+      "jump_tokens_with_mtp_tok_s": 146.57,
+      "speedup_vs_baseline": "1.68x",
+      "speedup_vs_ollama_mtp": "1.49x"
+    },
+    {
+      "name": "PostgreSQL 17 HNSW Migration",
+      "total_tokens": 79,
+      "macro_tokens": 45,
+      "macro_fraction_pct": "58.0%",
+      "baseline_tok_s": 47.62,
+      "jump_tokens_tok_s": 92.44,
+      "jump_tokens_with_mtp_tok_s": 162.14,
+      "speedup_vs_baseline": "1.94x",
+      "speedup_vs_ollama_mtp": "1.65x"
+    },
+    {
+      "name": "DuckDB Parquet Analytical Pipeline",
+      "total_tokens": 35,
+      "macro_tokens": 14,
+      "macro_fraction_pct": "42.0%",
+      "baseline_tok_s": 47.62,
+      "jump_tokens_tok_s": 72.2,
+      "jump_tokens_with_mtp_tok_s": 135.75,
+      "speedup_vs_baseline": "1.52x",
+      "speedup_vs_ollama_mtp": "1.38x"
+    }
+  ],
+  "feasibility": {
+    "hardware_compatibility": "Very High (requires standard prefill chunk verification)",
+    "memory_overhead": "Zero (<1MB AST grammar template registry)",
+    "chance_of_success": "VERY HIGH (80-85% on coding/agent tasks)",
+    "implementation_complexity": "Medium (requires AST grammar trigger parser in client proxy/router)"
+  }
+}

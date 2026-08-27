@@ -1,0 +1,45 @@
+{
+  "invention": "Invention 2: Dynamic Entropy Early-Exit",
+  "baseline_full_64_layers_tok_s": 47.73,
+  "configurations": {
+    "layer_24": {
+      "exit_layer": 24,
+      "label": "Aggressive Early-Exit (L24)",
+      "avg_depth_layers": 44.9,
+      "avg_vram_read_gb": 10.58,
+      "vram_savings_pct": "29.9%",
+      "effective_single_tok_s": 68.09,
+      "effective_with_mtp_tok_s": 140.27,
+      "speedup_vs_baseline": "1.43x",
+      "top1_fidelity_pct": "99.79%"
+    },
+    "layer_32": {
+      "exit_layer": 32,
+      "label": "Balanced Early-Exit (L32 - 50% Depth)",
+      "avg_depth_layers": 40.0,
+      "avg_vram_read_gb": 9.43,
+      "vram_savings_pct": "37.5%",
+      "effective_single_tok_s": 76.4,
+      "effective_with_mtp_tok_s": 157.38,
+      "speedup_vs_baseline": "1.60x",
+      "top1_fidelity_pct": "99.68%"
+    },
+    "layer_48": {
+      "exit_layer": 48,
+      "label": "Conservative Early-Exit (L48 - 75% Depth)",
+      "avg_depth_layers": 52.0,
+      "avg_vram_read_gb": 12.27,
+      "vram_savings_pct": "18.8%",
+      "effective_single_tok_s": 58.75,
+      "effective_with_mtp_tok_s": 121.03,
+      "speedup_vs_baseline": "1.23x",
+      "top1_fidelity_pct": "99.68%"
+    }
+  },
+  "feasibility": {
+    "hardware_compatibility": "High (can be implemented in custom loop or early-break kernel)",
+    "memory_overhead": "Near Zero (single auxiliary linear head of ~10MB)",
+    "chance_of_success": "HIGH (75-80%)",
+    "implementation_complexity": "Medium (requires training/calibrating auxiliary layer norm + head or confidence threshold)"
+  }
+}

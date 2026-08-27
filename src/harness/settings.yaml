@@ -1,0 +1,81 @@
+# DeepSeek Harness (dsh) Settings
+# Configures the Primary Engine & Models Menu
+
+ui-onboarding:
+  welcomeNoticeVersion: 2026-08-13.1
+
+llm-deepseek:
+  baseURL: http://127.0.0.1:8000/v1
+  apiKeyEnv: DEEPSEEK_API_KEY
+  models:
+    - id: "qwen3.5-9b-astral"
+      name: "Qwen 3.5 9B [Native Astral uv & ruff]"
+      contextWindow: 16384
+      maxTokens: 8192
+    - id: "qwen3.5-9b-postgresql"
+      name: "Qwen 3.5 9B [Native PostgreSQL 17 & pgvector]"
+      contextWindow: 16384
+      maxTokens: 8192
+    - id: "qwen3.5-9b-duckdb"
+      name: "Qwen 3.5 9B [Native DuckDB Vectorized]"
+      contextWindow: 16384
+      maxTokens: 8192
+    - id: "qwen3.5-9b-financial"
+      name: "Qwen 3.5 9B [Native Financial Modeling]"
+      contextWindow: 16384
+      maxTokens: 8192
+    - id: "qwen3.5-9b-dynamic"
+      name: "Qwen 3.5 9B [Native Riemannian Dynamic Team]"
+      contextWindow: 16384
+      maxTokens: 8192
+    - id: "qwen3.8:27b"
+      name: "Qwen 3.8 27B (Auto-Dynamic Specialist LoRA)"
+      contextWindow: 32768
+      maxTokens: 8192
+    - id: "qwen3.8-27b-postgresql"
+      name: "Qwen 3.8 27B [PostgreSQL 17 & Vector Search]"
+      contextWindow: 32768
+      maxTokens: 8192
+    - id: "qwen3.8-27b-duckdb"
+      name: "Qwen 3.8 27B [DuckDB Vectorized OLAP]"
+      contextWindow: 32768
+      maxTokens: 8192
+    - id: "qwen3.8-27b-astral"
+      name: "Qwen 3.8 27B [Astral uv & ruff Toolchain]"
+      contextWindow: 32768
+      maxTokens: 8192
+    - id: "qwen3.8-27b-fastapi"
+      name: "Qwen 3.8 27B [FastAPI & Async Web]"
+      contextWindow: 32768
+      maxTokens: 8192
+    - id: "qwen3.8-27b-financial"
+      name: "Qwen 3.8 27B [Financial Monte Carlo]"
+      contextWindow: 32768
+      maxTokens: 8192
+    - id: "qwen3.8-27b-base"
+      name: "Qwen 3.8 27B [Pristine Base]"
+      contextWindow: 32768
+      maxTokens: 8192
+    - id: "deepseek-v4-flash"
+      name: "DeepSeek-V4-Flash (Local 27B Engine Alias)"
+      contextWindow: 32768
+      maxTokens: 8192
+
+llm-pi-ai:
+  providers:
+    supercharged-27b:
+      displayName: "Supercharged 27B Specialist Engine"
+      api: openai-completions
+      baseURL: http://127.0.0.1:8000/v1
+      apiKeyEnv: DEEPSEEK_API_KEY
+      compat:
+        thinkingFormat: deepseek
+      models:
+        - id: "qwen3.8:27b"
+          name: "Qwen 3.8 27B (Auto-Dynamic Specialist LoRA)"
+          contextWindow: 32768
+          maxTokens: 8192
+        - id: "qwen3.8-27b-postgresql"
+          name: "Qwen 3.8 27B [PostgreSQL 17 & Vector Search]"
+          contextWindow: 32768
+          maxTokens: 8192

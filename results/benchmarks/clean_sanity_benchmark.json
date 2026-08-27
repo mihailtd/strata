@@ -1,0 +1,52 @@
+{
+  "hardware": "AMD Radeon RX 7900 XTX (24GB GDDR6, gfx1100)",
+  "model": "Qwen 3.8 27B Q4_K_M",
+  "avg_ollama_tok_s": 40.89,
+  "avg_native_c_plus_plus_tok_s": 38.61,
+  "ollama_tasks": [
+    {
+      "task": "FastAPI CRUD & pgvector",
+      "stream_chunks": 320,
+      "ttft_ms": 239.6,
+      "decode_duration_s": 8.01,
+      "tok_per_sec": 39.96
+    },
+    {
+      "task": "PostgreSQL 17 HNSW Migration",
+      "stream_chunks": 313,
+      "ttft_ms": 247.7,
+      "decode_duration_s": 7.89,
+      "tok_per_sec": 39.69
+    },
+    {
+      "task": "DuckDB Parquet Window Analytics",
+      "stream_chunks": 316,
+      "ttft_ms": 249.7,
+      "decode_duration_s": 7.35,
+      "tok_per_sec": 43.01
+    }
+  ],
+  "native_tasks": [
+    {
+      "task": "FastAPI CRUD & pgvector",
+      "stream_chunks": 350,
+      "ttft_ms": 298.0,
+      "decode_duration_s": 9.62,
+      "tok_per_sec": 36.37
+    },
+    {
+      "task": "PostgreSQL 17 HNSW Migration",
+      "stream_chunks": 350,
+      "ttft_ms": 370.2,
+      "decode_duration_s": 8.82,
+      "tok_per_sec": 39.67
+    },
+    {
+      "task": "DuckDB Parquet Window Analytics",
+      "stream_chunks": 350,
+      "ttft_ms": 371.3,
+      "decode_duration_s": 8.8,
+      "tok_per_sec": 39.78
+    }
+  ]
+}

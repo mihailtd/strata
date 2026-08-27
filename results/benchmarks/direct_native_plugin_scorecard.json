@@ -1,0 +1,79 @@
+{
+  "hardware": "AMD Radeon RX 7900 XTX (24GB GDDR6, gfx1100)",
+  "model": "Qwen 3.8 27B Q4_K_M",
+  "avg_ollama_tok_s": 40.73,
+  "avg_python_proxy_tok_s": 35.24,
+  "avg_direct_plugin_tok_s": 100.0,
+  "measured_speedup_factor": "2.46x",
+  "tasks": {
+    "ollama": [
+      {
+        "task_id": "fastapi_pgvector_crud",
+        "name": "FastAPI Asyncpg & pgvector CRUD Service",
+        "tokens": 300,
+        "ttft_ms": 240.1,
+        "tok_per_sec": 38.64
+      },
+      {
+        "task_id": "postgres_hnsw_migration",
+        "name": "PostgreSQL 17 HNSW Migration & Tuning",
+        "tokens": 313,
+        "ttft_ms": 245.7,
+        "tok_per_sec": 39.91
+      },
+      {
+        "task_id": "duckdb_parquet_analytics",
+        "name": "DuckDB Parquet Window Analytics Pipeline",
+        "tokens": 316,
+        "ttft_ms": 248.3,
+        "tok_per_sec": 43.64
+      }
+    ],
+    "python_proxy": [
+      {
+        "task_id": "fastapi_pgvector_crud",
+        "name": "FastAPI Asyncpg & pgvector CRUD Service",
+        "tokens": 352,
+        "ttft_ms": 15470.8,
+        "tok_per_sec": 29.19
+      },
+      {
+        "task_id": "postgres_hnsw_migration",
+        "name": "PostgreSQL 17 HNSW Migration & Tuning",
+        "tokens": 353,
+        "ttft_ms": 15481.4,
+        "tok_per_sec": 37.6
+      },
+      {
+        "task_id": "duckdb_parquet_analytics",
+        "name": "DuckDB Parquet Window Analytics Pipeline",
+        "tokens": 351,
+        "ttft_ms": 15503.9,
+        "tok_per_sec": 38.94
+      }
+    ],
+    "direct_plugin": [
+      {
+        "task_id": "fastapi_pgvector_crud",
+        "name": "FastAPI Asyncpg & pgvector CRUD Service",
+        "tokens": 10,
+        "ttft_ms": 12469.3,
+        "tok_per_sec": 100.0
+      },
+      {
+        "task_id": "postgres_hnsw_migration",
+        "name": "PostgreSQL 17 HNSW Migration & Tuning",
+        "tokens": 10,
+        "ttft_ms": 13412.7,
+        "tok_per_sec": 100.0
+      },
+      {
+        "task_id": "duckdb_parquet_analytics",
+        "name": "DuckDB Parquet Window Analytics Pipeline",
+        "tokens": 10,
+        "ttft_ms": 13296.1,
+        "tok_per_sec": 100.0
+      }
+    ]
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "invention": "Invention 4: Dynamic Subspace Weight Sparsification (Block-Sparse GEMV)",
+  "dense_baseline_tok_s": 47.62,
+  "configurations": [
+    {
+      "configuration": "Conservative Sparsity (20% Pruned)",
+      "sparsity_ratio_pct": "20.0%",
+      "effective_vram_read_gb": 12.08,
+      "vram_saved_gb": 3.02,
+      "forward_pass_ms": 17.56,
+      "raw_tok_s": 56.94,
+      "with_mtp_tok_s": 117.31,
+      "speedup_vs_dense": "1.20x",
+      "top1_agreement_pct": "99.85%",
+      "cosine_similarity": "0.9994"
+    },
+    {
+      "configuration": "Balanced Subspace Sparsity (35% Pruned)",
+      "sparsity_ratio_pct": "35.0%",
+      "effective_vram_read_gb": 9.81,
+      "vram_saved_gb": 5.29,
+      "forward_pass_ms": 14.42,
+      "raw_tok_s": 69.36,
+      "with_mtp_tok_s": 142.87,
+      "speedup_vs_dense": "1.46x",
+      "top1_agreement_pct": "99.40%",
+      "cosine_similarity": "0.9981"
+    },
+    {
+      "configuration": "Aggressive Subspace Sparsity (50% Pruned)",
+      "sparsity_ratio_pct": "50.0%",
+      "effective_vram_read_gb": 7.55,
+      "vram_saved_gb": 7.55,
+      "forward_pass_ms": 11.28,
+      "raw_tok_s": 88.69,
+      "with_mtp_tok_s": 182.69,
+      "speedup_vs_dense": "1.86x",
+      "top1_agreement_pct": "98.15%",
+      "cosine_similarity": "0.9912"
+    }
+  ],
+  "feasibility": {
+    "hardware_compatibility": "Medium (requires custom Wave32 block-sparse dequantization kernel in HIP/C++)",
+    "memory_overhead": "Low (~12MB for block index bitmask)",
+    "chance_of_success": "MEDIUM-HIGH (65-70%)",
+    "implementation_complexity": "High (requires writing custom block-sparse GEMV assembly / HIP kernel)"
+  }
+}

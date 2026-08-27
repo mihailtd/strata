@@ -17,10 +17,11 @@ fi
 
 cd llama.cpp
 cmake -B build -G Ninja \
-  -DCMAKE_C_COMPILER=/opt/rocm-7.2.0/llvm/bin/clang \
-  -DCMAKE_CXX_COMPILER=/opt/rocm-7.2.0/llvm/bin/clang++ \
+  -DCMAKE_C_COMPILER=/opt/rocm/llvm/bin/clang \
+  -DCMAKE_CXX_COMPILER=/opt/rocm/llvm/bin/clang++ \
   -DGGML_HIP=ON \
   -DAMDGPU_TARGETS=gfx1100 \
+  -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
   -DCMAKE_BUILD_TYPE=Release
 
 cmake --build build --config Release -j"$(nproc)"

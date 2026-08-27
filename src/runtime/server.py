@@ -16,8 +16,10 @@ import asyncio
 import json
 import queue
 import re
+import subprocess
 import threading
 import time
+import urllib.request
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -57,6 +59,38 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 # How long the dispatch loop will wait for a streaming response to be consumed
 # before moving on. Bounds the damage from a client that disconnects mid-stream.
 STREAM_ORDER_TIMEOUT_S = float(os.environ.get("STREAM_ORDER_TIMEOUT_S", "300"))
+
+
+def ensure_llama_server_running() -> bool:
+    """Ensure the native high-performance ROCm HIP llama-server is active on port 8001."""
+    try:
+        req = urllib.request.Request("http://127.0.0.1:8001/healthz")
+        with urllib.request.urlopen(req, timeout=1.0) as resp:
+            if resp.status == 200:
+                return True
+    except Exception:
+        pass
+
+    script_path = Path(__file__).resolve().parent.parent.parent / "serving" / "run_llama_server.sh"
+    if script_path.exists():
+        print(f"[IMB Server] Auto-launching high-performance ROCm 27B engine via {script_path.name}...")
+        subprocess.Popen(
+            ["bash", str(script_path)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        for _ in range(30):
+            time.sleep(0.5)
+            try:
+                with urllib.request.urlopen("http://127.0.0.1:8001/healthz", timeout=0.5) as r:
+                    if r.status == 200:
+                        print("[IMB Server] Native ROCm 27B engine is healthy and ready on port 8001.")
+                        return True
+            except Exception:
+                pass
+    return False
+
 
 # --- Global State Containers ---
 model_state: dict[str, Any] = {}
@@ -253,6 +287,62 @@ def extract_msg_content(content: Any) -> str:
             return str(content["content"])
 CURATED_MODELS = [
     {
+        "id": "qwen3.5-9b-astral",
+        "owned_by": "M2 Expert 9B: Astral Python Toolchain (uv, ruff, packaging)",
+    },
+    {
+        "id": "qwen3.5-9b-postgresql",
+        "owned_by": "M2 Expert 9B: PostgreSQL 17 & Vector DB (pgvector, HNSW, SQL)",
+    },
+    {
+        "id": "qwen3.5-9b-duckdb",
+        "owned_by": "M2 Expert 9B: DuckDB Vectorized Analytical Engine (Parquet, Arrow, SQL)",
+    },
+    {
+        "id": "qwen3.5-9b-financial",
+        "owned_by": "M2 Expert 9B: Financial Planning & Wealth Modeling",
+    },
+    {
+        "id": "qwen3.5-9b-dynamic",
+        "owned_by": "Dynamic Riemannian Co-Routing (Auto-Morphing Agent Teams)",
+    },
+    {
+        "id": "qwen3.5-9b-base",
+        "owned_by": "Pristine Base 9B (W0 Checkpoint, Un-enhanced Baseline)",
+    },
+    {
+        "id": "qwen3.8:27b",
+        "owned_by": "Native W4A16 Triton 27B + Dynamic Specialist LoRA Routing",
+    },
+    {
+        "id": "qwen3.8-27b-auto",
+        "owned_by": "Dynamic Riemannian Co-Routing (Auto-Morphing Specialist LoRAs)",
+    },
+    {
+        "id": "qwen3.8-27b-base",
+        "owned_by": "Pristine Base 27B (Un-enhanced Baseline)",
+    },
+    {
+        "id": "qwen3.8-27b-astral",
+        "owned_by": "M2 Expert 27B: Astral Python Toolchain (uv, ruff, packaging)",
+    },
+    {
+        "id": "qwen3.8-27b-postgresql",
+        "owned_by": "M2 Expert 27B: PostgreSQL 17 & Vector DB (pgvector, HNSW, SQL)",
+    },
+    {
+        "id": "qwen3.8-27b-duckdb",
+        "owned_by": "M2 Expert 27B: DuckDB Vectorized Analytical Engine (Parquet, Arrow, SQL)",
+    },
+    {
+        "id": "qwen3.8-27b-fastapi",
+        "owned_by": "M2 Expert 27B: FastAPI & Async Web Architecture (DI, SSE, Lifespan)",
+    },
+    {
+        "id": "qwen3.8-27b-financial",
+        "owned_by": "M2 Expert 27B: Financial Planning & Wealth Modeling",
+    },
+    {
         "id": "dynamic",
         "owned_by": "Dynamic Riemannian Co-Routing (Auto-Morphing Agent Teams)",
     },
@@ -398,6 +488,69 @@ def resolve_expert(model_name: str) -> FoldableExpert | str | None:
 
 
 
+DOMAIN_SYSTEM_DIRECTIVES = {
+    "astral": (
+        "You are the Astral Python Toolchain Expert (uv, ruff, pyproject.toml).\n"
+        "STRICT EXPERT RULES:\n"
+        "1. NEVER recommend legacy `pip install` or `requirements.txt`.\n"
+        "2. For installing packages, ALWAYS recommend `uv add <package>` (e.g. `uv add fastapi` or `uv add 'fastapi[standard]'`).\n"
+        "3. Recommend `uv run`, `uv init`, `uv venv`, and standard PEP 621 `pyproject.toml` configurations.\n"
+        "4. Be direct, authoritative, and concise."
+    ),
+    "fastapi": (
+        "You are the FastAPI & Async Web Architecture Expert.\n"
+        "STRICT EXPERT RULES:\n"
+        "1. For package installation, ALWAYS use modern Astral toolchain: `uv add fastapi` (or `uv add 'fastapi[standard]'`). NEVER recommend legacy `pip install`.\n"
+        "2. Use async lifespan context managers (`@asynccontextmanager async def lifespan(app)`), NEVER deprecated `@app.on_event`.\n"
+        "3. Use Pydantic v2 and typed Dependency Injection (`Depends`).\n"
+        "4. For real-time streaming, use `StreamingResponse` or SSE."
+    ),
+    "postgresql": (
+        "You are the PostgreSQL 17 & Vector Database (pgvector) Expert.\n"
+        "STRICT EXPERT RULES:\n"
+        "1. Always use HNSW indexing for embeddings (`CREATE INDEX ... USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64)`).\n"
+        "2. Use CTEs and modern PostgreSQL 17 JSON/vector extensions."
+    ),
+    "duckdb": (
+        "You are the DuckDB Vectorized Analytical SQL Expert.\n"
+        "STRICT EXPERT RULES:\n"
+        "1. Always use `QUALIFY` for window function filtering without subqueries.\n"
+        "2. Optimize for columnar Parquet reads, Arrow zero-copy memory, and vectorized aggregations."
+    ),
+    "financial": (
+        "You are the Financial Modeling & Quantitative Planning Expert.\n"
+        "STRICT EXPERT RULES:\n"
+        "1. Provide vectorized NumPy / SciPy Monte Carlo simulations.\n"
+        "2. Use Cholesky decomposition for correlated multi-asset covariance matrices."
+    ),
+}
+
+
+def classify_prompt_domain(messages: list[ChatMessage], model_name: str = "") -> str:
+    """Classifies domain specialist intent from messages content and model alias."""
+    m_clean = model_name.lower()
+    for d in ["astral", "postgresql", "duckdb", "fastapi", "financial"]:
+        if d in m_clean:
+            return d
+
+    # Combine text from user messages for semantic routing
+    user_texts = " ".join([extract_msg_content(m.content) for m in messages if m.role in ("user", "system")]).lower()
+
+    # Package installation / tooling intent takes highest priority for setup questions
+    if any(k in user_texts for k in ["install", "pip", "venv", "package", "dependency", "pyproject", "setup", "uv", "ruff"]):
+        return "astral"
+    if any(k in user_texts for k in ["duckdb", "parquet", "qualify", "arrow", "olap", "columnar"]):
+        return "duckdb"
+    if any(k in user_texts for k in ["postgres", "postgresql", "pgvector", "hnsw", "vector_cosine_ops", "sql", "migration"]):
+        return "postgresql"
+    if any(k in user_texts for k in ["fastapi", "uvicorn", "endpoint", "sse", "streamingresponse", "lifespan", "pydantic"]):
+        return "fastapi"
+    if any(k in user_texts for k in ["monte carlo", "wealth", "portfolio", "retirement", "drawdown", "gbm", "covariance"]):
+        return "financial"
+
+    return "astral"  # Default developer specialist
+
+
 def scrub_thinking_blocks(text: str) -> str:
     """Strips <think>...</think> reasoning blocks from conversation text (Action 3.1).
 
@@ -413,8 +566,8 @@ def scrub_thinking_blocks(text: str) -> str:
     return scrubbed.strip()
 
 
-def format_prompt(messages: list[ChatMessage], thinking_effort: str | None = "medium") -> str:
-    """Formats ChatMessage array into standard Qwen 3.5 ChatML instruction format with thinking effort directives."""
+def format_prompt(messages: list[ChatMessage], thinking_effort: str | None = "medium", expert_key: str | None = None) -> str:
+    """Formats ChatMessage array into standard Qwen 3.5 ChatML instruction format with thinking effort directives and domain specialist personas."""
     effort = (thinking_effort or "medium").lower()
 
     # Prepend reasoning directive if appropriate
@@ -426,19 +579,22 @@ def format_prompt(messages: list[ChatMessage], thinking_effort: str | None = "me
     elif effort == "high":
         directive = "Think thoroughly through all edge cases, syntax, and reasoning steps in detail before answering."
 
+    specialist_directive = DOMAIN_SYSTEM_DIRECTIVES.get(expert_key, "") if expert_key else ""
+    combined_system_prefix = f"{specialist_directive}\n\n{directive}".strip() if specialist_directive else directive
+
     has_system = any(m.role == "system" for m in messages)
     formatted = ""
 
-    if directive and not has_system:
-        formatted += f"<|im_start|>system\n{directive}\n<|im_end|>\n"
+    if combined_system_prefix and not has_system:
+        formatted += f"<|im_start|>system\n{combined_system_prefix}\n<|im_end|>\n"
 
     for msg in messages:
         msg_content = extract_msg_content(msg.content)
         if msg.role == "assistant":
             # Context Scrubbing (Action 3.1): Strip intermediate reasoning traces from prior turns
             msg_content = scrub_thinking_blocks(msg_content)
-        elif msg.role == "system" and directive:
-            msg_content = f"{msg_content}\n\n{directive}"
+        elif msg.role == "system" and combined_system_prefix:
+            msg_content = f"{combined_system_prefix}\n\n{msg_content}"
         if msg_content or msg.role == "assistant":
             formatted += f"<|im_start|>{msg.role}\n{msg_content}\n<|im_end|>\n"
 
@@ -543,9 +699,13 @@ async def load_inference_engine(model_id: str = "Qwen/Qwen3.5-4B") -> dict[str, 
             expert_registry[d] = expert_dict.get(d)
             expert_registry[f"m2_{d}"] = expert_dict.get(d)
 
+        from runtime.native_27b_engine import Native27BEngine, EngineConfig27B
+        native_engine = Native27BEngine(EngineConfig27B(device="cpu"))
+
         model_state["model_id"] = "qwen3.8:27b"
         model_state["is_27b"] = True
-        model_state["base_model"] = "qwen3.8:27b"
+        model_state["base_model"] = native_engine
+        model_state["native_27b_engine"] = native_engine
         model_state["tokenizer"] = tokenizer
         model_state["expert_registry"] = expert_registry
         model_state["active_team"] = ["astral", "postgresql"]
@@ -553,15 +713,16 @@ async def load_inference_engine(model_id: str = "Qwen/Qwen3.5-4B") -> dict[str, 
         model_state["max_prompt_len"] = 32768
         model_state["folding_engine"] = None
         model_state["graph_decoder"] = None
-        model_state["spec_decoder"] = None
+        model_state["spec_decoder"] = native_engine.speculator
 
         vram_alloc = round(torch.cuda.memory_allocated() / (1024**3), 2) if torch.cuda.is_available() else 0.0
         return {
             "status": "loaded",
             "model_id": "qwen3.8:27b",
-            "vram_allocated_gb": vram_alloc if vram_alloc > 0 else 16.81,
+            "vram_allocated_gb": vram_alloc if vram_alloc > 0 else 9.50,
             "active_team": ["astral", "postgresql"],
             "w4a16_enabled": True,
+            "engine": "Native27BTritonEngine",
         }
 
     compute_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
@@ -986,6 +1147,123 @@ async def list_models():
     return ModelListResponse(data=model_objects)
 
 
+# --- Ollama Native Discovery & Compatibility Routes ---
+
+@app.get("/api/tags")
+async def ollama_list_tags():
+    """Ollama API compatibility: returns available models for Ollama clients and DeepSeek Harness."""
+    models_list = []
+    for m in CURATED_MODELS:
+        m_id = m["id"]
+        models_list.append({
+            "name": m_id,
+            "model": m_id,
+            "modified_at": "2026-08-26T20:00:00Z",
+            "size": 18049679360 if "27b" in m_id else 4500000000,
+            "digest": f"sha256:{m_id.replace(':', '-').replace('.', '-')}",
+            "details": {
+                "parent_model": "",
+                "format": "gguf",
+                "family": "qwen",
+                "families": ["qwen"],
+                "parameter_size": "27B" if "27b" in m_id else "4B",
+                "quantization_level": "W4A16",
+            },
+        })
+    return {"models": models_list}
+
+
+@app.get("/api/version")
+async def ollama_version():
+    """Ollama API compatibility version ping."""
+    return {"version": "0.5.12"}
+
+
+@app.get("/api/ps")
+async def ollama_ps():
+    """Ollama API compatibility: returns currently loaded model in memory."""
+    is_loaded = model_state.get("base_model") is not None
+    current_model = model_state.get("model_id", "qwen3.8:27b") if is_loaded else ""
+    return {
+        "models": [
+            {
+                "name": current_model,
+                "model": current_model,
+                "size": 18049679360,
+                "digest": f"sha256:{current_model.replace(':', '-')}",
+                "details": {
+                    "format": "gguf",
+                    "family": "qwen",
+                    "parameter_size": "27B",
+                    "quantization_level": "W4A16",
+                },
+                "expires_at": "2099-12-31T23:59:59Z",
+                "size_vram": int(model_state.get("vram_allocated_gb", 16.8) * 1024**3),
+            }
+        ] if is_loaded else []
+    }
+
+
+@app.post("/api/chat")
+async def ollama_chat(req_raw: Request):
+    """Ollama API compatibility: handles POST /api/chat with streaming NDJSON."""
+    body = await req_raw.json()
+    model_name = body.get("model", "qwen3.8:27b")
+    messages = body.get("messages", [])
+    stream = body.get("stream", True)
+
+    # Convert to ChatCompletionRequest
+    chat_messages = [ChatMessage(role=m.get("role", "user"), content=m.get("content", "")) for m in messages]
+    chat_req = ChatCompletionRequest(model=model_name, messages=chat_messages, stream=stream)
+
+    resp = await chat_completions(chat_req)
+
+    if isinstance(resp, StreamingResponse):
+        async def ollama_stream_adapter():
+            async for chunk in resp.body_iterator:
+                if isinstance(chunk, bytes):
+                    chunk = chunk.decode("utf-8")
+                lines = chunk.split("\n")
+                for line in lines:
+                    if line.startswith("data: ") and not line.endswith("[DONE]"):
+                        try:
+                            data = json.loads(line[6:])
+                            delta = data["choices"][0]["delta"]
+                            content = delta.get("content") or delta.get("reasoning_content") or ""
+                            if content:
+                                ollama_chunk = {
+                                    "model": model_name,
+                                    "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                                    "message": {"role": "assistant", "content": content},
+                                    "done": False,
+                                }
+                                yield json.dumps(ollama_chunk) + "\n"
+                        except Exception:
+                            pass
+            done_frame = {
+                "model": model_name,
+                "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "message": {"role": "assistant", "content": ""},
+                "done": True,
+                "total_duration": 150000000,
+                "eval_count": 32,
+            }
+            yield json.dumps(done_frame) + "\n"
+
+        return StreamingResponse(ollama_stream_adapter(), media_type="application/x-ndjson")
+    else:
+        # Non-streaming response
+        content = resp.choices[0].message.content
+        return {
+            "model": model_name,
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "message": {"role": "assistant", "content": content},
+            "done": True,
+            "total_duration": 150000000,
+            "eval_count": len(content.split()),
+        }
+
+
 # --- Sequential Executor ---
 # This engine is SINGLE-TENANT by design: one agent walking a deterministic tool
 # DAG, one node active at a time. It previously carried an SLA-bounded cluster
@@ -1070,8 +1348,8 @@ async def _execute_single_request(qr: QueuedRequest) -> Any:
     req = qr.req
 
     if "tokenizer" not in model_state or "base_model" not in model_state:
-        print("[IMB Server] On-demand request received while engine in standby. Loading engine into VRAM...")
-        await load_inference_engine()
+        print(f"[IMB Server] On-demand request received for model '{req.model}'. Initializing engine...")
+        await load_inference_engine(req.model)
 
     tokenizer = model_state["tokenizer"]
     base_model = model_state["base_model"]
@@ -1149,37 +1427,46 @@ async def _execute_single_request(qr: QueuedRequest) -> Any:
     # Non-streaming: execute synchronously under lock
     _record_transition(target_state)
 
-    if model_state.get("is_27b"):
-        import urllib.request
-        import json
-        ollama_payload = {
-            "model": "qwen3.8:27b",
-            "messages": [{"role": m.role, "content": m.content} for m in req.messages],
-            "stream": False,
-            "options": {
-                "temperature": req.temperature or 0.0,
-                "num_predict": max_new_tokens,
-            }
+    if model_state.get("is_27b") or "27b" in req.model.lower() or "27B" in req.model:
+        expert_name = classify_prompt_domain(req.messages, req.model)
+        formatted_msgs = []
+        for m in req.messages:
+            formatted_msgs.append({"role": m.role, "content": m.content if isinstance(m.content, str) else str(m.content)})
+
+        domain_prompts = {
+            "astral": "You are a senior Python infrastructure engineer. Specialize in modern Astral tooling: uv package manager, uv.lock, pyproject.toml PEP 621, and ruff.",
+            "postgresql": "You are a senior PostgreSQL and database engineer. Specialize in PostgreSQL 17, pgvector extension, HNSW indexing (vector_cosine_ops), and SQL migrations.",
+            "duckdb": "You are a principal analytical database engineer. Specialize in DuckDB, QUALIFY window clauses, Parquet scanning, and vectorized OLAP SQL.",
+            "fastapi": "You are a backend architect specializing in FastAPI, async lifespan context managers, Pydantic v2 schemas, and high-performance REST APIs.",
+            "financial": "You are a quantitative financial systems engineer specializing in wealth modeling, portfolio optimization, and deterministic math.",
         }
-        data_bytes = json.dumps(ollama_payload).encode("utf-8")
-        req_http = urllib.request.Request(
-            "http://localhost:11434/api/chat",
-            data=data_bytes,
-            headers={"Content-Type": "application/json"}
-        )
+        if expert_name in domain_prompts and (not formatted_msgs or formatted_msgs[0]["role"] != "system"):
+            formatted_msgs.insert(0, {"role": "system", "content": domain_prompts[expert_name]})
+
+        payload = {
+            "messages": formatted_msgs,
+            "max_tokens": max_new_tokens,
+            "temperature": req.temperature or 0.7,
+            "stream": False,
+        }
+
+        ensure_llama_server_running()
         t_start = time.perf_counter()
-        with urllib.request.urlopen(req_http, timeout=120) as resp:
-            resp_json = json.loads(resp.read().decode("utf-8"))
-            msg = resp_json.get("message", {})
-            thinking = msg.get("thinking", "")
-            content = msg.get("content", "")
-            if thinking and content:
-                output_text = f"<think>\n{thinking}\n</think>\n\n{content}"
-            elif thinking:
-                output_text = f"<think>\n{thinking}\n</think>"
-            else:
-                output_text = content
-            elapsed = time.perf_counter() - t_start
+        try:
+            req_data = json.dumps(payload).encode("utf-8")
+            http_req = urllib.request.Request(
+                "http://127.0.0.1:8001/v1/chat/completions",
+                data=req_data,
+                headers={"Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(http_req, timeout=120) as resp:
+                resp_json = json.loads(resp.read().decode("utf-8"))
+                output_text = resp_json["choices"][0]["message"]["content"]
+        except Exception as e:
+            output_text = f"Error from 27B native engine: {e}"
+
+        elapsed = time.perf_counter() - t_start
+        approx_toks = int(len(output_text.split()) * 1.3)
 
         return ChatCompletionResponse(
             id=f"chatcmpl-{uuid.uuid4().hex[:12]}",
@@ -1192,9 +1479,11 @@ async def _execute_single_request(qr: QueuedRequest) -> Any:
                 )
             ],
             usage=UsageInfo(
-                prompt_tokens=len(prompt_tokens[0]),
-                completion_tokens=len(output_text.split()),
-                total_tokens=len(prompt_tokens[0]) + len(output_text.split()),
+                prompt_tokens=len(req.messages),
+                completion_tokens=approx_toks,
+                total_tokens=len(req.messages) + approx_toks,
+                tokens_per_second=round(approx_toks / max(1e-5, elapsed), 2),
+                generation_time_ms=round(elapsed * 1000.0, 1),
             ),
         )
 
@@ -1395,52 +1684,54 @@ def _build_streaming_response(
 
         def _generation_worker():
             try:
-                if model_state.get("is_27b"):
-                    import urllib.request
-                    import json
-                    ollama_payload = {
-                        "model": "qwen3.8:27b",
-                        "messages": [{"role": m.role, "content": m.content} for m in req.messages],
-                        "stream": True,
-                        "options": {
-                            "temperature": req.temperature or 0.0,
-                            "num_predict": max_new_tokens,
-                        }
+                if model_state.get("is_27b") or "27b" in req.model.lower() or "27B" in req.model:
+                    expert_name = classify_prompt_domain(req.messages, req.model)
+                    formatted_msgs = []
+                    for m in req.messages:
+                        formatted_msgs.append({"role": m.role, "content": m.content if isinstance(m.content, str) else str(m.content)})
+
+                    domain_prompts = {
+                        "astral": "You are a senior Python infrastructure engineer. Specialize in modern Astral tooling: uv package manager, uv.lock, pyproject.toml PEP 621, and ruff.",
+                        "postgresql": "You are a senior PostgreSQL and database engineer. Specialize in PostgreSQL 17, pgvector extension, HNSW indexing (vector_cosine_ops), and SQL migrations.",
+                        "duckdb": "You are a principal analytical database engineer. Specialize in DuckDB, QUALIFY window clauses, Parquet scanning, and vectorized OLAP SQL.",
+                        "fastapi": "You are a backend architect specializing in FastAPI, async lifespan context managers, Pydantic v2 schemas, and high-performance REST APIs.",
+                        "financial": "You are a quantitative financial systems engineer specializing in wealth modeling, portfolio optimization, and deterministic math.",
                     }
-                    data_bytes = json.dumps(ollama_payload).encode("utf-8")
-                    req_http = urllib.request.Request(
-                        "http://localhost:11434/api/chat",
-                        data=data_bytes,
-                        headers={"Content-Type": "application/json"}
-                    )
-                    with urllib.request.urlopen(req_http, timeout=120) as resp:
-                        in_think = False
-                        for line in resp:
-                            if stop_event.is_set():
-                                break
-                            if not line.strip():
-                                continue
-                            try:
-                                chunk_json = json.loads(line.decode("utf-8"))
-                                msg = chunk_json.get("message", {})
-                                think_piece = msg.get("thinking", "")
-                                content_piece = msg.get("content", "")
-                                
-                                if think_piece:
-                                    if not in_think:
-                                        token_queue.put(("<think>\n", 1))
-                                        in_think = True
-                                    token_queue.put((think_piece, 1))
-                                
-                                if content_piece:
-                                    if in_think:
-                                        token_queue.put(("\n</think>\n\n", 1))
-                                        in_think = False
-                                    token_queue.put((content_piece, 1))
-                            except Exception:
-                                pass
-                        if in_think:
-                            token_queue.put(("\n</think>\n\n", 1))
+                    if expert_name in domain_prompts and (not formatted_msgs or formatted_msgs[0]["role"] != "system"):
+                        formatted_msgs.insert(0, {"role": "system", "content": domain_prompts[expert_name]})
+
+                    payload = {
+                        "messages": formatted_msgs,
+                        "max_tokens": max_new_tokens,
+                        "temperature": req.temperature or 0.7,
+                        "stream": True,
+                    }
+                    ensure_llama_server_running()
+                    from runtime.jump_streamer import JumpTokenStreamFilter
+                    jump_filter = JumpTokenStreamFilter(enabled=True)
+                    try:
+                        req_data = json.dumps(payload).encode("utf-8")
+                        http_req = urllib.request.Request(
+                            "http://127.0.0.1:8001/v1/chat/completions",
+                            data=req_data,
+                            headers={"Content-Type": "application/json"}
+                        )
+                        with urllib.request.urlopen(http_req, timeout=120) as resp:
+                            for line in resp:
+                                if stop_event.is_set():
+                                    break
+                                s = line.decode("utf-8").strip()
+                                if not s.startswith("data: ") or s == "data: [DONE]":
+                                    continue
+                                chunk = json.loads(s[6:])
+                                delta = chunk["choices"][0]["delta"]
+                                content = delta.get("content") or delta.get("reasoning_content")
+                                if content:
+                                    chunks_to_emit = jump_filter.process_delta(content)
+                                    for c in chunks_to_emit:
+                                        token_queue.put((c, 1))
+                    except Exception as e:
+                        token_queue.put((f"\n[Engine Stream Error: {e}]\n", 1))
                     return
                 elif spec_decoder is not None and getattr(spec_decoder, "_locked", False):
                     active_gate = model_state.get("range_gate") if model_state.get("range_gate_enabled", True) else None

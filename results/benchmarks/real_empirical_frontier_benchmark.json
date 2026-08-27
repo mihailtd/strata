@@ -1,0 +1,101 @@
+{
+  "hardware": "AMD Radeon RX 7900 XTX (24GB GDDR6, gfx1100)",
+  "model": "Qwen 3.8 27B Q4_K_M",
+  "avg_ollama_speed_tok_s": 40.85,
+  "avg_our_engine_speed_tok_s": 37.71,
+  "measured_speedup_factor": "0.92x",
+  "ollama_tasks": [
+    {
+      "task_id": "fastapi_pgvector_crud",
+      "name": "FastAPI Asyncpg & pgvector CRUD Service",
+      "tokens": 300,
+      "ttft_ms": 245.6,
+      "gen_time_s": 7.69,
+      "tok_per_sec": 39.02,
+      "accuracy_pct": 80.0,
+      "matched_keywords": [
+        "FastAPI",
+        "asyncpg",
+        "CREATE",
+        "vector"
+      ]
+    },
+    {
+      "task_id": "postgres_hnsw_migration",
+      "name": "PostgreSQL 17 HNSW Migration & Tuning",
+      "tokens": 313,
+      "ttft_ms": 281.0,
+      "gen_time_s": 7.84,
+      "tok_per_sec": 39.91,
+      "accuracy_pct": 100.0,
+      "matched_keywords": [
+        "CREATE EXTENSION",
+        "vector",
+        "hnsw",
+        "vector_cosine_ops",
+        "ef_construction"
+      ]
+    },
+    {
+      "task_id": "duckdb_parquet_analytics",
+      "name": "DuckDB Parquet Window Analytics Pipeline",
+      "tokens": 316,
+      "ttft_ms": 285.8,
+      "gen_time_s": 7.24,
+      "tok_per_sec": 43.63,
+      "accuracy_pct": 75.0,
+      "matched_keywords": [
+        "QUALIFY",
+        "ROW_NUMBER()",
+        "read_parquet"
+      ]
+    }
+  ],
+  "our_engine_tasks": [
+    {
+      "task_id": "fastapi_pgvector_crud",
+      "name": "FastAPI Asyncpg & pgvector CRUD Service",
+      "tokens": 351,
+      "ttft_ms": 15484.3,
+      "gen_time_s": 9.27,
+      "tok_per_sec": 37.85,
+      "accuracy_pct": 80.0,
+      "matched_keywords": [
+        "FastAPI",
+        "asyncpg",
+        "CREATE",
+        "vector"
+      ]
+    },
+    {
+      "task_id": "postgres_hnsw_migration",
+      "name": "PostgreSQL 17 HNSW Migration & Tuning",
+      "tokens": 353,
+      "ttft_ms": 15508.3,
+      "gen_time_s": 10.56,
+      "tok_per_sec": 33.43,
+      "accuracy_pct": 100.0,
+      "matched_keywords": [
+        "CREATE EXTENSION",
+        "vector",
+        "hnsw",
+        "vector_cosine_ops",
+        "ef_construction"
+      ]
+    },
+    {
+      "task_id": "duckdb_parquet_analytics",
+      "name": "DuckDB Parquet Window Analytics Pipeline",
+      "tokens": 351,
+      "ttft_ms": 15497.6,
+      "gen_time_s": 8.39,
+      "tok_per_sec": 41.86,
+      "accuracy_pct": 75.0,
+      "matched_keywords": [
+        "QUALIFY",
+        "ROW_NUMBER()",
+        "read_parquet"
+      ]
+    }
+  ]
+}
