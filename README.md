@@ -11,7 +11,7 @@ Exposes local resident domain experts (`postgresql`, `astral`, `financial_planni
   * 🏭 **[`benchmarks/factory/`](benchmarks/factory/)**: Pillar 1: Geometric Stopping, Ledoit-Wolf Shrinkage, Riemannian AIRM Metrics, SSI Quantization.
   * ⚡ **[`benchmarks/runtime/`](benchmarks/runtime/)**: Pillar 2: $S_t$ Recurrent State Handoff, Mixture-of-Adapters, Weibull Hazard Speculative Gating, Standby Residency.
   * 🚀 **[`benchmarks/kernel/`](benchmarks/kernel/)**: Pillar 3: 128-Bit Coalesced GEMV, Fused SwiGLU In-Register SiLU, 2x2 Tree Speculation ($202.3\text{ tok/s}$, $4.15\times$ Ollama speed).
-* **[`docs/`](docs/)**: Conceptual Reference, Architecture Decisions, and Whitepapers ([`W4A16_RDNA3_BEATING_OLLAMA.md`](docs/W4A16_RDNA3_BEATING_OLLAMA.md)).
+* **[`docs/`](docs/)**: Conceptual Reference, Architecture Decisions, and Whitepapers ([`WHITE_PAPER_THE_CHICKEN_AND_EGG_RUNTIME_PARADOX.md`](docs/WHITE_PAPER_THE_CHICKEN_AND_EGG_RUNTIME_PARADOX.md), [`WHITE_PAPER_WEIGHT_ADAPTATION_VS_PROMPT_ENGINEERING.md`](docs/WHITE_PAPER_WEIGHT_ADAPTATION_VS_PROMPT_ENGINEERING.md), [`W4A16_RDNA3_BEATING_OLLAMA.md`](docs/W4A16_RDNA3_BEATING_OLLAMA.md)).
 * **[`scripts/`](scripts/)**: Production Training Pipelines (`CURRENT_m2`), Synthetic Dataset Curation, Domain Evaluators, and Server Launchers.
 * **[`src/runtime/`](src/runtime/)**: Core Python Engine (`novel_peft`, `mtp_draft`, `triton_w4a16`, `supercharged_engine`, `server`).
 * **[`src/dashboard/`](src/dashboard/)**: Next.js 16 Dark-Themed Live Visualizer, Interactive Research Infographics & Morphing Studio.
