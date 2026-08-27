@@ -1,0 +1,38 @@
+[
+  {
+    "domain": "postgresql",
+    "out_dir": "/home/mihai/Projects/gnn-experiment/results/adapters/m2_postgresql_r8a128_v7_ornith35b",
+    "training_time_sec": 0.004795969987753779,
+    "status": "COMPLETED"
+  },
+  {
+    "domain": "astral",
+    "out_dir": "/home/mihai/Projects/gnn-experiment/results/adapters/m2_astral_r8a128_v7_ornith35b",
+    "training_time_sec": 0.0003001950099132955,
+    "status": "COMPLETED"
+  },
+  {
+    "domain": "python_web",
+    "out_dir": "/home/mihai/Projects/gnn-experiment/results/adapters/m2_python_web_r8a128_v7_ornith35b",
+    "training_time_sec": 0.00022772597731091082,
+    "status": "COMPLETED"
+  },
+  {
+    "domain": "python_modern",
+    "out_dir": "/home/mihai/Projects/gnn-experiment/results/adapters/m2_python_modern_r8a128_v7_ornith35b",
+    "training_time_sec": 0.0003192810108885169,
+    "status": "COMPLETED"
+  },
+  {
+    "domain": "duckdb",
+    "out_dir": "/home/mihai/Projects/gnn-experiment/results/adapters/m2_duckdb_r8a128_v7_ornith35b",
+    "training_time_sec": 0.0002219249727204442,
+    "status": "COMPLETED"
+  },
+  {
+    "domain": "financial_planning",
+    "out_dir": "/home/mihai/Projects/gnn-experiment/results/adapters/m2_financial_r8a128_v7_ornith35b",
+    "training_time_sec": 0.0002005540009122342,
+    "status": "COMPLETED"
+  }
+]

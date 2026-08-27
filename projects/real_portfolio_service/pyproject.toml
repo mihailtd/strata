@@ -1,0 +1,18 @@
+[project]
+name = "real-portfolio-service"
+version = "0.1.0"
+description = "High-performance vector and risk analytics service"
+requires-python = ">=3.12"
+dependencies = [
+    "duckdb>=1.0.0",
+    "numpy>=1.26.0",
+    "pydantic>=2.7.0",
+    "pytest>=8.0.0",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

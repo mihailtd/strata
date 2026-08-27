@@ -1,0 +1,135 @@
+{
+  "model": "ornith-1.5:35b",
+  "architecture": "35B MoE (~3B Active)",
+  "hardware": "AMD Radeon RX 7900 XTX (24GB GDDR6, gfx1100)",
+  "avg_streaming_tok_s": 110.91,
+  "avg_fleet_tok_s": 98.99,
+  "speedup_vs_27b_dense": 2.71,
+  "suite_a_raw_streaming": {
+    "ollama": [
+      {
+        "domain": "python_web",
+        "task": "FastAPI CRUD & pgvector",
+        "stream_chunks": 350,
+        "ttft_ms": 242.0,
+        "decode_duration_s": 3.15,
+        "tok_per_sec": 111.05
+      },
+      {
+        "domain": "postgresql",
+        "task": "PostgreSQL 17 HNSW Migration",
+        "stream_chunks": 350,
+        "ttft_ms": 180.8,
+        "decode_duration_s": 3.16,
+        "tok_per_sec": 110.85
+      },
+      {
+        "domain": "duckdb",
+        "task": "DuckDB Parquet Window Analytics",
+        "stream_chunks": 350,
+        "ttft_ms": 186.8,
+        "decode_duration_s": 3.16,
+        "tok_per_sec": 110.83
+      }
+    ],
+    "native": [
+      {
+        "domain": "python_web",
+        "task": "FastAPI CRUD & pgvector",
+        "stream_chunks": 350,
+        "ttft_ms": 153.1,
+        "decode_duration_s": 3.13,
+        "tok_per_sec": 111.77
+      },
+      {
+        "domain": "postgresql",
+        "task": "PostgreSQL 17 HNSW Migration",
+        "stream_chunks": 350,
+        "ttft_ms": 132.4,
+        "decode_duration_s": 3.14,
+        "tok_per_sec": 111.53
+      },
+      {
+        "domain": "duckdb",
+        "task": "DuckDB Parquet Window Analytics",
+        "stream_chunks": 350,
+        "ttft_ms": 133.3,
+        "decode_duration_s": 9.29,
+        "tok_per_sec": 37.69
+      }
+    ]
+  },
+  "suite_b_6_domain_fleet": [
+    {
+      "domain": "postgresql",
+      "task": "Asyncpg Connection Pooling & Transaction Isolation",
+      "stream_chunks": 250,
+      "ttft_ms": 130.4,
+      "decode_duration_s": 2.27,
+      "tok_per_sec": 110.06
+    },
+    {
+      "domain": "astral",
+      "task": "Ruff & UV Modern Workspace Setup",
+      "stream_chunks": 250,
+      "ttft_ms": 130.3,
+      "decode_duration_s": 2.24,
+      "tok_per_sec": 111.49
+    },
+    {
+      "domain": "python_web",
+      "task": "FastAPI Background Tasks & WebSockets",
+      "stream_chunks": 250,
+      "ttft_ms": 149.4,
+      "decode_duration_s": 2.24,
+      "tok_per_sec": 111.73
+    },
+    {
+      "domain": "python_modern",
+      "task": "Python 3.12 Type Parameter Syntax & Generics",
+      "stream_chunks": 250,
+      "ttft_ms": 161.5,
+      "decode_duration_s": 7.06,
+      "tok_per_sec": 35.42
+    },
+    {
+      "domain": "duckdb",
+      "task": "DuckDB Spatial & Geometry Analytics",
+      "stream_chunks": 250,
+      "ttft_ms": 146.2,
+      "decode_duration_s": 2.22,
+      "tok_per_sec": 112.51
+    },
+    {
+      "domain": "financial_planning",
+      "task": "Portfolio Risk Covariance & VaR Calculation",
+      "stream_chunks": 250,
+      "ttft_ms": 146.5,
+      "decode_duration_s": 2.22,
+      "tok_per_sec": 112.74
+    }
+  ],
+  "suite_c_harness_agent": {
+    "tasks": [
+      {
+        "task_id": "TASK_001_ASYNC_PGVECTOR",
+        "wall_time_s": 2.86,
+        "passed": true,
+        "response_snippet": "The user wants me to design a Python function `search_similar_embeddings(conn, query_vec, top_k=5)` using asyncpg and th"
+      },
+      {
+        "task_id": "TASK_002_DUCKDB_PARQUET_PIPELINE",
+        "wall_time_s": 2.82,
+        "passed": true,
+        "response_snippet": "Here's a complete DuckDB Python script that queries parquet files and deduplicates by user using the `QUALIFY ROW_NUMBER"
+      },
+      {
+        "task_id": "TASK_003_FASTAPI_HEALTH_CHECK",
+        "wall_time_s": 2.81,
+        "passed": true,
+        "response_snippet": "Here's a complete FastAPI `/health` endpoint implementation using Pydantic v2:  ```python \"\"\"FastAPI health check endpoi"
+      }
+    ],
+    "pass_rate": 1.0
+  }
+}

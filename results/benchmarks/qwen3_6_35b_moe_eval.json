@@ -1,0 +1,113 @@
+[
+  {
+    "domain": "Python Web / FastAPI",
+    "speed": {
+      "text": "Here's a thinking process:\n\n1.  **Understand User Requirements:**\n   - **Framework:** FastAPI (latest standards)\n   - **Database:** Connection pool (implies async database driver like `asyncpg` or `databases`, but `SQLAlchemy 2.0+` with async is the modern standard)\n   - **Lifespan Context Manager:** For startup/shutdown events\n   - **Pydantic v2:** Response models for User profile\n   - **Production-grade:** Clean, well-structured, type hints, error handling, logging, configuration management, etc.\n\n2.  **Key Components to Include:**\n   - Project structure (modular)\n   - Configuration (using `pydantic-settings` or `dotenv`)\n   - Database setup (SQLAlchemy 2.0 async engine & sessionmaker with pooling)\n   - Lifespan context manager (startup/shutdown)\n   - Pydantic v2 models (User profile response)\n   - FastAPI app with routes\n   - Error handling/validation\n   - Logging configuration\n   - Type hints throughout\n   - Modern Python practices (3.10+ features if applicable, but keep it compatible)\n\n3.  **Design Decisions:**\n   - **Database:** SQLAlchemy 2.0 async (`sqlalchemy.ext.asyncio`) with `asyncpg` driver and connection pooling (`QueuePool` or `NullPool`? For production, `QueuePool` is standard, but SQLAlchemy handles pooling via the engine)\n   - **Config:** `pydantic-settings` for type-safe configuration\n   - **Structure:** \n     ```\n     app/\n       __init__.py\n       main.py          # FastAPI app & lifespan\n       config.py        # Settings\n       database.py      # DB engine, session, models\n       schemas.py       # Pydantic v2 models\n       routers/",
+      "chunks": 334,
+      "ttft_ms": 109.1,
+      "decode_s": 4.01,
+      "tok_s": 83.38
+    },
+    "grade": {
+      "modern_hits": [
+        "lifespan"
+      ],
+      "legacy_hits": [],
+      "is_modern": false
+    }
+  },
+  {
+    "domain": "PostgreSQL & Vector",
+    "speed": {
+      "text": "Here's a thinking process:\n\n1.  **Understand User Request:**\n   - **Language/Framework:** Python with `asyncpg` (PostgreSQL async driver)\n   - **Task:** Query an `items` table\n   - **Operation:** HNSW cosine similarity search on a 1536-dimensional vector\n   - **Requirements:** Use parameterized queries, return top 5 closest items\n   - **Role:** Principal software engineer (implies production-grade, clean, modern, well-documented, robust code)\n\n2.  **Key Technical Components:**\n   - `asyncpg` for async PostgreSQL interaction\n   - HNSW index in PostgreSQL (requires `pgvector` extension)\n   - Cosine similarity search syntax in pgvector: `<=>` operator or `<#>`? Wait, let's verify:\n     - In `pgvector`, cosine distance is `<=>` (cosine distance = 1 - cosine similarity)\n     - Actually, pgvector uses `<->` for L2 distance, `<#>` for inner product, and `<=>` for cosine distance.\n     - Wait, let's double-check: According to pgvector docs:\n       - `<->`: L2 distance\n       - `<#>`: inner product (negative of cosine similarity if normalized)\n       - `<=>`: cosine distance\n     - So for cosine similarity search, we use `<=>` operator. The query would be `embedding <=> %s ORDER BY embedding <=> %s LIMIT 5`\n   - Parameterized queries in asyncpg: Use `$1`, `$2` placeholders or `%s` depending on the driver. `asyncpg` uses `$1`, `$2` style by default, but also supports positional parameters. Actually, asyncpg's `fetchval`/`fetchrow` etc. take parameters as a tuple/list after the query string. The query string should use `$1`, `$",
+      "chunks": 360,
+      "ttft_ms": 144.3,
+      "decode_s": 3.87,
+      "tok_s": 92.92
+    },
+    "grade": {
+      "modern_hits": [
+        "asyncpg",
+        "<=>",
+        "$1"
+      ],
+      "legacy_hits": [
+        "<->",
+        "%s"
+      ],
+      "is_modern": false
+    }
+  },
+  {
+    "domain": "Astral & Tooling",
+    "speed": {
+      "text": "Here's a thinking process:\n\n1.  **Understand User Request:**\n   - **Role:** Principal Software Engineer\n   - **Task:** Write a modern `pyproject.toml` configuration\n   - **Key Components:**\n     - Astral `uv` workspace setup\n     - Strict `ruff` linter configuration with rule selection\n     - Formatting rules (also via ruff, as it handles both)\n   - **Standards:** Clean, production-grade, state-of-the-art, modern language/framework standards\n\n2.  **Deconstruct Requirements:**\n   - **`uv` workspace:** Needs `[project]`, `[tool.uv]`, and potentially `[workspace]` if it's a multi-package setup. I'll provide a single-package example that can be extended to a workspace, but explicitly show workspace configuration as requested.\n   - **`ruff` linter:** Strict configuration, explicit rule selection (enable all by default, then disable/ignore specific ones if needed, or use `select = [\"ALL\"]` with targeted ignores). Modern ruff uses `lint.select`, `lint.ignore`, etc.\n   - **Formatting:** Ruff's formatter (`format`) needs configuration like line length, quote style, trailing comma, etc.\n   - **Modern Standards:** PEP 621 for project metadata, modern ruff v0.4+ syntax (which is current as of 2024/2025), proper dependency management with `uv`.\n\n3.  **Research/Verify Modern Syntax (Mental Knowledge):**\n   - `pyproject.toml` structure: `[build-system]`, `[project]`, `[tool.ruff]`, `[tool.uv]`, `[workspace]`\n   - `uv` workspace: Uses `[tool.uv.workspace]` with `members = [\"packages/*\"]` or similar. For a single package, it's optional but can",
+      "chunks": 366,
+      "ttft_ms": 128.5,
+      "decode_s": 3.88,
+      "tok_s": 94.37
+    },
+    "grade": {
+      "modern_hits": [
+        "[tool.uv",
+        "[tool.ruff",
+        "select ="
+      ],
+      "legacy_hits": [],
+      "is_modern": true
+    }
+  },
+  {
+    "domain": "Python Modern Syntax",
+    "speed": {
+      "text": "Here's a thinking process:\n\n1.  **Understand User Request:**\n   - **Topic:** Modern Python 3.12 generic classes and generic type aliases\n   - **Specific Feature:** PEP 695 type parameter syntax (e.g., `class MyClass[T]:`, `type MyAlias[T] = ...`)\n   - **Goal:** Demonstrate clean, production-grade, state-of-the-art code using these features\n   - **Role:** Principal software engineer\n\n2.  **Key Concepts to Cover:**\n   - PEP 695 introduces a new syntax for type parameters in Python 3.12+\n   - `class MyClass[T]:` instead of `class MyClass(Generic[T]):`\n   - `type MyAlias[T] = ...` for generic type aliases\n   - Constraints on type parameters (e.g., `T: int`, `T: str | int`)\n   - Multiple type parameters\n   - Usage in functions, classes, and type aliases\n   - Proper typing practices (mypy/pyright compatibility)\n   - Production-grade patterns (type safety, documentation, error handling if needed)\n\n3.  **Structure the Demonstration:**\n   - Import necessary modules (`typing`, `collections.abc`, etc.)\n   - Define a generic class with PEP 695 syntax\n   - Define a generic type alias with PEP 695 syntax\n   - Show usage examples\n   - Include constraints and multiple parameters\n   - Add proper docstrings and type hints\n   - Ensure compatibility notes (Python 3.12+)\n   - Keep it concise but comprehensive\n\n4.  **Draft - Mental Code Construction:**\n\n   ```python\n   from __future__ import annotations\n   from typing import TypeVar, Generic, Protocol, runtime_checkable\n   from collections.abc import Sequence\n   import sys\n\n   # Check Python version",
+      "chunks": 332,
+      "ttft_ms": 127.3,
+      "decode_s": 3.89,
+      "tok_s": 85.29
+    },
+    "grade": {
+      "modern_hits": [],
+      "legacy_hits": [],
+      "is_modern": false
+    }
+  },
+  {
+    "domain": "DuckDB Analytics",
+    "speed": {
+      "text": "Here's a thinking process:\n\n1.  **Understand User Request:**\n   - **Database/Engine:** DuckDB\n   - **Input Data:** Partitioned Parquet files from `data/*.parquet`\n   - **Operation:** Compute window rankings per user\n   - **Filtering:** Keep only the top record per user\n   - **Key Feature:** Use the `QUALIFY` clause (DuckDB supports this, and it's a modern SQL feature)\n   - **Output:** A clean, production-grade SQL query\n\n2.  **Identify Key Components:**\n   - Reading partitioned Parquet files: DuckDB can automatically read partitioned data using `read_parquet('data/*.parquet')` or `parquet_scan('data/*.parquet')`. I'll use `read_parquet` as it's the standard DuckDB function.\n   - Window ranking: Need to rank rows per user. Common window functions: `ROW_NUMBER()`, `RANK()`, `DENSE_RANK()`. The prompt says \"top record\", so `ROW_NUMBER()` is appropriate. I'll assume there's a timestamp or some ordering column (e.g., `created_at` or `event_time`). Since the schema isn't specified, I'll make reasonable assumptions and document them. I'll use `ORDER BY created_at DESC` as a typical example, but I'll make it clear that the ordering column should be adjusted based on actual data.\n   - QUALIFY clause: DuckDB supports `QUALIFY ROW_NUMBER() OVER (...) = 1`. This filters rows after window functions are computed.\n   - Partitioned Parquet handling: DuckDB automatically infers partitions from directory structure if using `read_parquet('data/*.parquet')` or `parquet_scan`. I'll mention that partition columns will be automatically inferred and added to the result.\n\n3.  **Draft Query (Mental):**\n   ```",
+      "chunks": 371,
+      "ttft_ms": 134.6,
+      "decode_s": 3.87,
+      "tok_s": 95.74
+    },
+    "grade": {
+      "modern_hits": [
+        "read_parquet",
+        "QUALIFY",
+        "ROW_NUMBER()"
+      ],
+      "legacy_hits": [],
+      "is_modern": true
+    }
+  },
+  {
+    "domain": "Financial Modeling",
+    "speed": {
+      "text": "Here's a thinking process:\n\n1.  **Understand User Request:**\n   - **Goal:** Compute Value at Risk (VaR) and Conditional VaR (Expected Shortfall, ES) at 95% confidence level.\n   - **Input:** A vector of portfolio asset returns (1D array/list of floats).\n   - **Output:** VaR and ES values.\n   - **Context:** Python, production-grade, modern standards.\n\n2.  **Define Key Concepts:**\n   - **VaR (Value at Risk):** The maximum loss not exceeded with a given confidence level over a specified time horizon. For 95% confidence, it's the 5th percentile of the return distribution (since we're looking at losses, typically VaR is expressed as a positive number representing loss, or negative if using returns directly).\n   - **ES (Expected Shortfall / CVaR):** The expected loss given that the loss exceeds the VaR. It's the mean of all returns below the VaR threshold.\n   - **Confidence Level:** 95% \u2192 \u03b1 = 0.05 (tail probability)\n   - **Input Format:** Vector/array of returns (e.g., daily, monthly). I'll assume it's a 1D numpy array or similar.\n\n3.  **Mathematical Formulation:**\n   - Let `r` be the vector of returns.\n   - Sort `r` in ascending order.\n   - VaR_\u03b1 = percentile(r, \u03b1) where \u03b1 = 0.05 (for 95% confidence)\n   - ES_\u03b1 = mean(r[r <= VaR_\u03b1]) or equivalently mean of the lowest \u03b1*100% of returns.\n   - Note: In finance, VaR is often reported as a positive number (loss), so I'll return `-VaR` if inputs are returns",
+      "chunks": 360,
+      "ttft_ms": 132.2,
+      "decode_s": 3.89,
+      "tok_s": 92.55
+    },
+    "grade": {
+      "modern_hits": [
+        "percentile",
+        "numpy",
+        "returns"
+      ],
+      "legacy_hits": [],
+      "is_modern": true
+    }
+  }
+]

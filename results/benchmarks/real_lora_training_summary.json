@@ -1,0 +1,44 @@
+[
+  {
+    "domain": "postgresql",
+    "success": true,
+    "elapsed_s": 94.34,
+    "train_loss": "1.229",
+    "adapter_path": "results/adapters/m2_postgresql_r8a128_v7_real"
+  },
+  {
+    "domain": "astral",
+    "success": true,
+    "elapsed_s": 86.31,
+    "train_loss": "1.132",
+    "adapter_path": "results/adapters/m2_astral_r8a128_v7_real"
+  },
+  {
+    "domain": "python_web",
+    "success": true,
+    "elapsed_s": 91.98,
+    "train_loss": "0.806",
+    "adapter_path": "results/adapters/m2_python_web_r8a128_v7_real"
+  },
+  {
+    "domain": "python_modern",
+    "success": true,
+    "elapsed_s": 89.06,
+    "train_loss": "0.8625",
+    "adapter_path": "results/adapters/m2_python_modern_r8a128_v7_real"
+  },
+  {
+    "domain": "duckdb",
+    "success": true,
+    "elapsed_s": 92.96,
+    "train_loss": "0.9679",
+    "adapter_path": "results/adapters/m2_duckdb_r8a128_v7_real"
+  },
+  {
+    "domain": "financial_planning",
+    "success": true,
+    "elapsed_s": 86.62,
+    "train_loss": "1.637",
+    "adapter_path": "results/adapters/m2_financial_planning_r8a128_v7_real"
+  }
+]

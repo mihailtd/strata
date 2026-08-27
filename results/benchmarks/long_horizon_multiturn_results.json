@@ -1,0 +1,92 @@
+[
+  {
+    "turn": 1,
+    "title": "Architecture & PostgreSQL Schema",
+    "speed": 111.38,
+    "ttft_ms": 9291.7,
+    "context_tokens": 320,
+    "vram_gb": 21.01,
+    "spill": false
+  },
+  {
+    "turn": 2,
+    "title": "Vector HNSW Index & Query",
+    "speed": 110.7,
+    "ttft_ms": 317.0,
+    "context_tokens": 568,
+    "vram_gb": 21.01,
+    "spill": false
+  },
+  {
+    "turn": 3,
+    "title": "Tool Output: Grep Search Trace",
+    "speed": 108.27,
+    "ttft_ms": 1067.4,
+    "context_tokens": 1972,
+    "vram_gb": 21.05,
+    "spill": false
+  },
+  {
+    "turn": 4,
+    "title": "FastAPI Lifespan Server",
+    "speed": 108.18,
+    "ttft_ms": 226.9,
+    "context_tokens": 2242,
+    "vram_gb": 21.05,
+    "spill": false
+  },
+  {
+    "turn": 5,
+    "title": "Pydantic v2 Schemas",
+    "speed": 110.62,
+    "ttft_ms": 736.0,
+    "context_tokens": 1436,
+    "vram_gb": 21.03,
+    "spill": false
+  },
+  {
+    "turn": 6,
+    "title": "Tool Output: Pytest Trace",
+    "speed": 108.32,
+    "ttft_ms": 929.4,
+    "context_tokens": 2658,
+    "vram_gb": 21.06,
+    "spill": false
+  },
+  {
+    "turn": 7,
+    "title": "Python 3.12 Generics Refactoring",
+    "speed": 107.03,
+    "ttft_ms": 280.7,
+    "context_tokens": 2789,
+    "vram_gb": 21.06,
+    "spill": false
+  },
+  {
+    "turn": 8,
+    "title": "DuckDB Analytics Integration",
+    "speed": 109.21,
+    "ttft_ms": 1079.8,
+    "context_tokens": 2170,
+    "vram_gb": 21.05,
+    "spill": false
+  },
+  {
+    "turn": 9,
+    "title": "Financial VaR Risk Calculation",
+    "speed": 109.16,
+    "ttft_ms": 250.5,
+    "context_tokens": 2454,
+    "vram_gb": 21.06,
+    "spill": false
+  },
+  {
+    "turn": 10,
+    "title": "End-to-End System Verification",
+    "speed": 110.12,
+    "ttft_ms": 278.7,
+    "context_tokens": 2736,
+    "vram_gb": 21.06,
+    "spill": false
+  }
+]
