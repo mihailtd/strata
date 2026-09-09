@@ -1,0 +1,14 @@
+{
+  "num_steps": 512,
+  "max_seq_len": 1024,
+  "bf16_mem_mb": 4.0,
+  "q8_mem_mb": 2.015625,
+  "memory_saving_percent": 49.609375,
+  "avg_latency_naive_ms": 0.8750261464847142,
+  "avg_latency_bf16_ms": 0.7514318925636587,
+  "avg_latency_q8_ms": 0.9221113906185963,
+  "min_q8_cos_sim": 0.9999680519104004,
+  "avg_q8_cos_sim": 0.999985902570188,
+  "max_q8_abs_error": 0.375,
+  "passed": true
+}

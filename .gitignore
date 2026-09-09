@@ -29,3 +29,17 @@ mlartifacts/
 
 # throwaway adapters from the loss-curve diagnostic (curves themselves are tracked)
 results/loss_curves/adapters/
+
+# Model weights and unpacked layers (must stay out of git)
+models/*
+!models/**/metadata.json
+*.pt
+*.safetensors
+*.gguf
+*.bin
+*.vtt
+scratch/transcript*.txt
+.adapters/
+projects/**/.adapters/
+node_modules/
+**/node_modules

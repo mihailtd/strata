@@ -1,0 +1,29 @@
+# 1. Configure Default Model to Local ROCm Engine
+- id: agent-default-model
+  config:
+    provider: local-moa
+    model: qwen3.8:27b
+
+
+# 2. Enable Native Subagent Tools
+- id: tool-subagent
+  disabled: false
+
+
+- id: tool-subagent-fork
+  disabled: false
+
+- id: tool-subagent-control
+  disabled: false
+
+- id: tool-subagent-list-agents
+  disabled: false
+
+# 2. Mount Custom DSH Tool Plugins
+- insert:
+    - id: tool-code-verify
+      name: '/home/mihai/Projects/gnn-experiment/src/harness/plugins/dsh-plugin-code-verify/index.js'
+      inject:
+        - tools
+
+

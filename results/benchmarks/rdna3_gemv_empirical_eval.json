@@ -1,0 +1,9 @@
+{
+  "base_ms": 0.1755,
+  "opt_ms": 0.1219,
+  "speedup": 1.44,
+  "base_bw_gbs": 243.9,
+  "opt_bw_gbs": 351.2,
+  "cosine_similarity": 1.0,
+  "passed": true
+}

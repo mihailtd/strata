@@ -36,12 +36,26 @@ echo "Batch Size:  ${BATCH_SIZE}"
 echo "Speculation: draft-mtp,ngram-mod (Max Draft: 4, Max N-Gram: 4)"
 echo "================================================================================"
 
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+ADAPTERS_DIR="${PROJECT_ROOT}/results/adapters"
+LORA_ARGS=()
+if [[ -f "${ADAPTERS_DIR}/astral_27b.gguf" ]]; then
+  LORA_LIST="${ADAPTERS_DIR}/astral_27b.gguf,${ADAPTERS_DIR}/postgresql_27b.gguf,${ADAPTERS_DIR}/duckdb_27b.gguf,${ADAPTERS_DIR}/python_web_27b.gguf,${ADAPTERS_DIR}/financial_27b.gguf,${ADAPTERS_DIR}/python_modern_27b.gguf"
+  LORA_ARGS=(
+    --lora "${LORA_LIST}"
+    --lora-init-without-apply
+  )
+  echo "LoRAs loaded: astral(0), postgresql(1), duckdb(2), python_web(3), financial(4), python_modern(5)"
+fi
+
 exec "${BIN_DIR}/llama-server" \
   --model "${MODEL_PATH}" \
   --host "${HOST}" \
   --port "${PORT}" \
   -ngl 99 \
   -fa on \
+  -ctk q8_0 \
+  -ctv q8_0 \
   -c "${CTX_SIZE}" \
   -b "${BATCH_SIZE}" \
   -ub "${BATCH_SIZE}" \
@@ -51,4 +65,5 @@ exec "${BIN_DIR}/llama-server" \
   --spec-draft-n-max 4 \
   --spec-ngram-mod-n-max 4 \
   --spec-draft-backend-sampling \
+  "${LORA_ARGS[@]}" \
   --no-webui

@@ -1,0 +1,98 @@
+{
+  "http_benchmarks": {
+    "qwen3.8:27b": [
+      {
+        "success": true,
+        "elapsed_s": 4.23,
+        "completion_tokens": 32,
+        "tokens_per_second": 30.62,
+        "generation_time_ms": 1045.2,
+        "sample_output": "We need answer user's question: \"How do I initialize a new Python project using uv with pyproject.toml and add FastAPI a",
+        "prompt_id": "astral_uv_packaging",
+        "domain": "Astral Python Toolchain"
+      },
+      {
+        "success": true,
+        "elapsed_s": 1.02,
+        "completion_tokens": 32,
+        "tokens_per_second": 31.45,
+        "generation_time_ms": 1017.4,
+        "sample_output": "We need answer user: \"Write a PostgreSQL 17 SQL migration adding a 1536-dimensional vector column with an HNSW cosine in",
+        "prompt_id": "postgres_pgvector_hnsw",
+        "domain": "PostgreSQL 17 & Vector DB"
+      },
+      {
+        "success": true,
+        "elapsed_s": 1.04,
+        "completion_tokens": 32,
+        "tokens_per_second": 30.84,
+        "generation_time_ms": 1037.7,
+        "sample_output": "We need answer user: \"Write a DuckDB query to parse a Parquet file, compute 7-day rolling average revenue per customer, ",
+        "prompt_id": "duckdb_qualify_window",
+        "domain": "DuckDB Vectorized Analytics"
+      },
+      {
+        "success": true,
+        "elapsed_s": 1.21,
+        "completion_tokens": 32,
+        "tokens_per_second": 26.39,
+        "generation_time_ms": 1212.7,
+        "sample_output": "The user is asking for a minimal FastAPI app that includes: 1. An async lifespan handler (not the deprecated on_event, b",
+        "prompt_id": "fastapi_async_lifespan",
+        "domain": "FastAPI Web Architecture"
+      }
+    ],
+    "qwen3.8:27b-triton": [
+      {
+        "success": true,
+        "elapsed_s": 5.93,
+        "completion_tokens": 32,
+        "tokens_per_second": 5.4,
+        "generation_time_ms": 5928.0,
+        "sample_output": ";d)   \ufffd Korea  .",
+        "prompt_id": "astral_uv_packaging",
+        "domain": "Astral Python Toolchain"
+      },
+      {
+        "success": true,
+        "elapsed_s": 1.5,
+        "completion_tokens": 32,
+        "tokens_per_second": 21.33,
+        "generation_time_ms": 1500.1,
+        "sample_output": "i+        =pltalli          Polit",
+        "prompt_id": "postgres_pgvector_hnsw",
+        "domain": "PostgreSQL 17 & Vector DB"
+      },
+      {
+        "success": true,
+        "elapsed_s": 1.51,
+        "completion_tokens": 32,
+        "tokens_per_second": 21.27,
+        "generation_time_ms": 1504.7,
+        "sample_output": "",
+        "prompt_id": "duckdb_qualify_window",
+        "domain": "DuckDB Vectorized Analytics"
+      },
+      {
+        "success": true,
+        "elapsed_s": 1.5,
+        "completion_tokens": 32,
+        "tokens_per_second": 21.29,
+        "generation_time_ms": 1503.1,
+        "sample_output": "zell eworldsallieworld_likelihood   +    departamento    departamento",
+        "prompt_id": "fastapi_async_lifespan",
+        "domain": "FastAPI Web Architecture"
+      }
+    ]
+  },
+  "runtime_layer_evolution": {
+    "tokens_evaluated": 256,
+    "naive_cat_time_ms": 485.54,
+    "prealloc_bf16_time_ms": 199.58,
+    "prealloc_q8_time_ms": 252.89,
+    "speedup_bf16_vs_naive": 2.43,
+    "vram_bf16_kb": 1088.0,
+    "vram_q8_kb": 548.2,
+    "vram_saved_percent": 49.6
+  }
+}

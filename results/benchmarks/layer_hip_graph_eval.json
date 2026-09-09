@@ -1,0 +1,23 @@
+{
+  "single_ssm": {
+    "test": "single_ssm_layer",
+    "num_steps": 128,
+    "eager_ms_per_step": 0.789,
+    "graph_ms_per_step": 0.826,
+    "speedup": 0.96,
+    "cosine_similarity": 1.0,
+    "max_abs_error": 0.0,
+    "passed": true
+  },
+  "3ssm_chunk": {
+    "test": "3ssm_chunk",
+    "num_steps": 128,
+    "eager_ms_per_step": 2.258,
+    "graph_ms_per_step": 2.236,
+    "speedup": 1.01,
+    "cosine_similarity": 1.0,
+    "max_abs_error": 0.0,
+    "passed": true
+  },
+  "passed": true
+}

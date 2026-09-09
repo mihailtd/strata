@@ -21,15 +21,39 @@ import triton.language as tl
 # Vectorized Quantization and Packing Helpers (PyTorch GPU)
 # -----------------------------------------------------------------------------
 
+def _quantize_and_pack_w4_block(
+    weight: torch.Tensor,
+    group_size: int = 128,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    K, N = weight.shape
+    n_groups = K // group_size
+    w_grouped = weight.view(n_groups, group_size, N)
+
+    max_abs = w_grouped.abs().amax(dim=1, keepdim=True).clamp(min=1e-5)
+    scales = (max_abs / 7.5).to(torch.bfloat16)
+
+    q = torch.clamp(torch.round(w_grouped / scales) + 8.0, 0, 15).to(torch.int32)
+    q = q.view(K, N)
+
+    # Pack 8 nibbles into 1 int32 along K dimension
+    q_unpacked = q.view(K // 8, 8, N)
+    shifts = torch.tensor([0, 4, 8, 12, 16, 20, 24, 28], dtype=torch.int32, device=weight.device).view(1, 8, 1)
+    qweight = (q_unpacked << shifts).sum(dim=1, dtype=torch.int32)
+
+    return qweight, scales.view(n_groups, N)
+
+
 def quantize_and_pack_w4(
     weight: torch.Tensor,
     group_size: int = 128,
+    chunk_size: int = 4096,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Symmetric INT4 quantization with group scaling.
 
     Args:
         weight: (K, N) tensor in bfloat16 or float32.
         group_size: Quantization group size along K dimension (default 128).
+        chunk_size: Maximum column chunk size to avoid VRAM/RAM spikes.
 
     Returns:
         qweight: (K // 8, N) tensor of int32 packed nibbles (LSB-first).
@@ -39,21 +63,18 @@ def quantize_and_pack_w4(
     assert K % group_size == 0, f"K ({K}) must be divisible by group_size ({group_size})"
     assert group_size % 8 == 0, f"group_size ({group_size}) must be divisible by 8"
 
-    n_groups = K // group_size
-    w_grouped = weight.view(n_groups, group_size, N)
+    if N <= chunk_size:
+        return _quantize_and_pack_w4_block(weight, group_size)
 
-    max_abs = w_grouped.abs().amax(dim=1, keepdim=True).clamp(min=1e-5)
-    scales = (max_abs / 7.5).to(torch.bfloat16)
+    qweight_chunks = []
+    scales_chunks = []
+    for j in range(0, N, chunk_size):
+        w_chunk = weight[:, j : min(j + chunk_size, N)]
+        qw, sc = _quantize_and_pack_w4_block(w_chunk, group_size)
+        qweight_chunks.append(qw)
+        scales_chunks.append(sc)
 
-    q = torch.clamp(torch.round(w_grouped / scales.float()) + 8.0, 0, 15).to(torch.int32)
-    q = q.view(K, N)
-
-    # Pack 8 nibbles into 1 int32 along K dimension
-    q_unpacked = q.view(K // 8, 8, N)
-    shifts = torch.tensor([0, 4, 8, 12, 16, 20, 24, 28], dtype=torch.int32, device=weight.device).view(1, 8, 1)
-    qweight = (q_unpacked << shifts).sum(dim=1, dtype=torch.int32)
-
-    return qweight, scales.view(n_groups, N)
+    return torch.cat(qweight_chunks, dim=1), torch.cat(scales_chunks, dim=1)
 
 
 def unpack_and_dequantize_w4(
@@ -167,7 +188,7 @@ def _w4a16_gemm_kernel_raw(
 
 _w4a16_gemm_kernel = triton.autotune(
     configs=get_rdna3_w4a16_configs(),
-    key=["M", "N", "K"],
+    key=["N", "K"],
 )(_w4a16_gemm_kernel_raw)
 
 
@@ -270,8 +291,8 @@ def w4a16_matmul(
 
     # Fast-path for single-token autoregression (M=1)
     if M == 1:
-        BLOCK_N = 128
-        BLOCK_K = 64
+        BLOCK_N = 64
+        BLOCK_K = 128
         grid_m1 = (triton.cdiv(N, BLOCK_N),)
         _w4a16_gemv_m1_kernel[grid_m1](
             x_2d, qweight, scales, c_2d,
@@ -396,7 +417,7 @@ def _fused_w4a16_lora_kernel_raw(
 
 _fused_w4a16_lora_kernel = triton.autotune(
     configs=get_rdna3_w4a16_configs(),
-    key=["M", "N", "K", "R"],
+    key=["N", "K", "R"],
 )(_fused_w4a16_lora_kernel_raw)
 
 

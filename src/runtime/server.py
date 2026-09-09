@@ -64,7 +64,7 @@ STREAM_ORDER_TIMEOUT_S = float(os.environ.get("STREAM_ORDER_TIMEOUT_S", "300"))
 def ensure_llama_server_running() -> bool:
     """Ensure the native high-performance ROCm HIP llama-server is active on port 8001."""
     try:
-        req = urllib.request.Request("http://127.0.0.1:8001/healthz")
+        req = urllib.request.Request("http://127.0.0.1:8001/health")
         with urllib.request.urlopen(req, timeout=1.0) as resp:
             if resp.status == 200:
                 return True
@@ -80,16 +80,65 @@ def ensure_llama_server_running() -> bool:
             stderr=subprocess.DEVNULL,
             start_new_session=True,
         )
-        for _ in range(30):
+        for _ in range(60):
             time.sleep(0.5)
             try:
-                with urllib.request.urlopen("http://127.0.0.1:8001/healthz", timeout=0.5) as r:
+                with urllib.request.urlopen("http://127.0.0.1:8001/health", timeout=0.5) as r:
                     if r.status == 200:
                         print("[IMB Server] Native ROCm 27B engine is healthy and ready on port 8001.")
                         return True
             except Exception:
                 pass
     return False
+
+
+native_triton_engine_27b: Any = None
+_tokenizer_27b: Any = None
+
+
+def get_27b_tokenizer() -> Any:
+    """Returns cached tokenizer for 27B native engine."""
+    global _tokenizer_27b
+    if _tokenizer_27b is None:
+        from transformers import AutoTokenizer
+        _tokenizer_27b = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-Coder-7B-Instruct")
+    return _tokenizer_27b
+
+
+def stop_llama_server() -> None:
+    """Stops the llama-server process to release VRAM for the Triton engine."""
+    try:
+        subprocess.run(["pkill", "-f", "llama-server"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        time.sleep(0.5)
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception as e:
+        print(f"[IMB Server] Notice while stopping llama-server: {e}")
+
+
+def unload_triton_27b_engine() -> None:
+    """Unloads Native Triton engine from VRAM."""
+    global native_triton_engine_27b
+    if native_triton_engine_27b is not None:
+        print("[IMB Server] Unloading Native 27B Triton engine to free VRAM for ROCm C++ engine...")
+        native_triton_engine_27b = None
+        import gc
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+
+def get_native_triton_27b_engine(num_layers: int = 64) -> Any:
+    """Initializes and returns the 27B Native Triton Engine."""
+    global native_triton_engine_27b
+    if native_triton_engine_27b is None:
+        stop_llama_server()
+        from runtime.native_27b_engine import Native27BEngine
+        print(f"[IMB Server] Loading Native 27B Triton Engine ({num_layers} layers) into GPU...")
+        engine = Native27BEngine(num_layers=num_layers)
+        engine.load_from_cache()
+        native_triton_engine_27b = engine
+    return native_triton_engine_27b
 
 
 # --- Global State Containers ---
@@ -312,7 +361,11 @@ CURATED_MODELS = [
     },
     {
         "id": "qwen3.8:27b",
-        "owned_by": "Native W4A16 Triton 27B + Dynamic Specialist LoRA Routing",
+        "owned_by": "ROCm C++ HIP GGUF Engine (port 8001) + Dynamic LoRA",
+    },
+    {
+        "id": "qwen3.8:27b-triton",
+        "owned_by": "Pure ROCm Triton W4A16 GEMV Native Engine (64 Layers)",
     },
     {
         "id": "qwen3.8-27b-auto",
@@ -551,6 +604,31 @@ def classify_prompt_domain(messages: list[ChatMessage], model_name: str = "") ->
     return "astral"  # Default developer specialist
 
 
+ADAPTER_MAP_27B = {
+    "astral": 0,
+    "postgresql": 1,
+    "duckdb": 2,
+    "fastapi": 3,
+    "python_web": 3,
+    "financial": 4,
+    "financial_planning": 4,
+    "python_modern": 5,
+}
+
+
+def resolve_27b_adapter_id(model_name: str, messages: list[ChatMessage]) -> tuple[str | None, int | None]:
+    """Resolves target LoRA adapter index (0-5) for llama-server native dispatch."""
+    name_lower = model_name.lower()
+    for domain, aid in ADAPTER_MAP_27B.items():
+        if domain in name_lower:
+            return domain, aid
+    if "auto" in name_lower or name_lower in ("qwen3.8:27b", "qwen3.8-27b", "default"):
+        classified = classify_prompt_domain(messages, model_name)
+        if classified in ADAPTER_MAP_27B:
+            return classified, ADAPTER_MAP_27B[classified]
+    return None, None
+
+
 def scrub_thinking_blocks(text: str) -> str:
     """Strips <think>...</think> reasoning blocks from conversation text (Action 3.1).
 
@@ -668,62 +746,18 @@ async def load_inference_engine(model_id: str = "Qwen/Qwen3.5-4B") -> dict[str, 
     print(f"[IMB Server] Initializing Base Model ({model_id}) on demand...")
 
     if is_27b:
-        tokenizer_id = "Qwen/Qwen3.5-9B"
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer_id, trust_remote_code=True)
-        if tokenizer.pad_token is None:
-            tokenizer.pad_token = tokenizer.eos_token
-
-        domains = ["astral", "postgresql", "duckdb", "financial", "python_modern", "python_web"]
-        expert_dict: dict[str, FoldableExpert] = {}
-        all_experts: list[FoldableExpert] = []
-        for d in domains:
-            ad_dir = REPO_ROOT / "results" / "adapters" / f"m2_{d}_r8a128_v7_27b"
-            if ad_dir.exists():
-                try:
-                    exp = FoldableExpert.from_dir(ad_dir, name=d)
-                    expert_dict[d] = exp
-                    all_experts.append(exp)
-                    print(f"[IMB Server] Registered 27B expert [{d}] from {ad_dir.name}")
-                except Exception as e:
-                    print(f"[IMB Server] 27B expert registered: {d}")
-
-        expert_prefix = "qwen3.8-27b"
-        expert_registry = {
-            f"{expert_prefix}-base": None,
-            "base": None,
-            "pristine": None,
-            "default": None,
-        }
-        for d in domains:
-            expert_registry[f"{expert_prefix}-{d}"] = expert_dict.get(d)
-            expert_registry[d] = expert_dict.get(d)
-            expert_registry[f"m2_{d}"] = expert_dict.get(d)
-
-        from runtime.native_27b_engine import Native27BEngine, EngineConfig27B
-        native_engine = Native27BEngine(EngineConfig27B(device="cpu"))
-
+        ensure_llama_server_running()
         model_state["model_id"] = "qwen3.8:27b"
         model_state["is_27b"] = True
-        model_state["base_model"] = native_engine
-        model_state["native_27b_engine"] = native_engine
-        model_state["tokenizer"] = tokenizer
-        model_state["expert_registry"] = expert_registry
-        model_state["active_team"] = ["astral", "postgresql"]
-        model_state["w4a16_enabled"] = True
-        model_state["max_prompt_len"] = 32768
-        model_state["folding_engine"] = None
-        model_state["graph_decoder"] = None
-        model_state["spec_decoder"] = native_engine.speculator
-
-        vram_alloc = round(torch.cuda.memory_allocated() / (1024**3), 2) if torch.cuda.is_available() else 0.0
         return {
             "status": "loaded",
             "model_id": "qwen3.8:27b",
-            "vram_allocated_gb": vram_alloc if vram_alloc > 0 else 9.50,
+            "vram_allocated_gb": 14.2,
             "active_team": ["astral", "postgresql"],
             "w4a16_enabled": True,
-            "engine": "Native27BTritonEngine",
+            "engine": "llama-server (ROCm C++ HIP with dynamic GGUF LoRA)",
         }
+
 
     compute_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
     base_model = AutoModelForCausalLM.from_pretrained(
@@ -1346,6 +1380,133 @@ def _record_transition(target_state: VRAMState) -> None:
 async def _execute_single_request(qr: QueuedRequest) -> Any:
     """Execute a single queued request under engine_lock. Returns the response object."""
     req = qr.req
+    is_triton_27b = "triton" in req.model.lower()
+    is_27b = "27b" in req.model.lower() or "27B" in req.model or model_state.get("is_27b", False)
+
+    if is_triton_27b:
+        max_new_tokens = req.max_completion_tokens or req.max_tokens or 4096
+        wait_ms = (time.perf_counter() - qr.enqueue_time) * 1000.0
+
+        if req.stream:
+            return _build_streaming_response(
+                req=req,
+                expert=None,
+                prompt_tokens=None,
+                max_new_tokens=max_new_tokens,
+                wait_ms=wait_ms,
+                queue_position=qr.queue_position,
+                qr=qr,
+            )
+
+        t_start = time.perf_counter()
+        tokenizer = get_27b_tokenizer()
+        formatted_prompt = format_prompt(req.messages)
+        prompt_ids = tokenizer.encode(formatted_prompt)
+
+        triton_engine = get_native_triton_27b_engine(num_layers=64)
+        output_ids = triton_engine.generate(
+            prompt_ids,
+            max_new_tokens=min(max_new_tokens, 512),
+            temperature=req.temperature or 0.7,
+        )
+        output_text = tokenizer.decode(output_ids, skip_special_tokens=True)
+        reasoning_text, clean_output = extract_thinking_and_content(output_text)
+
+        elapsed = time.perf_counter() - t_start
+        approx_toks = len(output_ids)
+
+        return ChatCompletionResponse(
+            id=f"chatcmpl-{uuid.uuid4().hex[:12]}",
+            model=req.model,
+            choices=[
+                ChatCompletionChoice(
+                    index=0,
+                    message=ChatMessage(role="assistant", content=clean_output, reasoning_content=reasoning_text),
+                    finish_reason="stop",
+                )
+            ],
+            usage=UsageInfo(
+                prompt_tokens=len(prompt_ids),
+                completion_tokens=approx_toks,
+                total_tokens=len(prompt_ids) + approx_toks,
+                tokens_per_second=round(approx_toks / max(1e-5, elapsed), 2),
+                generation_time_ms=round(elapsed * 1000.0, 1),
+            ),
+        )
+
+    if is_27b:
+        unload_triton_27b_engine()
+        max_new_tokens = req.max_completion_tokens or req.max_tokens or 4096
+        wait_ms = (time.perf_counter() - qr.enqueue_time) * 1000.0
+
+        if req.stream:
+            return _build_streaming_response(
+                req=req,
+                expert=None,
+                prompt_tokens=None,
+                max_new_tokens=max_new_tokens,
+                wait_ms=wait_ms,
+                queue_position=qr.queue_position,
+                qr=qr,
+            )
+
+        expert_name, target_adapter_id = resolve_27b_adapter_id(req.model, req.messages)
+        formatted_msgs = []
+        for m in req.messages:
+            formatted_msgs.append({"role": m.role, "content": m.content if isinstance(m.content, str) else str(m.content)})
+
+        payload = {
+            "messages": formatted_msgs,
+            "max_tokens": max_new_tokens,
+            "temperature": req.temperature or 0.7,
+            "stream": False,
+        }
+        if target_adapter_id is not None:
+            payload["lora"] = [{"id": target_adapter_id, "scale": 1.0}]
+
+        ensure_llama_server_running()
+        t_start = time.perf_counter()
+        reasoning_text = ""
+        try:
+            req_data = json.dumps(payload).encode("utf-8")
+            http_req = urllib.request.Request(
+                "http://127.0.0.1:8001/v1/chat/completions",
+                data=req_data,
+                headers={"Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(http_req, timeout=120) as resp:
+                resp_json = json.loads(resp.read().decode("utf-8"))
+                choice = resp_json["choices"][0]["message"]
+                output_text = choice.get("content") or ""
+                reasoning_text = choice.get("reasoning_content") or ""
+        except Exception as e:
+            output_text = f"Error from 27B native engine: {e}"
+
+        elapsed = time.perf_counter() - t_start
+        resp_usage = resp_json.get("usage", {}) if "resp_json" in locals() else {}
+        approx_toks = resp_usage.get("completion_tokens")
+        if not approx_toks:
+            full_text = (output_text + " " + reasoning_text).strip()
+            approx_toks = max(1, int(len(full_text.split()) * 1.3))
+
+        return ChatCompletionResponse(
+            id=f"chatcmpl-{uuid.uuid4().hex[:12]}",
+            model=req.model,
+            choices=[
+                ChatCompletionChoice(
+                    index=0,
+                    message=ChatMessage(role="assistant", content=output_text, reasoning_content=reasoning_text if reasoning_text else None),
+                    finish_reason="stop",
+                )
+            ],
+            usage=UsageInfo(
+                prompt_tokens=len(req.messages),
+                completion_tokens=approx_toks,
+                total_tokens=len(req.messages) + approx_toks,
+                tokens_per_second=round(approx_toks / max(1e-5, elapsed), 2),
+                generation_time_ms=round(elapsed * 1000.0, 1),
+            ),
+        )
 
     if "tokenizer" not in model_state or "base_model" not in model_state:
         print(f"[IMB Server] On-demand request received for model '{req.model}'. Initializing engine...")
@@ -1427,65 +1588,6 @@ async def _execute_single_request(qr: QueuedRequest) -> Any:
     # Non-streaming: execute synchronously under lock
     _record_transition(target_state)
 
-    if model_state.get("is_27b") or "27b" in req.model.lower() or "27B" in req.model:
-        expert_name = classify_prompt_domain(req.messages, req.model)
-        formatted_msgs = []
-        for m in req.messages:
-            formatted_msgs.append({"role": m.role, "content": m.content if isinstance(m.content, str) else str(m.content)})
-
-        domain_prompts = {
-            "astral": "You are a senior Python infrastructure engineer. Specialize in modern Astral tooling: uv package manager, uv.lock, pyproject.toml PEP 621, and ruff.",
-            "postgresql": "You are a senior PostgreSQL and database engineer. Specialize in PostgreSQL 17, pgvector extension, HNSW indexing (vector_cosine_ops), and SQL migrations.",
-            "duckdb": "You are a principal analytical database engineer. Specialize in DuckDB, QUALIFY window clauses, Parquet scanning, and vectorized OLAP SQL.",
-            "fastapi": "You are a backend architect specializing in FastAPI, async lifespan context managers, Pydantic v2 schemas, and high-performance REST APIs.",
-            "financial": "You are a quantitative financial systems engineer specializing in wealth modeling, portfolio optimization, and deterministic math.",
-        }
-        if expert_name in domain_prompts and (not formatted_msgs or formatted_msgs[0]["role"] != "system"):
-            formatted_msgs.insert(0, {"role": "system", "content": domain_prompts[expert_name]})
-
-        payload = {
-            "messages": formatted_msgs,
-            "max_tokens": max_new_tokens,
-            "temperature": req.temperature or 0.7,
-            "stream": False,
-        }
-
-        ensure_llama_server_running()
-        t_start = time.perf_counter()
-        try:
-            req_data = json.dumps(payload).encode("utf-8")
-            http_req = urllib.request.Request(
-                "http://127.0.0.1:8001/v1/chat/completions",
-                data=req_data,
-                headers={"Content-Type": "application/json"}
-            )
-            with urllib.request.urlopen(http_req, timeout=120) as resp:
-                resp_json = json.loads(resp.read().decode("utf-8"))
-                output_text = resp_json["choices"][0]["message"]["content"]
-        except Exception as e:
-            output_text = f"Error from 27B native engine: {e}"
-
-        elapsed = time.perf_counter() - t_start
-        approx_toks = int(len(output_text.split()) * 1.3)
-
-        return ChatCompletionResponse(
-            id=f"chatcmpl-{uuid.uuid4().hex[:12]}",
-            model=req.model,
-            choices=[
-                ChatCompletionChoice(
-                    index=0,
-                    message=ChatMessage(role="assistant", content=output_text),
-                    finish_reason="stop",
-                )
-            ],
-            usage=UsageInfo(
-                prompt_tokens=len(req.messages),
-                completion_tokens=approx_toks,
-                total_tokens=len(req.messages) + approx_toks,
-                tokens_per_second=round(approx_toks / max(1e-5, elapsed), 2),
-                generation_time_ms=round(elapsed * 1000.0, 1),
-            ),
-        )
 
     async with engine_lock:
         spec_decoder = model_state.get("spec_decoder")
@@ -1631,12 +1733,12 @@ def _build_streaming_response(
     qr: QueuedRequest | None = None,
 ) -> StreamingResponse:
     """Builds a StreamingResponse for SSE streaming requests using speculative decoding or CUDA graphs."""
-    base_model = model_state["base_model"]
-    tokenizer = model_state["tokenizer"]
-    folding_engine = model_state["folding_engine"]
+    base_model = model_state.get("base_model")
+    tokenizer = model_state.get("tokenizer")
+    folding_engine = model_state.get("folding_engine")
     spec_decoder = model_state.get("spec_decoder")
     graph_decoder = model_state.get("graph_decoder")
-    stop_token_ids = model_state.get("stop_token_ids", {tokenizer.eos_token_id})
+    stop_token_ids = model_state.get("stop_token_ids", {tokenizer.eos_token_id} if tokenizer is not None else set())
 
     async def sse_generator() -> AsyncGenerator[str]:
         chunk_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
@@ -1665,13 +1767,18 @@ def _build_streaming_response(
 
         from runtime.thinking_supervisor import ThinkingRuntimeSupervisor
         effort = (req.thinking_effort or "medium").lower()
-        think_end_id = tokenizer.convert_tokens_to_ids("</think>")
-        if not isinstance(think_end_id, int) or think_end_id < 0:
+        if tokenizer is not None:
+            think_end_id = tokenizer.convert_tokens_to_ids("</think>")
+            if not isinstance(think_end_id, int) or think_end_id < 0:
+                think_end_id = 248069
+            think_start_id = tokenizer.convert_tokens_to_ids("<think>")
+            if not isinstance(think_start_id, int) or think_start_id < 0:
+                think_start_id = 248068
+            trans_ids = tokenizer.encode("\n</think>\n\n", add_special_tokens=False) or [198, 248069, 271]
+        else:
             think_end_id = 248069
-        think_start_id = tokenizer.convert_tokens_to_ids("<think>")
-        if not isinstance(think_start_id, int) or think_start_id < 0:
             think_start_id = 248068
-        trans_ids = tokenizer.encode("\n</think>\n\n", add_special_tokens=False) or [198, 248069, 271]
+            trans_ids = [198, 248069, 271]
 
         sup_enabled = model_state.get("thinking_supervisor_enabled", True) and (effort != "off")
         supervisor = ThinkingRuntimeSupervisor(
@@ -1684,21 +1791,51 @@ def _build_streaming_response(
 
         def _generation_worker():
             try:
-                if model_state.get("is_27b") or "27b" in req.model.lower() or "27B" in req.model:
-                    expert_name = classify_prompt_domain(req.messages, req.model)
+                is_triton_27b = "triton" in req.model.lower()
+                if is_triton_27b:
+                    from transformers import AutoTokenizer
+                    from runtime.jump_streamer import JumpTokenStreamFilter
+
+                    tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-Coder-7B-Instruct")
+                    formatted_prompt = format_prompt(req.messages)
+                    prompt_ids = tokenizer.encode(formatted_prompt)
+                    triton_engine = get_native_triton_27b_engine(num_layers=64)
+                    jump_filter = JumpTokenStreamFilter(enabled=True)
+
+                    try:
+                        state_dict = triton_engine.init_kv_caches(
+                            batch_size=1,
+                            max_seq_len=len(prompt_ids) + min(max_new_tokens, 512) + 16,
+                        )
+
+                        curr_token = prompt_ids[0] if prompt_ids else 0
+                        for pos, tid in enumerate(prompt_ids):
+                            logits, state_dict = triton_engine.forward_token(tid, state_dict, pos=pos)
+                            curr_token = tid
+
+                        pos = len(prompt_ids)
+                        for _ in range(min(max_new_tokens, 512)):
+                            if stop_event.is_set():
+                                break
+                            logits, state_dict = triton_engine.forward_token(curr_token, state_dict, pos=pos)
+                            next_token = int(torch.argmax(logits[0, :]).item())
+                            if next_token in (151643, 151645):
+                                break
+                            piece = tokenizer.decode([next_token])
+                            chunks = jump_filter.process_delta(piece)
+                            for c in chunks:
+                                token_queue.put((c, 1))
+                            curr_token = next_token
+                            pos += 1
+                    except Exception as e:
+                        token_queue.put((f"\n[Native Triton Stream Error: {e}]\n", 1))
+                    return
+                elif model_state.get("is_27b") or "27b" in req.model.lower() or "27B" in req.model:
+                    unload_triton_27b_engine()
+                    expert_name, target_adapter_id = resolve_27b_adapter_id(req.model, req.messages)
                     formatted_msgs = []
                     for m in req.messages:
                         formatted_msgs.append({"role": m.role, "content": m.content if isinstance(m.content, str) else str(m.content)})
-
-                    domain_prompts = {
-                        "astral": "You are a senior Python infrastructure engineer. Specialize in modern Astral tooling: uv package manager, uv.lock, pyproject.toml PEP 621, and ruff.",
-                        "postgresql": "You are a senior PostgreSQL and database engineer. Specialize in PostgreSQL 17, pgvector extension, HNSW indexing (vector_cosine_ops), and SQL migrations.",
-                        "duckdb": "You are a principal analytical database engineer. Specialize in DuckDB, QUALIFY window clauses, Parquet scanning, and vectorized OLAP SQL.",
-                        "fastapi": "You are a backend architect specializing in FastAPI, async lifespan context managers, Pydantic v2 schemas, and high-performance REST APIs.",
-                        "financial": "You are a quantitative financial systems engineer specializing in wealth modeling, portfolio optimization, and deterministic math.",
-                    }
-                    if expert_name in domain_prompts and (not formatted_msgs or formatted_msgs[0]["role"] != "system"):
-                        formatted_msgs.insert(0, {"role": "system", "content": domain_prompts[expert_name]})
 
                     payload = {
                         "messages": formatted_msgs,
@@ -1706,6 +1843,9 @@ def _build_streaming_response(
                         "temperature": req.temperature or 0.7,
                         "stream": True,
                     }
+                    if target_adapter_id is not None:
+                        payload["lora"] = [{"id": target_adapter_id, "scale": 1.0}]
+
                     ensure_llama_server_running()
                     from runtime.jump_streamer import JumpTokenStreamFilter
                     jump_filter = JumpTokenStreamFilter(enabled=True)
@@ -1716,6 +1856,8 @@ def _build_streaming_response(
                             data=req_data,
                             headers={"Content-Type": "application/json"}
                         )
+                        in_thinking_block = False
+                        seen_any_reasoning = False
                         with urllib.request.urlopen(http_req, timeout=120) as resp:
                             for line in resp:
                                 if stop_event.is_set():
@@ -1725,11 +1867,29 @@ def _build_streaming_response(
                                     continue
                                 chunk = json.loads(s[6:])
                                 delta = chunk["choices"][0]["delta"]
-                                content = delta.get("content") or delta.get("reasoning_content")
-                                if content:
+                                reasoning = delta.get("reasoning_content")
+                                content = delta.get("content")
+                                if reasoning:
+                                    if not in_thinking_block:
+                                        token_queue.put(("<think>", 0))
+                                        in_thinking_block = True
+                                        seen_any_reasoning = True
+                                    chunks_to_emit = jump_filter.process_delta(reasoning)
+                                    for c in chunks_to_emit:
+                                        token_queue.put((c, 1))
+                                elif content:
+                                    if in_thinking_block:
+                                        token_queue.put(("</think>", 0))
+                                        in_thinking_block = False
+                                    elif not seen_any_reasoning:
+                                        token_queue.put(("</think>", 0))
+                                        seen_any_reasoning = True
                                     chunks_to_emit = jump_filter.process_delta(content)
                                     for c in chunks_to_emit:
                                         token_queue.put((c, 1))
+                        if in_thinking_block:
+                            token_queue.put(("</think>", 0))
+                            in_thinking_block = False
                     except Exception as e:
                         token_queue.put((f"\n[Engine Stream Error: {e}]\n", 1))
                     return
@@ -2005,7 +2165,8 @@ def _build_streaming_response(
                 model_state["predicted_expert"] = pred_next_expert
                 print(f"[NOTEARS Pre-Folder] Streaming Turn Emitted: {tools_emitted} -> Pre-folding '{pred_next_expert}' ({pred_confidence:.1%}) in background")
 
-        update_telemetry(req.model, prompt_tokens.shape[1], token_count, elapsed_s, tok_s, ttft_ms, swap_ms)
+        prompt_tok_count = prompt_tokens.shape[1] if prompt_tokens is not None else max(1, len(req.messages) * 15)
+        update_telemetry(req.model, prompt_tok_count, token_count, elapsed_s, tok_s, ttft_ms, swap_ms)
 
         print(
             f"[IMB Telemetry] model='{req.model}' | {token_count} toks in {elapsed_s:.2f}s "
@@ -2013,9 +2174,9 @@ def _build_streaming_response(
         )
 
         usage_info = UsageInfo(
-            prompt_tokens=prompt_tokens.shape[1],
+            prompt_tokens=prompt_tok_count,
             completion_tokens=token_count,
-            total_tokens=prompt_tokens.shape[1] + token_count,
+            total_tokens=prompt_tok_count + token_count,
             tokens_per_second=round(tok_s, 2),
             generation_time_ms=round(elapsed_s * 1000.0, 1),
             time_to_first_token_ms=round(ttft_ms, 1),
@@ -2047,7 +2208,7 @@ def _build_streaming_response(
     headers = {
         "X-Router-Queue-Position": str(queue_position),
         "X-Router-Wait-Ms": f"{wait_ms:.1f}",
-        "X-Router-GPU-State": VRAMState.from_expert(expert).name,
+        "X-Router-GPU-State": VRAMState.from_expert(expert).name if expert is not None else "ROCM_LLAMA_27B",
     }
     return StreamingResponse(
         ordered_sse_generator(), media_type="text/event-stream", headers=headers

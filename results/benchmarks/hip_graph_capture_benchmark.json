@@ -1,0 +1,35 @@
+[
+  {
+    "num_layers": 1,
+    "kernels_per_step": 6,
+    "eager_per_step_ms": 0.604,
+    "eager_wall_per_step_ms": 0.605,
+    "graph_per_step_ms": 0.442,
+    "graph_wall_per_step_ms": 0.443,
+    "speedup_factor": 1.37,
+    "cosine_similarity": 1.0,
+    "max_diff": 0.0
+  },
+  {
+    "num_layers": 8,
+    "kernels_per_step": 48,
+    "eager_per_step_ms": 3.359,
+    "eager_wall_per_step_ms": 3.36,
+    "graph_per_step_ms": 3.232,
+    "graph_wall_per_step_ms": 3.233,
+    "speedup_factor": 1.04,
+    "cosine_similarity": 1.0,
+    "max_diff": 0.0
+  },
+  {
+    "num_layers": 16,
+    "kernels_per_step": 96,
+    "eager_per_step_ms": 6.72,
+    "eager_wall_per_step_ms": 6.723,
+    "graph_per_step_ms": 6.475,
+    "graph_wall_per_step_ms": 6.476,
+    "speedup_factor": 1.04,
+    "cosine_similarity": 1.0,
+    "max_diff": 0.0
+  }
+]

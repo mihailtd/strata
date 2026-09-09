@@ -1,0 +1,152 @@
+[
+  {
+    "seq_len": 2048,
+    "cache_type": "NaiveCatBF16",
+    "vram_mb": 8.14,
+    "append_latency_us": 77.1,
+    "attention_latency_ms": 0.156,
+    "total_step_latency_ms": 0.233,
+    "cosine_similarity": 0.75579,
+    "max_abs_error": 0.41431
+  },
+  {
+    "seq_len": 2048,
+    "cache_type": "PreallocatedBF16",
+    "vram_mb": 8.0,
+    "append_latency_us": 19.1,
+    "attention_latency_ms": 0.279,
+    "total_step_latency_ms": 0.299,
+    "cosine_similarity": 0.75579,
+    "max_abs_error": 0.41431
+  },
+  {
+    "seq_len": 2048,
+    "cache_type": "PreallocatedQ8",
+    "vram_mb": 4.03,
+    "append_latency_us": 161.4,
+    "attention_latency_ms": 0.228,
+    "total_step_latency_ms": 0.389,
+    "cosine_similarity": 0.75776,
+    "max_abs_error": 0.40649
+  },
+  {
+    "seq_len": 4096,
+    "cache_type": "NaiveCatBF16",
+    "vram_mb": 16.14,
+    "append_latency_us": 99.2,
+    "attention_latency_ms": 0.335,
+    "total_step_latency_ms": 0.434,
+    "cosine_similarity": 0.95108,
+    "max_abs_error": 0.06506
+  },
+  {
+    "seq_len": 4096,
+    "cache_type": "PreallocatedBF16",
+    "vram_mb": 16.0,
+    "append_latency_us": 10.8,
+    "attention_latency_ms": 0.276,
+    "total_step_latency_ms": 0.287,
+    "cosine_similarity": 0.95108,
+    "max_abs_error": 0.06506
+  },
+  {
+    "seq_len": 4096,
+    "cache_type": "PreallocatedQ8",
+    "vram_mb": 8.06,
+    "append_latency_us": 86.4,
+    "attention_latency_ms": 0.267,
+    "total_step_latency_ms": 0.353,
+    "cosine_similarity": 0.95108,
+    "max_abs_error": 0.06506
+  },
+  {
+    "seq_len": 8192,
+    "cache_type": "NaiveCatBF16",
+    "vram_mb": 32.14,
+    "append_latency_us": 122.8,
+    "attention_latency_ms": 0.519,
+    "total_step_latency_ms": 0.642,
+    "cosine_similarity": 0.97137,
+    "max_abs_error": 0.03516
+  },
+  {
+    "seq_len": 8192,
+    "cache_type": "PreallocatedBF16",
+    "vram_mb": 32.0,
+    "append_latency_us": 10.4,
+    "attention_latency_ms": 0.538,
+    "total_step_latency_ms": 0.548,
+    "cosine_similarity": 0.97137,
+    "max_abs_error": 0.03516
+  },
+  {
+    "seq_len": 8192,
+    "cache_type": "PreallocatedQ8",
+    "vram_mb": 16.12,
+    "append_latency_us": 88.4,
+    "attention_latency_ms": 0.534,
+    "total_step_latency_ms": 0.622,
+    "cosine_similarity": 0.97117,
+    "max_abs_error": 0.03516
+  },
+  {
+    "seq_len": 16384,
+    "cache_type": "NaiveCatBF16",
+    "vram_mb": 64.14,
+    "append_latency_us": 232.8,
+    "attention_latency_ms": 1.068,
+    "total_step_latency_ms": 1.301,
+    "cosine_similarity": 0.96295,
+    "max_abs_error": 0.03912
+  },
+  {
+    "seq_len": 16384,
+    "cache_type": "PreallocatedBF16",
+    "vram_mb": 64.0,
+    "append_latency_us": 11.5,
+    "attention_latency_ms": 1.037,
+    "total_step_latency_ms": 1.049,
+    "cosine_similarity": 0.96295,
+    "max_abs_error": 0.03912
+  },
+  {
+    "seq_len": 16384,
+    "cache_type": "PreallocatedQ8",
+    "vram_mb": 32.25,
+    "append_latency_us": 91.1,
+    "attention_latency_ms": 1.027,
+    "total_step_latency_ms": 1.118,
+    "cosine_similarity": 0.96321,
+    "max_abs_error": 0.03905
+  },
+  {
+    "seq_len": 32768,
+    "cache_type": "NaiveCatBF16",
+    "vram_mb": 128.14,
+    "append_latency_us": 507.1,
+    "attention_latency_ms": 2.284,
+    "total_step_latency_ms": 2.791,
+    "cosine_similarity": 0.99299,
+    "max_abs_error": 0.00812
+  },
+  {
+    "seq_len": 32768,
+    "cache_type": "PreallocatedBF16",
+    "vram_mb": 128.0,
+    "append_latency_us": 13.3,
+    "attention_latency_ms": 2.103,
+    "total_step_latency_ms": 2.117,
+    "cosine_similarity": 0.99299,
+    "max_abs_error": 0.00812
+  },
+  {
+    "seq_len": 32768,
+    "cache_type": "PreallocatedQ8",
+    "vram_mb": 64.5,
+    "append_latency_us": 97.9,
+    "attention_latency_ms": 8.265,
+    "total_step_latency_ms": 8.363,
+    "cosine_similarity": 0.99299,
+    "max_abs_error": 0.008
+  }
+]

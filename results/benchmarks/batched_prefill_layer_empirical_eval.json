@@ -1,0 +1,23 @@
+{
+  "attn_eval": {
+    "layer": "Layer 3 (Full Attention)",
+    "prompt_len": 32,
+    "batched_ms": 1.339,
+    "sequential_ms": 28.553,
+    "speedup": 21.33,
+    "cosine_similarity": 0.99999,
+    "max_abs_error": 0.03125,
+    "passed": true
+  },
+  "ssm_eval": {
+    "layer": "Layer 0 (SSM)",
+    "prompt_len": 32,
+    "batched_ms": 1.759,
+    "sequential_ms": 24.2,
+    "speedup": 13.76,
+    "cosine_similarity": 0.999999,
+    "max_abs_error": 0.03125,
+    "passed": true
+  },
+  "passed": true
+}

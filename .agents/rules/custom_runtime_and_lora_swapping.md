@@ -1,11 +1,51 @@
-# Rule: The Chicken-and-Egg Runtime Paradox & Custom Kernel Mandate
+# Rule: Novelty Mandate, Proprietary Moat & Custom Engine Architecture
 
-## Core Principle
-Standard inference frameworks present an impossible tradeoff for multi-expert agent workflows:
-1. **Ollama / llama.cpp**: Blazing raw speed (110+ tok/s on 35B MoE via C++/HIP assembly), but an **immutable static weight graph**. Swapping a LoRA adapter requires unloading the model and evicting the active KV cache (costing a 2,500–4,500 ms re-prefill freeze per turn).
-2. **Naive PyTorch / HuggingFace PEFT**: Native dynamic adapter switching, but **unoptimized ROCm kernels** that run at only 15–25 tok/s (unusable for real-time agent loops).
+## Core Mandate: Break SOTA and Invent What Does Not Exist
 
-To resolve this paradox, the system mandates a custom low-level Triton/HIP runtime that matches Ollama's hardware saturation while delivering **sub-18ms in-place LoRA swapping**.
+The core mission of this project is **NOT** to wrap existing commodity tools (`llama.cpp`, vLLM, HuggingFace) or train standard LoRAs with standard harnesses. Re-combining existing tools creates **ZERO MOAT**. 
+
+Our mandate is to **BREAK THE SOTA AND INVENT SOMETHING NOVEL AND NEW**—making workflows and capabilities possible that are currently **impossible** in existing frameworks:
+1. **Never celebrate discovering that an existing open-source tool already does what we need.** If an off-the-shelf tool already does it, that is evidence of zero proprietary novelty.
+2. **External engines (`llama.cpp`, Ollama, vLLM) are strictly Baselines and Testbeds** for comparative A/B evaluation, numerical ground truth, and dataset generation. They are NOT the project's technological moat or final product.
+3. **The Proprietary Moat lies in novel low-level kernels and architectures** that fundamentally surpass commodity runtimes.
+
+---
+
+## The Proprietary Moat: What We Are Inventing
+
+Existing commodity engines execute static, quantized models with discrete, isolated LoRAs. Our custom engine (`src/runtime/`) is built to achieve four novel breakthroughs:
+
+### 1. Continuous Riemannian Weight Traversal (Beyond Discrete LoRA Swapping)
+- **The SOTA Limitation**: Engines like `llama.cpp` and `S-LoRA` swap discrete integer adapters ($A \to B$) or apply linear scalar scaling ($s_i \in [0, 1]$) with separate memory operations.
+- **Our Novelty**: Continuous traversal along learned Riemannian weight sub-manifolds. The runtime dynamically morphs weights in-place per token or sub-turn ($W(\theta) = W_0 + \sum_i \alpha_i(\mathbf{z}) U_i V_i$) directly inside the compute pipeline, treating specialist skills as a continuous manifold rather than siloed discrete files.
+
+### 2. In-Register Multi-Expert Superposition (Zero Memory Bandwidth Multiplication)
+- **The SOTA Limitation**: In standard architectures, executing multiple specialist perspectives (e.g. Security + Performance + SQL) requires running multiple models or computing multiple sequential adapter forward passes, multiplying GDDR6 traffic.
+- **Our Novelty**: Fusing multiple low-rank expert projections directly inside Wave32 GPU vector registers during the base 4-bit weight dequantization pass. The base weights $W_0$ are pulled from VRAM exactly ONCE; multiple specialist adapter vectors are superposed in registers simultaneously without saturating the GDDR6 bus.
+
+### 3. Sub-Quadratic Hybrid Recurrence & Dynamic Graph Memory
+- **The SOTA Limitation**: Transformer architectures suffer from $O(N^2)$ KV cache explosion or static linear RNN limitations that cannot dynamically route knowledge representations.
+- **Our Novelty**: Hardware-native associative recurrence (Gated DeltaNet) fused with graph neural memory states, enabling constant-memory long-horizon agent reasoning and state handoffs between specialized sub-graphs that transformer KV caches cannot perform.
+
+### 4. Breaking the Physical Memory Bandwidth Decode Ceiling
+- **The SOTA Limitation**: On 960 GB/s hardware (RX 7900 XTX), single-token autoregressive decode for 15–18 GB models is hard-capped by physics at $\approx 35\text{--}50\text{ tok/s}$.
+- **Our Novelty**: Recurrent multi-token associative expansion, state-space speculation, and ping-pong tensor streaming that generate multi-token verified bursts per global VRAM sweep.
+
+---
+
+## Roles of the Two Engines
+
+1. **Commodity Baseline Engine (`llama-server` on port 8001)**:
+   - **Status**: External SOTA Baseline / Validation Harness.
+   - **Role**: Serves as the ground-truth benchmark for output quality, baseline latency, and reference generation.
+   - **Constraint**: Using or tuning this engine is NEVER the goal or the deliverable. It is merely the standard of comparison that our proprietary engine must surpass.
+
+2. **Proprietary Custom Engine (`src/runtime/` on port 8000)**:
+   - **Status**: The Core Project & Intellectual Property (Moat).
+   - **Role**: Our custom Triton/HIP kernel engine implementing in-register weight morphing, fused DeltaNet associative recurrence, and multi-adapter superposition.
+   - **Constraint**: Every engineering milestone must deliver proprietary capabilities that commodity `llama.cpp` cannot perform.
+
+---
 
 ## Architectural Invariants & Guardrails
 
@@ -13,8 +53,8 @@ To resolve this paradox, the system mandates a custom low-level Triton/HIP runti
    - Mutate pre-allocated low-rank working buffers in VRAM in-place without re-allocating model memory or reloading weights from host RAM.
    - Total memory churn per adapter swap MUST be **0 bytes**.
 
-2. **100% KV Cache Retention Across Adapter Swaps**:
-   - Swapping a specialist LoRA adapter MUST NEVER invalidate or flush the active KV Cache.
+2. **100% KV / State Retention Across Adapter Transitions**:
+   - Transitioning between specialist representations MUST NEVER invalidate or flush the active KV or recurrent state.
    - The model must continue streaming the subsequent turn immediately with zero prompt re-prefill penalty.
 
 3. **Fused In-Register LoRA Dot Products**:
@@ -26,4 +66,11 @@ To resolve this paradox, the system mandates a custom low-level Triton/HIP runti
    - Fuse Gate + Up GEMV with in-register SiLU activation to eliminate intermediate VRAM traffic.
 
 5. **Ultrafast Semantic Routing ($<30\mu\text{s}$)**:
-   - Route incoming agent steps to the optimal domain specialist (e.g. `postgresql`, `duckdb`, `fastapi`) using an embedded Riemannian covariance classifier executing in $<30\mu\text{s}$ before the first token is emitted.
+   - Route incoming agent steps to the optimal domain specialist manifold using an embedded Riemannian covariance classifier executing in $<30\mu\text{s}$ before the first token is emitted.
+
+6. **Dual-Engine VRAM Arbitration (Single 24 GB GPU Guardrail)**:
+   - On 24 GB VRAM (AMD RX 7900 XTX), both 27B models (18.2 GB `llama-server` + 15.2 GB Triton engine) CANNOT be co-resident in VRAM.
+   - The runtime server (`src/runtime/server.py`) MUST arbitrate VRAM dynamically:
+     - Calling `qwen3.8:27b-triton` triggers `stop_llama_server()` to free 18 GB and allocate 15.2 GB for the Triton engine.
+     - Calling `qwen3.8:27b` triggers `unload_triton_27b_engine()` and starts `llama-server` on port 8001.
+   - Neither engine may spill to PCIe host memory; switching must complete in $<2$ seconds.

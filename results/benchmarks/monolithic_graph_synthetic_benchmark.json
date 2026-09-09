@@ -1,0 +1,9 @@
+{
+  "num_layers": 64,
+  "num_steps": 100,
+  "eager_ms_per_step": 2.94,
+  "eager_toks_per_sec": 340.7,
+  "monolithic_ms_per_step": 2.88,
+  "monolithic_toks_per_sec": 346.8,
+  "speedup": 1.02
+}

@@ -1,0 +1,76 @@
+{
+  "goal": "Build a high-performance vector search and analytics microservice with FastAPI, PostgreSQL 17 pgvector, and DuckDB",
+  "project_dir": "/home/mihai/Projects/gnn-experiment/projects/real_coordinated_service",
+  "total_tokens": 5998,
+  "total_duration_s": 54.14,
+  "all_tests_passed": true,
+  "tasks_count": 6,
+  "subagent_telemetry": [
+    {
+      "task_id": "step_1_toolchain",
+      "specialist": "astral",
+      "tok_s": 112.74,
+      "ttft_ms": 279.3,
+      "swap_latency_ms": 0.0,
+      "tokens": 998,
+      "artifacts": [
+        "/home/mihai/Projects/gnn-experiment/projects/real_coordinated_service/pyproject.toml"
+      ]
+    },
+    {
+      "task_id": "step_2_models",
+      "specialist": "python_modern",
+      "tok_s": 112.81,
+      "ttft_ms": 56.4,
+      "swap_latency_ms": 0.0,
+      "tokens": 1000,
+      "artifacts": [
+        "/home/mihai/Projects/gnn-experiment/projects/real_coordinated_service/models.py"
+      ]
+    },
+    {
+      "task_id": "step_3_database",
+      "specialist": "postgresql",
+      "tok_s": 112.82,
+      "ttft_ms": 74.0,
+      "swap_latency_ms": 0.0,
+      "tokens": 1000,
+      "artifacts": [
+        "/home/mihai/Projects/gnn-experiment/projects/real_coordinated_service/db.py"
+      ]
+    },
+    {
+      "task_id": "step_4_analytics",
+      "specialist": "duckdb",
+      "tok_s": 112.98,
+      "ttft_ms": 78.4,
+      "swap_latency_ms": 0.0,
+      "tokens": 1000,
+      "artifacts": [
+        "/home/mihai/Projects/gnn-experiment/projects/real_coordinated_service/analytics.py"
+      ]
+    },
+    {
+      "task_id": "step_5_web_api",
+      "specialist": "python_web",
+      "tok_s": 112.78,
+      "ttft_ms": 85.5,
+      "swap_latency_ms": 0.0,
+      "tokens": 1000,
+      "artifacts": [
+        "/home/mihai/Projects/gnn-experiment/projects/real_coordinated_service/main.py"
+      ]
+    },
+    {
+      "task_id": "step_6_integration_tests",
+      "specialist": "stacked_cross_domain",
+      "tok_s": 112.97,
+      "ttft_ms": 100.1,
+      "swap_latency_ms": 38.42,
+      "tokens": 1000,
+      "artifacts": [
+        "/home/mihai/Projects/gnn-experiment/projects/real_coordinated_service/tests/test_service.py"
+      ]
+    }
+  ]
+}

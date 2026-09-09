@@ -99,6 +99,32 @@ class W4A16Linear(nn.Module):
 
         return mod
 
+    @classmethod
+    def from_packed(
+        cls,
+        qweight: torch.Tensor,
+        scales: torch.Tensor,
+        bias: Optional[torch.Tensor] = None,
+        group_size: int = 128,
+        device: Optional[torch.device] = None,
+    ) -> W4A16Linear:
+        """Instantiates W4A16Linear directly from pre-quantized qweight and scales."""
+        k_words, out_features = qweight.shape
+        in_features = k_words * 8
+        target_device = device or (torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu"))
+        mod = cls(
+            in_features=in_features,
+            out_features=out_features,
+            bias=bias is not None,
+            group_size=group_size,
+            device=target_device,
+        )
+        mod.qweight.copy_(qweight.to(device=target_device))
+        mod.scales.copy_(scales.to(device=target_device))
+        if bias is not None and mod.bias is not None:
+            mod.bias.copy_(bias.to(device=target_device))
+        return mod
+
     def set_lora_adapter(
         self,
         lora_a: Optional[torch.Tensor],

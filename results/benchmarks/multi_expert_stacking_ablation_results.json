@@ -1,0 +1,153 @@
+[
+  {
+    "id": "stack_pg_web",
+    "title": "Dual-Expert: PostgreSQL pgvector + FastAPI Web",
+    "experts": {
+      "postgresql": 0.5,
+      "python_web": 0.5
+    },
+    "fused_rank": 16,
+    "base_score": {
+      "pass_rate_pct": 80.0,
+      "rules_passed": "4/5",
+      "details": {
+        "fastapi_lifespan": true,
+        "fastapi_no_on_event": true,
+        "pgvector_cosine": true,
+        "pgvector_no_euclidean": false,
+        "asyncpg_parameterized": true
+      }
+    },
+    "single_1_score": {
+      "pass_rate_pct": 100.0,
+      "rules_passed": "5/5",
+      "details": {
+        "fastapi_lifespan": true,
+        "fastapi_no_on_event": true,
+        "pgvector_cosine": true,
+        "pgvector_no_euclidean": true,
+        "asyncpg_parameterized": true
+      }
+    },
+    "single_2_score": {
+      "pass_rate_pct": 60.0,
+      "rules_passed": "3/5",
+      "details": {
+        "fastapi_lifespan": true,
+        "fastapi_no_on_event": true,
+        "pgvector_cosine": true,
+        "pgvector_no_euclidean": false,
+        "asyncpg_parameterized": false
+      }
+    },
+    "stacked_score": {
+      "pass_rate_pct": 100.0,
+      "rules_passed": "5/5",
+      "details": {
+        "fastapi_lifespan": true,
+        "fastapi_no_on_event": true,
+        "pgvector_cosine": true,
+        "pgvector_no_euclidean": true,
+        "asyncpg_parameterized": true
+      }
+    },
+    "stacked_speed": 84.49
+  },
+  {
+    "id": "stack_pg_duck_web",
+    "title": "Triple-Expert: PostgreSQL + DuckDB Analytics + FastAPI Web",
+    "experts": {
+      "postgresql": 0.35,
+      "duckdb": 0.35,
+      "python_web": 0.3
+    },
+    "fused_rank": 24,
+    "base_score": {
+      "pass_rate_pct": 75.0,
+      "rules_passed": "3/4",
+      "details": {
+        "fastapi_lifespan": true,
+        "pydantic_v2_config": false,
+        "pgvector_cosine": true,
+        "duckdb_qualify": true
+      }
+    },
+    "single_1_score": {
+      "pass_rate_pct": 75.0,
+      "rules_passed": "3/4",
+      "details": {
+        "fastapi_lifespan": true,
+        "pydantic_v2_config": false,
+        "pgvector_cosine": true,
+        "duckdb_qualify": true
+      }
+    },
+    "single_2_score": {
+      "pass_rate_pct": 75.0,
+      "rules_passed": "3/4",
+      "details": {
+        "fastapi_lifespan": true,
+        "pydantic_v2_config": false,
+        "pgvector_cosine": true,
+        "duckdb_qualify": true
+      }
+    },
+    "stacked_score": {
+      "pass_rate_pct": 75.0,
+      "rules_passed": "3/4",
+      "details": {
+        "fastapi_lifespan": true,
+        "pydantic_v2_config": false,
+        "pgvector_cosine": true,
+        "duckdb_qualify": true
+      }
+    },
+    "stacked_speed": 88.37
+  },
+  {
+    "id": "stack_astral_modern",
+    "title": "Dual-Expert: Astral Toolchain + Python Modern Generics",
+    "experts": {
+      "astral": 0.5,
+      "python_modern": 0.5
+    },
+    "fused_rank": 16,
+    "base_score": {
+      "pass_rate_pct": 66.7,
+      "rules_passed": "2/3",
+      "details": {
+        "astral_ruff_lint": true,
+        "pep695_generics": false,
+        "no_legacy_typevar": true
+      }
+    },
+    "single_1_score": {
+      "pass_rate_pct": 66.7,
+      "rules_passed": "2/3",
+      "details": {
+        "astral_ruff_lint": true,
+        "pep695_generics": false,
+        "no_legacy_typevar": true
+      }
+    },
+    "single_2_score": {
+      "pass_rate_pct": 100.0,
+      "rules_passed": "3/3",
+      "details": {
+        "astral_ruff_lint": true,
+        "pep695_generics": true,
+        "no_legacy_typevar": true
+      }
+    },
+    "stacked_score": {
+      "pass_rate_pct": 66.7,
+      "rules_passed": "2/3",
+      "details": {
+        "astral_ruff_lint": true,
+        "pep695_generics": false,
+        "no_legacy_typevar": true
+      }
+    },
+    "stacked_speed": 62.96
+  }
+]

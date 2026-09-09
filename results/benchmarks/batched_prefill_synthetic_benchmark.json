@@ -1,0 +1,33 @@
+{
+  "benchmark": "batched_prefill_synthetic",
+  "results": [
+    {
+      "seq_len": 16,
+      "batched_ms": 0.091,
+      "sequential_ms": 1.003,
+      "speedup": 11.08,
+      "vram_read_reduction_ratio": 16
+    },
+    {
+      "seq_len": 32,
+      "batched_ms": 0.158,
+      "sequential_ms": 2.019,
+      "speedup": 12.8,
+      "vram_read_reduction_ratio": 32
+    },
+    {
+      "seq_len": 64,
+      "batched_ms": 0.253,
+      "sequential_ms": 4.119,
+      "speedup": 16.29,
+      "vram_read_reduction_ratio": 64
+    },
+    {
+      "seq_len": 128,
+      "batched_ms": 0.368,
+      "sequential_ms": 8.306,
+      "speedup": 22.55,
+      "vram_read_reduction_ratio": 128
+    }
+  ]
+}

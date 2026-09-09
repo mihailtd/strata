@@ -1,49 +1,111 @@
 # DeepSeek Harness (dsh) Settings
-# Configures the Primary Engine & Models Menu
+# Configures the Primary Engine, Dynamic MoA Stacking, & Models Menu
 
 ui-onboarding:
   welcomeNoticeVersion: 2026-08-13.1
 
 llm-deepseek:
-  baseURL: http://127.0.0.1:11434/v1
+  baseURL: http://127.0.0.1:8000/v1
   apiKeyEnv: DEEPSEEK_API_KEY
   models:
-    - id: "ornith-1.5:35b"
-      name: "Ornith 1.5 35B MoE [Primary Agent Engine]"
-      contextWindow: 32768
-      maxTokens: 8192
-    - id: "ornith-1.5:32k"
-      name: "Ornith 1.5 35B MoE [32k Context Window]"
-      contextWindow: 32768
-      maxTokens: 8192
-    - id: "qwen3.6:35b"
-      name: "Qwen 3.6 35B MoE [Alibaba MoE]"
-      contextWindow: 32768
-      maxTokens: 8192
     - id: "qwen3.8:27b"
-      name: "Qwen 3.8 27B [Dense Baseline]"
+      name: "Qwen 3.8 27B [Native W4A16 Triton + MTP Speculation]"
+      contextWindow: 16384
+      maxTokens: 8192
+    - id: "qwen3.8-27b-auto"
+      name: "Qwen 3.8 27B [Auto-Dynamic Riemannian LoRA Router]"
+      contextWindow: 16384
+      maxTokens: 8192
+    - id: "qwen3.8-27b-postgresql"
+      name: "Qwen 3.8 27B [PostgreSQL 17 & pgvector HNSW Specialist]"
+      contextWindow: 16384
+      maxTokens: 8192
+    - id: "qwen3.8-27b-duckdb"
+      name: "Qwen 3.8 27B [DuckDB Parquet OLAP Analytics Specialist]"
+      contextWindow: 16384
+      maxTokens: 8192
+    - id: "qwen3.8-27b-fastapi"
+      name: "Qwen 3.8 27B [FastAPI Async Web Specialist]"
+      contextWindow: 16384
+      maxTokens: 8192
+    - id: "qwen3.8-27b-astral"
+      name: "Qwen 3.8 27B [Astral Python Toolchain uv & ruff Specialist]"
+      contextWindow: 16384
+      maxTokens: 8192
+    - id: "qwen3.8-27b-financial"
+      name: "Qwen 3.8 27B [Financial Planning & Risk Specialist]"
+      contextWindow: 16384
+      maxTokens: 8192
+    - id: "ornith-1.5:35b"
+      name: "Ornith 1.5 35B MoE [Primary Dynamic MoA Engine]"
       contextWindow: 32768
       maxTokens: 8192
 
 llm-pi-ai:
   providers:
-    local-ollama:
-      displayName: "Local ROCm MoE Engine"
+    local-moa:
+      displayName: "Local Dynamic Mixture-of-Adapters (MoA) Engine"
       api: openai-completions
-      baseURL: http://127.0.0.1:11434/v1
+      baseURL: http://127.0.0.1:8000/v1
       apiKeyEnv: DEEPSEEK_API_KEY
       compat:
         thinkingFormat: deepseek
       models:
+        - id: "qwen3.8:27b"
+          name: "Qwen 3.8 27B [ROCm C++ HIP GGUF Engine + MTP Speculation]"
+          contextWindow: 16384
+          maxTokens: 8192
+        - id: "qwen3.8:27b-triton"
+          name: "Qwen 3.8 27B [Pure ROCm Triton W4A16 GEMV Native Engine]"
+          contextWindow: 16384
+          maxTokens: 8192
+        - id: "qwen3.8-27b-auto"
+          name: "Qwen 3.8 27B [Auto-Dynamic Riemannian LoRA Router]"
+          contextWindow: 16384
+          maxTokens: 8192
+        - id: "qwen3.8-27b-postgresql"
+          name: "Qwen 3.8 27B [PostgreSQL 17 & pgvector HNSW Specialist]"
+          contextWindow: 16384
+          maxTokens: 8192
+        - id: "qwen3.8-27b-duckdb"
+          name: "Qwen 3.8 27B [DuckDB Parquet OLAP Analytics Specialist]"
+          contextWindow: 16384
+          maxTokens: 8192
+        - id: "qwen3.8-27b-fastapi"
+          name: "Qwen 3.8 27B [FastAPI Async Web Specialist]"
+          contextWindow: 16384
+          maxTokens: 8192
+        - id: "qwen3.8-27b-astral"
+          name: "Qwen 3.8 27B [Astral Python Toolchain uv & ruff Specialist]"
+          contextWindow: 16384
+          maxTokens: 8192
+        - id: "qwen3.8-27b-financial"
+          name: "Qwen 3.8 27B [Financial Planning & Risk Specialist]"
+          contextWindow: 16384
+          maxTokens: 8192
         - id: "ornith-1.5:35b"
-          name: "Ornith 1.5 35B MoE [Primary Agent Engine]"
+          name: "Ornith 1.5 35B MoE [Primary Dynamic MoA Engine]"
           contextWindow: 32768
           maxTokens: 8192
-        - id: "ornith-1.5:32k"
-          name: "Ornith 1.5 35B MoE [32k Context Window]"
+
+        - id: "ornith-1.5:35b-astral"
+          name: "Ornith 1.5 35B [Astral Python Toolchain uv & ruff Specialist]"
           contextWindow: 32768
           maxTokens: 8192
-        - id: "qwen3.6:35b"
-          name: "Qwen 3.6 35B MoE"
+        - id: "ornith-1.5:35b-financial"
+          name: "Ornith 1.5 35B [Financial Planning & Risk Modeling Specialist]"
           contextWindow: 32768
           maxTokens: 8192
+        - id: "ornith-1.5-stack-pg-web"
+          name: "Ornith 1.5 35B [Dual-Expert Stack: Postgres + FastAPI]"
+          contextWindow: 32768
+          maxTokens: 8192
+        - id: "ornith-1.5-stack-pg-duck-web"
+          name: "Ornith 1.5 35B [Triple-Expert Stack: Postgres + DuckDB + FastAPI]"
+          contextWindow: 32768
+          maxTokens: 8192
+        - id: "ornith-1.5-moa-auto"
+          name: "Ornith 1.5 35B [Auto-Dynamic Multi-Expert Stacking Router]"
+          contextWindow: 32768
+          maxTokens: 8192
+
