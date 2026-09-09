@@ -2,84 +2,52 @@
   "http_benchmarks": {
     "qwen3.8:27b": [
       {
-        "success": true,
-        "elapsed_s": 4.33,
-        "completion_tokens": 32,
-        "tokens_per_second": 29.79,
-        "generation_time_ms": 1074.2,
-        "sample_output": "We need answer user: \"How do I initialize a new Python project using uv with pyproject.toml and add FastAPI and Pydantic",
+        "success": false,
+        "error": "<urlopen error [Errno 111] Connection refused>",
         "prompt_id": "astral_uv_packaging",
         "domain": "Astral Python Toolchain"
       },
       {
-        "success": true,
-        "elapsed_s": 1.0,
-        "completion_tokens": 32,
-        "tokens_per_second": 32.04,
-        "generation_time_ms": 998.9,
-        "sample_output": "We need answer user: \"Write a PostgreSQL 17 SQL migration adding a 1536-dimensional vector column with an HNSW cosine in",
+        "success": false,
+        "error": "<urlopen error [Errno 111] Connection refused>",
         "prompt_id": "postgres_pgvector_hnsw",
         "domain": "PostgreSQL 17 & Vector DB"
       },
       {
-        "success": true,
-        "elapsed_s": 1.02,
-        "completion_tokens": 32,
-        "tokens_per_second": 31.32,
-        "generation_time_ms": 1021.7,
-        "sample_output": "We need answer user asks: \"Write a DuckDB query to parse a Parquet file, compute 7-day rolling average revenue per custo",
+        "success": false,
+        "error": "<urlopen error [Errno 111] Connection refused>",
         "prompt_id": "duckdb_qualify_window",
         "domain": "DuckDB Vectorized Analytics"
       },
       {
-        "success": true,
-        "elapsed_s": 0.98,
-        "completion_tokens": 32,
-        "tokens_per_second": 32.64,
-        "generation_time_ms": 980.3,
-        "sample_output": "We need to respond to user: \"Write a minimal FastAPI app with an async lifespan handler, dependency injection, and Pydan",
+        "success": false,
+        "error": "<urlopen error [Errno 111] Connection refused>",
         "prompt_id": "fastapi_async_lifespan",
         "domain": "FastAPI Web Architecture"
       }
     ],
     "qwen3.8:27b-triton": [
       {
-        "success": true,
-        "elapsed_s": 4.74,
-        "completion_tokens": 32,
-        "tokens_per_second": 6.76,
-        "generation_time_ms": 4735.7,
-        "sample_output": "The user wants to know how to initialize a new Python project using `uv` (the fast Python package manager by Astral) wit",
+        "success": false,
+        "error": "<urlopen error [Errno 111] Connection refused>",
         "prompt_id": "astral_uv_packaging",
         "domain": "Astral Python Toolchain"
       },
       {
-        "success": true,
-        "elapsed_s": 1.84,
-        "completion_tokens": 32,
-        "tokens_per_second": 17.43,
-        "generation_time_ms": 1835.9,
-        "sample_output": "The user wants a PostgreSQL 17 SQL migration that: 1. Adds a 1536-dimensional vector column (this is the dimensionality ",
+        "success": false,
+        "error": "<urlopen error [Errno 111] Connection refused>",
         "prompt_id": "postgres_pgvector_hnsw",
         "domain": "PostgreSQL 17 & Vector DB"
       },
       {
-        "success": true,
-        "elapsed_s": 1.84,
-        "completion_tokens": 32,
-        "tokens_per_second": 17.36,
-        "generation_time_ms": 1843.8,
-        "sample_output": "The user wants a DuckDB query that: 1. Parses a Parquet file 2. Computes a 7-day rolling average revenue per customer 3",
+        "success": false,
+        "error": "<urlopen error [Errno 111] Connection refused>",
         "prompt_id": "duckdb_qualify_window",
         "domain": "DuckDB Vectorized Analytics"
       },
       {
-        "success": true,
-        "elapsed_s": 1.83,
-        "completion_tokens": 32,
-        "tokens_per_second": 17.5,
-        "generation_time_ms": 1828.8,
-        "sample_output": "The user wants a minimal FastAPI app that demonstrates: 1. Async lifespan handler (the modern replacement for on_startup",
+        "success": false,
+        "error": "<urlopen error [Errno 111] Connection refused>",
         "prompt_id": "fastapi_async_lifespan",
         "domain": "FastAPI Web Architecture"
       }
@@ -87,10 +55,10 @@
   },
   "runtime_layer_evolution": {
     "tokens_evaluated": 256,
-    "naive_cat_time_ms": 474.48,
-    "prealloc_bf16_time_ms": 193.76,
-    "prealloc_q8_time_ms": 246.53,
-    "speedup_bf16_vs_naive": 2.45,
+    "naive_cat_time_ms": 467.97,
+    "prealloc_bf16_time_ms": 194.29,
+    "prealloc_q8_time_ms": 249.4,
+    "speedup_bf16_vs_naive": 2.41,
     "vram_bf16_kb": 1088.0,
     "vram_q8_kb": 548.2,
     "vram_saved_percent": 49.6

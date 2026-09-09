@@ -73,21 +73,22 @@ class EngineConfig27B:
 class NGramDrafter:
     """Fast in-memory n-gram lookahead drafter for zero-VRAM speculative decoding."""
 
-    def __init__(self, n: int = 3, k: int = 3):
-        self.n = n
+    def __init__(self, max_n: int = 5, min_n: int = 3, k: int = 3):
+        self.max_n = max_n
+        self.min_n = min_n
         self.k = k
 
     def find_draft(self, tokens: List[int]) -> List[int]:
         """Finds continuation of the longest matching suffix in tokens."""
         seq_len = len(tokens)
-        for cur_n in range(self.n, 1, -1):
+        for cur_n in range(self.max_n, self.min_n - 1, -1):
             if seq_len < cur_n + 1:
                 continue
             ngram = tokens[-cur_n:]
             for i in range(seq_len - cur_n - 1, -1, -1):
                 if tokens[i : i + cur_n] == ngram:
                     candidate = tokens[i + cur_n : i + cur_n + self.k]
-                    if len(candidate) > 0:
+                    if len(candidate) == self.k:
                         return candidate
         return []
 
@@ -610,6 +611,113 @@ class SSMChunkGraph:
         return self.static_out
 
 
+class SSMChunkVerifyGraph:
+    """Encapsulates a captured ROCm HIP Graph for 3-SSM chunk multi-token candidate verification.
+
+    Accelerates multi-token verification (e.g. K=4) by recording GEMVs, 1D convolution,
+    and DeltaNet recurrence into a pre-compiled GPU command buffer with intermediate state snapshots.
+    """
+
+    def __init__(self, layers: List[Qwen35SSMBlock], k: int = 4, device: Optional[torch.device] = None):
+        self.layers = layers
+        self.k = k
+        self.device = device or layers[0].device
+        self.static_in = torch.zeros((1, k, 5120), dtype=torch.bfloat16, device=self.device)
+        self.static_out = torch.zeros((1, k, 5120), dtype=torch.bfloat16, device=self.device)
+        self.init_ssm = [torch.zeros((48, 128, 128), dtype=torch.bfloat16, device=self.device) for _ in layers]
+        self.init_conv = [torch.zeros((10240, 3), dtype=torch.bfloat16, device=self.device) for _ in layers]
+        self.ssm_history = [torch.zeros((k, 48, 128, 128), dtype=torch.bfloat16, device=self.device) for _ in layers]
+        self.conv_history = [torch.zeros((k, 10240, 3), dtype=torch.bfloat16, device=self.device) for _ in layers]
+
+        capture_stream = torch.cuda.Stream(device=self.device)
+        capture_stream.wait_stream(torch.cuda.current_stream(device=self.device))
+
+        def forward_chunk():
+            curr = self.static_in
+            b, seq_len, d = curr.shape
+            for l_idx, layer in enumerate(self.layers):
+                x_norm = layer.attn_norm(curr)
+                qkv = layer.attn_qkv(x_norm) if layer.attn_qkv else x_norm
+                z = layer.attn_gate(x_norm) if layer.attn_gate else x_norm
+                alpha = layer.ssm_alpha(x_norm) if layer.ssm_alpha else torch.zeros((b, seq_len, 48), dtype=curr.dtype, device=self.device)
+                beta = layer.ssm_beta(x_norm) if layer.ssm_beta else torch.zeros((b, seq_len, 48), dtype=curr.dtype, device=self.device)
+
+                conv_w = layer.ssm_conv1d.unsqueeze(1).to(dtype=curr.dtype)
+                qkv_t = qkv.transpose(1, 2)
+                qkv_padded = torch.cat([self.init_conv[l_idx].unsqueeze(0).to(curr.dtype), qkv_t], dim=-1)
+                conv_out = F.silu(F.conv1d(qkv_padded, conv_w, groups=10240).transpose(1, 2))
+
+                q_all = conv_out[:, :, :2048].view(b, seq_len, 16, 128).float()
+                k_all = conv_out[:, :, 2048:4096].view(b, seq_len, 16, 128).float()
+                v_all = conv_out[:, :, 4096:10240].view(b, seq_len, 48, 128).float()
+
+                eps = 1e-6
+                q_all = q_all / torch.clamp(torch.norm(q_all, p=2, dim=-1, keepdim=True), min=eps) * (128.0 ** -0.5)
+                k_all = k_all / torch.clamp(torch.norm(k_all, p=2, dim=-1, keepdim=True), min=eps)
+                q_all = q_all.repeat(1, 1, 3, 1)
+                k_all = k_all.repeat(1, 1, 3, 1)
+
+                gate_all = layer.ssm_a * F.softplus(alpha.float() + layer.ssm_dt_bias)
+                decay_all = torch.exp(gate_all)
+                beta_all = torch.sigmoid(beta.float())
+
+                curr_ssm = self.init_ssm[l_idx].clone().float()
+                o_all = torch.zeros(b, seq_len, 48, 128, dtype=torch.float32, device=self.device)
+                for t in range(seq_len):
+                    q_t = q_all[0, t].unsqueeze(-1)
+                    k_t = k_all[0, t].unsqueeze(-1)
+                    v_t = v_all[0, t].unsqueeze(-1)
+                    dec_t = decay_all[0, t].view(48, 1, 1)
+                    beta_t = beta_all[0, t].view(48, 1, 1)
+
+                    curr_ssm = curr_ssm * dec_t
+                    v_err = (v_t - torch.bmm(curr_ssm, k_t)) * beta_t
+                    curr_ssm = curr_ssm + torch.bmm(v_err, k_t.transpose(1, 2))
+                    o_all[0, t] = torch.bmm(curr_ssm, q_t).squeeze(-1)
+                    self.ssm_history[l_idx][t].copy_(curr_ssm.to(curr.dtype))
+                    self.conv_history[l_idx][t].copy_(qkv_padded[0, :, t + 1 : t + 4])
+
+                o_rms = layer.ssm_norm(o_all.to(curr.dtype))
+                gated_o = (o_rms * F.silu(z.view(b, seq_len, 48, 128))).reshape(b, seq_len, 6144)
+                y = layer.ssm_out(gated_o) if layer.ssm_out else gated_o
+                curr = curr + y
+
+                x_ffn_norm = layer.post_attention_norm(curr)
+                ffn_gate = layer.ffn_gate(x_ffn_norm)
+                ffn_up = layer.ffn_up(x_ffn_norm)
+                mlp_out = layer.ffn_down(F.silu(ffn_gate) * ffn_up)
+                curr = curr + mlp_out
+
+            self.static_out.copy_(curr)
+
+        with torch.cuda.stream(capture_stream):
+            for _ in range(3):
+                forward_chunk()
+        torch.cuda.current_stream(device=self.device).wait_stream(capture_stream)
+
+        self.graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(self.graph, stream=capture_stream):
+            forward_chunk()
+        torch.cuda.current_stream(device=self.device).wait_stream(capture_stream)
+
+    def reset_states(self) -> None:
+        """Resets initial and intermediate state buffers."""
+        for ssm, conv, s_hist, c_hist in zip(self.init_ssm, self.init_conv, self.ssm_history, self.conv_history):
+            ssm.zero_()
+            conv.zero_()
+            s_hist.zero_()
+            c_hist.zero_()
+
+    def replay(self, x: torch.Tensor, init_ssm_list: List[torch.Tensor], init_conv_list: List[torch.Tensor]) -> Tuple[torch.Tensor, List[torch.Tensor], List[torch.Tensor]]:
+        """Executes the pre-compiled hardware graph for multi-token verification."""
+        self.static_in.copy_(x)
+        for j in range(len(self.layers)):
+            self.init_ssm[j].copy_(init_ssm_list[j])
+            self.init_conv[j].copy_(init_conv_list[j])
+        self.graph.replay()
+        return self.static_out, self.ssm_history, self.conv_history
+
+
 class Native27BEngine(nn.Module):
     """Full 64-Layer Pure Native Triton Serving Engine for Qwen 3.5 / 3.8 27B."""
 
@@ -658,6 +766,7 @@ class Native27BEngine(nn.Module):
 
         # ROCm HIP Graph acceleration
         self.ssm_graphs: List[SSMChunkGraph] = []
+        self.verify_graphs: List[SSMChunkVerifyGraph] = []
         self.hip_graph_captured: bool = False
 
     def _init_rope(self, dim: int = 64, base: float = 1e7) -> None:
@@ -732,21 +841,26 @@ class Native27BEngine(nn.Module):
 
         t0 = time.perf_counter()
         self.ssm_graphs.clear()
+        self.verify_graphs.clear()
         chunk_count = self.num_layers // 4
 
         for k in range(chunk_count):
             ssm_layers = [self.layers[4 * k], self.layers[4 * k + 1], self.layers[4 * k + 2]]
             chunk = SSMChunkGraph(ssm_layers, self.device)
             self.ssm_graphs.append(chunk)
+            v_chunk = SSMChunkVerifyGraph(ssm_layers, k=4, device=self.device)
+            self.verify_graphs.append(v_chunk)
 
         self.hip_graph_captured = True
-        print(f"[Native 27B Triton] Captured {len(self.ssm_graphs)} SSM HIP Graphs in {(time.perf_counter() - t0)*1000:.1f}ms")
+        print(f"[Native 27B Triton] Captured {len(self.ssm_graphs)} SSM Graphs & {len(self.verify_graphs)} Verify Graphs in {(time.perf_counter() - t0)*1000:.1f}ms")
         return True
 
     def reset_hip_graphs(self) -> None:
-        """Resets recurrent states across all captured SSM HIP Graphs."""
+        """Resets recurrent states across all captured SSM and Verify HIP Graphs."""
         for g in self.ssm_graphs:
             g.reset_states()
+        for vg in self.verify_graphs:
+            vg.reset_states()
 
     def sync_states_to_graphs(self, state_dict: Dict[str, Any]) -> None:
         """Synchronizes recurrent and conv states into pre-compiled HIP Graph buffers."""
@@ -1119,6 +1233,56 @@ class Native27BEngine(nn.Module):
 
         history: Dict[str, List[torch.Tensor]] = {}
 
+        # Fast path: ROCm HIP Graph replay for fixed K=4 candidate verification
+        chunk_count = self.num_layers // 4
+        if (
+            s == 4
+            and self.hip_graph_captured
+            and len(self.verify_graphs) == chunk_count
+        ):
+            curr = x
+            b, seq_len, _ = curr.shape
+            for k in range(chunk_count):
+                init_ssms = [
+                    state_dict.get(f"ssm_{4 * k + j}", torch.zeros((48, 128, 128), dtype=curr.dtype, device=self.device))
+                    for j in range(3)
+                ]
+                init_convs = [
+                    state_dict.get(f"conv_{4 * k + j}", torch.zeros((10240, 3), dtype=curr.dtype, device=self.device))
+                    for j in range(3)
+                ]
+                curr, s_hist, c_hist = self.verify_graphs[k].replay(curr, init_ssms, init_convs)
+                for j in range(3):
+                    history[f"ssm_{4 * k + j}"] = [s_hist[j][t].clone() for t in range(s)]
+                    history[f"conv_{4 * k + j}"] = [c_hist[j][t].clone() for t in range(s)]
+
+                # 4th layer: Attention block
+                attn_layer = self.layers[4 * k + 3]
+                x_norm = attn_layer.attn_norm(curr)
+                q_full = attn_layer.attn_q(x_norm) if attn_layer.attn_q else x_norm
+                query_states, gate = torch.chunk(q_full.view(b, s, 24, 256 * 2), 2, dim=-1)
+                gate = gate.reshape(b, s, -1)
+                q = attn_layer.attn_q_norm(query_states).transpose(1, 2)
+                k_proj = attn_layer.attn_k_norm(attn_layer.attn_k(x_norm).view(b, s, 4, 256)).transpose(1, 2)
+                v_proj = attn_layer.attn_v(x_norm).view(b, s, 4, 256).transpose(1, 2)
+                cos, sin = cos_sin
+                q = apply_rotary_emb(q, cos, sin)
+                k_proj = apply_rotary_emb(k_proj, cos, sin)
+                k_all, v_all = state_dict[f"kv_{4 * k + 3}"].update(k_proj, v_proj)
+                k_rep = k_all.repeat_interleave(6, dim=1)
+                v_rep = v_all.repeat_interleave(6, dim=1)
+                attn_out = F.scaled_dot_product_attention(q, k_rep, v_rep, attn_mask=mask)
+                attn_out = attn_out.transpose(1, 2).contiguous().view(b, s, -1) * torch.sigmoid(gate)
+                curr = curr + (attn_layer.attn_output(attn_out) if attn_layer.attn_output else attn_out)
+                x_ffn_norm = attn_layer.post_attention_norm(curr)
+                mlp_out = attn_layer.ffn_down(F.silu(attn_layer.ffn_gate(x_ffn_norm)) * attn_layer.ffn_up(x_ffn_norm))
+                curr = curr + mlp_out
+
+            x_norm = self.output_norm(curr)
+            logits = self.lm_head(x_norm)
+            return logits[0], history
+
+        # Eager fallback for arbitrary candidate lengths
         for i, layer in enumerate(self.layers):
             if isinstance(layer, Qwen35SSMBlock):
                 ssm_key = f"ssm_{i}"
@@ -1239,7 +1403,8 @@ class Native27BEngine(nn.Module):
         kv_cache_mode: Optional[str] = None,
         use_hip_graph: bool = True,
         draft_k: int = 3,
-        draft_n: int = 3,
+        draft_n: int = 5,
+        min_n: int = 4,
     ) -> List[int]:
         """Speculative decoding using in-memory context n-gram lookahead drafter.
 
@@ -1265,7 +1430,7 @@ class Native27BEngine(nn.Module):
         if curr_token in self.STOP_TOKEN_IDS or max_new_tokens <= 1:
             return generated
 
-        drafter = NGramDrafter(n=draft_n, k=draft_k)
+        drafter = NGramDrafter(max_n=draft_n, min_n=min_n, k=draft_k)
         all_tokens = list(prompt_ids) + [curr_token]
         pos = len(prompt_ids)
 
@@ -1337,7 +1502,8 @@ class Native27BEngine(nn.Module):
         kv_cache_mode: Optional[str] = None,
         use_hip_graph: bool = True,
         draft_k: int = 3,
-        draft_n: int = 3,
+        draft_n: int = 5,
+        min_n: int = 4,
     ):
         """Synchronously yields next token IDs in bursts using context n-gram lookahead speculation."""
         mode = kv_cache_mode or self.kv_cache_mode
@@ -1359,7 +1525,7 @@ class Native27BEngine(nn.Module):
         if curr_token in self.STOP_TOKEN_IDS or max_new_tokens <= 1:
             return
 
-        drafter = NGramDrafter(n=draft_n, k=draft_k)
+        drafter = NGramDrafter(max_n=draft_n, min_n=min_n, k=draft_k)
         all_tokens = list(prompt_ids) + [curr_token]
         pos = len(prompt_ids)
         emitted_count = 1

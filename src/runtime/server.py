@@ -1422,7 +1422,8 @@ async def _execute_single_request(qr: QueuedRequest) -> Any:
                 max_new_tokens=min(max_new_tokens, 512),
                 temperature=req.temperature or 0.7,
                 draft_k=3,
-                draft_n=3,
+                draft_n=5,
+                min_n=4,
             )
         else:
             output_ids = triton_engine.generate(
@@ -1834,7 +1835,8 @@ def _build_streaming_response(
                             max_new_tokens=min(max_new_tokens, 512),
                             temperature=req.temperature or 0.7,
                             draft_k=3,
-                            draft_n=3,
+                            draft_n=5,
+                            min_n=4,
                         )
                         if use_speculative
                         else triton_engine.generate_stream_tokens(

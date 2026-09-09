@@ -61,6 +61,25 @@ DOMAIN_PROMPTS = [
             "from fastapi import FastAPI, HTTPException\nfrom pydantic import BaseModel\n\napp = FastAPI()\n\nclass ItemRequest(BaseModel):\n    item_id: str\n    quantity: int\n\n@app.post(\"/items/stream\")\nasync def stream_item(req: ItemRequest):"
         ),
     },
+    {
+        "domain": "python_modern",
+        "title": "Pytest Repetitive Unit Test Suite",
+        "adapter": "python_modern",
+        "prompt": (
+            "<|im_start|>system\nYou are a senior Python software engineer.<|im_end|>\n"
+            "<|im_start|>user\nWrite unit tests for a UserModel class with fields id, username, email, and is_active.<|im_end|>\n"
+            "<|im_start|>assistant\n<think>\n\n</think>\n"
+            "import pytest\nfrom models import UserModel\n\n"
+            "def test_user_model_initialization():\n"
+            "    user = UserModel(id=1, username=\"alice\", email=\"alice@example.com\", is_active=True)\n"
+            "    assert user.id == 1\n"
+            "    assert user.username == \"alice\"\n"
+            "    assert user.email == \"alice@example.com\"\n"
+            "    assert user.is_active is True\n\n"
+            "def test_user_model_inactive():\n"
+            "    user = UserModel(id=2, username=\"bob\", email=\"bob@example.com\", is_active=False)\n"
+        ),
+    },
 ]
 
 
@@ -126,7 +145,8 @@ def run_benchmark():
             max_new_tokens=MAX_TOKENS,
             use_hip_graph=True,
             draft_k=3,
-            draft_n=3,
+            draft_n=5,
+            min_n=4,
         )
         torch.cuda.synchronize()
         t_spec = time.perf_counter() - t_s0
