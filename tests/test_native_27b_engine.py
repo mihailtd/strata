@@ -40,7 +40,7 @@ def test_ssm_block_forward():
     out, ssm_s, conv_s = block(x)
 
     assert out.shape == (1, 5120)
-    assert ssm_s.shape == (16, 128, 128)
+    assert ssm_s.shape == (48, 128, 128)
     assert not torch.isnan(out).any()
 
 
@@ -189,7 +189,7 @@ def test_batched_prefill():
     out_ssm, ssm_state, conv_state = ssm(x_seq)
 
     assert out_ssm.shape == (1, 8, 5120)
-    assert ssm_state.shape == (16, 128, 128)
+    assert ssm_state.shape == (48, 128, 128)
     assert conv_state.shape == (10240, 3)
     assert not torch.isnan(out_ssm).any()
 

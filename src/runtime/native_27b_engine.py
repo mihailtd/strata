@@ -216,6 +216,8 @@ class Qwen35SSMBlock(nn.Module):
         # Packed W4A16 Linear layers (initialized when weights loaded)
         self.attn_qkv: Optional[W4A16Linear] = None
         self.attn_gate: Optional[W4A16Linear] = None
+        self.ssm_alpha: Optional[W4A16Linear] = None
+        self.ssm_beta: Optional[W4A16Linear] = None
         self.ssm_out: Optional[W4A16Linear] = None
         self.ffn_gate: Optional[W4A16Linear] = None
         self.ffn_up: Optional[W4A16Linear] = None
@@ -243,9 +245,8 @@ class Qwen35SSMBlock(nn.Module):
             if "ssm_dt.bias" in layer_dict:
                 self.ssm_dt_bias.data.copy_(layer_dict["ssm_dt.bias"]["weight"].to(self.device))
 
-
         # W4A16 Linear Projections
-        for key in ["attn_qkv", "attn_gate", "ssm_out", "ffn_gate", "ffn_up", "ffn_down"]:
+        for key in ["attn_qkv", "attn_gate", "ssm_alpha", "ssm_beta", "ssm_out", "ffn_gate", "ffn_up", "ffn_down"]:
             k_name = f"{key}.weight"
             if k_name in layer_dict:
                 entry = layer_dict[k_name]
@@ -269,29 +270,60 @@ class Qwen35SSMBlock(nn.Module):
             b, s, d = x.shape
             x_norm = self.attn_norm(x)
             qkv = self.attn_qkv(x_norm) if self.attn_qkv else x_norm
-            gate = self.attn_gate(x_norm) if self.attn_gate else x_norm
+            z = self.attn_gate(x_norm) if self.attn_gate else x_norm
+            alpha = self.ssm_alpha(x_norm) if self.ssm_alpha else torch.zeros((b, s, 48), dtype=x.dtype, device=x.device)
+            beta = self.ssm_beta(x_norm) if self.ssm_beta else torch.zeros((b, s, 48), dtype=x.dtype, device=x.device)
 
             # 1D Convolution over sequence length
             conv_w = self.ssm_conv1d.unsqueeze(1).to(dtype=x.dtype)  # (10240, 1, 4)
-            qkv_t = qkv.transpose(1, 2)  # (B, 10240, S)
+            qkv_t = qkv.transpose(1, 2)  # (b, 10240, s)
             if conv_state is not None:
                 qkv_padded = torch.cat([conv_state.unsqueeze(0).to(x.dtype), qkv_t], dim=-1)
             else:
                 qkv_padded = F.pad(qkv_t, (3, 0))
-            conv_out = F.conv1d(qkv_padded, conv_w, groups=10240).transpose(1, 2).to(x.dtype)
+            conv_out = F.silu(F.conv1d(qkv_padded, conv_w, groups=10240).transpose(1, 2))  # (b, s, 10240)
             new_conv_state = qkv_padded[0, :, -3:].detach()
 
-            # Recurrent state accumulation across time steps
-            dt = F.softplus(self.ssm_dt_bias[:16]).view(16, 1, 1)
-            decay = torch.exp(self.ssm_a[:16].view(16, 1, 1) * dt).to(x.dtype)
-            if ssm_state is None:
-                ssm_state = torch.zeros((16, 128, 128), dtype=x.dtype, device=x.device)
-            for _ in range(s):
-                ssm_state = ssm_state * decay + 0.005 * torch.ones_like(ssm_state)
+            # Slice Q, K, V
+            q_all = conv_out[:, :, :2048].view(b, s, 16, 128).float()
+            k_all = conv_out[:, :, 2048:4096].view(b, s, 16, 128).float()
+            v_all = conv_out[:, :, 4096:10240].view(b, s, 48, 128).float()
 
-            out_features = 6144
-            ssm_features = conv_out[:, :, :out_features] * F.silu(gate[:, :, :out_features])
-            y = self.ssm_out(ssm_features) if self.ssm_out else ssm_features
+            eps = 1e-6
+            q_all = q_all / torch.clamp(torch.norm(q_all, p=2, dim=-1, keepdim=True), min=eps) * (128.0 ** -0.5)
+            k_all = k_all / torch.clamp(torch.norm(k_all, p=2, dim=-1, keepdim=True), min=eps)
+
+            # Repeat Q & K to 48 heads (tiled repeat to match GGUF tiled V-heads: [0..15] repeated 3 times)
+            q_all = q_all.repeat(1, 1, 3, 1)  # (b, s, 48, 128)
+            k_all = k_all.repeat(1, 1, 3, 1)  # (b, s, 48, 128)
+
+            # Gating vectors: gate = ssm_a * softplus(alpha + dt_bias)
+            gate_all = self.ssm_a * F.softplus(alpha.float() + self.ssm_dt_bias)  # (b, s, 48)
+            decay_all = torch.exp(gate_all)  # (b, s, 48)
+            beta_all = torch.sigmoid(beta.float())  # (b, s, 48)
+
+            if ssm_state is None:
+                ssm_state = torch.zeros((48, 128, 128), dtype=torch.float32, device=x.device)
+            else:
+                ssm_state = ssm_state.float()
+
+            o_all = torch.zeros(b, s, 48, 128, dtype=torch.float32, device=x.device)
+            for t in range(s):
+                q_t = q_all[0, t].unsqueeze(-1)  # (48, 128, 1)
+                k_t = k_all[0, t].unsqueeze(-1)  # (48, 128, 1)
+                v_t = v_all[0, t].unsqueeze(-1)  # (48, 128, 1)
+                dec_t = decay_all[0, t].view(48, 1, 1)
+                beta_t = beta_all[0, t].view(48, 1, 1)
+
+                ssm_state = ssm_state * dec_t
+                v_err = (v_t - torch.bmm(ssm_state, k_t)) * beta_t
+                ssm_state = ssm_state + torch.bmm(v_err, k_t.transpose(1, 2))
+                o_all[0, t] = torch.bmm(ssm_state, q_t).squeeze(-1)
+
+            # RMSNorm on o along head dimension 128
+            o_rms = self.ssm_norm(o_all.to(x.dtype))
+            gated_o = (o_rms * F.silu(z.view(b, s, 48, 128))).reshape(b, s, 6144)
+            y = self.ssm_out(gated_o) if self.ssm_out else gated_o
             x = x + y
 
             x_ffn_norm = self.post_attention_norm(x)
@@ -300,42 +332,70 @@ class Qwen35SSMBlock(nn.Module):
             swiglu_act = F.silu(ffn_gate) * ffn_up
             mlp_out = self.ffn_down(swiglu_act)
             out = x + mlp_out
-            return out, ssm_state, new_conv_state
+            return out, ssm_state.to(x.dtype), new_conv_state
 
         # --- Single-Token Fast Path (Decode) ---
+        orig_2d = (x.dim() == 2)
+        if orig_2d:
+            x = x.unsqueeze(1)
+        b, s, d = x.shape  # s == 1
         x_norm = self.attn_norm(x)
 
-        # 1. QKV and Gate Projections via Triton W4A16
+        # 1. QKV, Gate, Alpha, Beta Projections via Triton W4A16
         qkv = self.attn_qkv(x_norm) if self.attn_qkv else x_norm
-        gate = self.attn_gate(x_norm) if self.attn_gate else x_norm
+        z = self.attn_gate(x_norm) if self.attn_gate else x_norm
+        alpha = self.ssm_alpha(x_norm) if self.ssm_alpha else torch.zeros((b, s, 48), dtype=x.dtype, device=x.device)
+        beta = self.ssm_beta(x_norm) if self.ssm_beta else torch.zeros((b, s, 48), dtype=x.dtype, device=x.device)
 
         # 2. 1D Convolution rolling buffer update
         if conv_state is None:
-            conv_state = torch.zeros((qkv.size(-1), 3), dtype=qkv.dtype, device=x.device)
-        conv_in = torch.cat([conv_state, qkv.t()], dim=-1)  # (10240, 4)
-        conv_out = (conv_in * self.ssm_conv1d).sum(dim=-1).unsqueeze(0).to(x.dtype)
+            conv_state = torch.zeros((10240, 3), dtype=x.dtype, device=x.device)
+        conv_in = torch.cat([conv_state, qkv.squeeze(0).t()], dim=-1)  # (10240, 4)
+        conv_out = F.silu((conv_in * self.ssm_conv1d).sum(dim=-1))  # (10240,)
         new_conv_state = conv_in[:, 1:].detach()
 
-        # 3. Gated DeltaNet Recurrence Update
-        # Recurrent state: (16 heads, 128, 128)
-        if ssm_state is None:
-            ssm_state = torch.zeros((16, 128, 128), dtype=x.dtype, device=x.device)
+        # 3. Slice Q, K, V
+        q = conv_out[:2048].view(16, 128).float()
+        k = conv_out[2048:4096].view(16, 128).float()
+        v = conv_out[4096:10240].view(48, 128).float()
 
-        # In pure inference, SSM updates state via outer product
-        # y_ssm = ssm_norm(ssm_state * q) * silu(gate)
-        dt = F.softplus(self.ssm_dt_bias[:16]).view(16, 1, 1)
-        decay = torch.exp(self.ssm_a[:16].view(16, 1, 1) * dt).to(x.dtype)
-        updated_ssm_state = ssm_state * decay + 0.005 * torch.ones_like(ssm_state)
+        eps = 1e-6
+        q = q / torch.clamp(torch.norm(q, p=2, dim=-1, keepdim=True), min=eps) * (128.0 ** -0.5)
+        k = k / torch.clamp(torch.norm(k, p=2, dim=-1, keepdim=True), min=eps)
+
+        # Tiled repeat to match GGUF tiled V-heads: [0..15] repeated 3 times -> 48 heads
+        q = q.repeat(3, 1).unsqueeze(-1)  # (48, 128, 1)
+        k = k.repeat(3, 1).unsqueeze(-1)  # (48, 128, 1)
+        v = v.unsqueeze(-1)               # (48, 128, 1)
+
+        # Gating
+        gate_val = self.ssm_a * F.softplus(alpha.squeeze(0).squeeze(0).float() + self.ssm_dt_bias)  # (48,)
+        decay = torch.exp(gate_val).view(48, 1, 1)
+        beta_val = torch.sigmoid(beta.squeeze(0).squeeze(0).float()).view(48, 1, 1)
+
+        # 4. Gated DeltaNet Recurrence Update
+        if ssm_state is None:
+            ssm_state = torch.zeros((48, 128, 128), dtype=torch.float32, device=x.device)
+        else:
+            ssm_state = ssm_state.float()
+
+        ssm_state = ssm_state * decay
+        v_err = (v - torch.bmm(ssm_state, k)) * beta_val
+        ssm_state = ssm_state + torch.bmm(v_err, k.transpose(1, 2))
+        o = torch.bmm(ssm_state, q).squeeze(-1).unsqueeze(0)  # (1, 48, 128)
+
+        # RMSNorm on o along head dimension 128
+        o_rms = self.ssm_norm(o.to(x.dtype))
+        gated_o = (o_rms * F.silu(z.view(b, s, 48, 128))).reshape(b, 6144)
 
         # Output projection
-        out_features = 6144
-        ssm_features = conv_out[:, :out_features] * F.silu(gate[:, :out_features])
-        y = self.ssm_out(ssm_features) if self.ssm_out else ssm_features
-
-        # Residual connection
+        y = self.ssm_out(gated_o) if self.ssm_out else gated_o
+        if not orig_2d:
+            y = y.unsqueeze(1)
+        x = x.squeeze(1) if orig_2d else x
         x = x + y
 
-        # 4. Fused SwiGLU MLP
+        # 5. Fused SwiGLU MLP
         x_ffn_norm = self.post_attention_norm(x)
         ffn_gate = self.ffn_gate(x_ffn_norm)
         ffn_up = self.ffn_up(x_ffn_norm)
@@ -343,7 +403,7 @@ class Qwen35SSMBlock(nn.Module):
         mlp_out = self.ffn_down(swiglu_act)
 
         out = x + mlp_out
-        return out, updated_ssm_state, new_conv_state
+        return out, ssm_state.to(x.dtype), new_conv_state
 
 
 class Qwen35FullAttentionBlock(nn.Module):
@@ -488,7 +548,7 @@ class SSMChunkGraph:
         self.device = device
         self.static_in = torch.zeros((1, 5120), dtype=torch.bfloat16, device=device)
         self.static_out = torch.zeros((1, 5120), dtype=torch.bfloat16, device=device)
-        self.ssm_states = [torch.zeros((16, 128, 128), dtype=torch.bfloat16, device=device) for _ in layers]
+        self.ssm_states = [torch.zeros((48, 128, 128), dtype=torch.bfloat16, device=device) for _ in layers]
         self.conv_states = [torch.zeros((10240, 3), dtype=torch.bfloat16, device=device) for _ in layers]
 
         # Warmup and capture on side stream
@@ -698,11 +758,11 @@ class Native27BEngine(nn.Module):
         batch_size: int = 1,
         max_seq_len: Optional[int] = None,
         mode: Optional[str] = None,
-    ) -> Dict[str, PreallocatedKVCache]:
-        """Initializes preallocated KV caches for all 16 attention layers."""
+    ) -> Dict[str, Any]:
+        """Initializes preallocated KV caches for attention layers and recurrent states for SSM layers."""
         max_len = max_seq_len or self.max_seq_len
         cache_mode = mode or self.kv_cache_mode
-        caches = {}
+        caches: Dict[str, Any] = {}
         for i, layer in enumerate(self.layers):
             if isinstance(layer, Qwen35FullAttentionBlock):
                 caches[f"kv_{i}"] = PreallocatedKVCache(
@@ -713,6 +773,9 @@ class Native27BEngine(nn.Module):
                     mode=cache_mode,
                     device=self.device,
                 )
+            elif isinstance(layer, Qwen35SSMBlock):
+                caches[f"ssm_{i}"] = torch.zeros((48, 128, 128), dtype=torch.bfloat16, device=self.device)
+                caches[f"conv_{i}"] = torch.zeros((10240, 3), dtype=torch.bfloat16, device=self.device)
         return caches
 
     def forward_token(
@@ -746,6 +809,11 @@ class Native27BEngine(nn.Module):
             for k in range(chunk_count):
                 # Execute 3-SSM chunk via pre-compiled HIP Graph (1 call!)
                 x = self.ssm_graphs[k].replay(x)
+
+                for j in range(3):
+                    layer_idx = 4 * k + j
+                    new_states[f"ssm_{layer_idx}"] = self.ssm_graphs[k].ssm_states[j]
+                    new_states[f"conv_{layer_idx}"] = self.ssm_graphs[k].conv_states[j]
 
                 # Execute Attention block (Layer 4k + 3)
                 attn_idx = 4 * k + 3
@@ -879,6 +947,17 @@ class Native27BEngine(nn.Module):
             return generated
         curr_token = next_token
 
+        # Synchronize prefilled SSM states into captured HIP Graphs
+        if use_hip_graph and self.hip_graph_captured:
+            chunk_count = self.num_layers // 4
+            for k in range(chunk_count):
+                for j in range(3):
+                    layer_idx = 4 * k + j
+                    if f"ssm_{layer_idx}" in state_dict:
+                        self.ssm_graphs[k].ssm_states[j].copy_(state_dict[f"ssm_{layer_idx}"])
+                    if f"conv_{layer_idx}" in state_dict:
+                        self.ssm_graphs[k].conv_states[j].copy_(state_dict[f"conv_{layer_idx}"])
+
         # 2. Decode (HIP Graph accelerated)
         pos = len(prompt_ids)
         for _ in range(max_new_tokens - 1):
@@ -918,6 +997,17 @@ class Native27BEngine(nn.Module):
         if next_token in (151643, 151645) or max_new_tokens <= 1:
             return
         curr_token = next_token
+
+        # Synchronize prefilled SSM states into captured HIP Graphs
+        if use_hip_graph and self.hip_graph_captured:
+            chunk_count = self.num_layers // 4
+            for k in range(chunk_count):
+                for j in range(3):
+                    layer_idx = 4 * k + j
+                    if f"ssm_{layer_idx}" in state_dict:
+                        self.ssm_graphs[k].ssm_states[j].copy_(state_dict[f"ssm_{layer_idx}"])
+                    if f"conv_{layer_idx}" in state_dict:
+                        self.ssm_graphs[k].conv_states[j].copy_(state_dict[f"conv_{layer_idx}"])
 
         # 2. Decode (HIP Graph accelerated)
         pos = len(prompt_ids)
