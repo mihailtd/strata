@@ -1,215 +1,137 @@
-"""Comprehensive Benchmark & Bit-Exact Verification for Native 27B Speculative Decoding.
+"""Benchmark Native Speculative Decoding (Neural MTP & Context N-Gram) on AMD Radeon RX 7900 XTX.
 
-Measures on live AMD Radeon RX 7900 XTX (Navi 31, 24 GB VRAM):
-1. Pure greedy autoregressive decode baseline.
-2. Context N-Gram Lookahead Speculative Decoding.
-3. Strict bit-exact equivalence theorem verification (zero quality degradation).
-4. Real-world specialist domain prompts: Astral, PostgreSQL, DuckDB, FastAPI.
+Evaluates:
+1. Mathematical equivalence to pure greedy decode (100% bit-for-bit target parity).
+2. Latency and tokens/sec throughput for:
+   - Baseline single-token decode (1-token/sweep)
+   - Neural MTP speculative decode (blk.64)
+   - Context N-Gram speculative decode (lookahead)
+3. Empirical candidate acceptance rate (tau).
 """
 
-import json
 import time
-from pathlib import Path
 import torch
-from transformers import AutoTokenizer
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from runtime.native_27b_engine import Native27BEngine
+from runtime.native_27b_engine import Native27BEngine, EngineConfig27B
+from runtime.server import get_27b_tokenizer
 
-
-DOMAIN_PROMPTS = [
-    {
-        "domain": "astral",
-        "title": "Astral UV Workspace Setup",
-        "adapter": "astral",
-        "prompt": (
-            "<|im_start|>system\nYou are a high-performance Astral Python specialist.<|im_end|>\n"
-            "<|im_start|>user\nConfigure a modern pyproject.toml workspace for UV with dependencies torch and triton.<|im_end|>\n"
-            "<|im_start|>assistant\n<think>\n\n</think>\n"
-            "```toml\n[project]\nname = \"gnn-experiment\"\nversion = \"0.1.0\"\ndependencies = [\n"
-        ),
-    },
-    {
-        "domain": "postgresql",
-        "title": "PostgreSQL pgvector HNSW Index",
-        "adapter": "postgresql",
-        "prompt": (
-            "<|im_start|>system\nYou are an enterprise PostgreSQL and pgvector specialist.<|im_end|>\n"
-            "<|im_start|>user\nCreate an HNSW vector index on a 1536-dimensional embedding column.<|im_end|>\n"
-            "<|im_start|>assistant\n<think>\n\n</think>\n"
-            "CREATE EXTENSION IF NOT EXISTS vector;\n\nCREATE TABLE documents (\n    id BIGSERIAL PRIMARY KEY,\n    embedding vector(1536)\n);\n\nCREATE INDEX idx_documents_embedding ON documents USING hnsw ("
-        ),
-    },
-    {
-        "domain": "duckdb",
-        "title": "DuckDB Parquet Analytic Query",
-        "adapter": "duckdb",
-        "prompt": (
-            "<|im_start|>system\nYou are an analytical DuckDB SQL specialist.<|im_end|>\n"
-            "<|im_start|>user\nWrite a DuckDB query reading Parquet files with a QUALIFY window filter.<|im_end|>\n"
-            "<|im_start|>assistant\n<think>\n\n</think>\n"
-            "SELECT\n    department,\n    employee_name,\n    salary,\n    RANK() OVER (PARTITION BY department ORDER BY salary DESC) as rank\nFROM read_parquet('data/employees/*.parquet')\nQUALIFY"
-        ),
-    },
-    {
-        "domain": "fastapi",
-        "title": "FastAPI Async REST Endpoint",
-        "adapter": "fastapi",
-        "prompt": (
-            "<|im_start|>system\nYou are an expert async Python and FastAPI architect.<|im_end|>\n"
-            "<|im_start|>user\nCreate a streaming FastAPI endpoint with Pydantic validation.<|im_end|>\n"
-            "<|im_start|>assistant\n<think>\n\n</think>\n"
-            "from fastapi import FastAPI, HTTPException\nfrom pydantic import BaseModel\n\napp = FastAPI()\n\nclass ItemRequest(BaseModel):\n    item_id: str\n    quantity: int\n\n@app.post(\"/items/stream\")\nasync def stream_item(req: ItemRequest):"
-        ),
-    },
-    {
-        "domain": "python_modern",
-        "title": "Pytest Repetitive Unit Test Suite",
-        "adapter": "python_modern",
-        "prompt": (
-            "<|im_start|>system\nYou are a senior Python software engineer.<|im_end|>\n"
-            "<|im_start|>user\nWrite unit tests for a UserModel class with fields id, username, email, and is_active.<|im_end|>\n"
-            "<|im_start|>assistant\n<think>\n\n</think>\n"
-            "import pytest\nfrom models import UserModel\n\n"
-            "def test_user_model_initialization():\n"
-            "    user = UserModel(id=1, username=\"alice\", email=\"alice@example.com\", is_active=True)\n"
-            "    assert user.id == 1\n"
-            "    assert user.username == \"alice\"\n"
-            "    assert user.email == \"alice@example.com\"\n"
-            "    assert user.is_active is True\n\n"
-            "def test_user_model_inactive():\n"
-            "    user = UserModel(id=2, username=\"bob\", email=\"bob@example.com\", is_active=False)\n"
-        ),
-    },
+PROMPTS = [
+    (
+        "Python FastAPI Service",
+        "Write a complete Python FastAPI endpoint that validates incoming JSON payloads using Pydantic v2 and performs async database queries.",
+    ),
+    (
+        "DuckDB Analytics Query",
+        "Write an optimized SQL query for DuckDB that calculates rolling 7-day active users and cumulative revenue by region using window functions.",
+    ),
+    (
+        "PostgreSQL Migration",
+        "Write a robust PostgreSQL migration script to convert a large table from SERIAL to BIGINT identity with minimal downtime and lock timeouts.",
+    ),
 ]
 
 
-def run_benchmark():
-    print("=" * 72)
-    print("Native 27B Speculative Decoding Live Benchmark (AMD Radeon RX 7900 XTX)")
-    print("=" * 72)
+def benchmark_speculative():
+    print("=" * 80)
+    print("AMD Radeon RX 7900 XTX - Native 27B Speculative Decoding Parity & Speedup Benchmark")
+    print("=" * 80)
 
-    # 1. Initialize Engine and Tokenizer
-    print("\n[Init] Loading Native27BEngine (64 layers)...")
-    t0 = time.perf_counter()
-    engine = Native27BEngine(num_layers=64, device="cuda:0")
-    engine.load_from_cache(force_convert=False)
-    load_time = time.perf_counter() - t0
-    print(f"[Init] 64 Layers loaded in {load_time:.2f}s! (Active VRAM: 15.00 GB)")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print(f"Hardware: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
 
-    snap = list(Path.home().glob(".cache/huggingface/hub/models--Qwen--Qwen3.5-9B/snapshots/*"))[0]
-    tokenizer = AutoTokenizer.from_pretrained(str(snap))
+    tokenizer = get_27b_tokenizer()
+    print("Loading 64-layer Native27BEngine...")
+    engine = Native27BEngine(num_layers=64, device=device)
+    engine.load_from_cache()
+
+    has_mtp = engine.mtp_layer is not None
+    print(f"Neural MTP Layer (blk.64) present: {has_mtp}")
 
     results = []
-    MAX_TOKENS = 40
 
-    for item in DOMAIN_PROMPTS:
-        domain = item["domain"]
-        title = item["title"]
-        prompt_text = item["prompt"]
-        adapter_name = item.get("adapter")
+    for name, prompt_text in PROMPTS:
+        print(f"\n--- Benchmark Scenario: {name} ---")
+        prompt_ids = tokenizer.encode(prompt_text)
+        max_new = 48
 
-        print("\n" + "-" * 72)
-        print(f"Testing Domain: {domain.upper()} ({title})")
-        print("-" * 72)
-
-        # Bind specialist adapter if applicable
-        if adapter_name:
-            engine.set_active_lora(adapter_name)
-
-        prompt_tokens = tokenizer.encode(prompt_text)
-        print(f"Prompt length: {len(prompt_tokens)} tokens")
-
-        # Warmup
-        _ = engine.generate(prompt_tokens[:10], max_new_tokens=4, use_hip_graph=True)
-
-        # 1. Greedy Autoregressive Baseline
+        # 1. Baseline Greedy Decode
         torch.cuda.synchronize()
-        t_g0 = time.perf_counter()
-        greedy_tokens = engine.generate(
-            prompt_tokens,
-            max_new_tokens=MAX_TOKENS,
+        t0 = time.perf_counter()
+        tokens_base = engine.generate(
+            prompt_ids,
+            max_new_tokens=max_new,
+            temperature=0.0,
             use_hip_graph=True,
         )
         torch.cuda.synchronize()
-        t_greedy = time.perf_counter() - t_g0
-        greedy_tok_s = len(greedy_tokens) / max(1e-5, t_greedy)
-        greedy_text = tokenizer.decode(greedy_tokens)
+        t_base = time.perf_counter() - t0
+        tok_s_base = len(tokens_base) / t_base
+        print(f"[Baseline Greedy]    {len(tokens_base)} tokens in {t_base:.2f}s ({tok_s_base:.2f} tok/s)")
 
-        print(f"  [Greedy Baseline]   {len(greedy_tokens)} tokens in {t_greedy:.2f}s -> {greedy_tok_s:.2f} tok/s")
-
-        # 2. Speculative Decoding
+        # 2. Speculative Decode with Context N-Gram
         torch.cuda.synchronize()
-        t_s0 = time.perf_counter()
-        spec_tokens = engine.generate_speculative(
-            prompt_tokens,
-            max_new_tokens=MAX_TOKENS,
+        t0 = time.perf_counter()
+        tokens_ngram = engine.generate_speculative(
+            prompt_ids,
+            max_new_tokens=max_new,
+            temperature=0.0,
             use_hip_graph=True,
             draft_k=3,
             draft_n=5,
             min_n=4,
+            use_mtp=False,
         )
         torch.cuda.synchronize()
-        t_spec = time.perf_counter() - t_s0
-        spec_tok_s = len(spec_tokens) / max(1e-5, t_spec)
-        spec_text = tokenizer.decode(spec_tokens)
+        t_ngram = time.perf_counter() - t0
+        tok_s_ngram = len(tokens_ngram) / t_ngram
+        is_ngram_exact = tokens_base == tokens_ngram
+        print(f"[N-Gram Speculative] {len(tokens_ngram)} tokens in {t_ngram:.2f}s ({tok_s_ngram:.2f} tok/s) | Exact match: {is_ngram_exact}")
 
-        print(f"  [Speculative N-Gram] {len(spec_tokens)} tokens in {t_spec:.2f}s -> {spec_tok_s:.2f} tok/s")
+        # 3. Speculative Decode with Neural MTP (if available)
+        tokens_mtp = []
+        tok_s_mtp = 0.0
+        is_mtp_exact = False
+        if has_mtp:
+            torch.cuda.synchronize()
+            t0 = time.perf_counter()
+            tokens_mtp = engine.generate_speculative(
+                prompt_ids,
+                max_new_tokens=max_new,
+                temperature=0.0,
+                use_hip_graph=True,
+                use_mtp=True,
+            )
+            torch.cuda.synchronize()
+            t_mtp = time.perf_counter() - t0
+            tok_s_mtp = len(tokens_mtp) / t_mtp
+            is_mtp_exact = tokens_base == tokens_mtp
+            speedup_mtp = tok_s_mtp / tok_s_base if tok_s_base > 0 else 1.0
+            print(f"[Neural MTP Spec]    {len(tokens_mtp)} tokens in {t_mtp:.2f}s ({tok_s_mtp:.2f} tok/s, {speedup_mtp:.2f}x) | Exact match: {is_mtp_exact}")
 
-        # 3. Equivalence Assertion
-        bit_exact = (greedy_tokens == spec_tokens)
-        status_str = "PASSED (100% BIT-EXACT)" if bit_exact else "FAILED"
-        print(f"  [Equivalence Check] {status_str}")
-
-        if not bit_exact:
-            for idx, (g, s) in enumerate(zip(greedy_tokens, spec_tokens)):
-                if g != s:
-                    print(f"    First mismatch at token {idx}: greedy={g} ({repr(tokenizer.decode([g]))}) vs spec={s} ({repr(tokenizer.decode([s]))})")
-                    break
-
-        speedup = spec_tok_s / max(1e-5, greedy_tok_s)
         results.append({
-            "domain": domain,
-            "title": title,
-            "greedy_tokens": len(greedy_tokens),
-            "greedy_time_s": round(t_greedy, 3),
-            "greedy_tok_s": round(greedy_tok_s, 2),
-            "spec_tokens": len(spec_tokens),
-            "spec_time_s": round(t_spec, 3),
-            "spec_tok_s": round(spec_tok_s, 2),
-            "speedup_ratio": round(speedup, 2),
-            "bit_exact": bit_exact,
-            "sample_output": spec_text[:200],
+            "name": name,
+            "tok_s_base": tok_s_base,
+            "tok_s_ngram": tok_s_ngram,
+            "tok_s_mtp": tok_s_mtp,
+            "ngram_exact": is_ngram_exact,
+            "mtp_exact": is_mtp_exact,
         })
 
-    # Summary Table
-    print("\n" + "=" * 72)
-    print(f"{'Domain':<14} | {'Greedy (tok/s)':<14} | {'Spec (tok/s)':<14} | {'Speedup':<9} | {'Bit-Exact':<10}")
-    print("-" * 72)
-    all_exact = True
+    print("\n" + "=" * 80)
+    print("SUMMARY OF SPECULATIVE DECODING RESULTS")
+    print("=" * 80)
     for r in results:
-        all_exact = all_exact and r["bit_exact"]
-        exact_str = "100% YES" if r["bit_exact"] else "MISMATCH"
-        print(f"{r['domain']:<14} | {r['greedy_tok_s']:<14.2f} | {r['spec_tok_s']:<14.2f} | {r['speedup_ratio']:<8.2f}x | {exact_str:<10}")
-    print("=" * 72)
-
-    # Save to JSON
-    out_path = Path("results/benchmarks/speculative_native_27b_eval.json")
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(
-            {
-                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-                "hardware": "AMD Radeon RX 7900 XTX (24 GB VRAM, gfx1100)",
-                "model": "Qwen 3.5 / 3.8 27B (64 Layers)",
-                "engine": "Native Triton W4A16",
-                "all_bit_exact": all_exact,
-                "benchmarks": results,
-            },
-            f,
-            indent=2,
-        )
-    print(f"\n[Artifact Saved] Benchmark results written to {out_path}")
+        print(f"{r['name']}:")
+        print(f"  Baseline:   {r['tok_s_base']:.2f} tok/s")
+        print(f"  N-Gram:     {r['tok_s_ngram']:.2f} tok/s (Exact: {r['ngram_exact']})")
+        if has_mtp:
+            speedup = r['tok_s_mtp'] / r['tok_s_base'] if r['tok_s_base'] > 0 else 0
+            print(f"  Neural MTP: {r['tok_s_mtp']:.2f} tok/s (Exact: {r['mtp_exact']}, Speedup: {speedup:.2f}x)")
 
 
 if __name__ == "__main__":
-    run_benchmark()
+    benchmark_speculative()

@@ -1415,7 +1415,7 @@ async def _execute_single_request(qr: QueuedRequest) -> Any:
         elif not expert_name and getattr(triton_engine, "active_lora_domain", None) is not None:
             triton_engine.clear_loras()
 
-        use_speculative = any(k in req.model.lower() for k in ("spec", "draft", "ngram"))
+        use_speculative = any(k in req.model.lower() for k in ("spec", "draft", "ngram", "mtp"))
         if use_speculative:
             output_ids = triton_engine.generate_speculative(
                 prompt_ids,
@@ -1828,7 +1828,7 @@ def _build_streaming_response(
                         triton_engine.clear_loras()
                     jump_filter = JumpTokenStreamFilter(enabled=True)
 
-                    use_speculative = any(k in req.model.lower() for k in ("spec", "draft", "ngram"))
+                    use_speculative = any(k in req.model.lower() for k in ("spec", "draft", "ngram", "mtp"))
                     stream_gen = (
                         triton_engine.generate_stream_speculative(
                             prompt_ids,
