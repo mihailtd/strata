@@ -724,33 +724,129 @@ class Native27BEngine(nn.Module):
         for g in self.ssm_graphs:
             g.reset_states()
 
-    def set_active_lora(self, domain_name: str, adapter_dir: Path | str) -> bool:
+    ADAPTER_DIR_MAP = {
+        "astral": "results/adapters/m2_astral_r8a128_v7_27b",
+        "postgresql": "results/adapters/m2_postgresql_r8a128_v7_27b",
+        "postgres": "results/adapters/m2_postgresql_r8a128_v7_27b",
+        "duckdb": "results/adapters/m2_duckdb_r8a128_v7_27b",
+        "python_web": "results/adapters/m2_python_web_r8a128_v7_27b",
+        "fastapi": "results/adapters/m2_python_web_r8a128_v7_27b",
+        "financial": "results/adapters/m2_financial_r8a128_v7_27b",
+        "financial_planning": "results/adapters/m2_financial_r8a128_v7_27b",
+        "python_modern": "results/adapters/m2_python_modern_r8a128_v7_27b",
+    }
+
+    def clear_loras(self) -> None:
+        """Clears all active LoRA adapters across all layers."""
+        for layer in self.layers:
+            for mod_name in ["attn_qkv", "attn_q", "attn_k", "attn_v", "attn_output", "ffn_gate", "ffn_up", "ffn_down"]:
+                mod = getattr(layer, mod_name, None)
+                if isinstance(mod, W4A16Linear):
+                    mod.clear_lora()
+        self.active_lora_domain = None
+        if self.hip_graph_captured:
+            self.capture_hip_graphs()
+
+    def set_active_lora(self, domain_name: Optional[str], adapter_dir: Optional[Path | str] = None) -> bool:
         """Dynamically binds PyTorch LoRA adapter weights directly into W4A16Linear Triton layers."""
-        adapter_path = Path(adapter_dir)
-        if not adapter_path.exists():
+        if not domain_name or domain_name.lower() in ("none", "base", "default"):
+            self.clear_loras()
+            return True
+
+        domain_clean = domain_name.lower()
+        target_path: Optional[Path] = None
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        if adapter_dir is not None:
+            target_path = Path(adapter_dir)
+            if not target_path.is_absolute():
+                target_path = repo_root / target_path
+        elif domain_clean in self.ADAPTER_DIR_MAP:
+            rel_path = self.ADAPTER_DIR_MAP[domain_clean]
+            target_path = repo_root / rel_path
+        else:
+            p = Path(domain_name)
+            if p.exists():
+                target_path = p
+            elif (repo_root / domain_name).exists():
+                target_path = repo_root / domain_name
+
+        if target_path is None or not target_path.exists():
+            print(f"[Native 27B Triton] Warning: Adapter path not found for [{domain_name}]: {target_path}")
             return False
 
         t0 = time.perf_counter()
-        weights = {}
-        for p in adapter_path.glob("*.pt"):
-            weights.update(torch.load(p, map_location="cpu", weights_only=False))
+        weights: Dict[str, torch.Tensor] = {}
+        sf_path = target_path / "adapter_model.safetensors"
+        if sf_path.exists():
+            from safetensors.torch import load_file
+            weights = load_file(str(sf_path), device=str(self.device))
+        else:
+            for p in target_path.glob("*.pt"):
+                weights.update(torch.load(p, map_location=self.device, weights_only=False))
+
+        if not weights:
+            print(f"[Native 27B Triton] No weights loaded from {target_path}")
+            return False
+
+        alpha = 16.0
+        config_path = target_path / "adapter_config.json"
+        if config_path.exists():
+            try:
+                with open(config_path) as f:
+                    cfg = json.load(f)
+                r_val = float(cfg.get("r", 8.0))
+                alpha_val = float(cfg.get("lora_alpha", 128.0))
+                if r_val > 0:
+                    alpha = alpha_val / r_val
+            except Exception:
+                pass
 
         applied_count = 0
         for i, layer in enumerate(self.layers):
-            for mod_name in ["attn_qkv", "attn_q", "attn_output", "ffn_gate", "ffn_up", "ffn_down"]:
-                mod = getattr(layer, mod_name, None)
-                if isinstance(mod, W4A16Linear):
-                    key_a = f"base_model.model.model.layers.{i}.{mod_name}.lora_A.weight"
-                    key_b = f"base_model.model.model.layers.{i}.{mod_name}.lora_B.weight"
-                    if key_a in weights and key_b in weights:
-                        mod.set_lora_adapter(
-                            lora_a=weights[key_a].t().contiguous(),
-                            lora_b=weights[key_b].t().contiguous(),
-                            alpha=2.0,
-                        )
-                        applied_count += 1
+            is_attn = ((i + 1) % 4 == 0)
+            mod_mappings = [
+                ("ffn_gate", f"model.layers.{i}.mlp.gate_proj"),
+                ("ffn_up", f"model.layers.{i}.mlp.up_proj"),
+                ("ffn_down", f"model.layers.{i}.mlp.down_proj"),
+            ]
+            if is_attn:
+                mod_mappings.extend([
+                    ("attn_q", f"model.layers.{i}.self_attn.q_proj"),
+                    ("attn_k", f"model.layers.{i}.self_attn.k_proj"),
+                    ("attn_v", f"model.layers.{i}.self_attn.v_proj"),
+                    ("attn_output", f"model.layers.{i}.self_attn.o_proj"),
+                ])
 
-        print(f"[Native 27B Triton] Bound LoRA [{domain_name}] to {applied_count} Triton modules in {(time.perf_counter() - t0)*1000:.1f}ms")
+            for attr_name, key_prefix in mod_mappings:
+                mod = getattr(layer, attr_name, None)
+                if isinstance(mod, W4A16Linear):
+                    key_a = f"{key_prefix}.lora_A.weight"
+                    key_b = f"{key_prefix}.lora_B.weight"
+                    if key_a not in weights:
+                        key_a = f"base_model.model.{key_prefix}.lora_A.weight"
+                        key_b = f"base_model.model.{key_prefix}.lora_B.weight"
+
+                    if key_a in weights and key_b in weights:
+                        wa = weights[key_a]
+                        wb = weights[key_b]
+                        if wa.shape[0] != mod.in_features and wa.shape[1] == mod.in_features:
+                            wa = wa.t()
+                        if wb.shape[1] != mod.out_features and wb.shape[0] == mod.out_features:
+                            wb = wb.t()
+
+                        if wa.shape[0] == mod.in_features and wb.shape[1] == mod.out_features:
+                            mod.set_lora_adapter(
+                                lora_a=wa.contiguous(),
+                                lora_b=wb.contiguous(),
+                                alpha=alpha,
+                            )
+                            applied_count += 1
+
+        self.active_lora_domain = domain_clean
+        if self.hip_graph_captured:
+            self.capture_hip_graphs()
+
+        print(f"[Native 27B Triton] Bound LoRA [{domain_name}] ({applied_count} modules, alpha={alpha:.1f}) in {(time.perf_counter() - t0)*1000:.1f}ms")
         return True
 
     def init_kv_caches(
@@ -970,6 +1066,55 @@ class Native27BEngine(nn.Module):
             pos += 1
 
         return generated
+
+    def generate_stream_tokens(
+        self,
+        prompt_ids: List[int],
+        max_new_tokens: int = 128,
+        temperature: float = 0.7,
+        kv_cache_mode: Optional[str] = None,
+        use_hip_graph: bool = True,
+    ):
+        """Synchronously yields next token IDs with batched prefill and HIP Graph acceleration."""
+        mode = kv_cache_mode or self.kv_cache_mode
+        state_dict: Dict[str, Any] = self.init_kv_caches(
+            batch_size=1,
+            max_seq_len=len(prompt_ids) + max_new_tokens + 16,
+            mode=mode,
+        )
+
+        if use_hip_graph and self.hip_graph_captured:
+            self.reset_hip_graphs()
+
+        # 1. Fast Batched Prefill
+        logits, state_dict = self.forward_prompt(prompt_ids, state_dict)
+        next_token = int(torch.argmax(logits[0, :]).item())
+        yield next_token
+        if next_token in (151643, 151645) or max_new_tokens <= 1:
+            return
+        curr_token = next_token
+
+        # Synchronize prefilled SSM states into captured HIP Graphs
+        if use_hip_graph and self.hip_graph_captured:
+            chunk_count = self.num_layers // 4
+            for k in range(chunk_count):
+                for j in range(3):
+                    layer_idx = 4 * k + j
+                    if f"ssm_{layer_idx}" in state_dict:
+                        self.ssm_graphs[k].ssm_states[j].copy_(state_dict[f"ssm_{layer_idx}"])
+                    if f"conv_{layer_idx}" in state_dict:
+                        self.ssm_graphs[k].conv_states[j].copy_(state_dict[f"conv_{layer_idx}"])
+
+        # 2. Decode (HIP Graph accelerated)
+        pos = len(prompt_ids)
+        for _ in range(max_new_tokens - 1):
+            logits, state_dict = self.forward_token(curr_token, state_dict, pos=pos, use_graph=use_hip_graph)
+            next_token = int(torch.argmax(logits[0, :]).item())
+            yield next_token
+            if next_token in (151643, 151645):
+                break
+            curr_token = next_token
+            pos += 1
 
     async def generate_stream(
         self,

@@ -100,8 +100,13 @@ def get_27b_tokenizer() -> Any:
     """Returns cached tokenizer for 27B native engine."""
     global _tokenizer_27b
     if _tokenizer_27b is None:
+        from pathlib import Path
         from transformers import AutoTokenizer
-        _tokenizer_27b = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-Coder-7B-Instruct")
+        snaps = list(Path.home().glob(".cache/huggingface/hub/models--Qwen--Qwen3.5-9B/snapshots/*"))
+        if snaps:
+            _tokenizer_27b = AutoTokenizer.from_pretrained(str(snaps[0]))
+        else:
+            _tokenizer_27b = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-Coder-7B-Instruct")
     return _tokenizer_27b
 
 
@@ -1404,6 +1409,12 @@ async def _execute_single_request(qr: QueuedRequest) -> Any:
         prompt_ids = tokenizer.encode(formatted_prompt)
 
         triton_engine = get_native_triton_27b_engine(num_layers=64)
+        expert_name, _ = resolve_27b_adapter_id(req.model, req.messages)
+        if expert_name and expert_name != getattr(triton_engine, "active_lora_domain", None):
+            triton_engine.set_active_lora(expert_name)
+        elif not expert_name and getattr(triton_engine, "active_lora_domain", None) is not None:
+            triton_engine.clear_loras()
+
         output_ids = triton_engine.generate(
             prompt_ids,
             max_new_tokens=min(max_new_tokens, 512),
@@ -1793,40 +1804,31 @@ def _build_streaming_response(
             try:
                 is_triton_27b = "triton" in req.model.lower()
                 if is_triton_27b:
-                    from transformers import AutoTokenizer
                     from runtime.jump_streamer import JumpTokenStreamFilter
 
-                    tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-Coder-7B-Instruct")
+                    tokenizer = get_27b_tokenizer()
                     formatted_prompt = format_prompt(req.messages)
                     prompt_ids = tokenizer.encode(formatted_prompt)
                     triton_engine = get_native_triton_27b_engine(num_layers=64)
+                    expert_name, _ = resolve_27b_adapter_id(req.model, req.messages)
+                    if expert_name and expert_name != getattr(triton_engine, "active_lora_domain", None):
+                        triton_engine.set_active_lora(expert_name)
+                    elif not expert_name and getattr(triton_engine, "active_lora_domain", None) is not None:
+                        triton_engine.clear_loras()
                     jump_filter = JumpTokenStreamFilter(enabled=True)
 
                     try:
-                        state_dict = triton_engine.init_kv_caches(
-                            batch_size=1,
-                            max_seq_len=len(prompt_ids) + min(max_new_tokens, 512) + 16,
-                        )
-
-                        curr_token = prompt_ids[0] if prompt_ids else 0
-                        for pos, tid in enumerate(prompt_ids):
-                            logits, state_dict = triton_engine.forward_token(tid, state_dict, pos=pos)
-                            curr_token = tid
-
-                        pos = len(prompt_ids)
-                        for _ in range(min(max_new_tokens, 512)):
+                        for next_token in triton_engine.generate_stream_tokens(
+                            prompt_ids,
+                            max_new_tokens=min(max_new_tokens, 512),
+                            temperature=req.temperature or 0.7,
+                        ):
                             if stop_event.is_set():
-                                break
-                            logits, state_dict = triton_engine.forward_token(curr_token, state_dict, pos=pos)
-                            next_token = int(torch.argmax(logits[0, :]).item())
-                            if next_token in (151643, 151645):
                                 break
                             piece = tokenizer.decode([next_token])
                             chunks = jump_filter.process_delta(piece)
                             for c in chunks:
                                 token_queue.put((c, 1))
-                            curr_token = next_token
-                            pos += 1
                     except Exception as e:
                         token_queue.put((f"\n[Native Triton Stream Error: {e}]\n", 1))
                     return
