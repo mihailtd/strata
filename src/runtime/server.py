@@ -1415,11 +1415,21 @@ async def _execute_single_request(qr: QueuedRequest) -> Any:
         elif not expert_name and getattr(triton_engine, "active_lora_domain", None) is not None:
             triton_engine.clear_loras()
 
-        output_ids = triton_engine.generate(
-            prompt_ids,
-            max_new_tokens=min(max_new_tokens, 512),
-            temperature=req.temperature or 0.7,
-        )
+        use_speculative = any(k in req.model.lower() for k in ("spec", "draft", "ngram"))
+        if use_speculative:
+            output_ids = triton_engine.generate_speculative(
+                prompt_ids,
+                max_new_tokens=min(max_new_tokens, 512),
+                temperature=req.temperature or 0.7,
+                draft_k=3,
+                draft_n=3,
+            )
+        else:
+            output_ids = triton_engine.generate(
+                prompt_ids,
+                max_new_tokens=min(max_new_tokens, 512),
+                temperature=req.temperature or 0.7,
+            )
         output_text = tokenizer.decode(output_ids, skip_special_tokens=True)
         reasoning_text, clean_output = extract_thinking_and_content(output_text)
 
@@ -1817,12 +1827,24 @@ def _build_streaming_response(
                         triton_engine.clear_loras()
                     jump_filter = JumpTokenStreamFilter(enabled=True)
 
-                    try:
-                        for next_token in triton_engine.generate_stream_tokens(
+                    use_speculative = any(k in req.model.lower() for k in ("spec", "draft", "ngram"))
+                    stream_gen = (
+                        triton_engine.generate_stream_speculative(
                             prompt_ids,
                             max_new_tokens=min(max_new_tokens, 512),
                             temperature=req.temperature or 0.7,
-                        ):
+                            draft_k=3,
+                            draft_n=3,
+                        )
+                        if use_speculative
+                        else triton_engine.generate_stream_tokens(
+                            prompt_ids,
+                            max_new_tokens=min(max_new_tokens, 512),
+                            temperature=req.temperature or 0.7,
+                        )
+                    )
+                    try:
+                        for next_token in stream_gen:
                             if stop_event.is_set():
                                 break
                             piece = tokenizer.decode([next_token])

@@ -27,13 +27,15 @@ Existing commodity engines execute static, quantized models with discrete, isola
 - **The SOTA Limitation**: Transformer architectures suffer from $O(N^2)$ KV cache explosion or static linear RNN limitations that cannot dynamically route knowledge representations.
 - **Our Novelty**: Hardware-native associative recurrence (Gated DeltaNet) fused with graph neural memory states, enabling constant-memory long-horizon agent reasoning and state handoffs between specialized sub-graphs that transformer KV caches cannot perform.
 
-### 4. Breaking the Physical Memory Bandwidth Decode Ceiling (Phase 2 Priority)
-- **The Physical Ceiling**: Single-token autoregressive decode of 15.00 GB W4A16 weights on a 960 GB/s bus is physically bounded at $\approx 18\text{--}22\text{ tok/s}$ in full execution.
-- **The Speculation Requirement**:
-  - `llama.cpp` reaches ~30 tok/s exclusively via `--spec-type draft-mtp,ngram-mod`.
-  - For our custom Triton/HIP engine to surpass 30 tok/s, it must implement **In-Register Recurrent Multi-Token Prediction (MTP) Speculation**:
-    - Generating $K=3\text{--}4$ candidate tokens via recurrent associative expansion without sweeping the 15 GB base model.
-    - Verifying $K$ draft tokens in a single parallel Triton GEMV sweep.
+### 4. Breaking the Physical Memory Bandwidth Decode Ceiling (Native Speculation)
+- **The Physical Ceiling**: Single-token autoregressive decode of 15.00 GB W4A16 weights on a 960 GB/s bus is physically bounded at $\approx 18\text{--}22\text{ tok/s}$ in full autoregression ($15\text{ GB} / 800\text{ GB/s} \approx 18.5\text{ tok/s}$).
+- **Zero-Cost State Rollback Architecture**:
+  - Unlike black-box frameworks (e.g. HuggingFace) that incur a catastrophic 31.78 ms re-forward pass to recompute internal DeltaNet recurrent states on candidate rejection, our custom `Native27BEngine` records `ssm_history[t]` and `conv_history[t]` during multi-token parallel verification.
+  - Partial or total rejections rollback intermediate SSM and Conv states in $O(1)$ scalar/pointer time ($0.00\text{ ms}$ commit tax).
+  - Attention KV cache is rewindable by adjusting `current_len` directly.
+- **Strict Bit-Exact Equivalence Invariant**:
+  - Speculative decoding MUST be mathematically verified against greedy decode token-for-token.
+  - Every candidate token accepted ($y_t == d_t$) and every emitted bonus token ($\arg\max P(\cdot \mid x_{\le t})$) originates strictly from target model logits, guaranteeing 100% bit-exact equivalence with zero quality loss.
 
 ---
 

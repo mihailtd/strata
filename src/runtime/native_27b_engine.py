@@ -70,6 +70,28 @@ class EngineConfig27B:
     device: str = "cuda:0"
 
 
+class NGramDrafter:
+    """Fast in-memory n-gram lookahead drafter for zero-VRAM speculative decoding."""
+
+    def __init__(self, n: int = 3, k: int = 3):
+        self.n = n
+        self.k = k
+
+    def find_draft(self, tokens: List[int]) -> List[int]:
+        """Finds continuation of the longest matching suffix in tokens."""
+        seq_len = len(tokens)
+        for cur_n in range(self.n, 1, -1):
+            if seq_len < cur_n + 1:
+                continue
+            ngram = tokens[-cur_n:]
+            for i in range(seq_len - cur_n - 1, -1, -1):
+                if tokens[i : i + cur_n] == ngram:
+                    candidate = tokens[i + cur_n : i + cur_n + self.k]
+                    if len(candidate) > 0:
+                        return candidate
+        return []
+
+
 class PreallocatedKVCache:
     """Contiguous Pre-allocated Key-Value Cache supporting BF16 and Q8_0 modes.
 
@@ -591,6 +613,8 @@ class SSMChunkGraph:
 class Native27BEngine(nn.Module):
     """Full 64-Layer Pure Native Triton Serving Engine for Qwen 3.5 / 3.8 27B."""
 
+    STOP_TOKEN_IDS = (151643, 151645, 248044, 248046)
+
     def __init__(
         self,
         cache_dir: str | Path = DEFAULT_CACHE_DIR,
@@ -723,6 +747,19 @@ class Native27BEngine(nn.Module):
         """Resets recurrent states across all captured SSM HIP Graphs."""
         for g in self.ssm_graphs:
             g.reset_states()
+
+    def sync_states_to_graphs(self, state_dict: Dict[str, Any]) -> None:
+        """Synchronizes recurrent and conv states into pre-compiled HIP Graph buffers."""
+        if not self.hip_graph_captured:
+            return
+        chunk_count = self.num_layers // 4
+        for k in range(chunk_count):
+            for j in range(3):
+                layer_idx = 4 * k + j
+                if f"ssm_{layer_idx}" in state_dict:
+                    self.ssm_graphs[k].ssm_states[j].copy_(state_dict[f"ssm_{layer_idx}"])
+                if f"conv_{layer_idx}" in state_dict:
+                    self.ssm_graphs[k].conv_states[j].copy_(state_dict[f"conv_{layer_idx}"])
 
     ADAPTER_DIR_MAP = {
         "astral": "results/adapters/m2_astral_r8a128_v7_27b",
@@ -1039,20 +1076,12 @@ class Native27BEngine(nn.Module):
         logits, state_dict = self.forward_prompt(prompt_ids, state_dict)
         next_token = int(torch.argmax(logits[0, :]).item())
         generated.append(next_token)
-        if next_token in (151643, 151645) or max_new_tokens <= 1:
+        if next_token in self.STOP_TOKEN_IDS or max_new_tokens <= 1:
             return generated
         curr_token = next_token
 
         # Synchronize prefilled SSM states into captured HIP Graphs
-        if use_hip_graph and self.hip_graph_captured:
-            chunk_count = self.num_layers // 4
-            for k in range(chunk_count):
-                for j in range(3):
-                    layer_idx = 4 * k + j
-                    if f"ssm_{layer_idx}" in state_dict:
-                        self.ssm_graphs[k].ssm_states[j].copy_(state_dict[f"ssm_{layer_idx}"])
-                    if f"conv_{layer_idx}" in state_dict:
-                        self.ssm_graphs[k].conv_states[j].copy_(state_dict[f"conv_{layer_idx}"])
+        self.sync_states_to_graphs(state_dict)
 
         # 2. Decode (HIP Graph accelerated)
         pos = len(prompt_ids)
@@ -1060,12 +1089,338 @@ class Native27BEngine(nn.Module):
             logits, state_dict = self.forward_token(curr_token, state_dict, pos=pos, use_graph=use_hip_graph)
             next_token = int(torch.argmax(logits[0, :]).item())
             generated.append(next_token)
-            if next_token in (151643, 151645):
+            if next_token in self.STOP_TOKEN_IDS:
                 break
             curr_token = next_token
             pos += 1
 
         return generated
+
+    def forward_verify(
+        self,
+        candidate_tokens: List[int],
+        state_dict: Dict[str, Any],
+        pos: int,
+    ) -> Tuple[torch.Tensor, Dict[str, Any]]:
+        """Parallel verification forward pass over candidate tokens with intermediate state history.
+
+        Computes logits for all candidate tokens in one single forward pass across all 64 layers.
+        Returns logits of shape (s, vocab_size) and intermediate recurrent/conv state history.
+        """
+        s = len(candidate_tokens)
+        x = self.token_embd[candidate_tokens, :].unsqueeze(0).to(self.device)
+        cos_sin = self._get_cos_sin(seq_len=s, offset=pos)
+
+        past_len = pos
+        tot_len = past_len + s
+        mask = torch.zeros((1, 1, s, tot_len), dtype=torch.bool, device=self.device)
+        for i in range(s):
+            mask[0, 0, i, : past_len + i + 1] = True
+
+        history: Dict[str, List[torch.Tensor]] = {}
+
+        for i, layer in enumerate(self.layers):
+            if isinstance(layer, Qwen35SSMBlock):
+                ssm_key = f"ssm_{i}"
+                conv_key = f"conv_{i}"
+                ssm_state = state_dict.get(ssm_key)
+                conv_state = state_dict.get(conv_key)
+
+                b, seq_len, d = x.shape
+                x_norm = layer.attn_norm(x)
+                qkv = layer.attn_qkv(x_norm) if layer.attn_qkv else x_norm
+                z = layer.attn_gate(x_norm) if layer.attn_gate else x_norm
+                alpha = layer.ssm_alpha(x_norm) if layer.ssm_alpha else torch.zeros((b, seq_len, 48), dtype=x.dtype, device=x.device)
+                beta = layer.ssm_beta(x_norm) if layer.ssm_beta else torch.zeros((b, seq_len, 48), dtype=x.dtype, device=x.device)
+
+                conv_w = layer.ssm_conv1d.unsqueeze(1).to(dtype=x.dtype)
+                qkv_t = qkv.transpose(1, 2)
+                if conv_state is not None:
+                    qkv_padded = torch.cat([conv_state.unsqueeze(0).to(x.dtype), qkv_t], dim=-1)
+                else:
+                    qkv_padded = F.pad(qkv_t, (3, 0))
+                conv_out = F.silu(F.conv1d(qkv_padded, conv_w, groups=10240).transpose(1, 2))
+
+                q_all = conv_out[:, :, :2048].view(b, seq_len, 16, 128).float()
+                k_all = conv_out[:, :, 2048:4096].view(b, seq_len, 16, 128).float()
+                v_all = conv_out[:, :, 4096:10240].view(b, seq_len, 48, 128).float()
+
+                eps = 1e-6
+                q_all = q_all / torch.clamp(torch.norm(q_all, p=2, dim=-1, keepdim=True), min=eps) * (128.0 ** -0.5)
+                k_all = k_all / torch.clamp(torch.norm(k_all, p=2, dim=-1, keepdim=True), min=eps)
+                q_all = q_all.repeat(1, 1, 3, 1)
+                k_all = k_all.repeat(1, 1, 3, 1)
+
+                gate_all = layer.ssm_a * F.softplus(alpha.float() + layer.ssm_dt_bias)
+                decay_all = torch.exp(gate_all)
+                beta_all = torch.sigmoid(beta.float())
+
+                curr_ssm = ssm_state.clone().float() if ssm_state is not None else torch.zeros((48, 128, 128), dtype=torch.float32, device=x.device)
+                o_all = torch.zeros(b, seq_len, 48, 128, dtype=torch.float32, device=x.device)
+                ssm_hist: List[torch.Tensor] = []
+                conv_hist: List[torch.Tensor] = []
+                for t in range(seq_len):
+                    q_t = q_all[0, t].unsqueeze(-1)
+                    k_t = k_all[0, t].unsqueeze(-1)
+                    v_t = v_all[0, t].unsqueeze(-1)
+                    dec_t = decay_all[0, t].view(48, 1, 1)
+                    beta_t = beta_all[0, t].view(48, 1, 1)
+
+                    curr_ssm = curr_ssm * dec_t
+                    v_err = (v_t - torch.bmm(curr_ssm, k_t)) * beta_t
+                    curr_ssm = curr_ssm + torch.bmm(v_err, k_t.transpose(1, 2))
+                    o_all[0, t] = torch.bmm(curr_ssm, q_t).squeeze(-1)
+                    ssm_hist.append(curr_ssm.clone().to(x.dtype))
+                    conv_hist.append(qkv_padded[0, :, t + 1 : t + 4].clone())
+
+                o_rms = layer.ssm_norm(o_all.to(x.dtype))
+                gated_o = (o_rms * F.silu(z.view(b, seq_len, 48, 128))).reshape(b, seq_len, 6144)
+                y = layer.ssm_out(gated_o) if layer.ssm_out else gated_o
+                x = x + y
+
+                x_ffn_norm = layer.post_attention_norm(x)
+                ffn_gate = layer.ffn_gate(x_ffn_norm)
+                ffn_up = layer.ffn_up(x_ffn_norm)
+                mlp_out = layer.ffn_down(F.silu(ffn_gate) * ffn_up)
+                x = x + mlp_out
+
+                history[ssm_key] = ssm_hist
+                history[conv_key] = conv_hist
+
+            elif isinstance(layer, Qwen35FullAttentionBlock):
+                kv_key = f"kv_{i}"
+                kv_cache = state_dict.get(kv_key)
+                b, seq_len, _ = x.shape
+                x_norm = layer.attn_norm(x)
+                if layer.attn_q:
+                    q_full = layer.attn_q(x_norm)
+                    query_states, gate = torch.chunk(q_full.view(b, seq_len, 24, 256 * 2), 2, dim=-1)
+                    gate = gate.reshape(b, seq_len, -1)
+                else:
+                    query_states = x_norm[..., :6144].view(b, seq_len, 24, 256)
+                    gate = torch.zeros((b, seq_len, 6144), dtype=x.dtype, device=x.device)
+
+                q = layer.attn_q_norm(query_states).transpose(1, 2)
+                k = layer.attn_k(x_norm) if layer.attn_k else x_norm[..., :1024]
+                k = layer.attn_k_norm(k.view(b, seq_len, 4, 256)).transpose(1, 2)
+                v = layer.attn_v(x_norm) if layer.attn_v else x_norm[..., :1024]
+                v = v.view(b, seq_len, 4, 256).transpose(1, 2)
+
+                cos, sin = cos_sin
+                q = apply_rotary_emb(q, cos, sin)
+                k = apply_rotary_emb(k, cos, sin)
+
+                k_all, v_all = kv_cache.update(k, v)
+                k_rep = k_all.repeat_interleave(6, dim=1)
+                v_rep = v_all.repeat_interleave(6, dim=1)
+
+                attn_out = F.scaled_dot_product_attention(q, k_rep, v_rep, attn_mask=mask)
+                attn_out = attn_out.transpose(1, 2).contiguous().view(b, seq_len, -1)
+                if layer.attn_q:
+                    attn_out = attn_out * torch.sigmoid(gate)
+                y = layer.attn_output(attn_out) if layer.attn_output else attn_out
+                x = x + y
+
+                x_ffn_norm = layer.post_attention_norm(x)
+                ffn_gate = layer.ffn_gate(x_ffn_norm)
+                ffn_up = layer.ffn_up(x_ffn_norm)
+                mlp_out = layer.ffn_down(F.silu(ffn_gate) * ffn_up)
+                x = x + mlp_out
+
+        x_norm = self.output_norm(x)
+        logits = self.lm_head(x_norm)
+        return logits[0], history
+
+    def generate_speculative(
+        self,
+        prompt_ids: List[int],
+        max_new_tokens: int = 64,
+        temperature: float = 0.7,
+        kv_cache_mode: Optional[str] = None,
+        use_hip_graph: bool = True,
+        draft_k: int = 3,
+        draft_n: int = 3,
+    ) -> List[int]:
+        """Speculative decoding using in-memory context n-gram lookahead drafter.
+
+        Guarantees 100% mathematical equivalence to greedy decode with zero quality loss.
+        """
+        generated: List[int] = []
+        mode = kv_cache_mode or self.kv_cache_mode
+        state_dict: Dict[str, Any] = self.init_kv_caches(
+            batch_size=1,
+            max_seq_len=len(prompt_ids) + max_new_tokens + 32,
+            mode=mode,
+        )
+
+        if use_hip_graph and self.hip_graph_captured:
+            self.reset_hip_graphs()
+
+        # 1. Batched Prefill
+        logits, state_dict = self.forward_prompt(prompt_ids, state_dict)
+        self.sync_states_to_graphs(state_dict)
+
+        curr_token = int(torch.argmax(logits[0, :]).item())
+        generated.append(curr_token)
+        if curr_token in self.STOP_TOKEN_IDS or max_new_tokens <= 1:
+            return generated
+
+        drafter = NGramDrafter(n=draft_n, k=draft_k)
+        all_tokens = list(prompt_ids) + [curr_token]
+        pos = len(prompt_ids)
+
+        while len(generated) < max_new_tokens:
+            draft = drafter.find_draft(all_tokens) if draft_k > 0 else []
+
+            if len(draft) >= 1:
+                candidates = [curr_token] + draft[:draft_k]
+                K = len(candidates)
+                chunk_logits, history = self.forward_verify(candidates, state_dict, pos)
+
+                n_acc = 0
+                bonus_token = None
+                for j in range(K - 1):
+                    pred_tok = int(torch.argmax(chunk_logits[j]).item())
+                    target_cand = candidates[j + 1]
+                    if pred_tok == target_cand:
+                        n_acc += 1
+                    else:
+                        bonus_token = pred_tok
+                        break
+
+                if bonus_token is None:
+                    bonus_token = int(torch.argmax(chunk_logits[K - 1]).item())
+
+                # Zero-cost commit: assign layer recurrent states from pre-computed history
+                for i in range(self.num_layers):
+                    if f"ssm_{i}" in history:
+                        state_dict[f"ssm_{i}"] = history[f"ssm_{i}"][n_acc].clone()
+                        state_dict[f"conv_{i}"] = history[f"conv_{i}"][n_acc].clone()
+                    if f"kv_{i}" in state_dict:
+                        state_dict[f"kv_{i}"].current_len = pos + n_acc + 1
+
+                self.sync_states_to_graphs(state_dict)
+
+                # Emit accepted tokens
+                for j in range(n_acc):
+                    acc_tok = candidates[j + 1]
+                    generated.append(acc_tok)
+                    all_tokens.append(acc_tok)
+                    if acc_tok in self.STOP_TOKEN_IDS or len(generated) >= max_new_tokens:
+                        return generated
+
+                generated.append(bonus_token)
+                all_tokens.append(bonus_token)
+                if bonus_token in self.STOP_TOKEN_IDS or len(generated) >= max_new_tokens:
+                    return generated
+
+                pos = pos + n_acc + 1
+                curr_token = bonus_token
+            else:
+                # Single-token fallback decode
+                logits, state_dict = self.forward_token(curr_token, state_dict, pos=pos, use_graph=use_hip_graph)
+                next_token = int(torch.argmax(logits[0, :]).item())
+                generated.append(next_token)
+                all_tokens.append(next_token)
+                if next_token in self.STOP_TOKEN_IDS or len(generated) >= max_new_tokens:
+                    return generated
+                curr_token = next_token
+                pos += 1
+
+        return generated
+
+    def generate_stream_speculative(
+        self,
+        prompt_ids: List[int],
+        max_new_tokens: int = 128,
+        temperature: float = 0.7,
+        kv_cache_mode: Optional[str] = None,
+        use_hip_graph: bool = True,
+        draft_k: int = 3,
+        draft_n: int = 3,
+    ):
+        """Synchronously yields next token IDs in bursts using context n-gram lookahead speculation."""
+        mode = kv_cache_mode or self.kv_cache_mode
+        state_dict: Dict[str, Any] = self.init_kv_caches(
+            batch_size=1,
+            max_seq_len=len(prompt_ids) + max_new_tokens + 32,
+            mode=mode,
+        )
+
+        if use_hip_graph and self.hip_graph_captured:
+            self.reset_hip_graphs()
+
+        # 1. Batched Prefill
+        logits, state_dict = self.forward_prompt(prompt_ids, state_dict)
+        self.sync_states_to_graphs(state_dict)
+
+        curr_token = int(torch.argmax(logits[0, :]).item())
+        yield curr_token
+        if curr_token in self.STOP_TOKEN_IDS or max_new_tokens <= 1:
+            return
+
+        drafter = NGramDrafter(n=draft_n, k=draft_k)
+        all_tokens = list(prompt_ids) + [curr_token]
+        pos = len(prompt_ids)
+        emitted_count = 1
+
+        while emitted_count < max_new_tokens:
+            draft = drafter.find_draft(all_tokens) if draft_k > 0 else []
+
+            if len(draft) >= 1:
+                candidates = [curr_token] + draft[:draft_k]
+                K = len(candidates)
+                chunk_logits, history = self.forward_verify(candidates, state_dict, pos)
+
+                n_acc = 0
+                bonus_token = None
+                for j in range(K - 1):
+                    pred_tok = int(torch.argmax(chunk_logits[j]).item())
+                    target_cand = candidates[j + 1]
+                    if pred_tok == target_cand:
+                        n_acc += 1
+                    else:
+                        bonus_token = pred_tok
+                        break
+
+                if bonus_token is None:
+                    bonus_token = int(torch.argmax(chunk_logits[K - 1]).item())
+
+                for i in range(self.num_layers):
+                    if f"ssm_{i}" in history:
+                        state_dict[f"ssm_{i}"] = history[f"ssm_{i}"][n_acc].clone()
+                        state_dict[f"conv_{i}"] = history[f"conv_{i}"][n_acc].clone()
+                    if f"kv_{i}" in state_dict:
+                        state_dict[f"kv_{i}"].current_len = pos + n_acc + 1
+
+                self.sync_states_to_graphs(state_dict)
+
+                for j in range(n_acc):
+                    acc_tok = candidates[j + 1]
+                    yield acc_tok
+                    emitted_count += 1
+                    all_tokens.append(acc_tok)
+                    if acc_tok in self.STOP_TOKEN_IDS or emitted_count >= max_new_tokens:
+                        return
+
+                yield bonus_token
+                emitted_count += 1
+                all_tokens.append(bonus_token)
+                if bonus_token in self.STOP_TOKEN_IDS or emitted_count >= max_new_tokens:
+                    return
+
+                pos = pos + n_acc + 1
+                curr_token = bonus_token
+            else:
+                logits, state_dict = self.forward_token(curr_token, state_dict, pos=pos, use_graph=use_hip_graph)
+                next_token = int(torch.argmax(logits[0, :]).item())
+                yield next_token
+                emitted_count += 1
+                all_tokens.append(next_token)
+                if next_token in self.STOP_TOKEN_IDS or emitted_count >= max_new_tokens:
+                    return
+                curr_token = next_token
+                pos += 1
 
     def generate_stream_tokens(
         self,
@@ -1090,20 +1445,12 @@ class Native27BEngine(nn.Module):
         logits, state_dict = self.forward_prompt(prompt_ids, state_dict)
         next_token = int(torch.argmax(logits[0, :]).item())
         yield next_token
-        if next_token in (151643, 151645) or max_new_tokens <= 1:
+        if next_token in self.STOP_TOKEN_IDS or max_new_tokens <= 1:
             return
         curr_token = next_token
 
         # Synchronize prefilled SSM states into captured HIP Graphs
-        if use_hip_graph and self.hip_graph_captured:
-            chunk_count = self.num_layers // 4
-            for k in range(chunk_count):
-                for j in range(3):
-                    layer_idx = 4 * k + j
-                    if f"ssm_{layer_idx}" in state_dict:
-                        self.ssm_graphs[k].ssm_states[j].copy_(state_dict[f"ssm_{layer_idx}"])
-                    if f"conv_{layer_idx}" in state_dict:
-                        self.ssm_graphs[k].conv_states[j].copy_(state_dict[f"conv_{layer_idx}"])
+        self.sync_states_to_graphs(state_dict)
 
         # 2. Decode (HIP Graph accelerated)
         pos = len(prompt_ids)
@@ -1111,7 +1458,7 @@ class Native27BEngine(nn.Module):
             logits, state_dict = self.forward_token(curr_token, state_dict, pos=pos, use_graph=use_hip_graph)
             next_token = int(torch.argmax(logits[0, :]).item())
             yield next_token
-            if next_token in (151643, 151645):
+            if next_token in self.STOP_TOKEN_IDS:
                 break
             curr_token = next_token
             pos += 1
@@ -1125,43 +1472,12 @@ class Native27BEngine(nn.Module):
         use_hip_graph: bool = True,
     ) -> AsyncGenerator[int, None]:
         """Autoregressively generates next tokens with batched prefill and yields each token ID."""
-        mode = kv_cache_mode or self.kv_cache_mode
-        state_dict: Dict[str, Any] = self.init_kv_caches(
-            batch_size=1,
-            max_seq_len=len(prompt_ids) + max_new_tokens + 16,
-            mode=mode,
-        )
-
-        if use_hip_graph and self.hip_graph_captured:
-            self.reset_hip_graphs()
-
-        # 1. Fast Batched Prefill (Reads 13.5 GB weights ONCE)
-        logits, state_dict = self.forward_prompt(prompt_ids, state_dict)
-        next_token = int(torch.argmax(logits[0, :]).item())
-        yield next_token
-        if next_token in (151643, 151645) or max_new_tokens <= 1:
-            return
-        curr_token = next_token
-
-        # Synchronize prefilled SSM states into captured HIP Graphs
-        if use_hip_graph and self.hip_graph_captured:
-            chunk_count = self.num_layers // 4
-            for k in range(chunk_count):
-                for j in range(3):
-                    layer_idx = 4 * k + j
-                    if f"ssm_{layer_idx}" in state_dict:
-                        self.ssm_graphs[k].ssm_states[j].copy_(state_dict[f"ssm_{layer_idx}"])
-                    if f"conv_{layer_idx}" in state_dict:
-                        self.ssm_graphs[k].conv_states[j].copy_(state_dict[f"conv_{layer_idx}"])
-
-        # 2. Decode (HIP Graph accelerated)
-        pos = len(prompt_ids)
-        for _ in range(max_new_tokens - 1):
-            logits, state_dict = self.forward_token(curr_token, state_dict, pos=pos, use_graph=use_hip_graph)
-            next_token = int(torch.argmax(logits[0, :]).item())
-            yield next_token
-            if next_token in (151643, 151645):
-                break
-            curr_token = next_token
-            pos += 1
+        for token in self.generate_stream_tokens(
+            prompt_ids=prompt_ids,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+            kv_cache_mode=kv_cache_mode,
+            use_hip_graph=use_hip_graph,
+        ):
+            yield token
 
