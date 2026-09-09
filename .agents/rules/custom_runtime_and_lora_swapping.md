@@ -27,9 +27,13 @@ Existing commodity engines execute static, quantized models with discrete, isola
 - **The SOTA Limitation**: Transformer architectures suffer from $O(N^2)$ KV cache explosion or static linear RNN limitations that cannot dynamically route knowledge representations.
 - **Our Novelty**: Hardware-native associative recurrence (Gated DeltaNet) fused with graph neural memory states, enabling constant-memory long-horizon agent reasoning and state handoffs between specialized sub-graphs that transformer KV caches cannot perform.
 
-### 4. Breaking the Physical Memory Bandwidth Decode Ceiling
-- **The SOTA Limitation**: On 960 GB/s hardware (RX 7900 XTX), single-token autoregressive decode for 15–18 GB models is hard-capped by physics at $\approx 35\text{--}50\text{ tok/s}$.
-- **Our Novelty**: Recurrent multi-token associative expansion, state-space speculation, and ping-pong tensor streaming that generate multi-token verified bursts per global VRAM sweep.
+### 4. Breaking the Physical Memory Bandwidth Decode Ceiling (Phase 2 Priority)
+- **The Physical Ceiling**: Single-token autoregressive decode of 15.00 GB W4A16 weights on a 960 GB/s bus is physically bounded at $\approx 18\text{--}22\text{ tok/s}$ in full execution.
+- **The Speculation Requirement**:
+  - `llama.cpp` reaches ~30 tok/s exclusively via `--spec-type draft-mtp,ngram-mod`.
+  - For our custom Triton/HIP engine to surpass 30 tok/s, it must implement **In-Register Recurrent Multi-Token Prediction (MTP) Speculation**:
+    - Generating $K=3\text{--}4$ candidate tokens via recurrent associative expansion without sweeping the 15 GB base model.
+    - Verifying $K$ draft tokens in a single parallel Triton GEMV sweep.
 
 ---
 

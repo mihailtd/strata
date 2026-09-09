@@ -15,3 +15,8 @@ All model loading, training, fine-tuning, benchmarking, evaluation, and kernel d
      - Recurrent State Tensor $S_t$ ($O(1)$ multi-turn handoff)
      - MTP (Multi-Token Prediction) draft heads
      - W4A16 Triton WMMA register dequantization
+
+4. **Strict Tokenizer Governance (Zero Vocabulary Drift)**:
+   - Qwen 3.x models (e.g. Qwen 3.5 / 3.8) have a distinct vocabulary and token IDs from Qwen 2.5 (e.g. token ID 750 vs 727 for keyword `def`).
+   - The runtime server (`server.py`) and all evaluation harnesses MUST dynamically resolve the local Qwen 3.x snapshot tokenizer (`~/.cache/huggingface/hub/models--Qwen--Qwen3.5-*/snapshots/*`).
+   - NEVER import or fall back to `Qwen/Qwen2.5-Coder-7B-Instruct` or older tokenizers in 27B runtime paths.
