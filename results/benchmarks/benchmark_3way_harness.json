@@ -1,0 +1,210 @@
+{
+  "benchmark": "3-Way Honest: S_t Tensor Handoff vs Native Re-Prefill vs llama.cpp",
+  "hardware": "AMD Radeon RX 7900 XTX (24 GB, gfx1100)",
+  "model_arm_a_b": "Qwen2.5-Coder-27B-W4A16-DeltaNet (Triton)",
+  "model_arm_c": "Qwen2.5-Coder-27B GGUF (llama.cpp b2e2d99c, ROCm/HIP gfx1100)",
+  "goal": "Build a high-performance vector search and analytics microservice with FastAPI, PostgreSQL 17 pgvector, and DuckDB",
+  "max_tokens_per_turn": 128,
+  "methodology": {
+    "arm_a_timing": "torch.cuda.synchronize() brackets",
+    "arm_b_timing": "torch.cuda.synchronize() brackets",
+    "arm_c_timing": "timings.prompt_ms from /completion response (engine-internal ns)",
+    "arm_a_decode": "MTP Neural Speculative (blk.64) + greedy fallback via execute_turn()",
+    "arm_b_decode": "Greedy forward_token() loop (no speculative \u2014 re-prefill baseline)",
+    "arm_c_decode": "--spec-type draft-mtp,ngram-mod --spec-draft-n-max 4 (matches run_llama_server.sh)",
+    "arm_c_cache_prompt": false,
+    "arm_c_vram": "Triton engine fully unloaded from GPU before llama-server start",
+    "quantization": "A/B = W4A16 Triton group-wise; C = Q4 GGUF Ollama blob",
+    "lora": "Specialized adapter per turn for all arms where possible"
+  },
+  "cumulative": {
+    "arm_a_total_prefill_ms": 4092.38,
+    "arm_b_total_prefill_ms": 24486.48,
+    "arm_c_total_prefill_ms": 7397.9,
+    "speedup_a_vs_b": 5.98,
+    "speedup_a_vs_c": 1.81,
+    "speedup_b_vs_c": 0.3,
+    "tokens_avoided": 4214,
+    "context_capacity_saved_pct": 82.3,
+    "avg_handoff_ms": 1.4303,
+    "arm_a_wall_s": 49.86,
+    "arm_b_wall_s": 97.39,
+    "arm_c_wall_s": 23.09
+  },
+  "os_verification": {
+    "arm_a": {
+      "ruff_exit": 1,
+      "pytest_exit": 1,
+      "passed": false,
+      "ruff_stdout": "I001 [*] Import block is un-sorted or un-formatted\n --> analytics.py:1:1\n  |\n1 | import duckdb\n  | ^^^^^^^^^^^^^\n2 |\n3 | def run_analytics(con: duckdb.DuckDBPyConnection):\n  |\nhelp: Organize imports\n  |\n2 |\n3 +\n4 | def run_analytics(con: duckdb.DuckDBPyConnection):\n  |\n\nI001 [*] Import block is un-s",
+      "pytest_stdout": ""
+    },
+    "arm_b": {
+      "ruff_exit": 1,
+      "pytest_exit": 1,
+      "passed": false,
+      "ruff_stdout": "I001 [*] Import block is un-sorted or un-formatted\n --> analytics.py:1:1\n  |\n1 | import duckdb\n  | ^^^^^^^^^^^^^\n2 |\n3 | def run_analytics(con: duckdb.DuckDBPyConnection):\n  |\nhelp: Organize imports\n  |\n2 |\n3 +\n4 | def run_analytics(con: duckdb.DuckDBPyConnection):\n  |\n\nI001 [*] Import block is un-s",
+      "pytest_stdout": ""
+    },
+    "arm_c": {
+      "ruff_exit": 0,
+      "pytest_exit": 4,
+      "passed": false,
+      "ruff_stdout": "All checks passed!\n",
+      "pytest_stdout": "============================= test session starts ==============================\nplatform linux -- Python 3.14.7, pytest-9.1.1, pluggy-1.6.0 -- /home/mihai/Projects/gnn-experiment/.venv/bin/python\ncachedir: .pytest_cache\nrootdir: /home/mihai/Projects/gnn-experiment\nconfigfile: pyproject.toml\nplugins: py-pglite-0.5.3, asyncio-1.4.0, anyio-4.14.2\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollecting ... collected 0 item"
+    }
+  },
+  "turns": [
+    {
+      "task_id": "step_1_toolchain",
+      "specialist": "astral",
+      "arm_a": {
+        "prefill_ms": 749.63,
+        "prompt_tokens": 161,
+        "tokens_avoided": 0,
+        "handoff_ms": 0.0,
+        "tok_per_sec": 20.44
+      },
+      "arm_b": {
+        "prefill_ms": 865.26,
+        "prompt_tokens": 161,
+        "tok_per_sec": 10.96
+      },
+      "arm_c": {
+        "prefill_ms": 466.6,
+        "prompt_tokens": 161,
+        "tok_per_sec": 58.17,
+        "timing_source": "timings.prompt_ms"
+      },
+      "speedup_a_vs_b": 1.15,
+      "speedup_a_vs_c": 0.62,
+      "speedup_b_vs_c": 0.54
+    },
+    {
+      "task_id": "step_2_models",
+      "specialist": "python_modern",
+      "arm_a": {
+        "prefill_ms": 847.29,
+        "prompt_tokens": 189,
+        "tokens_avoided": 289,
+        "handoff_ms": 1.8557,
+        "tok_per_sec": 21.05
+      },
+      "arm_b": {
+        "prefill_ms": 2178.86,
+        "prompt_tokens": 480,
+        "tok_per_sec": 12.06
+      },
+      "arm_c": {
+        "prefill_ms": 702.82,
+        "prompt_tokens": 480,
+        "tok_per_sec": 47.17,
+        "timing_source": "timings.prompt_ms"
+      },
+      "speedup_a_vs_b": 2.57,
+      "speedup_a_vs_c": 0.83,
+      "speedup_b_vs_c": 0.32
+    },
+    {
+      "task_id": "step_3_database",
+      "specialist": "postgresql",
+      "arm_a": {
+        "prefill_ms": 626.53,
+        "prompt_tokens": 132,
+        "tokens_avoided": 606,
+        "handoff_ms": 1.7816,
+        "tok_per_sec": 18.48
+      },
+      "arm_b": {
+        "prefill_ms": 3046.8,
+        "prompt_tokens": 742,
+        "tok_per_sec": 11.97
+      },
+      "arm_c": {
+        "prefill_ms": 1124.43,
+        "prompt_tokens": 742,
+        "tok_per_sec": 39.75,
+        "timing_source": "timings.prompt_ms"
+      },
+      "speedup_a_vs_b": 4.86,
+      "speedup_a_vs_c": 1.79,
+      "speedup_b_vs_c": 0.37
+    },
+    {
+      "task_id": "step_4_analytics",
+      "specialist": "duckdb",
+      "arm_a": {
+        "prefill_ms": 503.75,
+        "prompt_tokens": 105,
+        "tokens_avoided": 866,
+        "handoff_ms": 1.6453,
+        "tok_per_sec": 16.94
+      },
+      "arm_b": {
+        "prefill_ms": 3972.84,
+        "prompt_tokens": 977,
+        "tok_per_sec": 10.32
+      },
+      "arm_c": {
+        "prefill_ms": 1365.57,
+        "prompt_tokens": 977,
+        "tok_per_sec": 46.61,
+        "timing_source": "timings.prompt_ms"
+      },
+      "speedup_a_vs_b": 7.89,
+      "speedup_a_vs_c": 2.71,
+      "speedup_b_vs_c": 0.34
+    },
+    {
+      "task_id": "step_5_web_api",
+      "specialist": "python_web",
+      "arm_a": {
+        "prefill_ms": 598.04,
+        "prompt_tokens": 127,
+        "tokens_avoided": 1099,
+        "handoff_ms": 1.6865,
+        "tok_per_sec": 16.33
+      },
+      "arm_b": {
+        "prefill_ms": 5782.14,
+        "prompt_tokens": 1234,
+        "tok_per_sec": 8.95
+      },
+      "arm_c": {
+        "prefill_ms": 1719.55,
+        "prompt_tokens": 1234,
+        "tok_per_sec": 55.35,
+        "timing_source": "timings.prompt_ms"
+      },
+      "speedup_a_vs_b": 9.67,
+      "speedup_a_vs_c": 2.88,
+      "speedup_b_vs_c": 0.3
+    },
+    {
+      "task_id": "step_6_integration_tests",
+      "specialist": "stacked_cross_domain",
+      "arm_a": {
+        "prefill_ms": 767.13,
+        "prompt_tokens": 165,
+        "tokens_avoided": 1354,
+        "handoff_ms": 1.613,
+        "tok_per_sec": 18.54
+      },
+      "arm_b": {
+        "prefill_ms": 8640.57,
+        "prompt_tokens": 1529,
+        "tok_per_sec": 10.11
+      },
+      "arm_c": {
+        "prefill_ms": 2018.93,
+        "prompt_tokens": 1529,
+        "tok_per_sec": 51.43,
+        "timing_source": "timings.prompt_ms"
+      },
+      "speedup_a_vs_b": 11.26,
+      "speedup_a_vs_c": 2.63,
+      "speedup_b_vs_c": 0.23
+    }
+  ],
+  "arm_c_error": null
+}

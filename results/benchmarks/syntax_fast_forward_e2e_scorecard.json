@@ -1,0 +1,145 @@
+{
+  "benchmark": "syntax_fast_forward_e2e_scorecard",
+  "hardware": "AMD Radeon RX 7900 XTX (gfx1100)",
+  "timestamp": "2026-09-10 13:20:36",
+  "summary": {
+    "arm_1_greedy": {
+      "name": "Pure Greedy Baseline (K=1)",
+      "total_tokens": 256,
+      "total_wall_clock_s": 24.61,
+      "avg_throughput_tok_s": 10.4,
+      "speedup_vs_greedy": "1.00x"
+    },
+    "arm_2_previous_linear": {
+      "name": "Previous Version: Linear MTP + N-Gram",
+      "total_tokens": 256,
+      "total_wall_clock_s": 13.31,
+      "avg_throughput_tok_s": 19.2,
+      "speedup_vs_greedy": "1.85x"
+    },
+    "arm_3_syntax_fast_forward": {
+      "name": "Our Engine: Syntax Fast-Forward + N-Gram + MTP",
+      "total_tokens": 256,
+      "total_wall_clock_s": 13.32,
+      "avg_throughput_tok_s": 19.2,
+      "speedup_vs_greedy": "1.85x",
+      "speedup_vs_previous_linear": "1.0x"
+    }
+  },
+  "results_by_arm": {
+    "arm_1_greedy": [
+      {
+        "task_id": "e2e_01_fastapi",
+        "domain": "FastAPI & Pydantic",
+        "tokens_generated": 64,
+        "wall_clock_s": 8.09,
+        "throughput_tok_s": 7.9,
+        "mem_delta_mb": 0.0,
+        "snippet": " FastAPI, HTTPException\\nfrom pydantic import BaseModel\\nimport numpy as"
+      },
+      {
+        "task_id": "e2e_02_postgresql",
+        "domain": "PostgreSQL 17 Asyncpg",
+        "tokens_generated": 64,
+        "wall_clock_s": 5.5,
+        "throughput_tok_s": 11.6,
+        "mem_delta_mb": 0.0,
+        "snippet": " conn:\\n        return await conn.fetch(query)\\n\\nasync def execute_query_with"
+      },
+      {
+        "task_id": "e2e_03_duckdb",
+        "domain": "DuckDB Parquet OLAP",
+        "tokens_generated": 64,
+        "wall_clock_s": 5.56,
+        "throughput_tok_s": 11.5,
+        "mem_delta_mb": 0.0,
+        "snippet": "PARTITION BY customer_id ORDER BY order_date DESC) = 1\\n   "
+      },
+      {
+        "task_id": "e2e_04_python_boilerplate",
+        "domain": "Python Architecture",
+        "tokens_generated": 64,
+        "wall_clock_s": 5.46,
+        "throughput_tok_s": 11.7,
+        "mem_delta_mb": 0.0,
+        "snippet": " List\\n\\ndef main() -> None:\\n    \"\"\"\\n    This function reads"
+      }
+    ],
+    "arm_2_previous_linear": [
+      {
+        "task_id": "e2e_01_fastapi",
+        "domain": "FastAPI & Pydantic",
+        "tokens_generated": 64,
+        "wall_clock_s": 3.45,
+        "throughput_tok_s": 18.6,
+        "mem_delta_mb": 0.0,
+        "snippet": " FastAPI, HTTPException\\nfrom pydantic import BaseModel\\nimport numpy as"
+      },
+      {
+        "task_id": "e2e_02_postgresql",
+        "domain": "PostgreSQL 17 Asyncpg",
+        "tokens_generated": 64,
+        "wall_clock_s": 3.12,
+        "throughput_tok_s": 20.5,
+        "mem_delta_mb": 0.0,
+        "snippet": " conn:\\n        return await conn.fetch(query)\\n\\nasync def execute_query_with"
+      },
+      {
+        "task_id": "e2e_03_duckdb",
+        "domain": "DuckDB Parquet OLAP",
+        "tokens_generated": 64,
+        "wall_clock_s": 3.37,
+        "throughput_tok_s": 19.0,
+        "mem_delta_mb": 0.0,
+        "snippet": "PARTITION BY customer_id ORDER BY order_date DESC) = 1\\n   "
+      },
+      {
+        "task_id": "e2e_04_python_boilerplate",
+        "domain": "Python Architecture",
+        "tokens_generated": 64,
+        "wall_clock_s": 3.37,
+        "throughput_tok_s": 19.0,
+        "mem_delta_mb": 0.0,
+        "snippet": " List\\n\\ndef main() -> None:\\n    \"\"\"\\n    This function reads"
+      }
+    ],
+    "arm_3_syntax_fast_forward": [
+      {
+        "task_id": "e2e_01_fastapi",
+        "domain": "FastAPI & Pydantic",
+        "tokens_generated": 64,
+        "wall_clock_s": 3.45,
+        "throughput_tok_s": 18.6,
+        "mem_delta_mb": 0.0,
+        "snippet": " FastAPI, HTTPException\\nfrom pydantic import BaseModel\\nimport numpy as"
+      },
+      {
+        "task_id": "e2e_02_postgresql",
+        "domain": "PostgreSQL 17 Asyncpg",
+        "tokens_generated": 64,
+        "wall_clock_s": 3.14,
+        "throughput_tok_s": 20.4,
+        "mem_delta_mb": 0.0,
+        "snippet": " conn:\\n        return await conn.fetch(query)\\n\\nasync def execute_query_with"
+      },
+      {
+        "task_id": "e2e_03_duckdb",
+        "domain": "DuckDB Parquet OLAP",
+        "tokens_generated": 64,
+        "wall_clock_s": 3.37,
+        "throughput_tok_s": 19.0,
+        "mem_delta_mb": 0.0,
+        "snippet": "PARTITION BY customer_id ORDER BY order_date DESC) = 1\\n   "
+      },
+      {
+        "task_id": "e2e_04_python_boilerplate",
+        "domain": "Python Architecture",
+        "tokens_generated": 64,
+        "wall_clock_s": 3.36,
+        "throughput_tok_s": 19.0,
+        "mem_delta_mb": 0.0,
+        "snippet": " List\\n\\ndef main() -> None:\\n    \"\"\"\\n    This function reads"
+      }
+    ]
+  }
+}

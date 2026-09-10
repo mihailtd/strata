@@ -1,0 +1,95 @@
+{
+  "benchmark": "deterministic_syntax_fast_forward_synthetic",
+  "hardware": "AMD Radeon RX 7900 XTX (gfx1100)",
+  "timestamp": "2026-09-10 13:15:34",
+  "trie_metrics": {
+    "macro_count": 45,
+    "compilation_time_ms": 1.81,
+    "avg_lookup_latency_us": 0.364,
+    "p50_lookup_latency_us": 0.361,
+    "p90_lookup_latency_us": 0.481
+  },
+  "scenarios": [
+    {
+      "domain": "Python Core",
+      "prompt": "if __name__ == ",
+      "matched": true,
+      "tokens_gained": 7,
+      "draft_decoded": "\"__main__\":\n    ",
+      "lookup_latency_us": 0.361,
+      "burst_speedup": "16.66x"
+    },
+    {
+      "domain": "Python Core",
+      "prompt": "class User:\n    def __init__(self",
+      "matched": true,
+      "tokens_gained": 2,
+      "draft_decoded": ", ",
+      "lookup_latency_us": 0.397,
+      "burst_speedup": "4.76x"
+    },
+    {
+      "domain": "Python Core",
+      "prompt": "try:\n    do_work()\nexcept Exception as ",
+      "matched": true,
+      "tokens_gained": 4,
+      "draft_decoded": "e:\n    ",
+      "lookup_latency_us": 0.285,
+      "burst_speedup": "9.52x"
+    },
+    {
+      "domain": "FastAPI",
+      "prompt": "from fastapi import ",
+      "matched": true,
+      "tokens_gained": 8,
+      "draft_decoded": "FastAPI, Depends, HTTPException,",
+      "lookup_latency_us": 0.309,
+      "burst_speedup": "19.04x"
+    },
+    {
+      "domain": "Pydantic",
+      "prompt": "from pydantic import ",
+      "matched": true,
+      "tokens_gained": 8,
+      "draft_decoded": "BaseModel, Field, ConfigDict\n",
+      "lookup_latency_us": 0.337,
+      "burst_speedup": "19.04x"
+    },
+    {
+      "domain": "PostgreSQL",
+      "prompt": "async def fetch_user():\n    async with pool.acquire() as ",
+      "matched": true,
+      "tokens_gained": 4,
+      "draft_decoded": "conn:\n        ",
+      "lookup_latency_us": 0.481,
+      "burst_speedup": "9.52x"
+    },
+    {
+      "domain": "PostgreSQL",
+      "prompt": "CREATE EXTENSION IF NOT EXISTS ",
+      "matched": true,
+      "tokens_gained": 6,
+      "draft_decoded": "\"uuid-ossp\";\n",
+      "lookup_latency_us": 0.434,
+      "burst_speedup": "14.28x"
+    },
+    {
+      "domain": "DuckDB",
+      "prompt": "SELECT * FROM read_parquet('data/*.parquet') QUALIFY ROW_NUMBER() OVER (",
+      "matched": true,
+      "tokens_gained": 4,
+      "draft_decoded": "PARTITION BY ",
+      "lookup_latency_us": 0.447,
+      "burst_speedup": "9.52x"
+    },
+    {
+      "domain": "Testing",
+      "prompt": "import pytest\n",
+      "matched": true,
+      "tokens_gained": 3,
+      "draft_decoded": "import asyncio\n",
+      "lookup_latency_us": 0.222,
+      "burst_speedup": "7.14x"
+    }
+  ]
+}

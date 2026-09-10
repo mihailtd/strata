@@ -125,6 +125,19 @@ class W4A16Linear(nn.Module):
             mod.bias.copy_(bias.to(device=target_device))
         return mod
 
+    def init_static_lora_buffer(self, max_rank: int = 16) -> None:
+        """Preallocates fixed-address GPU memory buffers for LoRA adapter weights.
+        Enables permanent validity of HIP graphs across dynamic adapter hot-swaps.
+        """
+        self.max_lora_rank = max_rank
+        target_device = self.qweight.device
+        self.static_lora_a = torch.zeros((self.in_features, max_rank), dtype=torch.bfloat16, device=target_device)
+        self.static_lora_b = torch.zeros((max_rank, self.out_features), dtype=torch.bfloat16, device=target_device)
+        self.lora_a = self.static_lora_a
+        self.lora_b = self.static_lora_b
+        self.lora_alpha = 1.0
+        self.has_active_lora = False
+
     def set_lora_adapter(
         self,
         lora_a: Optional[torch.Tensor],
@@ -136,25 +149,55 @@ class W4A16Linear(nn.Module):
             assert lora_a.shape[0] == self.in_features, f"LoRA A input dim {lora_a.shape[0]} != {self.in_features}"
             assert lora_b.shape[1] == self.out_features, f"LoRA B output dim {lora_b.shape[1]} != {self.out_features}"
             assert lora_a.shape[1] == lora_b.shape[0], f"Rank mismatch: A is {lora_a.shape}, B is {lora_b.shape}"
-            self.lora_a = lora_a.to(dtype=torch.bfloat16, device=self.qweight.device)
-            self.lora_b = lora_b.to(dtype=torch.bfloat16, device=self.qweight.device)
-            self.lora_alpha = alpha
+            r = lora_a.shape[1]
+            if hasattr(self, "static_lora_a") and self.static_lora_a is not None and r <= self.max_lora_rank:
+                self.static_lora_a.zero_()
+                self.static_lora_b.zero_()
+                self.static_lora_a[:, :r].copy_(lora_a.to(dtype=torch.bfloat16, device=self.qweight.device))
+                # Fold alpha directly into lora_b so kernel launch scalar remains constant (1.0)
+                self.static_lora_b[:r, :].copy_((lora_b * alpha).to(dtype=torch.bfloat16, device=self.qweight.device))
+                self.lora_a = self.static_lora_a
+                self.lora_b = self.static_lora_b
+                self.lora_alpha = 1.0
+                self.has_active_lora = True
+            else:
+                self.lora_a = lora_a.to(dtype=torch.bfloat16, device=self.qweight.device)
+                self.lora_b = lora_b.to(dtype=torch.bfloat16, device=self.qweight.device)
+                self.lora_alpha = alpha
+                self.has_active_lora = True
+        else:
+            self.clear_lora()
+
+    def clear_lora(self) -> None:
+        """Disengages active LoRA branch."""
+        if hasattr(self, "static_lora_a") and self.static_lora_a is not None:
+            self.static_lora_a.zero_()
+            self.static_lora_b.zero_()
+            self.lora_alpha = 1.0
+            self.has_active_lora = False
         else:
             self.lora_a = None
             self.lora_b = None
             self.lora_alpha = 1.0
-
-    def clear_lora(self) -> None:
-        """Disengages active LoRA branch."""
-        self.lora_a = None
-        self.lora_b = None
-        self.lora_alpha = 1.0
+            self.has_active_lora = False
 
     def forward(self, x: torch.Tensor, out: Optional[torch.Tensor] = None) -> torch.Tensor:
         """Executes fused W4A16 matrix multiplication."""
         x_bf16 = x.to(torch.bfloat16) if x.dtype != torch.bfloat16 else x
 
-        if self.lora_a is not None and self.lora_b is not None:
+        if hasattr(self, "static_lora_a") and self.static_lora_a is not None:
+            # Static buffer path: permanently fixed GPU pointers for zero-recapture HIP graphs
+            out_res = fused_w4a16_lora_matmul(
+                x_bf16,
+                self.qweight,
+                self.scales,
+                self.static_lora_a,
+                self.static_lora_b,
+                out=out,
+                alpha=1.0,
+                group_size=self.group_size,
+            )
+        elif self.lora_a is not None and self.lora_b is not None:
             out_res = fused_w4a16_lora_matmul(
                 x_bf16,
                 self.qweight,

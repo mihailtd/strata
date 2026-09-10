@@ -19,7 +19,7 @@ import json
 import math
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import torch
 from safetensors.torch import load_file, save_file
@@ -30,35 +30,41 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 class DynamicAdapterStacker:
     """Combines multiple LoRA safetensors into a unified multi-expert adapter."""
 
-    def __init__(self, adapters_dir: Union[str, Path] = REPO_ROOT / "results" / "adapters"):
+    def __init__(self, adapters_dir: str | Path = REPO_ROOT / "results" / "adapters"):
         self.adapters_dir = Path(adapters_dir)
 
     def stack_adapters(
         self,
-        expert_weights: Dict[str, float],
-        output_path: Optional[Union[str, Path]] = None,
+        expert_weights: dict[str, float],
+        output_path: str | Path | None = None,
         device: str = "cpu",
-    ) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any]]:
-        """Stacks multiple domain adapters with given convex mixture weights.
+        normalize_weights: bool = False,
+    ) -> tuple[dict[str, torch.Tensor], dict[str, Any]]:
+        """Stacks multiple domain adapters with given mixture weights.
 
         Args:
-            expert_weights: Mapping of adapter_name/path -> weight gamma_k (sum normalized to 1.0).
+            expert_weights: Mapping of adapter_name/path -> weight gamma_k.
             output_path: Optional path to save fused adapter_model.safetensors.
             device: Compute device ('cpu' or 'cuda'/'hip').
+            normalize_weights: If True, weights are normalized to sum to 1.0. If False,
+                weights represent direct unattenuated multipliers (e.g. 1.0 for each expert).
 
         Returns:
             Tuple of (fused_state_dict, fused_config)
         """
         t0 = time.perf_counter()
-        # 1. Normalize weights
-        total_w = sum(expert_weights.values())
-        if total_w <= 0:
-            raise ValueError(f"Sum of expert weights must be > 0, got {total_w}")
-        norm_weights = {k: v / total_w for k, v in expert_weights.items()}
+        # 1. Process weights
+        if normalize_weights:
+            total_w = sum(expert_weights.values())
+            if total_w <= 0:
+                raise ValueError(f"Sum of expert weights must be > 0, got {total_w}")
+            norm_weights = {k: v / total_w for k, v in expert_weights.items()}
+        else:
+            norm_weights = {k: float(v) for k, v in expert_weights.items()}
 
         # 2. Resolve adapter paths
-        loaded_tensors: List[Tuple[str, float, Dict[str, torch.Tensor]]] = []
-        base_config: Optional[Dict[str, Any]] = None
+        loaded_tensors: list[tuple[str, float, dict[str, torch.Tensor]]] = []
+        base_config: dict[str, Any] | None = None
 
         for name, gamma in norm_weights.items():
             adapter_file = self._resolve_adapter_path(name)
@@ -83,7 +89,7 @@ class DynamicAdapterStacker:
         a_keys = {k for k in all_keys if "lora_A" in k}
         b_keys = {k for k in all_keys if "lora_B" in k}
 
-        fused_state_dict: Dict[str, torch.Tensor] = {}
+        fused_state_dict: dict[str, torch.Tensor] = {}
         total_rank = 0
 
         # 4. Fuse matching A and B matrices
@@ -93,7 +99,7 @@ class DynamicAdapterStacker:
             a_parts = []
             b_parts = []
 
-            for name, gamma, tensors in loaded_tensors:
+            for _name, gamma, tensors in loaded_tensors:
                 if a_key in tensors and b_key in tensors:
                     a_t = tensors[a_key].to(device)
                     b_t = tensors[b_key].to(device)
@@ -103,14 +109,28 @@ class DynamicAdapterStacker:
                     b_parts.append(b_t * sqrt_gamma)
 
             if a_parts and b_parts:
-                # A: concat along dim=0 (rows = ranks)
-                a_fused = torch.cat(a_parts, dim=0)
-                # B: concat along dim=1 (cols = ranks)
-                b_fused = torch.cat(b_parts, dim=1)
+                first_a = a_parts[0]
+                first_b = b_parts[0]
+
+                if first_a.shape[1] == first_b.shape[0]:
+                    # Native 27B GGUF format: A is (in_features, r), B is (r, out_features)
+                    # Concat A along dim=1 (rank cols), Concat B along dim=0 (rank rows)
+                    a_fused = torch.cat(a_parts, dim=1)
+                    b_fused = torch.cat(b_parts, dim=0)
+                    total_rank = a_fused.shape[1]
+                elif first_a.shape[0] == first_b.shape[1]:
+                    # Standard HuggingFace PEFT format: A is (r, in_features), B is (out_features, r)
+                    # Concat A along dim=0 (rank rows), Concat B along dim=1 (rank cols)
+                    a_fused = torch.cat(a_parts, dim=0)
+                    b_fused = torch.cat(b_parts, dim=1)
+                    total_rank = a_fused.shape[0]
+                else:
+                    raise ValueError(
+                        f"Incompatible LoRA shapes for key {a_key}: A={first_a.shape}, B={first_b.shape}"
+                    )
 
                 fused_state_dict[a_key] = a_fused
                 fused_state_dict[b_key] = b_fused
-                total_rank = a_fused.shape[0]
 
         # Copy any auxiliary non-A/B tensors if present
         for key in all_keys - a_keys - b_keys:
@@ -130,7 +150,7 @@ class DynamicAdapterStacker:
         fused_config["stacked_at_timestamp"] = time.time()
 
         elapsed_ms = (time.perf_counter() - t0) * 1000.0
-        print(f"✅ Fused {len(loaded_tensors)} LoRA experts into unified Rank-{total_rank} adapter in {elapsed_ms:.2f}ms")
+        print(f"✅ Fused {len(loaded_tensors)} LoRA experts (Rank-{total_rank}) in {elapsed_ms:.2f}ms")
 
         # 6. Save if output path provided
         if output_path is not None:
@@ -153,6 +173,7 @@ class DynamicAdapterStacker:
 
         # Search in adapters_dir
         candidates = [
+            self.adapters_dir / f"m2_{name}_r8a128_v7_27b" / "adapter_model.safetensors",
             self.adapters_dir / f"m2_{name}_r8a128_v7_real" / "adapter_model.safetensors",
             self.adapters_dir / f"m2_{name}_r8a128_v7_ornith35b" / "adapter_model.safetensors",
             self.adapters_dir / f"m2_{name}_r8a128_v7" / "adapter_model.safetensors",

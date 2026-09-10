@@ -12,18 +12,25 @@ from __future__ import annotations
 import re
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
+
+from src.runtime.adapter_stacker import DynamicAdapterStacker
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-from src.runtime.adapter_stacker import DynamicAdapterStacker
 
 DOMAIN_PATTERNS = {
     "postgresql": [r"postgres", r"psql", r"asyncpg", r"pgvector", r"hnsw", r"cosine distance", r"vector\(", r"<=>"],
-    "python_web": [r"fastapi", r"lifespan", r"endpoint", r"router", r"pydantic", r"asynccontextmanager", r"starlette"],
+    "python_web": [
+        r"fastapi", r"lifespan", r"endpoint", r"router", r"pydantic", r"asynccontextmanager", r"starlette"
+    ],
     "duckdb": [r"duckdb", r"parquet", r"qualify", r"olap", r"columnar", r"window function", r"percentile"],
     "astral": [r"uv", r"ruff", r"pyproject\.toml", r"linter", r"formatter", r"workspace"],
-    "python_modern": [r"pep\s*695", r"generics", r"type parameter", r"type alias", r"class\s+\w+\[T\]", r"def\s+\w+\[T\]"],
-    "financial_planning": [r"var", r"cvar", r"monte carlo", r"volatility", r"wealth", r"expected return", r"portfolio risk"],
+    "python_modern": [
+        r"pep\s*695", r"generics", r"type parameter", r"type alias", r"class\s+\w+\[T\]", r"def\s+\w+\[T\]"
+    ],
+    "financial_planning": [
+        r"var", r"cvar", r"monte carlo", r"volatility", r"wealth", r"expected return", r"portfolio risk"
+    ],
 }
 
 DOMAIN_PROMPTS = {
@@ -43,12 +50,12 @@ class DynamicMoARouter:
         self.stacker = DynamicAdapterStacker(adapters_dir)
         self.live_stack_dir = adapters_dir / "live_moa_stack"
 
-    def route_and_stack(self, prompt: str) -> Dict[str, Any]:
+    def route_and_stack(self, prompt: str) -> dict[str, Any]:
         """Analyzes prompt, determines active experts, and fuses them if multi-domain."""
         t0 = time.perf_counter()
         
         # 1. Compute domain match counts
-        scores: Dict[str, float] = {}
+        scores: dict[str, float] = {}
         text_lower = prompt.lower()
 
         for domain, patterns in DOMAIN_PATTERNS.items():
@@ -100,3 +107,17 @@ class DynamicMoARouter:
             "system_prompt": system_prompt,
             "routing_latency_ms": round(dt_ms, 2),
         }
+
+    def route_and_bind(self, prompt: str, engine: Any) -> dict[str, Any]:
+        """Routes prompt and directly binds the optimal single or stacked LoRA into engine static VRAM."""
+        route_res = self.route_and_stack(prompt)
+        if route_res["is_multi_expert"]:
+            experts = route_res["experts"]
+            engine.set_active_stacked_lora({exp: 1.0 for exp in experts})
+        else:
+            single = next(iter(route_res["experts"]))
+            if single != "general":
+                engine.set_active_lora(single)
+            else:
+                engine.clear_loras()
+        return route_res

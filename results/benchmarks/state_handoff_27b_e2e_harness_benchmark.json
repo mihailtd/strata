@@ -1,0 +1,106 @@
+{
+  "hardware": "AMD Radeon RX 7900 XTX (24 GB, gfx1100)",
+  "model": "Qwen2.5-Coder-27B-W4A16-DeltaNet",
+  "goal": "Build a high-performance vector search and analytics microservice with FastAPI, PostgreSQL 17 pgvector, and DuckDB",
+  "cumulative_prefill_speedup": 7.95,
+  "total_tokens_avoided": 4214,
+  "context_capacity_saved_pct": 82.3,
+  "handoff_total_prefill_ms": 4045.08,
+  "text_total_prefill_ms": 32170.83,
+  "os_verification": {
+    "handoff_arm": {
+      "ruff_exit": 0,
+      "pytest_exit": 0,
+      "passed": true,
+      "ruff_stdout": "All checks passed!\n",
+      "pytest_stdout": "============================= test session starts ==============================\nplatform linux -- Python 3.14.7, pytest-9.1.1, pluggy-1.6.0 -- /home/mihai/Projects/gnn-experiment/projects/state_handoff_e2e_service/.venv/bin/python\ncachedir: .pytest_cache\nrootdir: /home/mihai/Projects/gnn-experiment"
+    },
+    "text_arm": {
+      "ruff_exit": 0,
+      "pytest_exit": 0,
+      "passed": true,
+      "ruff_stdout": "All checks passed!\n",
+      "pytest_stdout": "============================= test session starts ==============================\nplatform linux -- Python 3.14.7, pytest-9.1.1, pluggy-1.6.0 -- /home/mihai/Projects/gnn-experiment/projects/text_prefill_e2e_service/.venv/bin/python\ncachedir: .pytest_cache\nrootdir: /home/mihai/Projects/gnn-experiment/"
+    }
+  },
+  "turns": [
+    {
+      "task_id": "step_1_toolchain",
+      "specialist": "astral",
+      "lora_adapter": "astral",
+      "handoff_prefill_ms": 739.54,
+      "handoff_prompt_tokens": 161,
+      "handoff_tokens_avoided": 0,
+      "handoff_latency_ms": 0.0,
+      "handoff_lora_swap_ms": 53.02,
+      "text_prefill_ms": 742.92,
+      "text_prompt_tokens": 161,
+      "speedup": 1.0
+    },
+    {
+      "task_id": "step_2_models",
+      "specialist": "python_modern",
+      "lora_adapter": "python_modern",
+      "handoff_prefill_ms": 839.89,
+      "handoff_prompt_tokens": 189,
+      "handoff_tokens_avoided": 289,
+      "handoff_latency_ms": 1.6271,
+      "handoff_lora_swap_ms": 50.68,
+      "text_prefill_ms": 1977.16,
+      "text_prompt_tokens": 480,
+      "speedup": 2.35
+    },
+    {
+      "task_id": "step_3_database",
+      "specialist": "postgresql",
+      "lora_adapter": "postgresql",
+      "handoff_prefill_ms": 615.7,
+      "handoff_prompt_tokens": 132,
+      "handoff_tokens_avoided": 606,
+      "handoff_latency_ms": 1.6434,
+      "handoff_lora_swap_ms": 53.26,
+      "text_prefill_ms": 3008.64,
+      "text_prompt_tokens": 742,
+      "speedup": 4.89
+    },
+    {
+      "task_id": "step_4_analytics",
+      "specialist": "duckdb",
+      "lora_adapter": "duckdb",
+      "handoff_prefill_ms": 495.38,
+      "handoff_prompt_tokens": 105,
+      "handoff_tokens_avoided": 866,
+      "handoff_latency_ms": 1.6699,
+      "handoff_lora_swap_ms": 61.96,
+      "text_prefill_ms": 3927.77,
+      "text_prompt_tokens": 977,
+      "speedup": 7.93
+    },
+    {
+      "task_id": "step_5_web_api",
+      "specialist": "python_web",
+      "lora_adapter": "python_web",
+      "handoff_prefill_ms": 585.65,
+      "handoff_prompt_tokens": 127,
+      "handoff_tokens_avoided": 1099,
+      "handoff_latency_ms": 1.6483,
+      "handoff_lora_swap_ms": 53.14,
+      "text_prefill_ms": 7998.19,
+      "text_prompt_tokens": 1234,
+      "speedup": 13.66
+    },
+    {
+      "task_id": "step_6_integration_tests",
+      "specialist": "stacked_cross_domain",
+      "lora_adapter": "postgresql",
+      "handoff_prefill_ms": 768.91,
+      "handoff_prompt_tokens": 165,
+      "handoff_tokens_avoided": 1354,
+      "handoff_latency_ms": 1.4314,
+      "handoff_lora_swap_ms": 44.51,
+      "text_prefill_ms": 14516.16,
+      "text_prompt_tokens": 1529,
+      "speedup": 18.88
+    }
+  ]
+}

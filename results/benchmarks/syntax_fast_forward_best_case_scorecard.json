@@ -1,0 +1,64 @@
+{
+  "benchmark": "syntax_fast_forward_best_case_1k",
+  "hardware": "AMD Radeon RX 7900 XTX (gfx1100, 24 GB VRAM)",
+  "prompt_tokens": 186,
+  "target_tokens": 1024,
+  "arms": {
+    "arm_1_greedy": {
+      "name": "Pure Greedy Baseline (K=1)",
+      "tokens_generated": 1024,
+      "wall_clock_s": 89.08,
+      "throughput_tok_s": 11.5,
+      "mem_delta_mb": 0.0,
+      "stats": {},
+      "snippet": "# ---------------------------------------------------------------------------\n# Logging\n# ---------------------------------------------------------------------------\nlogging.basicConfig(level=logging.INFO)\nlogger = logging.getLogger(\"inventory\")\n\n# ---------------------------------------------------------------------------\n",
+      "speedup_vs_greedy": "1.00x"
+    },
+    "arm_2_previous_linear": {
+      "name": "Previous Version: Linear MTP + N-Gram",
+      "tokens_generated": 1024,
+      "wall_clock_s": 47.64,
+      "throughput_tok_s": 21.5,
+      "mem_delta_mb": 0.0,
+      "stats": {
+        "total_steps": 501,
+        "tokens_generated": 1024,
+        "syntax_drafts_proposed": 0,
+        "syntax_tokens_accepted": 0,
+        "ngram_drafts_proposed": 264,
+        "ngram_tokens_accepted": 152,
+        "mtp_drafts_proposed": 413,
+        "mtp_tokens_accepted": 370,
+        "single_token_steps": 0
+      },
+      "snippet": "# ---------------------------------------------------------------------------\n# Logging\n# ---------------------------------------------------------------------------\nlogging.basicConfig(level=logging.INFO)\nlogger = logging.getLogger(\"inventory\")\n\n# ---------------------------------------------------------------------------\n",
+      "speedup_vs_greedy": "1.87x"
+    },
+    "arm_3_syntax_fast_forward": {
+      "name": "Our Engine: Syntax Fast-Forward + N-Gram + MTP",
+      "tokens_generated": 1024,
+      "wall_clock_s": 48.27,
+      "throughput_tok_s": 21.21,
+      "mem_delta_mb": 0.0,
+      "stats": {
+        "total_steps": 507,
+        "tokens_generated": 1024,
+        "syntax_drafts_proposed": 25,
+        "syntax_tokens_accepted": 4,
+        "ngram_drafts_proposed": 264,
+        "ngram_tokens_accepted": 147,
+        "mtp_drafts_proposed": 410,
+        "mtp_tokens_accepted": 365,
+        "single_token_steps": 0
+      },
+      "snippet": "# ---------------------------------------------------------------------------\n# Logging\n# ---------------------------------------------------------------------------\nlogging.basicConfig(level=logging.INFO)\nlogger = logging.getLogger(\"inventory\")\n\n# ---------------------------------------------------------------------------\n",
+      "speedup_vs_greedy": "1.84x",
+      "speedup_vs_previous_linear": "0.99x"
+    }
+  },
+  "parity": {
+    "linear_matches_greedy": false,
+    "syntax_matches_greedy": false,
+    "syntax_matches_linear": true
+  }
+}

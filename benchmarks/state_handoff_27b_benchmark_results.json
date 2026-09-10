@@ -1,0 +1,47 @@
+{
+  "hardware": "AMD Radeon RX 7900 XTX (24 GB, gfx1100)",
+  "model": "Qwen2.5-Coder-27B-W4A16-DeltaNet",
+  "cumulative_prefill_speedup": 2.48,
+  "total_tokens_avoided": 519,
+  "turns": [
+    {
+      "turn": 1,
+      "role": "Database Architect",
+      "expert": "postgresql",
+      "handoff_prefill_ms": 1053.44,
+      "handoff_prefill_tokens": 46,
+      "handoff_tokens_avoided": 0,
+      "handoff_overhead_ms": 0.0,
+      "lora_swap_ms": 2695.74,
+      "text_prefill_ms": 164.75,
+      "text_prefill_tokens": 46,
+      "speedup": 0.16
+    },
+    {
+      "turn": 2,
+      "role": "Async Tooling Engineer",
+      "expert": "astral",
+      "handoff_prefill_ms": 163.48,
+      "handoff_prefill_tokens": 43,
+      "handoff_tokens_avoided": 174,
+      "handoff_overhead_ms": 0.7354,
+      "lora_swap_ms": 819.3,
+      "text_prefill_ms": 844.98,
+      "text_prefill_tokens": 219,
+      "speedup": 5.17
+    },
+    {
+      "turn": 3,
+      "role": "API Backend Engineer",
+      "expert": "python_web",
+      "handoff_prefill_ms": 163.36,
+      "handoff_prefill_tokens": 45,
+      "handoff_tokens_avoided": 345,
+      "handoff_overhead_ms": 0.7562,
+      "lora_swap_ms": 821.02,
+      "text_prefill_ms": 2409.72,
+      "text_prefill_tokens": 394,
+      "speedup": 14.75
+    }
+  ]
+}

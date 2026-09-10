@@ -110,3 +110,8 @@ norecursedirs = [
 ]
 addopts = "-v --tb=short"
 
+[tool.pyright]
+include = ["src", "benchmarks", "tests"]
+extraPaths = [".", "src"]
+
+

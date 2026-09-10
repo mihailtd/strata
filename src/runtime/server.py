@@ -622,12 +622,31 @@ ADAPTER_MAP_27B = {
 
 
 def resolve_27b_adapter_id(model_name: str, messages: list[ChatMessage]) -> tuple[str | None, int | None]:
-    """Resolves target LoRA adapter index (0-5) for llama-server native dispatch."""
+    """Resolves target LoRA adapter index (0-5) or multi-expert stacked specification."""
     name_lower = model_name.lower()
+
+    # Check for multi-expert stacked spec in model_name (e.g. "qwen3.8:27b:postgresql+python_web" or "stacked:postgresql+duckdb")
+    matched_domains = [domain for domain in ADAPTER_MAP_27B if domain in name_lower]
+    if len(matched_domains) >= 2:
+        return "+".join(matched_domains), -1
+
+    # Single domain match
     for domain, aid in ADAPTER_MAP_27B.items():
         if domain in name_lower:
             return domain, aid
-    if "auto" in name_lower or name_lower in ("qwen3.8:27b", "qwen3.8-27b", "default"):
+
+    if "auto" in name_lower or "moa" in name_lower or name_lower in ("qwen3.8:27b", "qwen3.8-27b", "default"):
+        # If "moa" is requested or "auto" with multi-domain intent, check MoA router
+        try:
+            from src.harness.router.dynamic_moa_router import DynamicMoARouter
+            router = DynamicMoARouter()
+            last_msg = messages[-1].content if messages else ""
+            route_res = router.route_and_stack(last_msg)
+            if route_res.get("is_multi_expert"):
+                return "+".join(route_res["experts"].keys()), -1
+        except Exception:
+            pass
+
         classified = classify_prompt_domain(messages, model_name)
         if classified in ADAPTER_MAP_27B:
             return classified, ADAPTER_MAP_27B[classified]
@@ -3088,6 +3107,7 @@ class RunPipelineRequest(BaseModel):
     mode: str = "tensor_handoff"  # "tensor_handoff" | "text_prefill" | "both_side_by_side"
     max_new_tokens: int = 256
     temperature: float = 0.0
+    model_size: str = "27b"  # "27b" | "4b"
 
 
 @app.post("/api/multi_agent/run_pipeline")
@@ -3096,6 +3116,150 @@ async def run_multi_agent_pipeline(req: RunPipelineRequest):
     """Executes a multi-turn agentic pipeline under Tensor-Level Recurrent State Handoff ($S_t$)
     or standard text re-prefill baseline, providing real-time telemetry for the UI studio.
     """
+    if req.model_size == "27b":
+        from runtime.state_handoff_27b import StateHandoffSession, AgentTurn
+        eng = get_native_triton_27b_engine()
+
+        def _run_tensor_arm_27b():
+            session = StateHandoffSession(engine=eng)
+            results = []
+            for idx, turn in enumerate(req.turns):
+                res = session.execute_turn(
+                    AgentTurn(
+                        agent_id=f"agent_{idx+1}",
+                        role=turn.expert,
+                        instruction=turn.instruction,
+                        expert_lora=turn.expert,
+                        max_new_tokens=req.max_new_tokens,
+                        temperature=req.temperature,
+                    )
+                )
+                lines = [l.strip() for l in res.output_text.splitlines() if l.strip()]
+                summary = [l for l in lines if not l.startswith("```") and not l.startswith("#") and len(l) > 10]
+                human_summary = summary[0] if summary else f"Generated {res.tokens_generated} tokens of {turn.expert} output."
+                results.append({
+                    "step_index": idx + 1,
+                    "expert": turn.expert,
+                    "instruction": turn.instruction,
+                    "output_text": res.output_text,
+                    "human_summary": human_summary,
+                    "prompt_tokens": res.prefill_tokens,
+                    "generated_tokens": res.tokens_generated,
+                    "tokens_avoided": res.tokens_avoided,
+                    "prefill_ms": round(res.prefill_ms, 2),
+                    "decode_ms": round(res.decode_ms, 2),
+                    "total_ms": round(res.total_ms, 2),
+                    "tok_per_sec": round(res.tok_per_sec, 2),
+                    "state_size_mb": 154.0,
+                    "handoff_ms": round(res.handoff_ms, 2),
+                    "lora_swap_ms": round(res.lora_swap_ms, 2),
+                })
+            return results
+
+        def _run_text_arm_27b():
+            tok = get_27b_tokenizer()
+            results = []
+            history_prompt = ""
+            for idx, turn in enumerate(req.turns):
+                t_start = time.perf_counter()
+                t_lora0 = time.perf_counter()
+                eng.set_active_lora(turn.expert)
+                lora_swap_ms = (time.perf_counter() - t_lora0) * 1000.0
+
+                if idx == 0:
+                    history_prompt = f"<|im_start|>user\n{turn.instruction}<|im_end|>\n<|im_start|>assistant\n"
+                else:
+                    history_prompt += f"<|im_end|>\n<|im_start|>user\n{turn.instruction}<|im_end|>\n<|im_start|>assistant\n"
+
+                prompt_tokens = tok.encode(history_prompt)
+                t_pref0 = time.perf_counter()
+                l_first, st = eng.forward_prompt(prompt_tokens)
+                prefill_ms = (time.perf_counter() - t_pref0) * 1000.0
+
+                first_token = int(torch.argmax(l_first[0, :]).item())
+                gen_tokens = [first_token]
+                curr_token = first_token
+                pos = len(prompt_tokens)
+                if eng.hip_graph_captured:
+                    eng.sync_states_to_graphs(st)
+
+                t_dec0 = time.perf_counter()
+                for _ in range(req.max_new_tokens - 1):
+                    if first_token in eng.STOP_TOKEN_IDS or req.max_new_tokens <= 1:
+                        break
+                    logits, st = eng.forward_token(curr_token, st, pos=pos, use_graph=True)
+                    next_token = int(torch.argmax(logits[0, :]).item())
+                    gen_tokens.append(next_token)
+                    if next_token in eng.STOP_TOKEN_IDS:
+                        break
+                    curr_token = next_token
+                    pos += 1
+                decode_ms = (time.perf_counter() - t_dec0) * 1000.0
+                total_ms = (time.perf_counter() - t_start) * 1000.0
+
+                full_text = tok.decode(gen_tokens)
+                history_prompt += full_text
+
+                lines = [l.strip() for l in full_text.splitlines() if l.strip()]
+                summary = [l for l in lines if not l.startswith("```") and not l.startswith("#") and len(l) > 10]
+                human_summary = summary[0] if summary else f"Generated {len(gen_tokens)} tokens of {turn.expert} output."
+                tok_s = round(len(gen_tokens) / (decode_ms / 1000.0), 2) if decode_ms > 0 else 0.0
+
+                results.append({
+                    "step_index": idx + 1,
+                    "expert": turn.expert,
+                    "instruction": turn.instruction,
+                    "output_text": full_text,
+                    "human_summary": human_summary,
+                    "prompt_tokens": len(prompt_tokens),
+                    "generated_tokens": len(gen_tokens),
+                    "tokens_avoided": 0,
+                    "prefill_ms": round(prefill_ms, 2),
+                    "decode_ms": round(decode_ms, 2),
+                    "total_ms": round(total_ms, 2),
+                    "tok_per_sec": tok_s,
+                    "state_size_mb": 0.0,
+                    "handoff_ms": 0.0,
+                    "lora_swap_ms": round(lora_swap_ms, 2),
+                })
+            return results
+
+        async with engine_lock:
+            if req.mode == "tensor_handoff":
+                tensor_results = await asyncio.to_thread(_run_tensor_arm_27b)
+                return {"mode": "tensor_handoff", "steps": tensor_results}
+            elif req.mode == "text_prefill":
+                text_results = await asyncio.to_thread(_run_text_arm_27b)
+                return {"mode": "text_prefill", "steps": text_results}
+            else:  # both_side_by_side
+                tensor_results = await asyncio.to_thread(_run_tensor_arm_27b)
+                text_results = await asyncio.to_thread(_run_text_arm_27b)
+                t_pref_total_tensor = sum(s["prefill_ms"] for s in tensor_results[1:]) if len(tensor_results) > 1 else tensor_results[0]["prefill_ms"]
+                t_pref_total_text = sum(s["prefill_ms"] for s in text_results[1:]) if len(text_results) > 1 else text_results[0]["prefill_ms"]
+                speedup = round(t_pref_total_text / max(t_pref_total_tensor, 0.01), 2)
+                total_prompt_tok_text = sum(s["prompt_tokens"] for s in text_results)
+                total_prompt_tok_tensor = sum(s["prompt_tokens"] for s in tensor_results)
+                tokens_saved = total_prompt_tok_text - total_prompt_tok_tensor
+                capacity_saved_pct = round((tokens_saved / max(total_prompt_tok_text, 1)) * 100, 1)
+                return {
+                    "mode": "both_side_by_side",
+                    "tensor_arm": {
+                        "steps": tensor_results,
+                        "total_prefill_ms": round(t_pref_total_tensor, 2),
+                        "total_prompt_tokens": total_prompt_tok_tensor,
+                    },
+                    "text_arm": {
+                        "steps": text_results,
+                        "total_prefill_ms": round(t_pref_total_text, 2),
+                        "total_prompt_tokens": total_prompt_tok_text,
+                    },
+                    "comparison": {
+                        "prefill_speedup": speedup,
+                        "tokens_saved": tokens_saved,
+                        "capacity_saved_pct": capacity_saved_pct,
+                    },
+                }
+
     base_model = model_state.get("base_model")
     tokenizer = model_state.get("tokenizer")
     folding_engine = model_state.get("folding_engine")
@@ -3258,6 +3422,74 @@ async def run_multi_agent_pipeline(req: RunPipelineRequest):
             import traceback
             traceback.print_exc()
             return JSONResponse(status_code=500, content={"error": f"Pipeline execution failed: {exc}"})
+
+
+class HandoffTurnItem(BaseModel):
+    agent_id: str = "agent"
+    role: str = "General"
+    expert: str | None = None
+    instruction: str
+    max_tokens: int = 128
+    temperature: float = 0.0
+
+
+class HandoffPipelineRequest(BaseModel):
+    pipeline_name: str = "agent_pipeline"
+    turns: list[HandoffTurnItem]
+    compare_with_text_baseline: bool = False
+    model_size: str = "27b"
+
+
+@app.post("/v1/chat/state_handoff")
+async def execute_state_handoff_api(req: HandoffPipelineRequest):
+    """Executes multi-agent conversation with True O(1) Tensor State Handoff ($S_t$),
+    eliminating re-prefill penalties across agentic handoffs.
+    """
+    try:
+        from runtime.state_handoff_27b import StateHandoffSession, AgentTurn
+        eng = get_native_triton_27b_engine(num_layers=64)
+
+        def _run():
+            session = StateHandoffSession(engine=eng)
+            turn_results = []
+            for t in req.turns:
+                agent_turn = AgentTurn(
+                    agent_id=t.agent_id,
+                    role=t.role,
+                    expert_lora=t.expert,
+                    instruction=t.instruction,
+                    max_new_tokens=t.max_tokens,
+                    temperature=t.temperature,
+                )
+                res = session.execute_turn(agent_turn)
+                turn_results.append({
+                    "agent_id": res.agent_id,
+                    "role": res.role,
+                    "expert_lora": res.expert_lora,
+                    "output_text": res.output_text,
+                    "tokens_generated": res.tokens_generated,
+                    "prefill_tokens": res.prefill_tokens,
+                    "tokens_avoided": res.tokens_avoided,
+                    "prefill_ms": round(res.prefill_ms, 2),
+                    "decode_ms": round(res.decode_ms, 2),
+                    "tok_per_sec": round(res.tok_per_sec, 2),
+                    "handoff_overhead_ms": round(res.handoff_ms, 4),
+                    "lora_swap_ms": round(res.lora_swap_ms, 2),
+                    "state_tensor_mb": round(res.state_tensor_mb, 2),
+                })
+            return turn_results
+
+        results = await asyncio.to_thread(_run)
+        return {
+            "status": "ok",
+            "pipeline_name": req.pipeline_name,
+            "turn_results": results,
+            "total_tokens_avoided": sum(r["tokens_avoided"] for r in results),
+        }
+    except Exception as exc:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(status_code=500, content={"error": f"State handoff execution failed: {exc}"})
 
 
 if __name__ == "__main__":

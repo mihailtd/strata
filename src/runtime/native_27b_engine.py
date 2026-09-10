@@ -17,7 +17,7 @@ import math
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
+from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -73,10 +73,11 @@ class EngineConfig27B:
 class NGramDrafter:
     """Fast in-memory n-gram lookahead drafter for zero-VRAM speculative decoding."""
 
-    def __init__(self, max_n: int = 5, min_n: int = 3, k: int = 3):
+    def __init__(self, max_n: int = 5, min_n: int = 3, k: int = 3, max_search_tokens: int = 4096):
         self.max_n = max_n
         self.min_n = min_n
         self.k = k
+        self.max_search_tokens = max_search_tokens
 
     def find_draft(self, tokens: List[int]) -> List[int]:
         """Finds continuation of the longest matching suffix in tokens."""
@@ -85,10 +86,11 @@ class NGramDrafter:
             if seq_len < cur_n + 1:
                 continue
             ngram = tokens[-cur_n:]
-            for i in range(seq_len - cur_n - 1, -1, -1):
+            start_i = max(0, seq_len - cur_n - 1 - self.max_search_tokens)
+            for i in range(seq_len - cur_n - 1, start_i - 1, -1):
                 if tokens[i : i + cur_n] == ngram:
                     candidate = tokens[i + cur_n : i + cur_n + self.k]
-                    if len(candidate) == self.k:
+                    if len(candidate) >= 1:
                         return candidate
         return []
 
@@ -214,6 +216,22 @@ class PreallocatedKVCache:
     def reset(self) -> None:
         """Resets active sequence length in O(1) time without reallocating buffers."""
         self.current_len = 0
+
+    def clone(self) -> "PreallocatedKVCache":
+        """Fast clone avoiding reallocation memsets by directly cloning active tensors."""
+        new_cache = object.__new__(PreallocatedKVCache)
+        new_cache.batch_size = self.batch_size
+        new_cache.num_heads = self.num_heads
+        new_cache.head_dim = self.head_dim
+        new_cache.max_seq_len = self.max_seq_len
+        new_cache.mode = self.mode
+        new_cache.device = self.device
+        new_cache.current_len = self.current_len
+        new_cache.k_cache = self.k_cache.clone()
+        new_cache.v_cache = self.v_cache.clone()
+        new_cache.k_scales = self.k_scales.clone() if self.k_scales is not None else None
+        new_cache.v_scales = self.v_scales.clone() if self.v_scales is not None else None
+        return new_cache
 
     def get_memory_bytes(self) -> int:
         mem = self.k_cache.nelement() * self.k_cache.element_size()
@@ -355,7 +373,7 @@ class Qwen35SSMBlock(nn.Module):
             swiglu_act = F.silu(ffn_gate) * ffn_up
             mlp_out = self.ffn_down(swiglu_act)
             out = x + mlp_out
-            return out, ssm_state.to(x.dtype), new_conv_state
+            return out, ssm_state.float(), new_conv_state
 
         # --- Single-Token Fast Path (Decode) ---
         orig_2d = (x.dim() == 2)
@@ -426,7 +444,7 @@ class Qwen35SSMBlock(nn.Module):
         mlp_out = self.ffn_down(swiglu_act)
 
         out = x + mlp_out
-        return out, ssm_state.to(x.dtype), new_conv_state
+        return out, ssm_state.float(), new_conv_state
 
 
 class Qwen35FullAttentionBlock(nn.Module):
@@ -517,6 +535,11 @@ class Qwen35FullAttentionBlock(nn.Module):
             k = apply_rotary_emb(k, cos, sin)
 
         # 4. KV Cache Update
+        past_len = (
+            kv_cache.current_len
+            if isinstance(kv_cache, PreallocatedKVCache)
+            else (kv_cache[0].shape[2] if kv_cache is not None and isinstance(kv_cache, (tuple, list)) else 0)
+        )
         if isinstance(kv_cache, PreallocatedKVCache):
             k, v = kv_cache.update(k, v)
             new_kv_cache = kv_cache
@@ -531,9 +554,17 @@ class Qwen35FullAttentionBlock(nn.Module):
         # 5. Grouped Query Attention (24 query heads, 4 KV heads -> 6 queries per KV)
         k_rep = k.repeat_interleave(6, dim=1)
         v_rep = v.repeat_interleave(6, dim=1)
-        attn_out = F.scaled_dot_product_attention(
-            q, k_rep, v_rep, is_causal=(s > 1 and s == k.shape[2])
-        )
+        tot_len = k.shape[2]
+        if s == 1:
+            attn_out = F.scaled_dot_product_attention(q, k_rep, v_rep)
+        elif s > 1 and s == tot_len:
+            attn_out = F.scaled_dot_product_attention(q, k_rep, v_rep, is_causal=True)
+        else:
+            # Incremental prefill / verification with existing KV cache (past_len > 0)
+            mask = torch.zeros((1, 1, s, tot_len), dtype=torch.bool, device=q.device)
+            for i in range(s):
+                mask[0, 0, i, : past_len + i + 1] = True
+            attn_out = F.scaled_dot_product_attention(q, k_rep, v_rep, attn_mask=mask)
 
         # 6. Reshape & Sigmoid Output Gating
         attn_out = attn_out.transpose(1, 2).contiguous().view(b, s, -1)
@@ -705,7 +736,7 @@ class SSMChunkGraph:
         self.device = device
         self.static_in = torch.zeros((1, 5120), dtype=torch.bfloat16, device=device)
         self.static_out = torch.zeros((1, 5120), dtype=torch.bfloat16, device=device)
-        self.ssm_states = [torch.zeros((48, 128, 128), dtype=torch.bfloat16, device=device) for _ in layers]
+        self.ssm_states = [torch.zeros((48, 128, 128), dtype=torch.float32, device=device) for _ in layers]
         self.conv_states = [torch.zeros((10240, 3), dtype=torch.bfloat16, device=device) for _ in layers]
 
         # Warmup and capture on side stream
@@ -907,6 +938,17 @@ class Native27BEngine(nn.Module):
         # Neural Multi-Token Prediction (blk.64)
         self.mtp_layer: Optional[Qwen35MTPBlock] = None
 
+        # Deterministic AST & Syntax Drafter
+        self.syntax_drafter: Optional[Any] = None
+
+    def init_syntax_drafter(self, tokenizer: Any = None) -> None:
+        """Initializes the Deterministic AST & Syntax Fast-Forwarding Drafter."""
+        if tokenizer is None:
+            from runtime.server import get_27b_tokenizer
+            tokenizer = get_27b_tokenizer()
+        from runtime.syntax_drafter import SyntaxTrieDrafter
+        self.syntax_drafter = SyntaxTrieDrafter(tokenizer)
+
     def _init_rope(self, dim: int = 64, base: float = 1e7) -> None:
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float32) / dim))
         self.register_buffer("inv_freq", inv_freq.to(self.device))
@@ -970,6 +1012,7 @@ class Native27BEngine(nn.Module):
 
         # Auto-capture HIP Graphs for SSM chunks if enabled
         if self.num_layers % 4 == 0 and torch.cuda.is_available():
+            self.init_static_lora_buffers(max_rank=32)
             self.capture_hip_graphs()
 
         # Warmup Triton GEMM kernels for batched prefill so serving requests experience zero JIT latency
@@ -980,6 +1023,19 @@ class Native27BEngine(nn.Module):
                 torch.cuda.synchronize(self.device)
             except Exception as e:
                 print(f"[Native 27B Triton] Warmup notice: {e}")
+
+    def init_static_lora_buffers(self, max_rank: int = 32) -> None:
+        """Preallocates fixed-address GPU memory buffers for LoRA adapters across all layers.
+        Enables permanent validity of HIP graphs across dynamic adapter hot-swaps (supports up to rank 32).
+        """
+        count = 0
+        for layer in self.layers:
+            for mod_name in ["attn_qkv", "attn_q", "attn_k", "attn_v", "attn_output", "ffn_gate", "ffn_up", "ffn_down"]:
+                mod = getattr(layer, mod_name, None)
+                if isinstance(mod, W4A16Linear):
+                    mod.init_static_lora_buffer(max_rank=max_rank)
+                    count += 1
+        print(f"[Native 27B Triton] Initialized {count} static LoRA buffers (rank={max_rank}) in VRAM")
 
     def capture_hip_graphs(self) -> bool:
         """Captures 3-SSM layer chunks into ROCm HIP Graphs to eliminate host dispatch."""
@@ -1037,6 +1093,7 @@ class Native27BEngine(nn.Module):
         "financial": "results/adapters/m2_financial_r8a128_v7_27b",
         "financial_planning": "results/adapters/m2_financial_r8a128_v7_27b",
         "python_modern": "results/adapters/m2_python_modern_r8a128_v7_27b",
+        "cross_domain": "results/adapters/m2_python_modern_r8a128_v7_27b",
     }
 
     def clear_loras(self) -> None:
@@ -1047,8 +1104,6 @@ class Native27BEngine(nn.Module):
                 if isinstance(mod, W4A16Linear):
                     mod.clear_lora()
         self.active_lora_domain = None
-        if self.hip_graph_captured:
-            self.capture_hip_graphs()
 
     def set_active_lora(self, domain_name: Optional[str], adapter_dir: Optional[Path | str] = None) -> bool:
         """Dynamically binds PyTorch LoRA adapter weights directly into W4A16Linear Triton layers."""
@@ -1056,7 +1111,19 @@ class Native27BEngine(nn.Module):
             self.clear_loras()
             return True
 
-        domain_clean = domain_name.lower()
+        domain_clean = domain_name.lower().strip()
+        if domain_clean == getattr(self, "active_lora_domain", None):
+            return True
+
+        # Check for multi-expert stacked notation: e.g. "postgresql+python_web", "stacked:postgresql+duckdb"
+        spec = domain_clean.removeprefix("stacked:").strip()
+        sep = "+" if "+" in spec else ("," if "," in spec else None)
+        if sep is not None:
+            experts = [e.strip() for e in spec.split(sep) if e.strip()]
+            if len(experts) >= 2:
+                weights = {e: 1.0 for e in experts}
+                return self.set_active_stacked_lora(weights)
+
         target_path: Optional[Path] = None
         repo_root = Path(__file__).resolve().parent.parent.parent
         if adapter_dir is not None:
@@ -1104,6 +1171,32 @@ class Native27BEngine(nn.Module):
             except Exception:
                 pass
 
+        return self.bind_lora_state_dict(weights, domain_name=domain_clean, alpha=alpha)
+
+    def set_active_stacked_lora(
+        self,
+        expert_weights: Dict[str, float],
+        alpha: float = 16.0,
+    ) -> bool:
+        """Dynamically fuses multiple LoRA adapters in-memory and binds them to static VRAM buffers."""
+        domain_label = "+".join(sorted(expert_weights.keys()))
+        target_name = f"stacked_{domain_label}"
+        if getattr(self, "active_lora_domain", None) in (target_name, domain_label):
+            return True
+
+        from src.runtime.adapter_stacker import DynamicAdapterStacker
+        stacker = DynamicAdapterStacker()
+        fused_dict, fused_cfg = stacker.stack_adapters(expert_weights, normalize_weights=False)
+        return self.bind_lora_state_dict(fused_dict, domain_name=target_name, alpha=alpha)
+
+    def bind_lora_state_dict(
+        self,
+        weights: Dict[str, torch.Tensor],
+        domain_name: str = "stacked",
+        alpha: float = 16.0,
+    ) -> bool:
+        """Directly binds an in-memory LoRA state dict into W4A16Linear static buffers."""
+        t0 = time.perf_counter()
         applied_count = 0
         for i, layer in enumerate(self.layers):
             is_attn = ((i + 1) % 4 == 0)
@@ -1145,9 +1238,7 @@ class Native27BEngine(nn.Module):
                             )
                             applied_count += 1
 
-        self.active_lora_domain = domain_clean
-        if self.hip_graph_captured:
-            self.capture_hip_graphs()
+        self.active_lora_domain = domain_name
 
         print(f"[Native 27B Triton] Bound LoRA [{domain_name}] ({applied_count} modules, alpha={alpha:.1f}) in {(time.perf_counter() - t0)*1000:.1f}ms")
         return True
@@ -1270,16 +1361,26 @@ class Native27BEngine(nn.Module):
         self,
         prompt_ids: List[int],
         state_dict: Optional[Dict[str, Any]] = None,
+        pos: int = 0,
     ) -> Tuple[torch.Tensor, Dict[str, Any]]:
-        """Batched forward pass through all 64 layers processing the prompt tokens in one single pass."""
+        """Batched forward pass through all 64 layers processing the prompt tokens in one single pass.
+
+        Supports incremental prefill: if state_dict contains past KV / SSM states, offset is
+        aligned to past context and new tokens update states in-place.
+        """
         state_dict = state_dict or {}
         s = len(prompt_ids)
         if s == 0:
             prompt_ids = [0]
             s = 1
 
-        # Precompute RoPE frequencies for all S prompt tokens: shape (1, 1, S, 32)
-        cos_sin = self._get_cos_sin(s, offset=0)
+        # Determine existing sequence position / past context length from state_dict
+        past_len = pos
+        if past_len == 0 and "kv_3" in state_dict and isinstance(state_dict["kv_3"], PreallocatedKVCache):
+            past_len = state_dict["kv_3"].current_len
+
+        # Precompute RoPE frequencies with past_len offset: shape (1, 1, S, 32)
+        cos_sin = self._get_cos_sin(s, offset=past_len)
 
         # 1. Embed all prompt tokens in one shot
         token_tensor = torch.tensor(prompt_ids, dtype=torch.long, device=self.device)
@@ -1288,7 +1389,7 @@ class Native27BEngine(nn.Module):
         else:
             x = torch.zeros((1, s, 5120), dtype=torch.bfloat16, device=self.device)
 
-        new_states = {}
+        new_states = dict(state_dict)
 
         # 2. Sequential layers in batched mode (reading 13.5 GB weights ONCE instead of S times)
         for i, layer in enumerate(self.layers):
@@ -1364,6 +1465,70 @@ class Native27BEngine(nn.Module):
             pos += 1
 
         return generated
+
+    def clone_state_dict(self, state_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """Clones all SSM, Conv, and KV cache tensors in GPU VRAM in sub-millisecond time (<1.0 ms)."""
+        new_state = {}
+        for k, v in state_dict.items():
+            if isinstance(v, torch.Tensor):
+                new_state[k] = v.clone()
+            elif isinstance(v, PreallocatedKVCache):
+                new_state[k] = v.clone()
+            else:
+                new_state[k] = v
+        return new_state
+
+    def generate_with_state(
+        self,
+        prompt_ids: List[int],
+        state_dict: Optional[Dict[str, Any]] = None,
+        max_new_tokens: int = 64,
+        temperature: float = 0.7,
+        use_hip_graph: bool = True,
+    ) -> Tuple[List[int], Dict[str, Any]]:
+        """Executes generation with state handoff (incremental prefill + decode).
+
+        Bypasses re-prefill of past turns. If state_dict is provided, only prefills
+        prompt_ids and continues generation from the inherited recurrent and KV state.
+        Returns (generated_tokens, updated_state_dict).
+        """
+        generated: List[int] = []
+        if state_dict is None:
+            state_dict = self.init_kv_caches(
+                batch_size=1,
+                max_seq_len=len(prompt_ids) + max_new_tokens + 16,
+                mode=self.kv_cache_mode,
+            )
+            past_len = 0
+            if use_hip_graph and self.hip_graph_captured:
+                self.reset_hip_graphs()
+        else:
+            past_len = state_dict.get("kv_3").current_len if "kv_3" in state_dict else 0
+
+        # Incremental Prefill
+        logits, state_dict = self.forward_prompt(prompt_ids, state_dict, pos=past_len)
+        next_token = int(torch.argmax(logits[0, :]).item())
+        generated.append(next_token)
+        if next_token in self.STOP_TOKEN_IDS or max_new_tokens <= 1:
+            return generated, state_dict
+
+        curr_token = next_token
+        pos = past_len + len(prompt_ids)
+
+        if use_hip_graph and self.hip_graph_captured:
+            self.sync_states_to_graphs(state_dict)
+
+        # Autoregressive decode loop
+        for _ in range(max_new_tokens - 1):
+            logits, state_dict = self.forward_token(curr_token, state_dict, pos=pos, use_graph=use_hip_graph)
+            next_token = int(torch.argmax(logits[0, :]).item())
+            generated.append(next_token)
+            if next_token in self.STOP_TOKEN_IDS:
+                break
+            curr_token = next_token
+            pos += 1
+
+        return generated, state_dict
 
     def forward_verify(
         self,
@@ -1563,12 +1728,25 @@ class Native27BEngine(nn.Module):
         draft_n: int = 5,
         min_n: int = 4,
         use_mtp: bool = True,
-    ) -> List[int]:
+        use_syntax_drafter: bool = False,
+        return_stats: bool = False,
+    ) -> Union[List[int], Tuple[List[int], Dict[str, Any]]]:
         """Speculative decoding using Neural MTP (blk.64) or in-memory context n-gram drafter.
 
         Guarantees 100% mathematical equivalence to greedy decode with zero quality loss.
         """
         generated: List[int] = []
+        stats: Dict[str, Any] = {
+            "total_steps": 0,
+            "tokens_generated": 0,
+            "syntax_drafts_proposed": 0,
+            "syntax_tokens_accepted": 0,
+            "ngram_drafts_proposed": 0,
+            "ngram_tokens_accepted": 0,
+            "mtp_drafts_proposed": 0,
+            "mtp_tokens_accepted": 0,
+            "single_token_steps": 0,
+        }
         mode = kv_cache_mode or self.kv_cache_mode
         state_dict: Dict[str, Any] = self.init_kv_caches(
             batch_size=1,
@@ -1586,11 +1764,18 @@ class Native27BEngine(nn.Module):
         curr_token = int(torch.argmax(logits[0, :]).item())
         generated.append(curr_token)
         if curr_token in self.STOP_TOKEN_IDS or max_new_tokens <= 1:
+            if return_stats:
+                stats["tokens_generated"] = len(generated)
+                return generated, stats
             return generated
 
         pos = len(prompt_ids)
 
-        # Neural MTP Speculative Loop (blk.64)
+        drafter = NGramDrafter(max_n=draft_n, min_n=min_n, k=draft_k)
+        all_tokens = list(prompt_ids) + [curr_token]
+
+        mtp_kv = None
+        h_curr = None
         if self.mtp_layer is not None and use_mtp:
             mtp_kv = PreallocatedKVCache(
                 num_heads=4,
@@ -1604,77 +1789,50 @@ class Native27BEngine(nn.Module):
             )
             verified_token = int(torch.argmax(logits_0[0, :]).item())
             generated.append(verified_token)
-            if verified_token in self.STOP_TOKEN_IDS:
+            all_tokens.append(verified_token)
+            if verified_token in self.STOP_TOKEN_IDS or len(generated) >= max_new_tokens:
+                if return_stats:
+                    stats["tokens_generated"] = len(generated)
+                    return generated, stats
                 return generated
             pos += 1
+            curr_token = verified_token
 
-            while len(generated) < max_new_tokens and verified_token not in self.STOP_TOKEN_IDS:
-                # Step A: MTP neural draft (1.0 ms)
-                tok_emb = self.token_embd[verified_token : verified_token + 1].view(1, 1, -1)
+        while len(generated) < max_new_tokens and curr_token not in self.STOP_TOKEN_IDS:
+            stats["total_steps"] += 1
+            draft_source: Optional[str] = None
+
+            # 1. Try Deterministic Syntax Trie Drafter (<0.001 ms)
+            draft = (
+                self.syntax_drafter.find_draft(all_tokens, max_k=draft_k)
+                if (self.syntax_drafter is not None and use_syntax_drafter and draft_k > 0)
+                else []
+            )
+            if draft:
+                draft_source = "syntax"
+
+            # 2. Try in-memory context N-Gram Drafter (<0.01 ms)
+            if not draft:
+                draft = drafter.find_draft(all_tokens) if draft_k > 0 else []
+                if draft:
+                    draft_source = "ngram"
+
+            # 3. If no N-Gram match, fallback to Neural MTP Drafter (blk.64)
+            if not draft and self.mtp_layer is not None and use_mtp and h_curr is not None and mtp_kv is not None:
+                tok_emb = self.token_embd[curr_token : curr_token + 1].view(1, 1, -1)
                 mtp_cos_sin = self._get_cos_sin(1, offset=pos)
                 mtp_out = self.mtp_layer(h_curr.view(1, 1, -1), tok_emb, pos=pos, kv_cache=mtp_kv, cos_sin=mtp_cos_sin)
                 d_cand = int(torch.argmax(self.lm_head(mtp_out)[0, -1]).item())
+                draft = [d_cand]
+                draft_source = "mtp"
 
-                # Step B: Parallel K=2 verification across all 64 layers in 1 GDDR6 sweep (~50ms)
-                chunk_logits, history, h_final = self.forward_verify(
-                    [verified_token, d_cand], state_dict, pos, return_hidden=True
-                )
-                y_true = int(torch.argmax(chunk_logits[0]).item())
-                y_bonus = int(torch.argmax(chunk_logits[1]).item())
-
-                if d_cand == y_true:
-                    # Candidate ACCEPTED! Two tokens emitted from 1 GPU sweep
-                    generated.append(y_true)
-                    if y_true in self.STOP_TOKEN_IDS or len(generated) >= max_new_tokens:
-                        return generated
-
-                    generated.append(y_bonus)
-                    if y_bonus in self.STOP_TOKEN_IDS or len(generated) >= max_new_tokens:
-                        return generated
-
-                    # Commit state after both tokens
-                    for i in range(self.num_layers):
-                        if f"ssm_{i}" in history:
-                            state_dict[f"ssm_{i}"] = history[f"ssm_{i}"][1].clone()
-                            state_dict[f"conv_{i}"] = history[f"conv_{i}"][1].clone()
-                        if f"kv_{i}" in state_dict:
-                            state_dict[f"kv_{i}"].current_len = pos + 2
-                    self.sync_states_to_graphs(state_dict)
-                    verified_token = y_bonus
-                    h_curr = h_final[1] if h_final is not None else h_curr
-                    pos += 2
-                else:
-                    # Candidate REJECTED! Single token committed with zero penalty
-                    generated.append(y_true)
-                    if y_true in self.STOP_TOKEN_IDS or len(generated) >= max_new_tokens:
-                        return generated
-
-                    # Commit state after verified_token only
-                    for i in range(self.num_layers):
-                        if f"ssm_{i}" in history:
-                            state_dict[f"ssm_{i}"] = history[f"ssm_{i}"][0].clone()
-                            state_dict[f"conv_{i}"] = history[f"conv_{i}"][0].clone()
-                        if f"kv_{i}" in state_dict:
-                            state_dict[f"kv_{i}"].current_len = pos + 1
-                    # Rewind MTP KV cache to match target model position
-                    mtp_kv.current_len = pos + 1
-                    self.sync_states_to_graphs(state_dict)
-                    verified_token = y_true
-                    h_curr = h_final[0] if h_final is not None else h_curr
-                    pos += 1
-
-            return generated
-
-        drafter = NGramDrafter(max_n=draft_n, min_n=min_n, k=draft_k)
-        all_tokens = list(prompt_ids) + [curr_token]
-
-        while len(generated) < max_new_tokens:
-            draft = drafter.find_draft(all_tokens) if draft_k > 0 else []
-
-            if len(draft) >= 1:
+            if len(draft) >= 1 and draft_source is not None:
                 candidates = [curr_token] + draft[:draft_k]
                 K = len(candidates)
-                chunk_logits, history, _ = self.forward_verify(candidates, state_dict, pos)
+                stats[f"{draft_source}_drafts_proposed"] += (K - 1)
+                chunk_logits, history, h_final = self.forward_verify(
+                    candidates, state_dict, pos, return_hidden=True
+                )
 
                 n_acc = 0
                 bonus_token = None
@@ -1687,6 +1845,8 @@ class Native27BEngine(nn.Module):
                         bonus_token = pred_tok
                         break
 
+                stats[f"{draft_source}_tokens_accepted"] += n_acc
+
                 if bonus_token is None:
                     bonus_token = int(torch.argmax(chunk_logits[K - 1]).item())
 
@@ -1698,34 +1858,61 @@ class Native27BEngine(nn.Module):
                     if f"kv_{i}" in state_dict:
                         state_dict[f"kv_{i}"].current_len = pos + n_acc + 1
 
+                if mtp_kv is not None:
+                    mtp_kv.current_len = pos + n_acc + 1
+
                 self.sync_states_to_graphs(state_dict)
 
+                if h_final is not None and len(h_final) > n_acc:
+                    h_curr = h_final[n_acc]
+
                 # Emit accepted tokens
+                stop_hit = False
                 for j in range(n_acc):
                     acc_tok = candidates[j + 1]
                     generated.append(acc_tok)
                     all_tokens.append(acc_tok)
                     if acc_tok in self.STOP_TOKEN_IDS or len(generated) >= max_new_tokens:
-                        return generated
+                        stop_hit = True
+                        break
+                if stop_hit:
+                    if return_stats:
+                        stats["tokens_generated"] = len(generated)
+                        return generated, stats
+                    return generated
 
                 generated.append(bonus_token)
                 all_tokens.append(bonus_token)
                 if bonus_token in self.STOP_TOKEN_IDS or len(generated) >= max_new_tokens:
+                    if return_stats:
+                        stats["tokens_generated"] = len(generated)
+                        return generated, stats
                     return generated
 
                 pos = pos + n_acc + 1
                 curr_token = bonus_token
             else:
+                stats["single_token_steps"] += 1
                 # Single-token fallback decode
-                logits, state_dict = self.forward_token(curr_token, state_dict, pos=pos, use_graph=use_hip_graph)
+                logits, state_dict, h_next = self.forward_token(
+                    curr_token, state_dict, pos=pos, use_graph=use_hip_graph, return_hidden=True
+                )
+                if h_next is not None:
+                    h_curr = h_next
                 next_token = int(torch.argmax(logits[0, :]).item())
                 generated.append(next_token)
                 all_tokens.append(next_token)
                 if next_token in self.STOP_TOKEN_IDS or len(generated) >= max_new_tokens:
+                    if return_stats:
+                        stats["tokens_generated"] = len(generated)
+                        return generated, stats
                     return generated
                 curr_token = next_token
                 pos += 1
 
+        if return_stats:
+            stats["tokens_generated"] = len(generated)
+            return generated, stats
         return generated
 
     def generate_stream_speculative(

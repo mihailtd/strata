@@ -193,19 +193,20 @@ _w4a16_gemm_kernel = triton.autotune(
 
 
 @triton.jit
-def _w4a16_gemv_m1_kernel(
+def _w4a16_gemv_kernel(
     a_ptr, q_ptr, scale_ptr, c_ptr,
-    N, K,
-    stride_ak,
+    M, N, K,
+    stride_am, stride_ak,
     stride_qk, stride_qn,
     stride_sn,
-    stride_cn,
+    stride_cm, stride_cn,
     BLOCK_N: tl.constexpr,
     BLOCK_K: tl.constexpr,
     GROUP_SIZE: tl.constexpr,
 ):
-    """Specialized ultra-fast GEMV (M=1) Kernel for Single-Token Decoding on RDNA3."""
+    """Specialized ultra-fast GEMV Kernel for M in 1..4 (Single-Token & Speculative Verification) on RDNA3."""
     pid_n = tl.program_id(axis=0)
+    pid_m = tl.program_id(axis=1)
     offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
     shifts = (tl.arange(0, 8) * 4)[:, None]  # (8, 1)
 
@@ -213,7 +214,7 @@ def _w4a16_gemv_m1_kernel(
 
     offs_kw = tl.arange(0, BLOCK_K // 8)
     q_ptrs = q_ptr + (offs_kw[:, None] * stride_qk + offs_n[None, :] * stride_qn)
-    a_ptrs = a_ptr + (tl.arange(0, BLOCK_K) * stride_ak)
+    a_ptrs = a_ptr + pid_m * stride_am + (tl.arange(0, BLOCK_K) * stride_ak)
 
     n_groups_k = tl.cdiv(K, BLOCK_K)
 
@@ -242,8 +243,12 @@ def _w4a16_gemv_m1_kernel(
         a_ptrs += BLOCK_K * stride_ak
         q_ptrs += (BLOCK_K // 8) * stride_qk
 
-    c_ptrs = c_ptr + offs_n * stride_cn
+    c_ptrs = c_ptr + pid_m * stride_cm + offs_n * stride_cn
     tl.store(c_ptrs, accumulator.to(tl.bfloat16), mask=offs_n < N)
+
+
+# Backwards compatibility alias
+_w4a16_gemv_m1_kernel = _w4a16_gemv_kernel
 
 
 def w4a16_matmul(
@@ -289,18 +294,19 @@ def w4a16_matmul(
     else:
         c_2d = torch.empty((M, N), device=x.device, dtype=torch.bfloat16)
 
-    # Fast-path for single-token autoregression (M=1)
-    if M == 1:
+    # Fast-path for small batch / speculative decoding verification (M <= 4)
+    # Uses exact same tile accumulation logic as single-token decoding for bitwise parity
+    if M <= 4:
         BLOCK_N = 64
         BLOCK_K = 128
-        grid_m1 = (triton.cdiv(N, BLOCK_N),)
-        _w4a16_gemv_m1_kernel[grid_m1](
+        grid_m = (triton.cdiv(N, BLOCK_N), M)
+        _w4a16_gemv_kernel[grid_m](
             x_2d, qweight, scales, c_2d,
-            N, K,
-            x_2d.stride(1),
+            M, N, K,
+            x_2d.stride(0) if M > 1 else 0, x_2d.stride(1),
             qweight.stride(0), qweight.stride(1),
             scales.stride(0),
-            c_2d.stride(1),
+            c_2d.stride(0) if M > 1 else 0, c_2d.stride(1),
             BLOCK_N=BLOCK_N,
             BLOCK_K=BLOCK_K,
             GROUP_SIZE=group_size,
