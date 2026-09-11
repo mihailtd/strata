@@ -23,9 +23,20 @@ results/**/checkpoints/
 data/**
 !data/**/
 !data/**/*.jsonl
+apps/factory/data/**
+!apps/factory/data/**/
+!apps/factory/data/**/*.jsonl
+# astral/raw/{ruff,ty,uv} are vendored doc source (plain tracked content, no
+# nested .git -- this repo has no submodules) -- track them in full, not just
+# their .jsonl siblings.
+!apps/factory/data/astral/raw/**
 mlruns/
 mlruns.db
 mlartifacts/
+
+# Unsloth JIT-compiled trainer cache and micro-probe run outputs
+apps/factory/unsloth_compiled_cache/
+apps/factory/outputs_micro_probe/
 
 # throwaway adapters from the loss-curve diagnostic (curves themselves are tracked)
 results/loss_curves/adapters/
@@ -43,3 +54,12 @@ scratch/transcript*.txt
 projects/**/.adapters/
 node_modules/
 **/node_modules
+target/
+**/target/
+
+# Fetched on demand by apps/runtime-llama/setup.sh (git clone --depth 1 +
+# local cmake build) -- not our code, not tracked. This repo has no
+# submodules; regenerable third-party checkouts are just gitignored.
+apps/runtime-llama/llama.cpp/
+.moon/cache/
+.moon/docker/

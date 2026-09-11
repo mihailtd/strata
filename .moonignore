@@ -1,0 +1,46 @@
+# Directories moon should never hash/scan when building its project graph or
+# computing task cache keys. Without this, the `root` project (mapped to `.`
+# in .moon/workspace.yml) walks the entire repo on every task -- including a
+# 1.2GB vendored llama.cpp checkout, a 496MB projects/ tree of benchmark-
+# generated target codebases, model weights, and MLflow artifacts. None of
+# that is source moon needs to know about.
+
+# Third-party checkout, gitignored wholesale -- setup.sh fetches it fresh
+# (git clone --depth 1), not ours to vendor or hash
+apps/runtime-llama/llama.cpp
+
+# AI-generated benchmark target codebases (each has its own .venv/lockfile;
+# see benchmarks/benchmark_3way_harness.py and friends)
+projects
+
+# Data/model/results artifacts -- large, mostly gitignored already
+data
+models
+results
+mlruns
+mlruns.db
+
+# Every independent project's own venv/build state. This is the real fix for
+# moon being slow on a cold cache (confirmed empirically: runtime-triton and
+# factory both have 15-16GB .venv dirs; moon does not reliably auto-exclude
+# a project-nested .venv the way it excludes a root-level one, even though
+# .venv/ is gitignored). Blanket pattern, not per-project, so this doesn't
+# need updating every time a new independent project gets its own venv.
+**/.venv
+serving/.venv
+apps/dashboard/.next
+apps/dashboard/node_modules
+apps/runtime-next/target
+
+# apps/factory/data/ holds training corpora: raw source epubs, 3 vendored
+# doc trees (ruff/ty/uv, plain tracked content -- no nested .git), and
+# hundreds of JSONL files. Not source moon's task graph needs to hash.
+# apps/factory/legacy/ is frozen/superseded code, also excluded from hashing.
+apps/factory/data
+apps/factory/legacy
+apps/factory/unsloth_compiled_cache
+apps/factory/outputs_micro_probe
+
+# Misc scratch/tool caches
+scratch/__pycache__
+hip-kernel-experiment

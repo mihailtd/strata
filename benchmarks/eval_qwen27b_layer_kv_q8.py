@@ -18,7 +18,7 @@ import torch.nn.functional as F
 # Add project root to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.runtime.native_27b_engine import (
+from runtime.native_27b_engine import (
     Qwen35FullAttentionBlock,
     apply_rotary_emb,
 )

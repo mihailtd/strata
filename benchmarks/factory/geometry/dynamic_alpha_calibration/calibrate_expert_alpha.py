@@ -58,7 +58,7 @@ from runtime.canon import REPO_ROOT as REPO  # noqa: E402
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
 sys.path.insert(0, str(REPO))
-sys.path.insert(0, str(REPO / "src"))
+sys.path.insert(0, str(REPO / "apps"))
 
 LAW_K = 0.167          # merge_rel_err_pct * (|dW|/|W|), fitted on the alpha sweep
 MERGE_ERR_FLOOR_PCT = 5.0

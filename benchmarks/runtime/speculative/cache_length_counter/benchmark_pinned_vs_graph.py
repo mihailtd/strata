@@ -22,7 +22,7 @@ from pathlib import Path
 
 REPO_ROOT = Path("/home/mihai/gnn-experiment")
 sys.path.insert(0, str(REPO_ROOT))
-sys.path.insert(0, str(REPO_ROOT / "src"))
+sys.path.insert(0, str(REPO_ROOT / "apps"))
 
 import torch  # noqa: E402
 

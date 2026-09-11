@@ -1,19 +1,27 @@
 {
   "include": [
-    "src",
+    "apps",
     "benchmarks",
     "tests"
   ],
+  "exclude": [
+    "apps/runtime-llama/llama.cpp",
+    "apps/runtime-common",
+    "apps/runtime-triton",
+    "apps/factory",
+    "apps/runtime-next",
+    "apps/dashboard"
+  ],
   "extraPaths": [
     ".",
-    "src"
+    "apps"
   ],
   "executionEnvironments": [
     {
       "root": ".",
       "extraPaths": [
         ".",
-        "src"
+        "apps"
       ]
     }
   ]

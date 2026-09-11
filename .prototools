@@ -1,0 +1,9 @@
+# Standalone `proto` CLI config -- for direct `proto install/run/outdated`
+# usage outside of moon. moon's own toolchain versions live in
+# .moon/toolchain.yml and are the actual source of truth for `moon run`
+# tasks (moon 2.5.4's built-in node/rust toolchains do not support
+# inheriting from this file -- that's only available to generic WASM-plugin
+# toolchains). Keep these two files' versions in sync by hand when bumping.
+
+node = "26.7.0"
+rust = "1.98.1"

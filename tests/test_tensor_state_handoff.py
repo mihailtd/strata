@@ -9,9 +9,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.runtime.canon import configure_deterministic_attention
-from src.runtime.novel_peft import FoldableExpert, WeightFoldingEngine
-from src.runtime.state_handoff import (
+from runtime.canon import configure_deterministic_attention
+from runtime.novel_peft import FoldableExpert, WeightFoldingEngine
+from runtime.state_handoff import (
     AgentHandoffSession,
     RecurrentStateSnapshot,
     capture_recurrent_state,

@@ -2,7 +2,7 @@ import time
 import torch
 from pathlib import Path
 import sys
-sys.path.insert(0, "src")
+sys.path.insert(0, "apps")
 sys.path.insert(0, ".")
 
 from runtime.native_27b_engine import Native27BEngine

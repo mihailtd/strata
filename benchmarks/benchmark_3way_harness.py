@@ -54,12 +54,12 @@ import torch
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
-if str(REPO_ROOT / "src") not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT / "src"))
+if str(REPO_ROOT / "apps") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "apps"))
 
-from src.harness.coordinator.state_handoff_harness import StateHandoffHarnessCoordinator, SPECIALIST_TO_LORA_MAP
-from src.harness.coordinator.subagent import SPECIALIST_SYSTEM_PROMPTS
-from src.runtime.native_27b_engine import Native27BEngine
+from harness.coordinator.state_handoff_harness import StateHandoffHarnessCoordinator, SPECIALIST_TO_LORA_MAP
+from harness.coordinator.subagent import SPECIALIST_SYSTEM_PROMPTS
+from runtime.native_27b_engine import Native27BEngine
 
 LLAMA_BIN_DIR = REPO_ROOT / "serving" / "llama.cpp" / "build" / "bin"
 LLAMA_SERVER = LLAMA_BIN_DIR / "llama-server"

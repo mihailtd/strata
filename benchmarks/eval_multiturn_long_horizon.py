@@ -29,8 +29,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.harness.state_compactor import SemanticStateCompactor
-from src.runtime.long_context_engine import LongContextAgentEngine, LongContextVRAMManager
+from harness.state_compactor import SemanticStateCompactor
+from runtime.long_context_engine import LongContextAgentEngine, LongContextVRAMManager
 
 AGENT_TURNS = [
     {

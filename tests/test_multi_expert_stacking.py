@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import torch
 
-from src.harness.router.dynamic_moa_router import DynamicMoARouter
-from src.runtime.adapter_stacker import DynamicAdapterStacker
-from src.runtime.server import ChatMessage, resolve_27b_adapter_id
+from harness.router.dynamic_moa_router import DynamicMoARouter
+from runtime.adapter_stacker import DynamicAdapterStacker
+from runtime.server import ChatMessage, resolve_27b_adapter_id
 
 
 def test_dual_expert_stacking_dimensions():

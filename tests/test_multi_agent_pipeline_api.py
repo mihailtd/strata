@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 os.environ["GPU_EXCLUSIVE_ACTION"] = "warn"
 
-from src.runtime.server import app, model_state, load_inference_engine
+from runtime.server import app, model_state, load_inference_engine
 
 
 @pytest.mark.asyncio

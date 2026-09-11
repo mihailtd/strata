@@ -1,0 +1,28 @@
+$schema: 'https://moonrepo.dev/schemas/toolchain.json'
+
+# Source of truth for toolchain versions that `moon run` tasks use -- moon
+# resolves these via proto automatically (confirmed: no standalone `proto`
+# binary was installed before this, yet ~/.proto was already populated by
+# moon itself). Mirrored in the root .prototools for direct standalone
+# `proto install/run/outdated` usage outside moon -- moon 2.5.4's built-in
+# node/rust toolchains don't support inheriting from .prototools (only
+# generic WASM-plugin toolchains can), so bump both files by hand together.
+# `moon run <project>:upgrade-toolchain` (dashboard, runtime-next) verifies
+# a version bump actually still builds/tests before you commit it.
+node:
+  version: '26.7.0'
+  packageManager: 'pnpm'
+  pnpm:
+    version: '10.14.0'
+
+rust:
+  version: '1.98.1'
+
+# Deliberately no `python`/`uv` toolchain block: moon's Python toolchain is
+# still unstable upstream. Every Python project's tasks (below) are plain
+# `system`-platform shell commands that call `uv sync` / `uv run ...`
+# directly -- moon only owns the project graph, task caching, and `deps`
+# ordering between projects, never Python dependency resolution itself.
+# (Note: moon 2.5.4's schema does define PythonConfig/UvConfig, suggesting
+# this may be more usable now than when this decision was first made --
+# worth re-evaluating separately, not folded into this change.)

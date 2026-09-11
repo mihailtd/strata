@@ -122,7 +122,7 @@ def run_python_proxy_arm():
     print("=" * 80, flush=True)
 
     env = os.environ.copy()
-    env["PYTHONPATH"] = "src"
+    env["PYTHONPATH"] = "apps"
     proc = subprocess.Popen(
         ["uv", "run", "python", "-m", "runtime.server"],
         stdout=subprocess.DEVNULL,
@@ -157,7 +157,7 @@ def run_direct_native_plugin_arm():
 
     # Add src to pythonpath
     import sys
-    sys.path.insert(0, "src")
+    sys.path.insert(0, "apps")
     from harness.native_plugin.harness_provider import NativeHarnessDirectProvider
 
     provider = NativeHarnessDirectProvider(model_id="qwen3.8:27b", enable_jump_tokens=True)

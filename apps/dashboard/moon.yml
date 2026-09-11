@@ -1,0 +1,45 @@
+$schema: 'https://moonrepo.dev/schemas/project.json'
+language: 'typescript'
+layer: 'application'
+stack: 'frontend'
+tags: ['web']
+
+tasks:
+  dev:
+    command: 'pnpm dev'
+    preset: 'server'
+  build:
+    command: 'pnpm build'
+    inputs: ['app/**/*', 'components/**/*', 'lib/**/*', 'package.json']
+    outputs: ['.next']
+  lint:
+    command: 'pnpm lint'
+  format:
+    command: 'pnpm format'
+  format-check:
+    command: 'pnpm format:check'
+  typecheck:
+    command: 'pnpm typecheck'
+  test:
+    command: 'pnpm test'
+  update-deps:
+    # Plain `pnpm update`, NOT --latest: --latest ignores declared ^ranges
+    # and previously force-bumped typescript 5->7 and eslint 9->10 past what
+    # @typescript-eslint/eslint-plugin-* actually support, breaking
+    # typecheck/build with peer-dependency conflicts. Bump majors by hand,
+    # deliberately, one at a time.
+    command: 'pnpm update'
+    inputs: ['package.json']
+    outputs: ['pnpm-lock.yaml']
+  check-toolchain:
+    command: 'proto outdated'
+    options:
+      cache: false
+  upgrade-toolchain:
+    # After bumping `node.version` in .moon/toolchain.yml (and .prototools to
+    # match), run this to confirm the new toolchain still builds, lints
+    # clean, typechecks, and passes tests before you commit the bump.
+    script: 'node --version && pnpm --version'
+    deps: ['build', 'lint', 'typecheck', 'test']
+    options:
+      cache: false

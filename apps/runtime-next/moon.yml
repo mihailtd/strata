@@ -1,0 +1,36 @@
+$schema: 'https://moonrepo.dev/schemas/project.json'
+language: 'rust'
+layer: 'application'
+stack: 'systems'
+tags: ['runtime-engine']
+
+tasks:
+  build:
+    command: 'cargo build --release'
+    inputs: ['src/**/*', 'Cargo.toml', 'Cargo.lock']
+    outputs: ['target/release']
+  test:
+    command: 'cargo test'
+    inputs: ['src/**/*', 'Cargo.toml', 'Cargo.lock']
+  lint:
+    command: 'cargo clippy -- -D warnings'
+  format:
+    command: 'cargo fmt'
+  format-check:
+    command: 'cargo fmt --check'
+  update-deps:
+    command: 'cargo update'
+    inputs: ['Cargo.toml']
+    outputs: ['Cargo.lock']
+  check-toolchain:
+    command: 'proto outdated'
+    options:
+      cache: false
+  upgrade-toolchain:
+    # After bumping `rust.version` in .moon/toolchain.yml (and .prototools to
+    # match), run this to confirm the new toolchain actually builds, lints
+    # clean, and passes tests before you commit the bump.
+    script: 'rustc --version && cargo --version'
+    deps: ['build', 'lint', 'test']
+    options:
+      cache: false

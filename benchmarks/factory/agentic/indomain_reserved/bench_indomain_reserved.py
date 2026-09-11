@@ -44,7 +44,7 @@ from pathlib import Path
 
 REPO = Path("/home/mihai/gnn-experiment")
 sys.path.insert(0, str(REPO))
-sys.path.insert(0, str(REPO / "src"))
+sys.path.insert(0, str(REPO / "apps"))
 sys.path.insert(0, str(REPO / "scripts"))
 
 T0 = time.perf_counter()

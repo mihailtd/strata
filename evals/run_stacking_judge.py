@@ -34,7 +34,7 @@ def run_stacking_eval(
 
     if not harness.check_server_health():
         print(f"❌ Error: Inference server is not reachable at {base_url}.")
-        print("Please start the server first (e.g. via 'uv run src/runtime/server.py')")
+        print("Please start the server first (e.g. via 'uv run apps/runtime/server.py')")
         sys.exit(1)
 
     print("=" * 80)

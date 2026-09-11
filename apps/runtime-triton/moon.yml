@@ -1,0 +1,36 @@
+$schema: 'https://moonrepo.dev/schemas/project.json'
+language: 'python'
+layer: 'application'
+stack: 'backend'
+tags: ['python', 'runtime-engine', 'independent-venv']
+
+# Self-sufficient as of Stage 2: own pyproject.toml/uv.lock/.venv, vendors its
+# own copy of native_27b_engine.py + deps (w4a16_loader, triton_w4a16,
+# gguf_unpacker), and depends only on runtime-common (path dependency) for
+# gpu_preflight/canon. Does NOT import from apps/runtime.
+dependsOn:
+  - 'runtime-common'
+
+tasks:
+  sync:
+    command: 'uv sync'
+    inputs: ['pyproject.toml']
+    outputs: ['.venv']
+  test:
+    command: 'uv run pytest tests -v'
+    deps: ['sync']
+    inputs: ['*.py', 'tests/**/*']
+  lint:
+    command: 'uv run ruff check .'
+    deps: ['sync']
+  format:
+    command: 'uv run ruff format .'
+    deps: ['sync']
+  update-deps:
+    command: 'uv lock --upgrade'
+    inputs: ['pyproject.toml']
+    outputs: ['uv.lock']
+  serve:
+    command: './run_server.sh'
+    deps: ['sync']
+    preset: 'server'

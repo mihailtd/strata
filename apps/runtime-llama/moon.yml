@@ -1,0 +1,25 @@
+$schema: 'https://moonrepo.dev/schemas/project.json'
+language: 'python'
+layer: 'application'
+stack: 'backend'
+tags: ['shell-wrapper', 'runtime-engine']
+
+# Pure shell wrapper (run_server.sh/setup.sh) around a llama.cpp checkout --
+# no Python deps of its own beyond what its smoke test needs. `language:
+# python` only drives the test task; `serve` is a raw shell script.
+#
+# apps/runtime-llama/llama.cpp itself is NOT tracked by this repo at all --
+# setup.sh fetches it fresh (`git clone --depth 1`) and builds it locally.
+# It's third-party code, not ours to vendor; gitignored wholesale (root
+# .gitignore). Excluded from lint/format/moon-hashing below for the same
+# reason -- it's not source this repo owns.
+tasks:
+  test:
+    command: 'uv run pytest tests -q'
+  lint:
+    command: 'uv run ruff check tests'
+  format:
+    command: 'uv run ruff format tests'
+  serve:
+    command: './run_server.sh'
+    preset: 'server'

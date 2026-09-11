@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.runtime.native_27b_engine import Qwen35FullAttentionBlock, PreallocatedKVCache
+from runtime.native_27b_engine import Qwen35FullAttentionBlock, PreallocatedKVCache
 
 dev = torch.device("cuda:0")
 block = Qwen35FullAttentionBlock(3, device=dev)

@@ -1,0 +1,60 @@
+[project]
+name = "factory"
+version = "0.1.0"
+description = "The Factory -- PEFT/LoRA adapter training, corpus pipeline, and quantization geometry. One project, one venv: unsloth needs torch<2.12.0, and nothing else here (transformers/peft/trl/liger-kernel) requires anything newer, so everything is pinned to the same matched ROCm 7.2 wheel trio."
+authors = [
+    { name = "Mihai Farcas", email = "farcasmihai91@gmail.com" }
+]
+requires-python = ">=3.14,<3.15"
+dependencies = [
+    "torch==2.11.0+rocm7.2",
+    "triton-rocm==3.6.0",
+    "torchvision==0.26.0+rocm7.2",
+    "unsloth[amd,studio]",
+    "transformers",
+    "peft",
+    "trl",
+    "liger-kernel",
+    "accelerate",
+    "bitsandbytes",
+    "datasets",
+    "gguf>=0.19.0",
+    "av>=18.0.0",
+    "safetensors>=0.8.0",
+    "runtime-common",
+]
+# Deliberately NOT depending on the root `runtime` package -- it has no
+# independent manifest yet (module-root = "apps" in the root pyproject.toml
+# IS its manifest), and its own deps float at torch>=2.13.0/vllm/flash-attn,
+# which would conflict with this project's torch==2.11.0 pin in one uv
+# resolution. The handful of apps/runtime modules still genuinely shared with
+# training (novel_peft, mtp_draft, w4a16_loader, training_db,
+# micro_probe/dataset, utils/logger, eval/eval_suite) are consumed as source
+# via the same `sys.path.insert(REPO_ROOT / "apps")` bootstrap used
+# throughout benchmarks/ -- see _bootstrap.py.
+
+[build-system]
+requires = ["uv_build>=0.12.3,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+package = false
+environments = ["sys_platform == 'linux'"]
+
+[[tool.uv.index]]
+name = "pytorch-rocm"
+url = "https://download.pytorch.org/whl/rocm7.2"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-rocm" }
+triton-rocm = { index = "pytorch-rocm" }
+torchvision = { index = "pytorch-rocm" }
+runtime-common = { path = "../runtime-common", editable = true }
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.16.2"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+addopts = "-v"

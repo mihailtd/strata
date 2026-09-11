@@ -30,7 +30,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.runtime.adapter_stacker import DynamicAdapterStacker
+from runtime.adapter_stacker import DynamicAdapterStacker
 
 RESULTS_DIR = REPO_ROOT / "results" / "benchmarks"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)

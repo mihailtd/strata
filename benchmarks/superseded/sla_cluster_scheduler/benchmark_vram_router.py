@@ -49,7 +49,7 @@ from runtime.canon import REPO_ROOT  # noqa: E402
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
-sys.path.insert(0, str(REPO_ROOT / "src"))
+sys.path.insert(0, str(REPO_ROOT / "apps"))
 
 from runtime.novel_peft import (  # noqa: E402
     FoldableExpert,

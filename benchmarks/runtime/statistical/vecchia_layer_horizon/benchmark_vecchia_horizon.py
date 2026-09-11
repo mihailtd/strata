@@ -41,7 +41,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "apps"))
 
 from runtime.cpu_bench import enforce_cpu_only, parse_bootstrap_flags  # noqa: E402
 

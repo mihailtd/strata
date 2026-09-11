@@ -19,7 +19,7 @@ import torch
 # Ensure repository root is on sys.path
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
-sys.path.insert(0, str(REPO_ROOT / "src"))
+sys.path.insert(0, str(REPO_ROOT / "apps"))
 
 from runtime.gpu_preflight import ensure_gpu_exclusive
 from runtime.triton_wmma import (

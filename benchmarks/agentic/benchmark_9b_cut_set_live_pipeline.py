@@ -34,7 +34,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from runtime.canon import REPO_ROOT
 sys.path.insert(0, str(REPO_ROOT))
-sys.path.insert(0, str(REPO_ROOT / "src"))
+sys.path.insert(0, str(REPO_ROOT / "apps"))
 
 from runtime.novel_peft import FoldableExpert, WeightFoldingEngine
 from runtime.gpu_preflight import ensure_gpu_exclusive

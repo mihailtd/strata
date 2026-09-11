@@ -1,0 +1,24 @@
+$schema: 'https://moonrepo.dev/schemas/project.json'
+language: 'python'
+layer: 'application'
+stack: 'backend'
+tags: ['python', 'runtime-engine', 'shared-root-venv']
+
+# Stage 1 state: no manifest of its own yet -- relies on the root
+# pyproject.toml/.venv (it imports apps/runtime's cuda_graph, fused_norm,
+# novel_peft, range_statistic_gate, none of which are self-sufficiency
+# targets right now). Gets its own pyproject.toml in Stage 3.
+dependsOn:
+  - 'runtime'
+  - 'runtime-common'
+
+tasks:
+  test:
+    command: 'uv run pytest tests -q'
+  lint:
+    command: 'uv run ruff check .'
+  format:
+    command: 'uv run ruff format .'
+  serve:
+    command: './run_server.sh'
+    preset: 'server'

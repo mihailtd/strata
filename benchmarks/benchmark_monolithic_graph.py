@@ -22,7 +22,7 @@ import torch.nn.functional as F
 # Add project root to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.runtime.triton_w4a16 import quantize_and_pack_w4, w4a16_matmul
+from runtime.triton_w4a16 import quantize_and_pack_w4, w4a16_matmul
 
 
 class MockHybridLayerChain:

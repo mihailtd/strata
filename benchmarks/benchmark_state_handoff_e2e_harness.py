@@ -31,11 +31,11 @@ import torch
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
-if str(REPO_ROOT / "src") not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT / "src"))
+if str(REPO_ROOT / "apps") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "apps"))
 
-from src.harness.coordinator.state_handoff_harness import StateHandoffHarnessCoordinator
-from src.runtime.native_27b_engine import Native27BEngine
+from harness.coordinator.state_handoff_harness import StateHandoffHarnessCoordinator
+from runtime.native_27b_engine import Native27BEngine
 
 
 def run_e2e_benchmark():

@@ -5,7 +5,7 @@ import torch
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from src.runtime.native_27b_engine import Native27BEngine
+from runtime.native_27b_engine import Native27BEngine
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print("Loading engine...")

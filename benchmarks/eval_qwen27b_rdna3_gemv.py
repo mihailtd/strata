@@ -23,8 +23,8 @@ import torch.nn.functional as F
 # Add project root to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.runtime.triton_w4a16 import _w4a16_gemv_m1_kernel, quantize_and_pack_w4
-from src.runtime.native_27b_engine import Qwen35FullAttentionBlock, Qwen35SSMBlock, PreallocatedKVCache
+from runtime.triton_w4a16 import _w4a16_gemv_m1_kernel, quantize_and_pack_w4
+from runtime.native_27b_engine import Qwen35FullAttentionBlock, Qwen35SSMBlock, PreallocatedKVCache
 
 
 def evaluate_layer_with_gemv_tile(

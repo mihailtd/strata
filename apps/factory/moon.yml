@@ -1,0 +1,36 @@
+$schema: 'https://moonrepo.dev/schemas/project.json'
+language: 'python'
+layer: 'application'
+stack: 'backend'
+tags: ['python', 'training', 'independent-venv']
+
+# Self-sufficient: own pyproject.toml/uv.lock/.venv, pinned to torch==2.11.0+
+# rocm7.2 (matched trio) to accommodate unsloth. Depends on runtime-common
+# (path dependency) for canon/gpu_preflight; the rest of what it needs from
+# apps/runtime (novel_peft, mtp_draft, w4a16_loader, training_db,
+# micro_probe/dataset, utils/logger, eval/eval_suite) is consumed as source
+# via _bootstrap.py, not a package dependency -- see pyproject.toml's comment.
+dependsOn:
+  - 'runtime-common'
+
+tasks:
+  sync:
+    command: 'uv sync'
+    inputs: ['pyproject.toml']
+    outputs: ['.venv']
+  test:
+    command: 'uv run pytest tests -v'
+    deps: ['sync']
+    inputs: ['*.py', 'tests/**/*', 'corpus/**/*.py', 'training/**/*.py']
+  lint:
+    command: 'uv run ruff check . --exclude legacy'
+    deps: ['sync']
+    inputs: ['*.py', 'tests/**/*.py', 'corpus/**/*.py', 'training/**/*.py']
+  format:
+    command: 'uv run ruff format . --exclude legacy'
+    deps: ['sync']
+    inputs: ['*.py', 'tests/**/*.py', 'corpus/**/*.py', 'training/**/*.py']
+  update-deps:
+    command: 'uv lock --upgrade'
+    inputs: ['pyproject.toml']
+    outputs: ['uv.lock']

@@ -144,7 +144,7 @@ def run_our_system_arm():
 
     # Launch our unified FastAPI server
     env = os.environ.copy()
-    env["PYTHONPATH"] = "src"
+    env["PYTHONPATH"] = "apps"
     proc = subprocess.Popen(
         ["uv", "run", "python", "-m", "runtime.server"],
         stdout=subprocess.DEVNULL,

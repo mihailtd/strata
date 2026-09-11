@@ -1,0 +1,28 @@
+[project]
+name = "runtime-common"
+version = "0.1.0"
+description = "Shared canonical benchmark constants (canon.py) and GPU-exclusivity guard (gpu_preflight.py) for every runtime-* serving engine. Single source of truth -- see canon.py docstring."
+authors = [
+    { name = "Mihai Farcas", email = "farcasmihai91@gmail.com" }
+]
+requires-python = ">=3.14,<3.15"
+dependencies = []
+# Deliberately NOT depending on torch here. `canon.configure_deterministic_
+# attention()` and gpu_preflight's VRAM checks both do a *lazy* `import torch`
+# inside the function body, never at module import time. Every consumer
+# (runtime-triton, runtime-ipwf, apps/runtime) already pins its own torch
+# build/index -- they legitimately differ (see serving/, apps/factory, and the
+# root pyproject.toml for three different torch/ROCm pins already in this
+# repo). Pinning torch here too would force every consumer to reconcile
+# runtime-common's pin against its own inside its own venv -- exactly the
+# isolation problem independent projects exist to avoid.
+
+[build-system]
+requires = ["uv_build>=0.12.3,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+environments = ["sys_platform == 'linux'"]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.16.2"]

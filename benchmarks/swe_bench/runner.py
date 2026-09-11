@@ -22,8 +22,8 @@ import torch
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
-if str(REPO_ROOT / "src") not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT / "src"))
+if str(REPO_ROOT / "apps") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "apps"))
 
 from benchmarks.swe_bench.harness import SWEBenchHarness, TaskAttemptResult
 from benchmarks.swe_bench.tasks import SWEBenchTask, SWE_BENCH_TASKS

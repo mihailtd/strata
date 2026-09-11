@@ -3,7 +3,7 @@ import time
 from pathlib import Path
 import torch
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "apps"))
 from runtime.native_27b_engine import Native27BEngine
 from transformers import AutoTokenizer
 

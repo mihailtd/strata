@@ -21,7 +21,7 @@ import triton.language as tl
 # Add project root to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.runtime.triton_w4a16 import _w4a16_gemv_m1_kernel, quantize_and_pack_w4
+from runtime.triton_w4a16 import _w4a16_gemv_m1_kernel, quantize_and_pack_w4
 
 
 def benchmark_gemv_config(

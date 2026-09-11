@@ -35,6 +35,7 @@ dependencies = [
     "py-pglite[extensions]>=0.5.3",
     "psycopg>=3.3.4",
     "pgvector>=0.5.0",
+    "runtime-common",
 ]
 
 [project.scripts]
@@ -43,6 +44,9 @@ runtime = "runtime.server:main"
 [build-system]
 requires = ["uv_build>=0.12.3,<0.13.0"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = "apps"
 
 [tool.uv]
 environments = ["sys_platform == 'linux'"]
@@ -65,6 +69,7 @@ torch = { index = "pytorch-rocm" }
 torchvision = { index = "pytorch-rocm" }
 vllm = { index = "vllm-rdna" }
 flash-attn = { index = "vllm-rdna" }
+runtime-common = { path = "apps/runtime-common", editable = true }
 
 [dependency-groups]
 dev = [
@@ -77,10 +82,12 @@ target-version = "py314"
 line-length = 120
 extend-exclude = [
     "data",                               # vendored doc/repo clones (astral_docs raw sources)
-    "serving/llama.cpp",                  # vendored upstream submodule
+    "apps/runtime-llama/llama.cpp",       # vendored upstream repo
     "mlruns",                             # MLflow artifact store, not source
-    "training/unsloth_compiled_cache",    # unsloth-generated trainer code
     "tests/opencode_evals/runs",          # generated eval-run fixtures/transcripts
+    "apps/runtime-common",                # independent uv project, own pyproject/venv/lint task
+    "apps/runtime-triton",                # independent uv project, own pyproject/venv/lint task
+    "apps/factory",                       # independent uv project, own pyproject/venv/lint task
 ]
 
 [tool.ruff.lint]
@@ -89,29 +96,49 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.ty.src]
 exclude = [
     "data",
-    "serving/llama.cpp",
+    "apps/runtime-llama/llama.cpp",
     "mlruns",
-    "training",                           # separate uv project, own pyproject/venv/deps
     "tests/opencode_evals/runs",
+    "apps/runtime-common",                # independent uv project, own pyproject/venv/deps
+    "apps/runtime-triton",                # independent uv project, own pyproject/venv/deps
+    "apps/factory",                       # independent uv project, own pyproject/venv/deps
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = [".", "src"]
+testpaths = [
+    "tests",
+    "apps/runtime-ipwf/tests",
+    "apps/harness/tests",
+    "apps/runtime-ollama/tests",
+    "apps/runtime-llama/tests",
+]
+pythonpath = [".","apps"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 norecursedirs = [
     "data",
     "benchmarks",
     "mlruns",
-    "training",
     "tests/opencode_evals",
     "serving",
+    "apps/runtime-common",
+    "apps/runtime-triton",
+    "apps/factory",
+    "apps/runtime-llama/llama.cpp",
+    "apps/runtime-next",
+    "apps/dashboard",
 ]
 addopts = "-v --tb=short"
 
 [tool.pyright]
-include = ["src", "benchmarks", "tests"]
-extraPaths = [".", "src"]
+include = ["apps", "benchmarks", "tests"]
+exclude = [
+    "apps/runtime-llama/llama.cpp",
+    "apps/runtime-common",   # independent uv project, own pyproject/venv
+    "apps/runtime-triton",   # independent uv project, own pyproject/venv
+    "apps/factory",          # independent uv project, own pyproject/venv
+    "apps/runtime-next",     # rust, not python
+    "apps/dashboard",        # typescript, not python
+]
 
 

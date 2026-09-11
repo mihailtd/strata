@@ -33,7 +33,7 @@ import torch
 
 from runtime.canon import REPO_ROOT
 sys.path.insert(0, str(REPO_ROOT))
-sys.path.insert(0, str(REPO_ROOT / "src"))
+sys.path.insert(0, str(REPO_ROOT / "apps"))
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from runtime.canon import (

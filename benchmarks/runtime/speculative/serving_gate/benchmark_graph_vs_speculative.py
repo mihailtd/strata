@@ -53,7 +53,7 @@ from runtime.canon import REPO_ROOT  # noqa: E402
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
 sys.path.insert(0, str(REPO_ROOT))
-sys.path.insert(0, str(REPO_ROOT / "src"))
+sys.path.insert(0, str(REPO_ROOT / "apps"))
 
 from runtime.bucketed_speculative import BucketedSpeculativeDecoder  # noqa: E402
 from runtime.cuda_graph import FoldedCudaGraphDecoder  # noqa: E402

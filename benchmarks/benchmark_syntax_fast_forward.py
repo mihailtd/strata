@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 # Ensure src is on path
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "apps"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from runtime.server import get_27b_tokenizer

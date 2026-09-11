@@ -1,0 +1,18 @@
+$schema: 'https://moonrepo.dev/schemas/workspace.json'
+
+vcs:
+  client: 'git'
+  defaultBranch: 'main'
+
+projects:
+  globs:
+    - 'apps/*'
+  # A project mapped to the workspace root itself ('.') was tried here to
+  # give the shared root pyproject.toml/uv.lock/.venv a `moon run root:x`
+  # identity -- moon 2.5.4 does a pathological full-repo scan for a project
+  # whose source is exactly the workspace root (confirmed: 145 CPU-seconds
+  # doing nothing useful, ignoring .moonignore the way subdirectory projects
+  # respect it). Reverted. Root-level tasks (lint/format/test/update-deps
+  # against the shared venv) stay as plain `uv run <cmd>` from the repo root
+  # -- see README/AGENTS.md's command reference -- until Stage 4 gives
+  # apps/runtime its own manifest and shrinks what "root" even means.

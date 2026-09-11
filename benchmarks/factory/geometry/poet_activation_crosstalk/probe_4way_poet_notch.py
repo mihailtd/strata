@@ -28,7 +28,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from runtime.canon import CANON, DOMAINS, REPO_ROOT, adapter_path
 
 # Ensure src is on path
-sys.path.insert(0, str(REPO_ROOT / "src"))
+sys.path.insert(0, str(REPO_ROOT / "apps"))
 
 from runtime.novel_peft import FoldableExpert, WeightFoldingEngine, set_hard_vram_cap
 

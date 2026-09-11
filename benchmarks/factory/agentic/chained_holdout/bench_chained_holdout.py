@@ -40,7 +40,7 @@ from pathlib import Path
 
 REPO_ROOT = Path("/home/mihai/gnn-experiment")
 sys.path.insert(0, str(REPO_ROOT))
-sys.path.insert(0, str(REPO_ROOT / "src"))
+sys.path.insert(0, str(REPO_ROOT / "apps"))
 sys.path.insert(0, str(Path(__file__).parent))
 
 T0 = time.perf_counter()

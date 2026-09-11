@@ -2,7 +2,7 @@
 
 import re
 import pytest
-from scripts.corpus.reserve_eval_constructs import RESERVED, record_text, family_of
+from apps.factory.corpus.reserve_eval_constructs import RESERVED, record_text, family_of
 
 
 def test_record_text_extraction_formats():

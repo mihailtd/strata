@@ -1,0 +1,24 @@
+$schema: 'https://moonrepo.dev/schemas/project.json'
+language: 'python'
+layer: 'application'
+stack: 'backend'
+tags: ['python', 'shared-root-venv']
+
+# Stage 1 state: no manifest of its own yet -- relies on the root
+# pyproject.toml/.venv. Gets its own pyproject.toml in Stage 3.
+#
+# apps/harness/plugins/* (dsh-plugin-code-verify, dsh-plugin-rocm-moa,
+# dsh-plugin-moa-router-tool, dsh-plugin-infinite-agent) are deliberately NOT
+# moon projects: they have no lockfile of their own, and their node_modules
+# are symlinks into an external ~/.dsh/profiles/node_modules managed by the
+# `dsh` CLI. They're nested one level below apps/*, so the `apps/*` glob in
+# .moon/workspace.yml already excludes them -- do not promote them to
+# top-level apps/* or moon will try to manage an install it has no business
+# touching.
+tasks:
+  test:
+    command: 'uv run pytest tests -q'
+  lint:
+    command: 'uv run ruff check . --exclude plugins'
+  format:
+    command: 'uv run ruff format . --exclude plugins'

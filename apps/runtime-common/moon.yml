@@ -1,0 +1,25 @@
+$schema: 'https://moonrepo.dev/schemas/project.json'
+language: 'python'
+layer: 'library'
+stack: 'backend'
+tags: ['python', 'shared']
+
+tasks:
+  sync:
+    command: 'uv sync'
+    inputs: ['pyproject.toml']
+    outputs: ['.venv']
+  test:
+    command: 'uv run pytest tests -v'
+    deps: ['sync']
+    inputs: ['src/**/*', 'tests/**/*']
+  lint:
+    command: 'uv run ruff check .'
+    deps: ['sync']
+  format:
+    command: 'uv run ruff format .'
+    deps: ['sync']
+  update-deps:
+    command: 'uv lock --upgrade'
+    inputs: ['pyproject.toml']
+    outputs: ['uv.lock']

@@ -1,0 +1,27 @@
+$schema: 'https://moonrepo.dev/schemas/project.json'
+language: 'python'
+layer: 'library'
+stack: 'backend'
+tags: ['python', 'shared-root-venv']
+
+# Stage 1 state: apps/runtime has no manifest of its own yet -- it IS the
+# root pyproject.toml's package (module-root = "apps" in the root
+# pyproject.toml). A `root` moon project mapped to '.' was tried and reverted
+# (see .moon/workspace.yml) because moon 2.5.4 does a pathological full-repo
+# scan for a project whose source is the workspace root itself. So these
+# tasks shell out to the root project explicitly instead; the wider
+# lint/format/test/update-deps commands for benchmarks/scripts/tests/evals
+# stay as plain `uv run` invocations from the repo root until Stage 4 gives
+# apps/runtime its own independent pyproject.toml/uv.lock/.venv.
+dependsOn:
+  - 'runtime-common'
+
+tasks:
+  test:
+    command: 'uv run pytest ../../tests -q'
+  check-canon:
+    command: 'uv run python ../../scripts/audit/check_canon.py'
+  lint:
+    command: 'uv run ruff check .'
+  format:
+    command: 'uv run ruff format .'

@@ -74,9 +74,12 @@ Existing commodity engines execute static, quantized models with discrete, isola
 5. **Ultrafast Semantic Routing ($<30\mu\text{s}$)**:
    - Route incoming agent steps to the optimal domain specialist manifold using an embedded Riemannian covariance classifier executing in $<30\mu\text{s}$ before the first token is emitted.
 
-6. **Dual-Engine VRAM Arbitration (Single 24 GB GPU Guardrail)**:
-   - On 24 GB VRAM (AMD RX 7900 XTX), both 27B models (18.2 GB `llama-server` + 15.2 GB Triton engine) CANNOT be co-resident in VRAM.
-   - The runtime server (`src/runtime/server.py`) MUST arbitrate VRAM dynamically:
-     - Calling `qwen3.8:27b-triton` triggers `stop_llama_server()` to free 18 GB and allocate 15.2 GB for the Triton engine.
-     - Calling `qwen3.8:27b` triggers `unload_triton_27b_engine()` and starts `llama-server` on port 8001.
-   - Neither engine may spill to PCIe host memory; switching must complete in $<2$ seconds.
+6. **Single-Engine Isolation & Directory Separation (Single 24 GB GPU Guardrail)**:
+   - On 24 GB VRAM (AMD RX 7900 XTX), multiple engines (18.2 GB `llama-server` + 15.4 GB Triton engine) CANNOT be co-resident in VRAM.
+   - **Zero Subprocess Entanglement**: Never invoke, stop, or proxy external engines from inside `src/runtime/server.py`.
+   - Each engine lives in its own dedicated directory with independent startup scripts:
+     - `src/runtime/` — Custom Triton engine (`http://127.0.0.1:8000`)
+     - `src/runtime-llama/` — C++ `llama-server` baseline (`http://127.0.0.1:8001`)
+     - `src/runtime-ollama/` — Ollama baseline harness (`http://127.0.0.1:11434`)
+     - `src/runtime-next/` — Native Compiled Rust engine
+   - When evaluating or benchmarking, execute strictly one engine at a time: run workload on engine A, terminate engine A completely, start engine B, run identical workload, and compare saved scorecards.

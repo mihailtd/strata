@@ -1,0 +1,11 @@
+{
+  "name": "dsh-plugin-moa-router-tool",
+  "version": "0.1.0",
+  "description": "Exposes the Dynamic Mixture-of-Adapters router as a first-class DSH tool. The agent calls route_prompt to determine which specialist LoRA team to activate for a given task, receiving expert weights, a recommended model ID, and a pre-built system prompt prefix.",
+  "type": "module",
+  "main": "index.js",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-tools": "^0.1.5-rc.2"
+  }
+}
