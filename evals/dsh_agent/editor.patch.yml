@@ -1,0 +1,15 @@
+# Adds str_replace_editor (and the local-filesystem provider sdk-minimal
+# lacks by default) so the agent has both a package-manager path (bash ->
+# `uv add/remove/lock/sync`) and a manual-edit path available -- matching
+# what the opencode eval originally offered, and what classify_fix_method()
+# in run_eval.py distinguishes between.
+#
+# Per DSH Python SDK docs ("Opt in to str_replace_editor"): sdk-minimal
+# ships bash-only; this patch is passed via DeepSeekHarness(patches=(...)).
+- insert:
+    - id: fs-local
+      name: '@deepseek-ai/dsh-fs-local'
+      config:
+        cwd: !!js process.cwd()
+    - id: tool-str-replace-editor
+      name: '@deepseek-ai/dsh-tool-str-replace-editor'

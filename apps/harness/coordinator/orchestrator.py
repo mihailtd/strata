@@ -6,17 +6,13 @@ import json
 import subprocess
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from harness.coordinator.planner import HarnessPlanner
 from harness.coordinator.subagent import LoRASubagent
 from harness.coordinator.types import (
     CoordinatedProjectManifest,
-    DomainSpecialist,
-    SubagentResult,
-    SubagentTask,
 )
-from harness.state_compactor import SemanticStateCompactor
 from runtime.adapter_stacker import DynamicAdapterStacker
 from runtime.long_context_engine import LongContextAgentEngine
 
@@ -36,7 +32,6 @@ class HarnessCoordinator:
         self.planner = HarnessPlanner()
         self.stacker = DynamicAdapterStacker(self.adapters_dir)
         self.engine = LongContextAgentEngine(model_name=model_name, max_context=32768, kv_quant_bits=4)
-        self.compactor = SemanticStateCompactor(max_raw_tool_lines=15, preserve_last_n_turns=2)
 
     def execute_goal(self, goal: str, project_dir: Path) -> CoordinatedProjectManifest:
         """Plans, provisions LoRA subagents, executes pipeline, and verifies with real OS tools."""
@@ -56,11 +51,11 @@ class HarnessCoordinator:
         tasks = self.planner.plan_project(goal, project_dir)
         print(f"\n📋 [PLANNER] Generated {len(tasks)} Specialized Subagent Tasks:")
         for idx, t in enumerate(tasks, 1):
-            exp_desc = ", ".join(f"{k} ({v*100:.0f}%)" for k, v in t.adapter_weights.items())
+            exp_desc = ", ".join(f"{k} ({v * 100:.0f}%)" for k, v in t.adapter_weights.items())
             print(f"   {idx}. [{t.specialist.value.upper()}] {t.title} ➔ LoRA: {exp_desc}")
 
         manifest = CoordinatedProjectManifest(goal=goal, project_dir=project_dir, tasks=tasks)
-        existing_artifacts: Dict[str, str] = {}
+        existing_artifacts: dict[str, str] = {}
 
         # 2. Sequential Subagent Execution
         for idx, task in enumerate(tasks, 1):
@@ -72,9 +67,11 @@ class HarnessCoordinator:
             subagent = LoRASubagent(task, self.engine, self.stacker, project_dir)
             result = subagent.execute(existing_artifacts)
             manifest.results.append(result)
-            manifest.total_tokens += result.tokens_generated
 
-            print(f"  ✅ Completed in {result.tok_s:5.1f} tok/s | TTFT: {result.ttft_ms:5.1f}ms | Swap Latency: {result.swap_latency_ms}ms")
+            status = "✅ SUCCESS" if result.success else f"❌ FAILED ({result.error_message})"
+            print(
+                f"  {status} in {result.duration_s}s | {result.tool_calls} tool calls | Swap Latency: {result.swap_latency_ms}ms"
+            )
             for art in result.artifacts_created:
                 p = Path(art)
                 if p.exists():
@@ -101,7 +98,7 @@ class HarnessCoordinator:
         for l in test_res["stdout"].splitlines():
             print(f"    {l}")
 
-        manifest.all_tests_passed = (test_res["exit_code"] == 0)
+        manifest.all_tests_passed = test_res["exit_code"] == 0
         manifest.total_duration_s = round(time.perf_counter() - t_start, 2)
 
         # 4. Save Manifest & Telemetry Log
@@ -112,19 +109,20 @@ class HarnessCoordinator:
                 {
                     "goal": manifest.goal,
                     "project_dir": str(manifest.project_dir),
-                    "total_tokens": manifest.total_tokens,
                     "total_duration_s": manifest.total_duration_s,
                     "all_tests_passed": manifest.all_tests_passed,
                     "tasks_count": len(manifest.tasks),
+                    "subagents_succeeded": sum(1 for r in manifest.results if r.success),
                     "subagent_telemetry": [
                         {
                             "task_id": r.task_id,
                             "specialist": r.specialist.value,
-                            "tok_s": r.tok_s,
-                            "ttft_ms": r.ttft_ms,
+                            "success": r.success,
+                            "duration_s": r.duration_s,
+                            "tool_calls": r.tool_calls,
                             "swap_latency_ms": r.swap_latency_ms,
-                            "tokens": r.tokens_generated,
                             "artifacts": r.artifacts_created,
+                            "error_message": r.error_message,
                         }
                         for r in manifest.results
                     ],
@@ -135,15 +133,18 @@ class HarnessCoordinator:
 
         print("\n" + "=" * 105)
         print("🏆 HARNESS COORDINATOR PIPELINE COMPLETE")
-        print(f"   • Total Subagents Executed : {len(manifest.tasks)}")
-        print(f"   • Real OS Verification     : {'✅ ALL TESTS PASSED' if manifest.all_tests_passed else '⚠️ VERIFICATION INCOMPLETE'}")
+        succeeded = sum(1 for r in manifest.results if r.success)
+        print(f"   • Subagents Succeeded      : {succeeded}/{len(manifest.tasks)}")
+        print(
+            f"   • Real OS Verification     : {'✅ ALL TESTS PASSED' if manifest.all_tests_passed else '⚠️ VERIFICATION INCOMPLETE'}"
+        )
         print(f"   • Total Pipeline Duration  : {manifest.total_duration_s}s")
         print(f"   • Execution Telemetry Log  : {log_file}")
         print("=" * 105)
 
         return manifest
 
-    def _run_command(self, cmd: str, cwd: Path) -> Dict[str, Any]:
+    def _run_command(self, cmd: str, cwd: Path) -> dict[str, Any]:
         """Runs a real OS command on the host filesystem."""
         t0 = time.perf_counter()
         res = subprocess.run(

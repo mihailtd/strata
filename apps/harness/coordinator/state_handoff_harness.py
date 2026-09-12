@@ -6,29 +6,23 @@ enabling multi-subagent autonomous software engineering pipelines without text r
 
 from __future__ import annotations
 
-import json
 import logging
-import os
 import re
 import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import torch
-
 from harness.coordinator.planner import HarnessPlanner
 from harness.coordinator.subagent import SPECIALIST_SYSTEM_PROMPTS
 from harness.coordinator.types import (
-    CoordinatedProjectManifest,
     DomainSpecialist,
-    SubagentResult,
-    SubagentTask,
 )
 from runtime.native_27b_engine import Native27BEngine
-from runtime.state_handoff_27b import AgentTurn, StateHandoffSession, TurnResult
 from runtime.server import get_27b_tokenizer
+from runtime.state_handoff_27b import AgentTurn, StateHandoffSession
 
 logger = logging.getLogger("StateHandoffHarness")
 if not logger.handlers:
@@ -64,7 +58,7 @@ class HarnessTurnTelemetry:
     tokens_avoided: int
     tokens_generated: int
     tok_per_sec: float
-    artifacts_created: List[str] = field(default_factory=list)
+    artifacts_created: list[str] = field(default_factory=list)
 
 
 class StateHandoffHarnessCoordinator:
@@ -72,7 +66,7 @@ class StateHandoffHarnessCoordinator:
 
     def __init__(
         self,
-        engine: Optional[Native27BEngine] = None,
+        engine: Native27BEngine | None = None,
         clone_on_handoff: bool = True,
     ):
         self.engine = engine or Native27BEngine(num_layers=64)
@@ -82,24 +76,6 @@ class StateHandoffHarnessCoordinator:
         self.planner = HarnessPlanner()
         self.tokenizer = get_27b_tokenizer()
         self.clone_on_handoff = clone_on_handoff
-
-    def _is_valid_python(self, code: str) -> bool:
-        """Validates that a string is syntactically valid Python code."""
-        try:
-            import ast
-            ast.parse(code)
-            return True
-        except Exception:
-            return False
-
-    def _is_valid_toml(self, code: str) -> bool:
-        """Validates that a string is syntactically valid TOML."""
-        try:
-            import tomllib
-            tomllib.loads(code)
-            return True
-        except Exception:
-            return False
 
     def _extract_code(self, text: str) -> str:
         """Extracts code enclosed in triple backticks."""
@@ -111,74 +87,19 @@ class StateHandoffHarnessCoordinator:
         return "\n".join(lines).strip()
 
     def _extract_file_content(self, raw_text: str, target_rel_path: str) -> str:
-        """Extracts appropriate code content for the target artifact, validating syntax."""
-        code = self._extract_code(raw_text)
+        """Extracts whatever code the model actually generated for this artifact.
 
-        if target_rel_path == "pyproject.toml":
-            if "[project]" in code and "[tool.ruff" in code and self._is_valid_toml(code):
-                return code
-            return (
-                '[project]\nname = "coordinated-service"\nversion = "0.1.0"\n'
-                'requires-python = ">=3.12"\ndependencies = [\n'
-                '    "fastapi>=0.115.0",\n    "uvicorn>=0.30.0",\n'
-                '    "asyncpg>=0.29.0",\n    "duckdb>=1.0.0",\n'
-                '    "pydantic>=2.8.0",\n    "pytest>=8.0.0",\n'
-                '    "pytest-asyncio>=0.24.0",\n]\n\n'
-                '[build-system]\nrequires = ["hatchling"]\nbuild-backend = "hatchling.build"\n\n'
-                '[tool.hatch.build.targets.wheel]\npackages = ["."]\n\n'
-                '[tool.ruff]\ntarget-version = "py312"\n\n'
-                '[tool.ruff.lint]\nselect = ["E", "F", "UP"]\n\n'
-                '[tool.pytest.ini_options]\nasyncio_mode = "auto"\n'
-            )
-        elif target_rel_path.endswith(".py"):
-            if self._is_valid_python(code) and len(code.strip()) > 30:
-                return code
-
-        # Curated fallbacks if model output had parsing/thinking truncation
-        if target_rel_path == "models.py":
-            return (
-                "from pydantic import BaseModel, ConfigDict, Field\n\n"
-                "class ItemPayload(BaseModel):\n"
-                "    model_config = ConfigDict(from_attributes=True)\n"
-                "    id: int\n"
-                "    title: str\n"
-                "    embedding: list[float] = Field(default_factory=list)\n"
-            )
-        elif target_rel_path == "db.py":
-            return (
-                "import asyncpg\n\n"
-                "async def init_db(dsn: str) -> asyncpg.Pool:\n"
-                "    pool = await asyncpg.create_pool(dsn)\n"
-                "    async with pool.acquire() as conn:\n"
-                "        await conn.execute('CREATE EXTENSION IF NOT EXISTS vector;')\n"
-                "    return pool\n"
-            )
-        elif target_rel_path == "analytics.py":
-            return (
-                "import duckdb\n\n"
-                "def run_analytics(con: duckdb.DuckDBPyConnection):\n"
-                "    return con.execute('SELECT 1').fetchall()\n"
-            )
-        elif target_rel_path == "main.py":
-            return (
-                "from contextlib import asynccontextmanager\n"
-                "from fastapi import FastAPI\n\n"
-                "@asynccontextmanager\n"
-                "async def lifespan(app: FastAPI):\n"
-                "    yield\n\n"
-                "app = FastAPI(lifespan=lifespan)\n\n"
-                "@app.get('/health')\n"
-                "async def health():\n"
-                "    return {'status': 'healthy'}\n"
-            )
-        elif "test" in target_rel_path:
-            return (
-                "import pytest\n\n"
-                "@pytest.mark.asyncio\n"
-                "async def test_smoke():\n"
-                "    assert True\n"
-            )
-        return code if code else raw_text
+        No fallback: an earlier version of this method silently substituted a
+        pre-written "curated" implementation whenever the model's real output
+        didn't parse -- which meant `_verify_project`'s ruff/pytest run was
+        frequently grading fabricated code, not the model's. This benchmark's
+        actual subject is tensor-handoff *timing* (prefill_ms/decode_ms/
+        handoff_ms, all measured from the real forward pass regardless of what
+        gets written here), so there's no reason to fake the artifact content
+        too -- write exactly what came out, valid or not, and let the real
+        verification step report the honest result.
+        """
+        return self._extract_code(raw_text)
 
     def execute_project(
         self,
@@ -186,14 +107,14 @@ class StateHandoffHarnessCoordinator:
         project_dir: Path,
         mode: str = "tensor_handoff",  # "tensor_handoff" | "text_reprefill"
         max_tokens_per_subagent: int = 256,
-    ) -> Tuple[List[HarnessTurnTelemetry], Dict[str, Any]]:
+    ) -> tuple[list[HarnessTurnTelemetry], dict[str, Any]]:
         """Executes the subagent project pipeline under either tensor handoff or text re-prefill."""
         project_dir = Path(project_dir)
         project_dir.mkdir(parents=True, exist_ok=True)
         (project_dir / "__init__.py").write_text('"""Coordinated Project Package."""\n')
 
         tasks = self.planner.plan_project(goal, project_dir)
-        telemetry_records: List[HarnessTurnTelemetry] = []
+        telemetry_records: list[HarnessTurnTelemetry] = []
 
         logger.info(f"Starting pipeline execution with mode='{mode}', {len(tasks)} tasks.")
 
@@ -289,7 +210,9 @@ class StateHandoffHarnessCoordinator:
                 if idx == 0:
                     cumulative_history = f"<|im_start|>user\n{prompt_delta}<|im_end|>\n<|im_start|>assistant\n"
                 else:
-                    cumulative_history += f"<|im_end|>\n<|im_start|>user\n{prompt_delta}<|im_end|>\n<|im_start|>assistant\n"
+                    cumulative_history += (
+                        f"<|im_end|>\n<|im_start|>user\n{prompt_delta}<|im_end|>\n<|im_start|>assistant\n"
+                    )
 
                 prompt_tokens = self.tokenizer.encode(cumulative_history)
 
@@ -365,9 +288,9 @@ class StateHandoffHarnessCoordinator:
 
         return telemetry_records, verification
 
-    def _verify_project(self, project_dir: Path) -> Dict[str, Any]:
+    def _verify_project(self, project_dir: Path) -> dict[str, Any]:
         """Runs ruff and pytest on the generated project to verify real code correctness."""
-        results: Dict[str, Any] = {"ruff_exit": -1, "pytest_exit": -1, "passed": False}
+        results: dict[str, Any] = {"ruff_exit": -1, "pytest_exit": -1, "passed": False}
         try:
             # Auto-format and fix imports
             subprocess.run(
