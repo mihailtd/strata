@@ -1,0 +1,33 @@
+$schema: 'https://moonrepo.dev/schemas/project.json'
+language: 'python'
+layer: 'application'
+stack: 'backend'
+tags: ['python', 'runtime-engine', 'independent-venv']
+
+# Isolated vLLM/ROCm environment -- own pyproject.toml/uv.lock/.venv because
+# its torch==2.12.0+rocm7.14.0 + vllm-rdna wheel trio conflicts with every
+# other project's torch pin in this repo. No source code of its own beyond
+# run_server.sh/setup.sh; `test` just smoke-checks those scripts.
+tasks:
+  sync:
+    command: 'uv sync'
+    inputs: ['pyproject.toml']
+    outputs: ['.venv']
+  test:
+    command: 'uv run pytest tests -q'
+    deps: ['sync']
+    inputs: ['tests/**/*']
+  lint:
+    command: 'uv run ruff check tests'
+    deps: ['sync']
+  format:
+    command: 'uv run ruff format tests'
+    deps: ['sync']
+  update-deps:
+    command: 'uv lock --upgrade'
+    inputs: ['pyproject.toml']
+    outputs: ['uv.lock']
+  serve:
+    command: './run_server.sh'
+    deps: ['sync']
+    preset: 'server'
