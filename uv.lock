@@ -604,6 +604,27 @@ wheels = [
 ]
 
 [[package]]
+name = "deepseek-harness-runtime-bin"
+version = "0.1.5rc1"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b0/33/9bb2ad17dc0a48d3641c7dd0bfdb8742333577739b31c70f46356847706a/deepseek_harness_runtime_bin-0.1.5rc1-py3-none-manylinux_2_28_aarch64.whl", hash = "sha256:32b7bb7887ea89f12462274d1b21acfafb00d38d94e11a5d7122492f185e4f85", size = 80243585, upload-time = "2026-09-10T05:54:29.446Z" },
+    { url = "https://files.pythonhosted.org/packages/bc/ff/632fddc738effdbc8752f02641aba6eaeb96f820367b8cee68397501948d/deepseek_harness_runtime_bin-0.1.5rc1-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:ad877237382baff4628969a9ebdbfe38486d971b7987c032d0e29775759b5229", size = 80720547, upload-time = "2026-09-10T05:54:33.233Z" },
+]
+
+[[package]]
+name = "deepseek-harness-sdk"
+version = "0.1.5rc1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "deepseek-harness-runtime-bin" },
+    { name = "pydantic" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ee/fa/9b3e2a449f876211fdcbd8082edcf70f0ead08617aa4e064a9bb14372291/deepseek_harness_sdk-0.1.5rc1-py3-none-any.whl", hash = "sha256:8d9897e97e8a95fd738cb2c3e2c563951d824e43847ec6f3b0fb172c0729b4d8", size = 13694, upload-time = "2026-09-10T05:55:48.883Z" },
+]
+
+[[package]]
 name = "depyf"
 version = "0.20.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3006,6 +3027,7 @@ dependencies = [
     { name = "beautifulsoup4" },
     { name = "bitsandbytes" },
     { name = "datasets" },
+    { name = "deepseek-harness-sdk" },
     { name = "ebooklib" },
     { name = "evaluate" },
     { name = "flash-attn" },
@@ -3045,6 +3067,7 @@ requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.15.0" },
     { name = "bitsandbytes", specifier = ">=0.50.0" },
     { name = "datasets", specifier = ">=5.0.1" },
+    { name = "deepseek-harness-sdk" },
     { name = "ebooklib", specifier = ">=0.20" },
     { name = "evaluate", specifier = ">=0.4.6" },
     { name = "flash-attn", specifier = ">=2.8.3", index = "https://rocm.frameworks.amd.com/whl-multi-arch/vllm-rdna" },

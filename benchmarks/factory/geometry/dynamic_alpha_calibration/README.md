@@ -73,7 +73,7 @@ uv run --env-file .env python benchmarks/factory/geometry/dynamic_alpha_calibrat
 
 ## 4. Server & Dashboard Wiring (2026-08-20)
 
-The calibration math above is now callable without a shell: `src/runtime/alpha_calibration.py`
+The calibration math above is now callable without a shell: `apps/runtime/alpha_calibration.py`
 exposes `calibrate_adapter_alpha()`, wired to three routes in `server.py` —
 `POST /api/factory/calibrate_alpha`, `GET /api/factory/calibrations`,
 `GET /api/factory/calibrations/{adapter_name}` — and to a **⚡ Calibrate α** button per
@@ -96,7 +96,7 @@ at each candidate $\alpha$ and picks the point with the best held-out score amon
 admissible ones — the "held-out 0.4667 (optimal)" column in the sample output above is
 a real measurement, once per adapter per calibration.
 
-`src/runtime/alpha_calibration.py` does not do this. Its upper bound is a
+`apps/runtime/alpha_calibration.py` does not do this. Its upper bound is a
 **fixed constant**, `TARGET_DW_W_MAX = 0.085`, chosen once and applied to every domain
 with no live evaluation at all — that is what "zero retraining time" and "1-click"
 actually mean here: zero GPU inference, not zero-retraining-but-still-checked. The

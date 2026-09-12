@@ -149,7 +149,7 @@ every feasible column at every λ tested. Retired because:
 Finding 2 is a property of the **activations**, not of CLIME, so it closes the whole
 application: *do not route or prune attention heads from a per-token head graph, with any
 method.* The winning estimator, `graphical_lasso_admm`, stays live in
-[`src/runtime/clime_precision.py`](../../../src/runtime/clime_precision.py).
+[`apps/runtime/clime_precision.py`](../../../apps/runtime/clime_precision.py).
 
 **Read [its README](../../superseded/clime_head_crosstalk/) before proposing any per-token
 head graph.**
@@ -408,10 +408,10 @@ records which mode produced it.
 
 | Path | Role |
 | :--- | :--- |
-| [`src/runtime/vecchia_precision.py`](../../../src/runtime/vecchia_precision.py) | Banded modified-Cholesky factor, batched fit, banded solve, horizon selection |
-| [`src/runtime/clime_precision.py`](../../../src/runtime/clime_precision.py) | Graphical lasso ADMM (**live** — won the comparison), support/guarantee diagnostics. CLIME entry points kept as the documented losing arm. |
-| [`src/runtime/gee_trajectory.py`](../../../src/runtime/gee_trajectory.py) | GEE with AR(1)/exchangeable working correlation, sandwich variance, `DriftMonitor` |
-| [`src/runtime/copula_routing.py`](../../../src/runtime/copula_routing.py) | Empirical copula, λ_U estimators, reference copulas, `CopulaTailRouter` |
-| [`src/runtime/activation_features.py`](../../../src/runtime/activation_features.py) | Real activation capture (CPU or GPU) + adapter-factor surrogate control |
-| [`src/runtime/cpu_bench.py`](../../../src/runtime/cpu_bench.py) | Device guard, thread cap, timing statistics, telemetry stamping |
+| [`apps/runtime/vecchia_precision.py`](../../../apps/runtime/vecchia_precision.py) | Banded modified-Cholesky factor, batched fit, banded solve, horizon selection |
+| [`apps/runtime/clime_precision.py`](../../../apps/runtime/clime_precision.py) | Graphical lasso ADMM (**live** — won the comparison), support/guarantee diagnostics. CLIME entry points kept as the documented losing arm. |
+| [`apps/runtime/gee_trajectory.py`](../../../apps/runtime/gee_trajectory.py) | GEE with AR(1)/exchangeable working correlation, sandwich variance, `DriftMonitor` |
+| [`apps/runtime/copula_routing.py`](../../../apps/runtime/copula_routing.py) | Empirical copula, λ_U estimators, reference copulas, `CopulaTailRouter` |
+| [`apps/runtime/activation_features.py`](../../../apps/runtime/activation_features.py) | Real activation capture (CPU or GPU) + adapter-factor surrogate control |
+| [`apps/runtime/cpu_bench.py`](../../../apps/runtime/cpu_bench.py) | Device guard, thread cap, timing statistics, telemetry stamping |
 | [`tests/test_statistical_estimators.py`](../../../tests/test_statistical_estimators.py) | 41 correctness tests, including asserted-known biases |

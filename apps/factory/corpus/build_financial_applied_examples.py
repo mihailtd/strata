@@ -46,9 +46,9 @@ import argparse
 import json
 import random
 import re
-from pathlib import Path
 
 from runtime_common.canon import REPO_ROOT  # noqa: E402
+
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
@@ -70,7 +70,7 @@ SCRIPTS = {
             "turns down a promotion because the pay rise 'feels wrong'",
         ],
         "action": "explore where the belief that money is corrupting came from, "
-                  "without challenging it directly in the first session",
+        "without challenging it directly in the first session",
     },
     "money status": {
         "belief": "that self-worth equals net worth",
@@ -129,54 +129,91 @@ FRAMINGS = [
 ]
 
 PROFESSIONS = [
-    "A surgeon", "A software engineer", "A schoolteacher", "A restaurant owner",
-    "A civil servant", "A freelance designer", "A pharmacist", "A logistics manager",
-    "A dentist", "A university lecturer", "A retired engineer", "A sales director",
+    "A surgeon",
+    "A software engineer",
+    "A schoolteacher",
+    "A restaurant owner",
+    "A civil servant",
+    "A freelance designer",
+    "A pharmacist",
+    "A logistics manager",
+    "A dentist",
+    "A university lecturer",
+    "A retired engineer",
+    "A sales director",
 ]
 AGES = ["34", "41", "47", "52", "58", "63", "29", "45"]
 
 # --- Formative-event (flashpoint) items --------------------------------------
 FLASHPOINTS = [
-    ("watched a parent lose a business when they were eleven",
-     "cannot tolerate any business debt, even well-covered borrowing"),
-    ("remembers bailiffs at the door in their early teens",
-     "keeps eighteen months of expenses in cash and will not invest it"),
-    ("was told repeatedly as a child that the family could not afford anything",
-     "underspends badly relative to a very comfortable position"),
-    ("saw a grandparent's savings wiped out by a bank failure",
-     "distrusts every institution and splits deposits across six providers"),
-    ("grew up with a parent who hid purchases from the other",
-     "keeps a private account and has never mentioned it to their spouse"),
-    ("had university fees withdrawn abruptly after a family argument",
-     "over-funds their own children's education at the cost of their pension"),
+    (
+        "watched a parent lose a business when they were eleven",
+        "cannot tolerate any business debt, even well-covered borrowing",
+    ),
+    (
+        "remembers bailiffs at the door in their early teens",
+        "keeps eighteen months of expenses in cash and will not invest it",
+    ),
+    (
+        "was told repeatedly as a child that the family could not afford anything",
+        "underspends badly relative to a very comfortable position",
+    ),
+    (
+        "saw a grandparent's savings wiped out by a bank failure",
+        "distrusts every institution and splits deposits across six providers",
+    ),
+    (
+        "grew up with a parent who hid purchases from the other",
+        "keeps a private account and has never mentioned it to their spouse",
+    ),
+    (
+        "had university fees withdrawn abruptly after a family argument",
+        "over-funds their own children's education at the cost of their pension",
+    ),
 ]
 
 # --- Bias items, using only concepts the corpus actually teaches --------------
 BIASES = [
-    ("loss aversion",
-     ["demands you sell everything after a single bad quarter",
-      "refuses to rebalance because it means realising a paper loss",
-      "wants to hold cash until markets 'feel safe again'"],
-     "the discomfort of a loss is felt far more strongly than an equivalent gain",
-     "reconnect the decision to the plan's horizon and agreed policy, rather than to the current drawdown"),
-    ("mental accounting",
-     ["keeps a car fund in a low-interest account while servicing an expensive card balance",
-      "treats a tax refund as free money while budgeting salary tightly",
-      "refuses to touch an 'education pot' to clear costly short-term debt"],
-     "money is treated as belonging to separate, non-interchangeable pots",
-     "show the household balance sheet as one pool and net the positions"),
-    ("recency bias",
-     ["wants to concentrate into whatever performed best over the last year",
-      "abandons a strategy after two weak quarters",
-      "assumes the recent trend will simply continue"],
-     "recent outcomes are given far more weight than the long record",
-     "widen the window under discussion and revisit the written policy"),
-    ("confirmation bias",
-     ["reads only commentary that supports a position they already hold",
-      "dismisses any analysis that contradicts their favoured holding",
-      "seeks a second opinion only until one agrees with them"],
-     "evidence that supports an existing belief is sought and contrary evidence discounted",
-     "deliberately surface the strongest disconfirming case before deciding"),
+    (
+        "loss aversion",
+        [
+            "demands you sell everything after a single bad quarter",
+            "refuses to rebalance because it means realising a paper loss",
+            "wants to hold cash until markets 'feel safe again'",
+        ],
+        "the discomfort of a loss is felt far more strongly than an equivalent gain",
+        "reconnect the decision to the plan's horizon and agreed policy, rather than to the current drawdown",
+    ),
+    (
+        "mental accounting",
+        [
+            "keeps a car fund in a low-interest account while servicing an expensive card balance",
+            "treats a tax refund as free money while budgeting salary tightly",
+            "refuses to touch an 'education pot' to clear costly short-term debt",
+        ],
+        "money is treated as belonging to separate, non-interchangeable pots",
+        "show the household balance sheet as one pool and net the positions",
+    ),
+    (
+        "recency bias",
+        [
+            "wants to concentrate into whatever performed best over the last year",
+            "abandons a strategy after two weak quarters",
+            "assumes the recent trend will simply continue",
+        ],
+        "recent outcomes are given far more weight than the long record",
+        "widen the window under discussion and revisit the written policy",
+    ),
+    (
+        "confirmation bias",
+        [
+            "reads only commentary that supports a position they already hold",
+            "dismisses any analysis that contradicts their favoured holding",
+            "seeks a second opinion only until one agrees with them",
+        ],
+        "evidence that supports an existing belief is sought and contrary evidence discounted",
+        "deliberately surface the strongest disconfirming case before deciding",
+    ),
 ]
 
 
@@ -228,24 +265,25 @@ def build(seed: int = 20260817) -> list[dict]:
     fp_framings = [
         "A client {ev} and now {beh}. What is the technical term for that early "
         "experience, and how does it connect to what you are seeing?",
-        "At discovery, a client {ev}. Today they {beh}. "
-        "How would you describe this chain?",
+        "At discovery, a client {ev}. Today they {beh}. How would you describe this chain?",
         "A client {ev}. Their current behaviour is that they {beh}. Name the mechanism at work.",
     ]
     for ev, beh in FLASHPOINTS:
         for f in pick_distinct(rng, fp_framings, 2):
-            out.append({
-                "q": f.format(ev=ev, beh=beh),
-                "a": (
-                    "That early experience is a financial flashpoint — a significant, often "
-                    "painful money event that leaves a lasting impression. Flashpoints shape "
-                    "money scripts, the beliefs a client carries about money, and those "
-                    "scripts in turn drive present-day financial behaviour. The behaviour is "
-                    "not irrational once the flashpoint is understood; it is the script doing "
-                    "its protective job. I would explore the flashpoint first, then name the "
-                    "script it produced, before discussing any change to the plan."
-                ),
-            })
+            out.append(
+                {
+                    "q": f.format(ev=ev, beh=beh),
+                    "a": (
+                        "That early experience is a financial flashpoint — a significant, often "
+                        "painful money event that leaves a lasting impression. Flashpoints shape "
+                        "money scripts, the beliefs a client carries about money, and those "
+                        "scripts in turn drive present-day financial behaviour. The behaviour is "
+                        "not irrational once the flashpoint is understood; it is the script doing "
+                        "its protective job. I would explore the flashpoint first, then name the "
+                        "script it produced, before discussing any change to the plan."
+                    ),
+                }
+            )
 
     # bias classification
     bias_framings = [
@@ -256,16 +294,18 @@ def build(seed: int = 20260817) -> list[dict]:
     for name, syms, mech, action in BIASES:
         for sym in syms:
             for f in pick_distinct(rng, bias_framings, 2):
-                out.append({
-                    "q": f.format(sym=sym),
-                    "a": (
-                        f"This is {name}: {mech}. It is a predictable pattern rather than a "
-                        f"failure of intelligence, and arguing with the arithmetic rarely "
-                        f"shifts it. The response is to {action}, and to have agreed the "
-                        f"approach in advance so the conversation is not happening for the "
-                        f"first time under pressure."
-                    ),
-                })
+                out.append(
+                    {
+                        "q": f.format(sym=sym),
+                        "a": (
+                            f"This is {name}: {mech}. It is a predictable pattern rather than a "
+                            f"failure of intelligence, and arguing with the arithmetic rarely "
+                            f"shifts it. The response is to {action}, and to have agreed the "
+                            f"approach in advance so the conversation is not happening for the "
+                            f"first time under pressure."
+                        ),
+                    }
+                )
 
     # Risk tolerance vs risk capacity. Two distinct concepts the corpus barely
     # separates (risk capacity appears ONCE in 304 records), and the eval item
@@ -284,20 +324,22 @@ def build(seed: int = 20260817) -> list[dict]:
     ]
     for sit in RISK_SITS:
         for f in pick_distinct(rng, risk_framings, 2):
-            out.append({
-                "q": f.format(sit=sit, Sit_cap="A client " + sit),
-                "a": (
-                    "Two separate things are in tension here: risk tolerance, which is the "
-                    "client's psychological comfort with volatility, and risk capacity, which "
-                    "is their financial ability to absorb a loss without damaging the plan. "
-                    "Tolerance is a feeling and capacity is arithmetic; a questionnaire "
-                    "measures the first and says nothing about the second. Capacity sets the "
-                    "ceiling — you cannot take more risk than the plan can survive, however "
-                    "comfortable the client feels — and tolerance determines whether they will "
-                    "actually stay invested. Where they disagree, plan to the lower of the two "
-                    "and address the gap explicitly."
-                ),
-            })
+            out.append(
+                {
+                    "q": f.format(sit=sit, Sit_cap="A client " + sit),
+                    "a": (
+                        "Two separate things are in tension here: risk tolerance, which is the "
+                        "client's psychological comfort with volatility, and risk capacity, which "
+                        "is their financial ability to absorb a loss without damaging the plan. "
+                        "Tolerance is a feeling and capacity is arithmetic; a questionnaire "
+                        "measures the first and says nothing about the second. Capacity sets the "
+                        "ceiling — you cannot take more risk than the plan can survive, however "
+                        "comfortable the client feels — and tolerance determines whether they will "
+                        "actually stay invested. Where they disagree, plan to the lower of the two "
+                        "and address the gap explicitly."
+                    ),
+                }
+            )
 
     rng.shuffle(out)
     return out
@@ -322,8 +364,10 @@ def main() -> None:
     firstword = {q.split()[0].lower() for q in qs}
 
     ev_rows = [json.loads(x) for x in (REPO_ROOT / args.eval).read_text().splitlines() if x.strip()]
+
     def toks(s: str) -> set[str]:
         return set(re.findall(r"\w+", s.lower()))
+
     worst = 0.0
     for e in ev_rows:
         et = toks(e["prompt"])
@@ -338,7 +382,7 @@ def main() -> None:
     print(f"  combined                      : {len(base_rows) + len(new_rows)}")
     print()
     print("  DIVERSITY GUARDS (the last corpus died of 1 distinct question prefix)")
-    print(f"    distinct 40-char prefixes   : {len(prefixes)}/{len(qs)} = {100*div:.1f}%")
+    print(f"    distinct 40-char prefixes   : {len(prefixes)}/{len(qs)} = {100 * div:.1f}%")
     print(f"    distinct opening words      : {len(firstword)}  {sorted(firstword)}")
     print(f"    worst eval-overlap (jaccard): {worst:.2f}")
 

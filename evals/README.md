@@ -1,104 +1,28 @@
-# ⚖️ End-to-End Qualitative Evaluation Suite (Agent-as-a-Judge)
+# Evals — is it actually correct, not just fast?
 
-Welcome to the **E2E Judge Evaluation Suite** for the GNN Runtime Engine.
+Task- and rubric-scored evaluation of a runtime or a trained adapter, as distinct from [`benchmarks/`](../benchmarks/)'s raw performance measurement. See the repo's [`docs/METHODOLOGY.md`](../docs/METHODOLOGY.md) for how this fits alongside `experiments/`/`benchmarks/`, and for the rule of thumb that decides which tree a new script belongs in: *a benchmark's number is a physical measurement; an eval's number is a judgment against a task, a rubric, or a ground truth.*
 
-This testing suite embodies the **"Human / AI Agent as a Judge"** testing philosophy, replacing brittle unit-test regexes and bit-exact token comparisons with holistic, observable, and reproducible qualitative evaluations.
+## What's here
 
----
+| Directory | Methodology | Scoring |
+| :--- | :--- | :--- |
+| [`judge/`](judge/) | Agent-as-Judge: multi-turn conversations and hybrid domain challenges, full untruncated transcripts | Human/agent reads a 5-dimension rubric against the transcript — not auto-scored |
+| [`domain_rubric/`](domain_rubric/) | Single-shot domain prompts against a fixed keyword/pattern rubric per domain | Automated substring/pattern match against expected indicators |
+| [`swe_bench/`](swe_bench/) | Fixed coding tasks across 6 real-world domains, real pytest sandboxes | Pass@1 — real test execution, ground truth |
+| [`execution_gate/`](execution_gate/) | Applied toolchain/execution tasks (does folding an expert make the model measurably better at real executable work) | Real sandbox execution (`ruff`, `py-pglite`) |
+| [`factory/`](factory/) | Held-out/task-quality evaluation of trained adapters (adherence, attribution, disposition, chained-holdout methodology) | Task-based, mostly against held-out constructs |
+| [`dsh_agent/`](dsh_agent/) | Autonomous agentic tool-use: can a DSH-driven agent diagnose and fix a real dependency conflict | Ground truth (`uv lock` exits 0 afterward) |
 
-## 🎯 The Testing Philosophy: Why "Agent-as-Judge"?
+## Why this many methodologies
 
-In the development of generative LLMs and dynamic LoRA weight-folding runtimes, traditional software testing patterns (rigid string assertions, exact token-match ratios, regex parsers) suffer from fatal limitations:
+Each answers a different question about correctness, not the same question five ways:
 
-1. **Brittle False Failures**: A perfectly coherent, high-quality answer that phrases an explanation slightly differently or formats SQL with different indentation fails a bit-exact token comparison.
-2. **Dangerous False Passes**: Two broken, repeating outputs (e.g. infinite loops of `import os\nimport os`) can have a "100% match" between greedy and speculative modes while being completely degenerate garbage.
-3. **No Sense of Semantic Alignment**: Regexes cannot judge whether a blended multi-expert adapter (e.g., `python_web + python_modern`) accurately reflected the requested domain idioms without hallucinating syntax.
-4. **Obscured Output Visibility**: Unit tests often hide the full text generation behind an assertion boolean. When a bug occurs, engineers are left debugging abstract metrics rather than reading what the model actually said.
+- **judge/** — is a multi-turn conversation *good*, in a way no fixed rubric can pin down (does it stay coherent, pick the right expert team, avoid degenerate repetition)?
+- **domain_rubric/** — did a single-shot answer hit the right idioms for its domain, cheaply and repeatably?
+- **swe_bench/** and **execution_gate/** — does the generated code actually *run* — real pytest, real linter, real database, not a text-similarity proxy for correctness?
+- **factory/** — do the *trained adapters themselves* generalize past their training distribution, not just the base model at inference time?
+- **dsh_agent/** — can an autonomous agent *use tools* to fix something, not just describe the fix?
 
-### The Solution
-Our E2E Judge harness runs realistic multi-turn conversations and hybrid domain challenges, captures the **complete un-truncated text**, measures real hardware telemetry (tok/s, TTFT, active LoRA teams, pre-fold predictions), checks automated syntactic heuristics (Python AST parse, 4-gram repetition loops), and outputs a structured report for direct human or agent review.
+## Relationship to `tests/opencode_evals/` (removed)
 
----
-
-## 📁 Directory Structure
-
-```text
-evals/
-├── README.md                    # This documentation
-├── prompts.py                   # Curated benchmark prompts & multi-turn scenarios
-├── judge_harness.py             # Core client harness, telemetry parser & quality checks
-├── run_multiturn_judge.py       # Multi-turn sequential chat runner (shared context)
-├── run_stacking_judge.py        # Hybrid multi-expert dynamic stacking runner
-└── run_speculative_judge.py     # Side-by-side Speculative vs Eager comparative runner
-```
-
----
-
-## 📋 Evaluation Rubric (5 Dimensions of Quality)
-
-When reviewing outputs generated by this suite, judge against the following 5 criteria:
-
-| Dimension | Description | Passing Signal | Red Flag |
-|---|---|---|---|
-| **1. Semantic Correctness** | Does the code/explanation accurately solve the user prompt? | Idiomatic, correct libraries (e.g. `uv`, `pgvector`, `FastAPI`, `DuckDB`). | Hallucinated parameters, wrong toolchain commands. |
-| **2. Coherence & Anti-Repetition** | Is the generation clean, concise, and non-repetitive? | 4-gram repetition index $< 15\%$, clean termination on stop tokens. | Infinite token loops, stuttering words, repeating sentences. |
-| **3. Code Syntactic Validity** | Do Python code blocks parse cleanly via AST? | `✅ VALID AST` on all extracted code blocks. | Syntax errors, unclosed brackets, cut-off code. |
-| **4. Expert Team Selection** | Did the Riemannian router select the proper domain expert(s)? | Appropriate single or blended team (e.g. `python_web + python_modern`). | Unnecessary expert dilution or completely wrong domain active. |
-| **5. Throughput & Latency** | Does generation achieve expected speed without stalls? | Stable $>18\text{ tok/s}$ eager baseline; TTFT $<150\text{ms}$. | Throughput degradation ($<12\text{ tok/s}$), graph capture stalls. |
-
----
-
-## 🚀 How to Run the Evaluations
-
-### Prerequisites
-Make sure the runtime server is running:
-```bash
-uv run src/runtime/server.py
-```
-
----
-
-### 1. Multi-Turn Sequential Chat Evaluation
-Simulates sequential turns in a shared context window (Astral ➡️ Postgres ➡️ FastAPI ➡️ DuckDB):
-```bash
-uv run python evals/run_multiturn_judge.py
-```
-*Options:*
-- `--url`: Server URL (default: `http://127.0.0.1:8000`)
-- `--expert`: Expert routing strategy (`dynamic`, `astral`, `postgresql`, etc.)
-- `--max-tokens`: Completion token limit per turn (default: `400`)
-- `--thinking`: Thinking effort level (`off`, `low`, `medium`, `high`)
-
----
-
-### 2. Hybrid Expert Stacking Evaluation
-Tests multi-domain challenges designed to test simultaneous dynamic LoRA blending:
-```bash
-uv run python evals/run_stacking_judge.py
-```
-*Evaluates whether the engine seamlessly blends weights (e.g. `python_web + duckdb`) without matrix corruption or quality degradation.*
-
----
-
-### 3. Speculative vs Eager Comparative Evaluation
-Runs identical prompts through both raw Eager CUDA graph decode and Bucketed Speculative decoding side-by-side:
-```bash
-uv run python evals/run_speculative_judge.py
-```
-*Compares text outputs and quantitatively reports whether speculative decoding achieved speedup or paid a verification tax.*
-
----
-
-## 📊 Output Artifacts
-
-All evaluation runs automatically generate detailed, timestamped Markdown reports saved under:
-```text
-results/evals/
-├── multiturn_judge_YYYYMMDD_HHMMSS.md
-├── stacking_judge_YYYYMMDD_HHMMSS.md
-└── speculative_vs_eager_YYYYMMDD_HHMMSS.md
-```
-
-Each report contains:
-- **Telemetry Summary Matrix**: Table containing tok/s, token counts, TTFT, active experts, and syntax status.
-- **Full Turn-by-Turn Transcripts**: Completely readable, syntax-highlighted assistant completions with inspection badges.
+This repo's first pass at agentic-capability evaluation used the third-party `opencode` CLI, under `tests/opencode_evals/`. That was retired as too heavyweight for local-model use; `dsh_agent/` is its replacement, built on DSH (`apps/harness/`) instead — see `dsh_agent/README.md` for the full history and the mechanical differences.

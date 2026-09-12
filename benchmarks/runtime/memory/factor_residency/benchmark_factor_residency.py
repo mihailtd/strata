@@ -4,7 +4,7 @@ Audits memory efficiency, compression ratios, and multi-expert standby capacity
 for low-rank factor residency (FoldableExpert) on Qwen 3.5 4B.
 
 Usage:
-    uv run --env-file .env python scripts/runtime/memory/factor_residency/benchmark_factor_residency.py
+    uv run --env-file .env python benchmarks/runtime/memory/factor_residency/benchmark_factor_residency.py
 """
 
 from __future__ import annotations

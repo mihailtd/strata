@@ -1,6 +1,5 @@
 """Unit tests for Chapter 8.5 Stress-Strength Interference (SSI) Quantization Calibration."""
 
-import pytest
 import torch
 from ssi_quantization import StressStrengthInterferenceCalibrator
 
@@ -86,4 +85,6 @@ def test_ssi_reduces_total_quantization_distortion():
 
     # SSI must achieve lower MSE / higher SNR
     assert snr_ssi > snr_max, f"SSI SNR ({snr_ssi:.2f} dB) should exceed naive max ({snr_max:.2f} dB)"
-    assert snr_ssi >= snr_max + 0.5, f"SSI should provide measurable SNR gain (+0.5 dB min), got +{snr_ssi - snr_max:.2f} dB"
+    assert snr_ssi >= snr_max + 0.5, (
+        f"SSI should provide measurable SNR gain (+0.5 dB min), got +{snr_ssi - snr_max:.2f} dB"
+    )

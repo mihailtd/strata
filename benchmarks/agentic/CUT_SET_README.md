@@ -1,6 +1,6 @@
 # 🛡️ Chapter 6: $k$-out-of-$n$ Reliability & Minimal Cut Sets for Agent Tool DAGs
 
-> **Implementation**: [`src/runtime/cut_set_router.py`](../../src/runtime/cut_set_router.py)  
+> **Implementation**: `apps/runtime/cut_set_router.py`  
 > **Theoretical Grounding**: Chapter 6 (*System Failure Modeling – k-out-of-n System Model, Minimal Paths & Cuts*, Jaejin Hwang, *Reliability Analysis Using MINITAB and Python*)  
 > **Telemetry Artifact**: [`results/benchmarks/cut_set_reliability_benchmark.json`](../../results/benchmarks/cut_set_reliability_benchmark.json)
 

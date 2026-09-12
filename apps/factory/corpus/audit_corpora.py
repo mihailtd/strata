@@ -29,10 +29,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import sys
-from pathlib import Path
 import re
+import sys
 from collections import Counter
+from pathlib import Path
 
 from runtime_common.canon import REPO_ROOT
 
@@ -74,7 +74,9 @@ BOOK_ARTIFACTS = [
 QUESTION_ASKS = re.compile(
     r"\?|\b(write|give|show|run|make|start|upgrade|count|find|return|insert|"
     r"aggregate|keep|join|get|add|format|check|pull|compute|how|what|why|when|"
-    r"explain|describe|implement|create|design|build|convert|optimi[sz]e)\b", re.I)
+    r"explain|describe|implement|create|design|build|convert|optimi[sz]e)\b",
+    re.I,
+)
 
 
 def split_qa(rec: dict) -> tuple[str, str] | None:
@@ -83,7 +85,7 @@ def split_qa(rec: dict) -> tuple[str, str] | None:
     t = rec.get("text") or ""
     if MARK in t:
         head, a = t.split(MARK, 1)
-        q = head[len("### Question:\n"):] if head.startswith("### Question:\n") else head
+        q = head[len("### Question:\n") :] if head.startswith("### Question:\n") else head
         return q, a
     return None
 
@@ -120,16 +122,16 @@ def audit(domain: str, path, samples: int) -> dict:
     top = fams.most_common(5)
     print(f"  families: {len(fams)}   top: " + ", ".join(f"{k}={v}" for k, v in top))
     if top and top[0][1] / len(rows) > 0.25:
-        print(f"    ⚠ {top[0][0]} is {top[0][1]/len(rows):.0%} of the corpus")
+        print(f"    ⚠ {top[0][0]} is {top[0][1] / len(rows):.0%} of the corpus")
 
     # ---- 1. answer form
     run = sum(bool(re.search(RUNNABLE[domain], a, re.I)) for a in ans)
     fence = sum("```" in a for a in ans)
     prose = sum("```" not in a for a in ans)
-    print(f"\n  ANSWER FORM")
-    print(f"    runnable artifact for this domain   {run*100.0/n:5.1f}%  ({run})")
-    print(f"    has any code fence                  {fence*100.0/n:5.1f}%")
-    print(f"    pure prose, no code                 {prose*100.0/n:5.1f}%")
+    print("\n  ANSWER FORM")
+    print(f"    runnable artifact for this domain   {run * 100.0 / n:5.1f}%  ({run})")
+    print(f"    has any code fence                  {fence * 100.0 / n:5.1f}%")
+    print(f"    pure prose, no code                 {prose * 100.0 / n:5.1f}%")
     out["runnable_pct"] = run * 100.0 / n
 
     # ---- 2. duplication
@@ -137,19 +139,19 @@ def audit(domain: str, path, samples: int) -> dict:
     ad = Counter(hashlib.md5(norm(a).encode()).hexdigest() for a in ans)
     qdup = n - len(qd)
     adup = n - len(ad)
-    print(f"\n  DUPLICATION (after normalising numbers/identifiers)")
-    print(f"    duplicate QUESTIONS  {qdup*100.0/n:5.1f}%  ({qdup})")
-    print(f"    duplicate ANSWERS    {adup*100.0/n:5.1f}%  ({adup})")
+    print("\n  DUPLICATION (after normalising numbers/identifiers)")
+    print(f"    duplicate QUESTIONS  {qdup * 100.0 / n:5.1f}%  ({qdup})")
+    print(f"    duplicate ANSWERS    {adup * 100.0 / n:5.1f}%  ({adup})")
     out["dup_q_pct"], out["dup_a_pct"] = qdup * 100.0 / n, adup * 100.0 / n
 
     # ---- 3. book artifacts
-    print(f"\n  BOOK ARTIFACTS (references to material the model cannot see)")
+    print("\n  BOOK ARTIFACTS (references to material the model cannot see)")
     tot_art = 0
     for pat, label in BOOK_ARTIFACTS:
         h = sum(bool(re.search(pat, a, re.I)) for a in ans)
         tot_art += h
         if h:
-            print(f"    {label:26s} {h*100.0/n:5.1f}%  ({h})")
+            print(f"    {label:26s} {h * 100.0 / n:5.1f}%  ({h})")
     if not tot_art:
         print("    none")
     out["artifact_hits"] = tot_art
@@ -157,19 +159,19 @@ def audit(domain: str, path, samples: int) -> dict:
     # ---- 4. truncation / malformed
     unclosed = sum(a.count("```") % 2 for a in ans)
     midsent = sum(bool(re.search(r"[a-z,]\s*$", a.strip())) for a in ans)
-    print(f"\n  TRUNCATION / MALFORMED")
-    print(f"    unclosed code fence   {unclosed*100.0/n:5.1f}%  ({unclosed})")
-    print(f"    ends mid-sentence     {midsent*100.0/n:5.1f}%  ({midsent})")
+    print("\n  TRUNCATION / MALFORMED")
+    print(f"    unclosed code fence   {unclosed * 100.0 / n:5.1f}%  ({unclosed})")
+    print(f"    ends mid-sentence     {midsent * 100.0 / n:5.1f}%  ({midsent})")
     out["unclosed_pct"] = unclosed * 100.0 / n
 
     # ---- 5. question form
     noask = sum(not QUESTION_ASKS.search(q) for q in qs)
-    print(f"\n  QUESTION FORM")
-    print(f"    requests no action (model can restate)  {noask*100.0/n:5.1f}%  ({noask})")
+    print("\n  QUESTION FORM")
+    print(f"    requests no action (model can restate)  {noask * 100.0 / n:5.1f}%  ({noask})")
     ql = sorted(len(q) for q in qs)
     al = sorted(len(a) for a in ans)
-    print(f"    question chars  median {ql[n//2]:5d}  p95 {ql[int(n*.95)]:6d}")
-    print(f"    answer   chars  median {al[n//2]:5d}  p95 {al[int(n*.95)]:6d}")
+    print(f"    question chars  median {ql[n // 2]:5d}  p95 {ql[int(n * 0.95)]:6d}")
+    print(f"    answer   chars  median {al[n // 2]:5d}  p95 {al[int(n * 0.95)]:6d}")
     out["noask_pct"] = noask * 100.0 / n
 
     # ---- 6. coherence: does the answer share content words with its question?
@@ -179,12 +181,12 @@ def audit(domain: str, path, samples: int) -> dict:
         aw = {w for w in norm(a).split() if len(w) > 4}
         if qw and len(qw & aw) / len(qw) < 0.10:
             weak += 1
-    print(f"\n  Q/A COHERENCE")
-    print(f"    answer shares <10% of question's content words  {weak*100.0/n:5.1f}%  ({weak})")
+    print("\n  Q/A COHERENCE")
+    print(f"    answer shares <10% of question's content words  {weak * 100.0 / n:5.1f}%  ({weak})")
     out["incoherent_pct"] = weak * 100.0 / n
 
     if samples:
-        print(f"\n  SAMPLES")
+        print("\n  SAMPLES")
         for q, a in qa[:samples]:
             print(f"    Q: {q[:110].strip()}")
             print(f"    A: {a[:110].strip()}\n")
@@ -193,8 +195,7 @@ def audit(domain: str, path, samples: int) -> dict:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--domain", choices=list(CORPORA))
     ap.add_argument("--samples", type=int, default=0)
     args = ap.parse_args()
@@ -209,14 +210,15 @@ def main() -> None:
         summary[d] = audit(d, p, args.samples)
 
     print("=" * 84)
-    print(f" {'domain':20s} {'runnable':>9s} {'dupQ':>7s} {'dupA':>7s} {'noask':>7s} "
-          f"{'unclosed':>9s} {'incoh':>7s}")
+    print(f" {'domain':20s} {'runnable':>9s} {'dupQ':>7s} {'dupA':>7s} {'noask':>7s} {'unclosed':>9s} {'incoh':>7s}")
     print("-" * 84)
     for d, s in summary.items():
         if s:
-            print(f" {d:20s} {s['runnable_pct']:8.1f}% {s['dup_q_pct']:6.1f}% "
-                  f"{s['dup_a_pct']:6.1f}% {s['noask_pct']:6.1f}% "
-                  f"{s['unclosed_pct']:8.1f}% {s['incoherent_pct']:6.1f}%")
+            print(
+                f" {d:20s} {s['runnable_pct']:8.1f}% {s['dup_q_pct']:6.1f}% "
+                f"{s['dup_a_pct']:6.1f}% {s['noask_pct']:6.1f}% "
+                f"{s['unclosed_pct']:8.1f}% {s['incoherent_pct']:6.1f}%"
+            )
     print("=" * 84)
 
 

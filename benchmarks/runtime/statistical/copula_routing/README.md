@@ -225,7 +225,7 @@ formula is not the shippable estimator.* The null subtraction is the method.
 
 | | |
 | :--- | :--- |
-| **Ship it** | `src/runtime/copula_routing.py` → `CopulaTailRouter(pair_metric="tail_calibrated")` |
+| **Ship it** | `apps/runtime/copula_routing.py` → `CopulaTailRouter(pair_metric="tail_calibrated")` |
 | **Never ship** | `pair_metric="tail"` (raw). It is a strictly worse Pearson. |
 | **Cost** | 5.27 µs/token + 137 ms one-time calibration |
 | **Requires** | n ≥ 2048 history samples, k/n ≈ 0.02, and a **rank transform** — raw magnitudes are not discriminative |

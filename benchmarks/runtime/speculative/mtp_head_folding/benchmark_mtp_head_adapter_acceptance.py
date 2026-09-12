@@ -51,7 +51,7 @@ is read from each adapter's own config, never hardcoded -- hardcoding alpha/rank
 is what produced the retracted speculation matrix. Weights are restored from a
 pristine buffer between conditions (bit-exact copy_, not subtract-the-delta).
 
-    uv run --env-file .env scripts/runtime/speculative/mtp_head_folding/benchmark_mtp_head_adapter_acceptance.py
+    uv run --env-file .env benchmarks/runtime/speculative/mtp_head_folding/benchmark_mtp_head_adapter_acceptance.py
 """
 
 import argparse

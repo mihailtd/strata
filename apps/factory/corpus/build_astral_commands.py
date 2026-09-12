@@ -50,9 +50,26 @@ ANSWER_MARKER = "\n\n### Answer:\n"
 # INSTANCE POOLS. Split train/eval so the eval set uses packages and phrasings
 # the corpus never contained -- while both use the SAME command surface.
 # --------------------------------------------------------------------------
-PKG_TRAIN = ["requests", "httpx", "pydantic", "sqlalchemy", "polars", "rich",
-             "typer", "structlog", "orjson", "tenacity", "attrs", "click",
-             "jinja2", "pyyaml", "boto3", "redis", "celery", "pillow"]
+PKG_TRAIN = [
+    "requests",
+    "httpx",
+    "pydantic",
+    "sqlalchemy",
+    "polars",
+    "rich",
+    "typer",
+    "structlog",
+    "orjson",
+    "tenacity",
+    "attrs",
+    "click",
+    "jinja2",
+    "pyyaml",
+    "boto3",
+    "redis",
+    "celery",
+    "pillow",
+]
 PKG_EVAL = ["msgspec", "cattrs", "anyio", "watchfiles", "uvloop", "granian"]
 
 RUNTIME_DEPS = ["fastapi", "starlette", "uvicorn", "django", "flask", "aiohttp"]
@@ -84,7 +101,8 @@ PHRASE_EVAL = [
 # Situational context. Without this the package-invariant tasks ("produce a
 # lockfile") repeat verbatim on every iteration.
 CTX_TRAIN = [
-    "", "", 
+    "",
+    "",
     " on a FastAPI service",
     " in a monorepo package",
     " for a CLI tool we ship to users",
@@ -105,14 +123,14 @@ CTX_EVAL = [
 def rec(family: str, question: str, answer: str) -> dict:
     return {
         "text": f"### Question:\n{question}{ANSWER_MARKER}{answer}",
-        "messages": [{"role": "user", "content": question},
-                     {"role": "assistant", "content": answer}],
+        "messages": [{"role": "user", "content": question}, {"role": "assistant", "content": answer}],
         "meta": {"family": family, "tool": "uv", "gen": "astral_commands_v1"},
     }
 
 
-def build(rng: random.Random, pkgs: list[str], pyvers: list[str],
-          phrases: list[str], n_per: int, ctxs: list[str]) -> list[dict]:
+def build(
+    rng: random.Random, pkgs: list[str], pyvers: list[str], phrases: list[str], n_per: int, ctxs: list[str]
+) -> list[dict]:
     out: list[dict] = []
 
     def add(fam: str, task: str, ans: str) -> None:
@@ -126,116 +144,166 @@ def build(rng: random.Random, pkgs: list[str], pyvers: list[str],
         dev2 = rng.choice([d for d in DEV_TOOLS if d != dev])
         ver = rng.choice(pyvers)
 
-        add("uvcmd_add", f"add {p} to my project",
+        add(
+            "uvcmd_add",
+            f"add {p} to my project",
             f"```bash\nuv add {p}\n```\n\nThis updates `pyproject.toml` and `uv.lock` "
-            f"in one step -- no manual editing of either file.")
+            f"in one step -- no manual editing of either file.",
+        )
 
-        add("uvcmd_add_pinned", f"add {rt} pinned to an exact version",
-            f"```bash\nuv add \"{rt}==0.115.0\"\n```\n\nUse `==` when you need the exact "
-            f"build. For a library, prefer a range like `\"{rt}>=0.115,<1.0\"` so "
-            f"consumers can resolve.")
+        add(
+            "uvcmd_add_pinned",
+            f"add {rt} pinned to an exact version",
+            f'```bash\nuv add "{rt}==0.115.0"\n```\n\nUse `==` when you need the exact '
+            f'build. For a library, prefer a range like `"{rt}>=0.115,<1.0"` so '
+            f"consumers can resolve.",
+        )
 
         # THE JUDGMENT CASE. The request says "dependencies"; the correct action is a
         # dev group, because a linter is not a runtime dependency. Base and the v4
         # expert both failed this.
-        add("uvcmd_add_dev_judgment", f"add {dev} and {dev2} as dependencies",
+        add(
+            "uvcmd_add_dev_judgment",
+            f"add {dev} and {dev2} as dependencies",
             f"```bash\nuv add --dev {dev} {dev2}\n```\n\n`{dev}` and `{dev2}` are "
             f"development tools, not runtime requirements, so they belong in the dev "
-            f"group even though the request said \"dependencies\" -- shipping them "
-            f"would bloat the production install.")
+            f'group even though the request said "dependencies" -- shipping them '
+            f"would bloat the production install.",
+        )
 
-        add("uvcmd_add_extras", f"add {rt} with its optional extras",
-            f"```bash\nuv add \"{rt}[standard]\"\n```")
+        add("uvcmd_add_extras", f"add {rt} with its optional extras", f'```bash\nuv add "{rt}[standard]"\n```')
 
-        add("uvcmd_remove", f"drop {q} from the project",
-            f"```bash\nuv remove {q}\n```\n\nThis also prunes it from `uv.lock`.")
+        add(
+            "uvcmd_remove",
+            f"drop {q} from the project",
+            f"```bash\nuv remove {q}\n```\n\nThis also prunes it from `uv.lock`.",
+        )
 
-        add("uvcmd_lock", "produce a lockfile for reproducible builds",
+        add(
+            "uvcmd_lock",
+            "produce a lockfile for reproducible builds",
             "```bash\nuv lock\n```\n\nCommit `uv.lock` to version control. It pins every "
             "direct and transitive dependency, and it is what makes the build "
-            "reproducible -- not cache clearing.")
+            "reproducible -- not cache clearing.",
+        )
 
-        add("uvcmd_lock_upgrade", f"upgrade only {p} and leave everything else pinned",
-            f"```bash\nuv lock --upgrade-package {p}\n```\n\nTo refresh everything "
-            f"instead, use `uv lock --upgrade`.")
+        add(
+            "uvcmd_lock_upgrade",
+            f"upgrade only {p} and leave everything else pinned",
+            f"```bash\nuv lock --upgrade-package {p}\n```\n\nTo refresh everything instead, use `uv lock --upgrade`.",
+        )
 
-        add("uvcmd_sync_ci", "install exactly what the lockfile says, in CI",
+        add(
+            "uvcmd_sync_ci",
+            "install exactly what the lockfile says, in CI",
             "```bash\nuv sync --frozen\n```\n\n`--frozen` fails if `uv.lock` is out of "
-            "date rather than silently updating it, which is what you want in CI.")
+            "date rather than silently updating it, which is what you want in CI.",
+        )
 
-        add("uvcmd_sync_prod", "install without dev tooling for a production image",
-            "```bash\nuv sync --no-dev\n```")
+        add("uvcmd_sync_prod", "install without dev tooling for a production image", "```bash\nuv sync --no-dev\n```")
 
-        add("uvcmd_run", "run my test suite inside the project environment",
+        add(
+            "uvcmd_run",
+            "run my test suite inside the project environment",
             "```bash\nuv run pytest\n```\n\n`uv run` resolves and activates the "
-            "environment for you -- no `source .venv/bin/activate` needed.")
+            "environment for you -- no `source .venv/bin/activate` needed.",
+        )
 
-        add("uvcmd_run_script", f"run a standalone script that needs {p}, without "
-            f"installing it into the project",
+        add(
+            "uvcmd_run_script",
+            f"run a standalone script that needs {p}, without installing it into the project",
             f"```bash\nuv run --with {p} script.py\n```\n\nOr declare it inline with "
             f"PEP 723 and just `uv run script.py`:\n\n```python\n# /// script\n"
-            f"# dependencies = [\"{p}\"]\n# ///\n```")
+            f'# dependencies = ["{p}"]\n# ///\n```',
+        )
 
-        add("uvcmd_python", f"use Python {ver} when my system has something older",
+        add(
+            "uvcmd_python",
+            f"use Python {ver} when my system has something older",
             f"```bash\nuv python install {ver}\nuv python pin {ver}\n```\n\n`pin` writes "
-            f"`.python-version` so everyone on the project gets the same interpreter.")
+            f"`.python-version` so everyone on the project gets the same interpreter.",
+        )
 
-        add("uvcmd_init", "start a new project with a src layout",
-            f"```bash\nuv init --lib myproject\ncd myproject\nuv python pin {ver}\n```")
+        add(
+            "uvcmd_init",
+            "start a new project with a src layout",
+            f"```bash\nuv init --lib myproject\ncd myproject\nuv python pin {ver}\n```",
+        )
 
-        add("uvcmd_tool", f"run {dev} without adding it to the project",
-            f"```bash\nuvx {dev}\n```\n\nOr install it once for repeated use: "
-            f"`uv tool install {dev}`.")
+        add(
+            "uvcmd_tool",
+            f"run {dev} without adding it to the project",
+            f"```bash\nuvx {dev}\n```\n\nOr install it once for repeated use: `uv tool install {dev}`.",
+        )
 
-        add("uvcmd_build", "build a wheel and sdist",
-            "```bash\nuv build\n```\n\nArtifacts land in `dist/`. Publish with "
-            "`uv publish`.")
+        add(
+            "uvcmd_build",
+            "build a wheel and sdist",
+            "```bash\nuv build\n```\n\nArtifacts land in `dist/`. Publish with `uv publish`.",
+        )
 
-        add("uvcmd_tree", f"find out why {q} is being installed",
-            f"```bash\nuv tree --package {q}\n```\n\nShows which dependency pulls it in.")
+        add(
+            "uvcmd_tree",
+            f"find out why {q} is being installed",
+            f"```bash\nuv tree --package {q}\n```\n\nShows which dependency pulls it in.",
+        )
 
-        add("uvcmd_export", "export the lockfile for a tool that only reads requirements",
+        add(
+            "uvcmd_export",
+            "export the lockfile for a tool that only reads requirements",
             "```bash\nuv export --format requirements.txt > requirements.txt\n```\n\n"
-            "The lockfile stays the source of truth; the export is a build artifact.")
+            "The lockfile stays the source of truth; the export is a build artifact.",
+        )
 
         # migration -- the highest-value disposition record, since the wrong answer
         # is the one the base model reaches for unprompted
-        add("uvcmd_migrate", "move a project off pip and requirements.txt",
-            f"```bash\nuv init\nuv add -r requirements.txt\nuv lock\n```\n\nThen delete "
-            f"`requirements.txt` and commit `uv.lock`. Do not keep both -- two sources "
-            f"of truth for dependencies is how environments drift.")
+        add(
+            "uvcmd_migrate",
+            "move a project off pip and requirements.txt",
+            "```bash\nuv init\nuv add -r requirements.txt\nuv lock\n```\n\nThen delete "
+            "`requirements.txt` and commit `uv.lock`. Do not keep both -- two sources "
+            "of truth for dependencies is how environments drift.",
+        )
 
-        add("ruffcmd_check", "find unused imports and undefined names across the repo",
-            "```bash\nruff check .\n```\n\nAdd `--fix` to apply the safe fixes.")
+        add(
+            "ruffcmd_check",
+            "find unused imports and undefined names across the repo",
+            "```bash\nruff check .\n```\n\nAdd `--fix` to apply the safe fixes.",
+        )
 
-        add("ruffcmd_format", "format the codebase and sort imports",
+        add(
+            "ruffcmd_format",
+            "format the codebase and sort imports",
             "```bash\nruff format .\nruff check --select I --fix .\n```\n\n`ruff format` "
-            "handles layout; import sorting is the `I` rule set.")
+            "handles layout; import sorting is the `I` rule set.",
+        )
 
-        add("tycmd_check", "type-check the project",
-            "```bash\nty check\n```")
+        add("tycmd_check", "type-check the project", "```bash\nty check\n```")
 
         # multi-clause, in the shape real requests arrive in
-        add("uvcmd_multi", f"set up {rt} pinned, add {dev} and {dev2} for development, "
-            f"and lock it all",
-            f"```bash\nuv add \"{rt}==0.115.0\"\nuv add --dev {dev} {dev2}\nuv lock\n```\n\n"
+        add(
+            "uvcmd_multi",
+            f"set up {rt} pinned, add {dev} and {dev2} for development, and lock it all",
+            f'```bash\nuv add "{rt}==0.115.0"\nuv add --dev {dev} {dev2}\nuv lock\n```\n\n'
             f"`{dev}` and `{dev2}` go in the dev group -- they are tooling, not runtime "
             f"dependencies. `uv add` already updates the lockfile; the explicit "
-            f"`uv lock` is only needed if you edited `pyproject.toml` by hand.")
+            f"`uv lock` is only needed if you edited `pyproject.toml` by hand.",
+        )
 
     return out
 
 
-CMD = re.compile(r"\b(uv (add|lock|sync|run|init|venv|python|build|tool|export|remove|tree|publish)"
-                 r"|uvx|ruff (check|format)|ty check)\b", re.I)
+CMD = re.compile(
+    r"\b(uv (add|lock|sync|run|init|venv|python|build|tool|export|remove|tree|publish)"
+    r"|uvx|ruff (check|format)|ty check)\b",
+    re.I,
+)
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--write", action="store_true")
-    ap.add_argument("--n-per", type=int, default=38,
-                    help="instances per family (23 families -> ~n*23 records)")
+    ap.add_argument("--n-per", type=int, default=38, help="instances per family (23 families -> ~n*23 records)")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
@@ -249,8 +317,8 @@ def main() -> None:
         cmds = sum(bool(CMD.search(r["messages"][1]["content"])) for r in rows)
         qs = {r["messages"][0]["content"] for r in rows}
         print(f"\n  {name}: {len(rows)} records, {len(fams)} families")
-        print(f"    runnable-command answers : {cmds*100.0/len(rows):5.1f}%")
-        print(f"    unique questions         : {len(qs)*100.0/len(rows):5.1f}%")
+        print(f"    runnable-command answers : {cmds * 100.0 / len(rows):5.1f}%")
+        print(f"    unique questions         : {len(qs) * 100.0 / len(rows):5.1f}%")
 
     print("=" * 78)
     print(" uv / ruff / ty COMMAND corpus")

@@ -70,17 +70,17 @@ Tested on a **3-stage multi-agent pipeline** (`Database Architect` $\to$ `Async 
 | **Handoff Latency Between Agents** | Prompt Serialisation / HTTP | **0.05 ms GPU Memory Copy** | **Instantaneous** |
 | **Context Window Consumed** | 555 prompt tokens | **150 prompt tokens** | **73.0% Context Saved 🔥** |
 
-Raw telemetry artifact: [`results/benchmarks/benchmark_27b_state_handoff_vs_ollama.json`](file:///home/mihai/Projects/gnn-experiment/results/benchmarks/benchmark_27b_state_handoff_vs_ollama.json).
+Raw telemetry artifact: [`results/benchmarks/benchmark_27b_state_handoff_vs_ollama.json`](../../../results/benchmarks/benchmark_27b_state_handoff_vs_ollama.json).
 
 ---
 
 ## 📁 Scripts & Artifacts
-- **Runtime Module:** [`src/runtime/state_handoff.py`](file:///home/mihai/Projects/gnn-experiment/src/runtime/state_handoff.py)
-- **Unit Tests:** [`tests/test_tensor_state_handoff.py`](file:///home/mihai/Projects/gnn-experiment/tests/test_tensor_state_handoff.py)
-- **4B Scaling Benchmark:** [`benchmarks/runtime/multi_agent/benchmark_tensor_state_handoff.py`](file:///home/mihai/Projects/gnn-experiment/benchmarks/runtime/multi_agent/benchmark_tensor_state_handoff.py)
-- **27B A/B vs. Ollama Benchmark:** [`benchmarks/runtime/multi_agent/benchmark_27b_state_handoff_vs_ollama.py`](file:///home/mihai/Projects/gnn-experiment/benchmarks/runtime/multi_agent/benchmark_27b_state_handoff_vs_ollama.py)
-- **27B A/B Results Telemetry:** [`results/benchmarks/benchmark_27b_state_handoff_vs_ollama.json`](file:///home/mihai/Projects/gnn-experiment/results/benchmarks/benchmark_27b_state_handoff_vs_ollama.json)
-- **4B Results Telemetry:** [`results/benchmarks/tensor_state_handoff_results.json`](file:///home/mihai/Projects/gnn-experiment/results/benchmarks/tensor_state_handoff_results.json)
+- **Runtime Module:** `apps/runtime/state_handoff.py`
+- **Unit Tests:** [`tests/test_tensor_state_handoff.py`](../../../apps/runtime/tests/test_tensor_state_handoff.py)
+- **4B Scaling Benchmark:** [`benchmarks/runtime/multi_agent/benchmark_tensor_state_handoff.py`](benchmark_tensor_state_handoff.py)
+- **27B A/B vs. Ollama Benchmark:** [`benchmarks/runtime/multi_agent/benchmark_27b_state_handoff_vs_ollama.py`](benchmark_27b_state_handoff_vs_ollama.py)
+- **27B A/B Results Telemetry:** [`results/benchmarks/benchmark_27b_state_handoff_vs_ollama.json`](../../../results/benchmarks/benchmark_27b_state_handoff_vs_ollama.json)
+- **4B Results Telemetry:** [`results/benchmarks/tensor_state_handoff_results.json`](../../../results/benchmarks/tensor_state_handoff_results.json)
 
 ---
 

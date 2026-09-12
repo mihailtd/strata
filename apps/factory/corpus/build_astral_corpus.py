@@ -18,19 +18,13 @@ Usage:
 
 from __future__ import annotations
 
-import argparse
 import json
-import os
 import random
-import re
-import subprocess
-import sys
-import tempfile
 from collections import Counter
-from pathlib import Path
 from typing import Any
 
 from runtime_common.canon import REPO_ROOT  # noqa: E402
+
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
@@ -86,6 +80,7 @@ DOMAIN_TOPICS = [
 # =====================================================================
 # Functional & Functional-Lite Generators (Steven F. Lott)
 # =====================================================================
+
 
 def gen_func_immutable_dataclass(rng: random.Random, topic: tuple[str, str, str, str]) -> tuple[str, str, str]:
     svc, table, entity, desc = topic
@@ -234,6 +229,7 @@ def _(val: list[Any]) -> str:
 # Production FastAPI Generators (Abdulazeez Adeshina)
 # =====================================================================
 
+
 def gen_fastapi_crud_router(rng: random.Random, topic: tuple[str, str, str, str]) -> tuple[str, str, str]:
     svc, table, entity, desc = topic
     phrasings = [
@@ -331,10 +327,11 @@ async def delete_{table[:-1] if table.endswith("s") else table}(
 # Modern Python 3.11+ Core Generators (Steven F. Lott)
 # =====================================================================
 
+
 def gen_py_protocol_slots(rng: random.Random, topic: tuple[str, str, str, str]) -> tuple[str, str, str]:
     svc, table, entity, desc = topic
     phrasings = [
-        f"Write a Python module defining a structural duck-typing interface using `typing.Protocol` and a memory-compact implementation using `__slots__`.",
+        "Write a Python module defining a structural duck-typing interface using `typing.Protocol` and a memory-compact implementation using `__slots__`.",
         f"Implement a high-performance, memory-optimized `{entity}` service using `Protocol` and `__slots__`.",
     ]
     q = rng.choice(phrasings)
@@ -681,18 +678,20 @@ def main() -> None:
                 if q in seen_q:
                     continue
                 seen_q.add(q)
-                by_fam.setdefault(fam, []).append({
-                    "messages": [
-                        {"role": "user", "content": q},
-                        {"role": "assistant", "content": a},
-                    ],
-                    "meta": {
-                        "source": "expanded_python_fastapi_v3",
-                        "family": fam,
-                        "domain": topic[0],
-                    },
-                    "text": f"### Question:\n{q}\n\n### Answer:\n{a}",
-                })
+                by_fam.setdefault(fam, []).append(
+                    {
+                        "messages": [
+                            {"role": "user", "content": q},
+                            {"role": "assistant", "content": a},
+                        ],
+                        "meta": {
+                            "source": "expanded_python_fastapi_v3",
+                            "family": fam,
+                            "domain": topic[0],
+                        },
+                        "text": f"### Question:\n{q}\n\n### Answer:\n{a}",
+                    }
+                )
 
     # Equalize new families
     per_fam = min(len(v) for v in by_fam.values())
@@ -718,9 +717,15 @@ def main() -> None:
     print("\n" + "=" * 74)
     print(f"SUCCESS: Wrote {len(total_dataset)} records to {OUT_V3}")
     print(f"  - v2 Foundation (Astral, uv, FastMCP): {len(existing_records)} records")
-    print(f"  - Functional Python (Immutability/Pipe): {sum(cnt for f, cnt in fam_counts.items() if f.startswith('func_'))} records")
-    print(f"  - Production FastAPI (Routes/Depends):  {sum(cnt for f, cnt in fam_counts.items() if f.startswith('fastapi_'))} records")
-    print(f"  - Modern Python 3.11+ (Protocols/Async): {sum(cnt for f, cnt in fam_counts.items() if f.startswith('py_'))} records")
+    print(
+        f"  - Functional Python (Immutability/Pipe): {sum(cnt for f, cnt in fam_counts.items() if f.startswith('func_'))} records"
+    )
+    print(
+        f"  - Production FastAPI (Routes/Depends):  {sum(cnt for f, cnt in fam_counts.items() if f.startswith('fastapi_'))} records"
+    )
+    print(
+        f"  - Modern Python 3.11+ (Protocols/Async): {sum(cnt for f, cnt in fam_counts.items() if f.startswith('py_'))} records"
+    )
     print("=" * 74)
 
 

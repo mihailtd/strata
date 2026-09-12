@@ -66,9 +66,9 @@ import argparse
 import json
 import re
 from collections import Counter
-from pathlib import Path
 
 from runtime_common.canon import REPO_ROOT as REPO  # noqa: E402
+
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
@@ -179,8 +179,7 @@ def family_of(rec: dict) -> str:
 def main() -> None:
     failures: list[str] = []
     ap = argparse.ArgumentParser()
-    ap.add_argument("--write", action="store_true",
-                    help="emit training_data_v4.jsonl (default: report only)")
+    ap.add_argument("--write", action="store_true", help="emit training_data_v4.jsonl (default: report only)")
     args = ap.parse_args()
 
     for domain, path in CORPORA.items():
@@ -223,8 +222,10 @@ def main() -> None:
 
         kept = [r for r in rows if family_of(r) not in reserved_set]
         dropped = len(rows) - len(kept)
-        print(f"  records {len(rows)} -> {len(kept)}   dropped {dropped} "
-              f"({dropped / max(1, len(rows)) * 100:.1f}%) as RESERVED FOR EVAL")
+        print(
+            f"  records {len(rows)} -> {len(kept)}   dropped {dropped} "
+            f"({dropped / max(1, len(rows)) * 100:.1f}%) as RESERVED FOR EVAL"
+        )
         for f in sorted(reserved_set):
             print(f"    reserved family {f:26s} {fams.get(f, 0):5d} records")
 
@@ -236,10 +237,8 @@ def main() -> None:
         for sig in spec["signatures"]:
             n = len(re.findall(sig, body, re.I))
             (clean if n == 0 else leaking).append((sig, n))
-            print(f"    {sig:26s} {n:18d}   "
-                  f"{'CLEAN — usable for eval' if n == 0 else 'STILL LEAKING'}")
-        print(f"\n  -> {len(clean)} construct(s) genuinely reserved, "
-              f"{len(leaking)} still present in training")
+            print(f"    {sig:26s} {n:18d}   {'CLEAN — usable for eval' if n == 0 else 'STILL LEAKING'}")
+        print(f"\n  -> {len(clean)} construct(s) genuinely reserved, {len(leaking)} still present in training")
         if leaking:
             print("     the leaking ones must NOT be used as gate constructs, or the")
             print("     generator that emits them must also be reserved")
@@ -270,24 +269,24 @@ def main() -> None:
 
     # construct -> engines it is VALID in
     VALIDITY = {
-        r"COLUMNS\s*\(":        {"duckdb"},
-        r"read_parquet":         {"duckdb"},
-        r"GROUP\s+BY\s+ALL":     {"duckdb"},
-        r"\bQUALIFY\b":          {"duckdb"},
-        r"\.pl\s*\(\s*\)":       {"duckdb"},
-        r"hive_partitioning":    {"duckdb"},
+        r"COLUMNS\s*\(": {"duckdb"},
+        r"read_parquet": {"duckdb"},
+        r"GROUP\s+BY\s+ALL": {"duckdb"},
+        r"\bQUALIFY\b": {"duckdb"},
+        r"\.pl\s*\(\s*\)": {"duckdb"},
+        r"hive_partitioning": {"duckdb"},
         # valid in BOTH -- DuckDB implements these on purpose
-        r"distinct\s+on":        {"duckdb", "postgresql"},
+        r"distinct\s+on": {"duckdb", "postgresql"},
         r"\bfilter\s*\(\s*where": {"duckdb", "postgresql"},
-        r"\blateral\b":          {"duckdb", "postgresql"},
-        r"\bunnest\s*\(":        {"duckdb", "postgresql"},
-        r"date_trunc":           {"duckdb", "postgresql"},
-        r"\blag\s*\(":           {"duckdb", "postgresql"},
-        r"\blead\s*\(":          {"duckdb", "postgresql"},
+        r"\blateral\b": {"duckdb", "postgresql"},
+        r"\bunnest\s*\(": {"duckdb", "postgresql"},
+        r"date_trunc": {"duckdb", "postgresql"},
+        r"\blag\s*\(": {"duckdb", "postgresql"},
+        r"\blead\s*\(": {"duckdb", "postgresql"},
         # postgres-only
-        r"percentile_cont":      {"postgresql"},
-        r"\bcollate\b":          {"postgresql"},
-        r"with\s+ordinality":    {"postgresql"},
+        r"percentile_cont": {"postgresql"},
+        r"\bcollate\b": {"postgresql"},
+        r"with\s+ordinality": {"postgresql"},
     }
     ENGINE_CORPORA = {
         "postgresql": REPO / "apps/factory/data/postgresql/training_data_v4.jsonl",
@@ -305,10 +304,10 @@ def main() -> None:
     for eng, body in bodies.items():
         for sig, valid_in in VALIDITY.items():
             if eng in valid_in:
-                continue                      # native here, not a leak
+                continue  # native here, not a leak
             hits = len(re.findall(sig, body, re.I))
             if hits:
-                if valid_in & set(bodies):    # belongs to another engine we track
+                if valid_in & set(bodies):  # belongs to another engine we track
                     real.append((eng, sig, hits))
                 else:
                     benign += 1

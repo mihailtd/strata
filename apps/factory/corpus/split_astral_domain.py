@@ -48,12 +48,24 @@ SRC = "apps/factory/data/astral/training_data_v4.jsonl"
 
 # Families that leave astral. Everything NOT listed here -- including every
 # doc-scraped record, which has no family at all -- stays.
-WEB = {"fastapi_route", "fastapi_crud_router", "fastapi_query_filters",
-       "fastapi_background_tasks", "fastapi_dependency_injection",
-       "fastmcp_tool", "asyncpg_pool"}
-MODERN = {"func_lru_cache", "func_reduce_compose", "func_immutable_dataclass",
-          "func_itertools_pipeline", "py_match_case", "py_contextmanager",
-          "modern_typing"}
+WEB = {
+    "fastapi_route",
+    "fastapi_crud_router",
+    "fastapi_query_filters",
+    "fastapi_background_tasks",
+    "fastapi_dependency_injection",
+    "fastmcp_tool",
+    "asyncpg_pool",
+}
+MODERN = {
+    "func_lru_cache",
+    "func_reduce_compose",
+    "func_immutable_dataclass",
+    "func_itertools_pipeline",
+    "py_match_case",
+    "py_contextmanager",
+    "modern_typing",
+}
 # pep723_script stays with astral: PEP 723 inline metadata is a `uv run` feature.
 
 BOOKS = {
@@ -62,8 +74,11 @@ BOOKS = {
     "Modern Python Cookbook - Steven F. Lott.epub": "python_modern",
 }
 
-CMD = re.compile(r"\b(uv (add|lock|sync|run|init|venv|python|build|tool|export)"
-                 r"|uvx|ruff (check|format))\b", re.I)
+CMD = re.compile(
+    r"\b(uv (add|lock|sync|run|init|venv|python|build|tool|export)"
+    r"|uvx|ruff (check|format))\b",
+    re.I,
+)
 MARK = "\n\n### Answer:\n"
 
 
@@ -84,8 +99,7 @@ def bucket(rec: dict) -> str:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--write", action="store_true")
     args = ap.parse_args()
 
@@ -104,13 +118,17 @@ def main() -> None:
         cmds = sum(bool(CMD.search(answer_of(r))) for r in g)
         docs = sum(1 for r in g if not (r.get("meta") or {}).get("family"))
         fams = Counter(str((r.get("meta") or {}).get("family") or "-doc-") for r in g)
-        print(f"\n  {name:14s} {len(g):5d} records"
-              f"   doc-scraped {docs:4d}   runnable-command answers {cmds*100.0/len(g):5.1f}%")
+        print(
+            f"\n  {name:14s} {len(g):5d} records"
+            f"   doc-scraped {docs:4d}   runnable-command answers {cmds * 100.0 / len(g):5.1f}%"
+        )
         print("     " + ", ".join(f"{k}={v}" for k, v in fams.most_common(6)))
 
-    print("\n  -> astral goes from 13.7% to "
-          f"{sum(bool(CMD.search(answer_of(r))) for r in groups['astral'])*100.0/len(groups['astral']):.1f}% "
-          "runnable-command answers just by removing what was never astral.")
+    print(
+        "\n  -> astral goes from 13.7% to "
+        f"{sum(bool(CMD.search(answer_of(r))) for r in groups['astral']) * 100.0 / len(groups['astral']):.1f}% "
+        "runnable-command answers just by removing what was never astral."
+    )
     print("     Still short of the >=40% target: the doc-scraped half is largely")
     print("     explanatory prose. That gap needs NEW command-shaped data, not a split.")
 
@@ -126,8 +144,7 @@ def main() -> None:
     keep = orig.with_name("training_data_v4_unsplit.jsonl")
     if not keep.exists():
         shutil.copy2(orig, keep)
-        print(f"  BACKED UP {orig.name} -> {keep.name} "
-              f"(the corpus m2_astral_r8a128_v4 was trained on)")
+        print(f"  BACKED UP {orig.name} -> {keep.name} (the corpus m2_astral_r8a128_v4 was trained on)")
 
     for name, g in groups.items():
         out = REPO_ROOT / f"apps/factory/data/{name}/training_data_v4.jsonl"

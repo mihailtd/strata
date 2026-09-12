@@ -73,7 +73,7 @@ Measured on **AMD Radeon RX 7900 XTX** (`gfx1100`, ROCm 7.2.4, CachyOS, PyTorch 
 └────────────────┴────────────────┴──────────────┴──────────────┴─────────┴───────────────┴──────────────┘
 ```
 
-Raw telemetry artifact: [`results/benchmarks/triton_wmma_perf.json`](file:///home/mihai/Projects/gnn-experiment/results/benchmarks/triton_wmma_perf.json).
+Raw telemetry artifact: [`results/benchmarks/triton_wmma_perf.json`](../../../results/benchmarks/triton_wmma_perf.json).
 
 ### ⚠️ CORRECTION (2026-08-24) — honest reading of the table
 
@@ -112,7 +112,7 @@ Single-pass Triton kernel that unpacks 4-bit weights in GPU registers, applies g
 * **Speedup Regime ($M \le 16$):** Memory-bound decode gains **1.17x–1.49x speedup** by cutting GDDR6 memory traffic by 75%.
 * **Prefill Tradeoff ($M \ge 64$):** Compute-bound prefill is ~20–29% slower due to dequantization instruction overhead vs rocBLAS assembly microkernels.
 
-Raw telemetry artifact: [`results/benchmarks/w4a16_fused_perf.json`](file:///home/mihai/Projects/gnn-experiment/results/benchmarks/w4a16_fused_perf.json).
+Raw telemetry artifact: [`results/benchmarks/w4a16_fused_perf.json`](../../../results/benchmarks/w4a16_fused_perf.json).
 
 ---
 
@@ -138,7 +138,7 @@ Enables serving massive models (e.g. 70B/72B in W4A16, ~33.7 GB total model weig
 * **100% GPU Matrix Execution:** Unlike CPU split-offloading (which runs 60% of layers on CPU AVX vector cores at ~65 GB/s DDR5 speeds), **100% of tensor operations execute on RX 7900 XTX WMMA matrix hardware**.
 * **Throughput Scaling:** When verifying 16–32 tokens concurrently or running continuous batching ($B \ge 16$), throughput scales to **6.18–24.65 tokens/second** (up to **5x–6x faster than CPU-bound split offload**).
 
-Raw telemetry artifact: [`results/benchmarks/pcie_ping_pong_dma_perf.json`](file:///home/mihai/Projects/gnn-experiment/results/benchmarks/pcie_ping_pong_dma_perf.json).
+Raw telemetry artifact: [`results/benchmarks/pcie_ping_pong_dma_perf.json`](../../../results/benchmarks/pcie_ping_pong_dma_perf.json).
 
 ---
 

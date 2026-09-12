@@ -62,7 +62,7 @@ def designed_pipelines() -> list[list[str]]:
     The module pulls in torch/transformers at import; this probe is CPU-only and may
     run while the GPU is busy, so the sequence is lifted textually.
     """
-    src = (REPO_ROOT / "benchmarks/multi_turn_execution_benchmark.py").read_text()
+    src = (REPO_ROOT / "benchmarks/multi_turn/multi_turn_execution_benchmark.py").read_text()
     seqs, cur = [], []
     for line in src.splitlines():
         if "pipeline_id=" in line and cur:

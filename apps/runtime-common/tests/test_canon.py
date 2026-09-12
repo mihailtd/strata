@@ -2,13 +2,12 @@
 
 import importlib
 import os
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from pathlib import Path
 from runtime_common.canon import (
     CANON,
-    DOMAINS,
     REPO_ROOT,
     adapter_path,
 )
@@ -45,7 +44,7 @@ def test_repo_root_prefers_moon_workspace_root_env_var():
     try:
         with patch.dict(os.environ, {"MOON_WORKSPACE_ROOT": "/tmp/fake-moon-root"}):
             importlib.reload(canon_module)
-            assert canon_module.REPO_ROOT == Path("/tmp/fake-moon-root")
+            assert Path("/tmp/fake-moon-root") == canon_module.REPO_ROOT
     finally:
         importlib.reload(canon_module)  # env restored by now; recompute the real REPO_ROOT
 
@@ -133,5 +132,3 @@ def test_configure_deterministic_attention():
     res = configure_deterministic_attention()
     assert isinstance(res, dict)
     assert "deterministic" in res
-
-

@@ -72,10 +72,14 @@ def load(rel: str) -> list[dict]:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--write", action="store_true", help="emit the merged corpora")
-    ap.add_argument("--seed", type=int, default=0,
-                    help="shuffle seed. Fixed so the merge is reproducible -- an "
-                         "unseeded shuffle makes two 'identical' corpora train "
-                         "differently and the difference looks like a real effect.")
+    ap.add_argument(
+        "--seed",
+        type=int,
+        default=0,
+        help="shuffle seed. Fixed so the merge is reproducible -- an "
+        "unseeded shuffle makes two 'identical' corpora train "
+        "differently and the difference looks like a real effect.",
+    )
     args = ap.parse_args()
 
     for name, domains in MERGES.items():

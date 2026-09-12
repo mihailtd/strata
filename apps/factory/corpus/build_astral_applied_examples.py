@@ -42,10 +42,10 @@ import subprocess
 import sys
 import tempfile
 from collections import Counter
-from pathlib import Path
 from typing import Any
 
 from runtime_common.canon import REPO_ROOT  # noqa: E402
+
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
@@ -494,17 +494,19 @@ def main():
                 if q in seen_q:
                     continue
                 seen_q.add(q)
-                by_fam.setdefault(fam, []).append({
-                    "messages": [
-                        {"role": "user", "content": q},
-                        {"role": "assistant", "content": a},
-                    ],
-                    "meta": {
-                        "source": "applied_generated",
-                        "family": fam,
-                        "domain": topic[0],
-                    },
-                })
+                by_fam.setdefault(fam, []).append(
+                    {
+                        "messages": [
+                            {"role": "user", "content": q},
+                            {"role": "assistant", "content": a},
+                        ],
+                        "meta": {
+                            "source": "applied_generated",
+                            "family": fam,
+                            "domain": topic[0],
+                        },
+                    }
+                )
 
     # Equalize families
     per_fam = min(len(v) for v in by_fam.values())
@@ -515,7 +517,7 @@ def main():
 
     fam_counts = Counter(m["meta"]["family"] for m in made)
     print(f"  Generated applied:         {len(made)} (rejected: {rejected})")
-    print(f"  Per-family count:          {per_fam} per family (Balance: {100.0/len(by_fam):.1f}% each)")
+    print(f"  Per-family count:          {per_fam} per family (Balance: {100.0 / len(by_fam):.1f}% each)")
     print(f"  Families:                  {dict(fam_counts)}")
 
     # 3. Combine and shuffle

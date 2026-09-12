@@ -48,9 +48,14 @@ DOMAINS = ["astral", "postgresql", "duckdb", "python_modern", "python_web", "fin
 #   asyncpg         -> postgresql had 0 asyncpg records and answered anyway
 #   analytics       -> duckdb had 0 PERCENTILE_ and 1 quantile record
 #   capability      -> python_modern/_web were 76% one answer shape
-NEW_FILES = ["training_data_commands.jsonl", "training_data_disposition.jsonl",
-             "training_data_config_families.jsonl", "training_data_asyncpg.jsonl",
-             "training_data_analytics.jsonl", "training_data_capability.jsonl"]
+NEW_FILES = [
+    "training_data_commands.jsonl",
+    "training_data_disposition.jsonl",
+    "training_data_config_families.jsonl",
+    "training_data_asyncpg.jsonl",
+    "training_data_analytics.jsonl",
+    "training_data_capability.jsonl",
+]
 
 # What "the right form" looks like per domain, for the before/after report.
 FORM = {
@@ -60,9 +65,11 @@ FORM = {
     "astral": r"\b(uv (add|lock|sync|run|init|python|build|tool|export|remove|tree)|uvx|ruff (check|format)|ty check)\b|```toml",
     # postgresql answers are SQL *or* driver code -- an asyncpg pool is correctly
     # Python. Only prose is the wrong form.
-    "postgresql": r"```(sql|python)", "duckdb": r"```(sql|python)",
-    "python_modern": r"```python", "python_web": r"```python",
-    "financial_planning": r"\*\*Not ",   # financial is prose; the tell is a rejected alternative
+    "postgresql": r"```(sql|python)",
+    "duckdb": r"```(sql|python)",
+    "python_modern": r"```python",
+    "python_web": r"```python",
+    "financial_planning": r"\*\*Not ",  # financial is prose; the tell is a rejected alternative
 }
 
 
@@ -86,15 +93,16 @@ def load(path) -> list[dict]:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--write", action="store_true")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
     print("=" * 92)
-    print(f" {'domain':14s} {'old':>6s} {'from v5':>7s} {'new':>6s} {'v6':>6s}  "
-          f"{'form% before':>12s} {'form% after':>12s}")
+    print(
+        f" {'domain':14s} {'old':>6s} {'from v5':>7s} {'new':>6s} {'v6':>6s}  "
+        f"{'form% before':>12s} {'form% after':>12s}"
+    )
     print("-" * 92)
 
     for dom in DOMAINS:
@@ -133,8 +141,7 @@ def main() -> None:
         fb = sum(bool(re.search(rx, answer_of(r), re.I)) for r in old) * 100.0 / len(old)
         fa = sum(bool(re.search(rx, answer_of(r), re.I)) for r in merged) * 100.0 / len(merged)
         n_new_kept = len(merged) - len(kept)
-        print(f" {dom:14s} {len(old):6d} {len(kept):6d} {n_new_kept:6d} {len(merged):6d}  "
-              f"{fb:11.1f}% {fa:11.1f}%")
+        print(f" {dom:14s} {len(old):6d} {len(kept):6d} {n_new_kept:6d} {len(merged):6d}  {fb:11.1f}% {fa:11.1f}%")
 
         if args.write:
             out = d / "training_data_v6.jsonl"

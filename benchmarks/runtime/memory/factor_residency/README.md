@@ -42,7 +42,7 @@ Audited on `Qwen/Qwen3.5-4B` in `bfloat16` with the `m2_*_r8a128` adapter fleet:
 ---
 
 ## 3. Production Server Integration
-In [`src/runtime/server.py`](file:///home/mihai/gnn-experiment/src/runtime/server.py):
+In `apps/runtime/server.py`:
 1. During server startup, all domain experts (`financial_planning`, `postgresql`, `astral`) are pre-loaded into factor residency via `FoldableExpert.from_dir()`.
 2. When a user requests any domain model via the standard OpenAI `/v1/chat/completions` endpoint, the server absorbs the resident factors into live weights in **18 ms** without ever touching the disk.
 

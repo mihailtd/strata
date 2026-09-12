@@ -46,7 +46,9 @@ def test_check_gpu_availability_occupied():
         "total_gb": 24.0,
         "device_name": "AMD Radeon RX 7900 XTX",
     }
-    mock_conflicts = [{"pid": 12345, "cpu_pct": "50.0", "mem_pct": "10.0", "cmd": "python scripts/train/train_expert.py"}]
+    mock_conflicts = [
+        {"pid": 12345, "cpu_pct": "50.0", "mem_pct": "10.0", "cmd": "python scripts/train/train_expert.py"}
+    ]
     with patch("runtime_common.gpu_preflight.get_gpu_vram_info", return_value=mock_vram):
         with patch("runtime_common.gpu_preflight.find_conflicting_processes", return_value=mock_conflicts):
             status = gpu_preflight.check_gpu_availability(max_occupied_gb=6.0)

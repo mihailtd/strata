@@ -17,15 +17,13 @@ Usage:
 
 from __future__ import annotations
 
-import argparse
 import json
 import random
-import re
 from collections import Counter
-from pathlib import Path
 from typing import Any
 
 from runtime_common.canon import REPO_ROOT  # noqa: E402
+
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
@@ -36,12 +34,30 @@ OUT_V3 = FIN_DIR / "training_data_v3.jsonl"
 EVAL_PATH = REPO_ROOT / "data" / "financial_planning" / "evaluation_data_v2.jsonl"
 
 PROFESSIONS = [
-    "A software engineer", "A surgeon", "A freelance designer", "A schoolteacher",
-    "A marketing manager", "A civil engineer", "A pharmacist", "A small business owner",
-    "A corporate attorney", "A management consultant", "A retired educator", "A registered nurse",
-    "A sales executive", "An architect", "A data scientist", "An electrician",
-    "A financial analyst", "A veterinary doctor", "A university professor", "A real estate agent",
-    "A journalist", "A physical therapist", "A hospitality manager", "A tech lead",
+    "A software engineer",
+    "A surgeon",
+    "A freelance designer",
+    "A schoolteacher",
+    "A marketing manager",
+    "A civil engineer",
+    "A pharmacist",
+    "A small business owner",
+    "A corporate attorney",
+    "A management consultant",
+    "A retired educator",
+    "A registered nurse",
+    "A sales executive",
+    "An architect",
+    "A data scientist",
+    "An electrician",
+    "A financial analyst",
+    "A veterinary doctor",
+    "A university professor",
+    "A real estate agent",
+    "A journalist",
+    "A physical therapist",
+    "A hospitality manager",
+    "A tech lead",
 ]
 
 AGES = ["28", "34", "39", "44", "49", "54", "59", "64", "71"]
@@ -59,12 +75,15 @@ NET_WORTHS = [
 # Pillar 2: Morgan Housel Generators (Psychology of Money)
 # =====================================================================
 
+
 def gen_housel_staying_wealthy(rng: random.Random, prof: str, age: str, nw: str) -> tuple[str, str, str]:
-    q = rng.choice([
-        f"{prof}, aged {age} with {nw}, made substantial gains during a bull market and now wants to take out high-leverage margin loans to accelerate returns. How do you counsel them using the distinction between 'getting wealthy' and 'staying wealthy'?",
-        f"A client ({prof}, {age}) asks why a conservative cash reserve is necessary after a decade of uninterrupted market growth. Explain the psychology of surviving downside tail risks.",
-        f"How do you explain the 'getting wealthy vs staying wealthy' paradox to a successful client ({prof}) who attributes all past returns to skill and disregards downside ruin?",
-    ])
+    q = rng.choice(
+        [
+            f"{prof}, aged {age} with {nw}, made substantial gains during a bull market and now wants to take out high-leverage margin loans to accelerate returns. How do you counsel them using the distinction between 'getting wealthy' and 'staying wealthy'?",
+            f"A client ({prof}, {age}) asks why a conservative cash reserve is necessary after a decade of uninterrupted market growth. Explain the psychology of surviving downside tail risks.",
+            f"How do you explain the 'getting wealthy vs staying wealthy' paradox to a successful client ({prof}) who attributes all past returns to skill and disregards downside ruin?",
+        ]
+    )
     a = (
         "Getting wealthy and staying wealthy require two completely opposite skill sets. "
         "Getting wealthy requires taking calculated risks, extreme optimism, and aggressive pursuit of opportunities. "
@@ -76,11 +95,13 @@ def gen_housel_staying_wealthy(rng: random.Random, prof: str, age: str, nw: str)
 
 
 def gen_housel_reasonable_vs_rational(rng: random.Random, prof: str, age: str, nw: str) -> tuple[str, str, str]:
-    q = rng.choice([
-        f"{prof} in their {age}s insists on paying off a low-interest fixed-rate mortgage early, even though the spreadsheet shows higher expected returns by investing in index funds. How should a financial planner evaluate this decision?",
-        f"Explain why being 'reasonable' is superior to being coldly 'rational' when designing a financial plan for a client with {nw}.",
-        f"A client ({prof}) feels guilty for holding 10% cash in their portfolio instead of 100% equities. How do you reframe 'sleeping well at night' vs mathematical optimality?",
-    ])
+    q = rng.choice(
+        [
+            f"{prof} in their {age}s insists on paying off a low-interest fixed-rate mortgage early, even though the spreadsheet shows higher expected returns by investing in index funds. How should a financial planner evaluate this decision?",
+            f"Explain why being 'reasonable' is superior to being coldly 'rational' when designing a financial plan for a client with {nw}.",
+            f"A client ({prof}) feels guilty for holding 10% cash in their portfolio instead of 100% equities. How do you reframe 'sleeping well at night' vs mathematical optimality?",
+        ]
+    )
     a = (
         "In financial planning, aiming to be consistently 'reasonable' is far more effective than trying to be coldly 'rational'. "
         "A spreadsheet models mathematical optimization, but human beings are emotional creatures who must live with the consequences of volatility. "
@@ -92,10 +113,12 @@ def gen_housel_reasonable_vs_rational(rng: random.Random, prof: str, age: str, n
 
 
 def gen_housel_freedom_autonomy(rng: random.Random, prof: str, age: str, nw: str) -> tuple[str, str, str]:
-    q = rng.choice([
-        f"{prof}, {age} with {nw}, contemplates quitting a prestigious high-paying position for a lower-stress role with more flexible hours. How do you articulate the true highest dividend of money in financial planning?",
-        f"How does a modern financial planner reframe the purpose of wealth from material consumption to time autonomy for a client like {prof}?",
-    ])
+    q = rng.choice(
+        [
+            f"{prof}, {age} with {nw}, contemplates quitting a prestigious high-paying position for a lower-stress role with more flexible hours. How do you articulate the true highest dividend of money in financial planning?",
+            f"How does a modern financial planner reframe the purpose of wealth from material consumption to time autonomy for a client like {prof}?",
+        ]
+    )
     a = (
         "The highest dividend that money pays is autonomy: the ability to wake up every morning and say, 'I can do whatever I want today.' "
         "Controlling your time is the highest-leverage lifestyle upgrade that wealth provides, far surpassing luxury goods or status displays. "
@@ -107,10 +130,12 @@ def gen_housel_freedom_autonomy(rng: random.Random, prof: str, age: str, nw: str
 
 
 def gen_housel_man_in_car(rng: random.Random, prof: str, age: str, nw: str) -> tuple[str, str, str]:
-    q = rng.choice([
-        f"Explain the 'Man in the Car Paradox' to {prof}, {age}, who feels pressured to purchase an expensive luxury vehicle to signal professional success.",
-        f"How do you counsel a client ({prof}) on the difference between being rich (current income/spending) versus being wealthy (unspent assets)?",
-    ])
+    q = rng.choice(
+        [
+            f"Explain the 'Man in the Car Paradox' to {prof}, {age}, who feels pressured to purchase an expensive luxury vehicle to signal professional success.",
+            f"How do you counsel a client ({prof}) on the difference between being rich (current income/spending) versus being wealthy (unspent assets)?",
+        ]
+    )
     a = (
         "The 'Man in the Car Paradox' describes the cognitive illusion that when people see someone driving an expensive car or wearing luxury goods, they rarely think, 'Wow, that person is admirable.' Instead, they imagine how cool *they themselves* would look if they owned it. "
         "People spend money to signal to others that they should be liked and respected, but other people simply use that display as a benchmark for their own desires. "
@@ -123,10 +148,12 @@ def gen_housel_man_in_car(rng: random.Random, prof: str, age: str, nw: str) -> t
 
 
 def gen_housel_room_for_error(rng: random.Random, prof: str, age: str, nw: str) -> tuple[str, str, str]:
-    q = rng.choice([
-        f"{prof} ({age}) presents a financial plan where every dollar is optimized with zero redundancy and assumes 9% continuous annual returns. How do you address the concept of 'Room for Error'?",
-        f"Why is margin of safety / room for error the single most important component of any long-term financial model?",
-    ])
+    q = rng.choice(
+        [
+            f"{prof} ({age}) presents a financial plan where every dollar is optimized with zero redundancy and assumes 9% continuous annual returns. How do you address the concept of 'Room for Error'?",
+            "Why is margin of safety / room for error the single most important component of any long-term financial model?",
+        ]
+    )
     a = (
         "The most important part of any financial plan is planning on your plan not going according to plan. "
         "A plan that only works if future market returns match historical averages, or if you never experience illness, job disruption, or unforeseen liabilities, is a fragile plan destined to fail. "
@@ -141,12 +168,15 @@ def gen_housel_room_for_error(rng: random.Random, prof: str, age: str, nw: str) 
 # Pillar 3: Claer Barrett Generators (What They Don't Teach You)
 # =====================================================================
 
+
 def gen_barrett_debt_trap(rng: random.Random, prof: str, age: str, nw: str) -> tuple[str, str, str]:
-    q = rng.choice([
-        f"A client ({prof}, {age}) carries $18,000 in credit card balances across 3 cards and is making only minimum monthly payments. What is the mathematical trap here, and what structured repayment strategy should be deployed?",
-        f"How do you counsel a client on the compounding danger of Buy Now Pay Later (BNPL) and minimum payment traps in consumer debt?",
-        f"Compare the Avalanche and Snowball debt repayment methods for {prof} struggling with multiple revolving debts.",
-    ])
+    q = rng.choice(
+        [
+            f"A client ({prof}, {age}) carries $18,000 in credit card balances across 3 cards and is making only minimum monthly payments. What is the mathematical trap here, and what structured repayment strategy should be deployed?",
+            "How do you counsel a client on the compounding danger of Buy Now Pay Later (BNPL) and minimum payment traps in consumer debt?",
+            f"Compare the Avalanche and Snowball debt repayment methods for {prof} struggling with multiple revolving debts.",
+        ]
+    )
     a = (
         "Minimum payments on revolving credit cards are engineered by lenders to maximize interest income while keeping the principal virtually untouched for decades. "
         "Paying only the minimum on an $18,000 balance at 22% APR can take over 25 years to clear and cost more than double the original borrowed amount in compounding interest. "
@@ -161,10 +191,12 @@ def gen_barrett_debt_trap(rng: random.Random, prof: str, age: str, nw: str) -> t
 
 
 def gen_barrett_salary_negotiation(rng: random.Random, prof: str, age: str, nw: str) -> tuple[str, str, str]:
-    q = rng.choice([
-        f"{prof} ({age}) has consistently exceeded performance targets for 3 years but has never asked for a salary increase due to discomfort. How do you coach them through evidence-based compensation negotiation?",
-        f"Why is increasing primary earning power often the highest-ROI move in early-to-mid career financial planning, and how should a client approach pay discussions?",
-    ])
+    q = rng.choice(
+        [
+            f"{prof} ({age}) has consistently exceeded performance targets for 3 years but has never asked for a salary increase due to discomfort. How do you coach them through evidence-based compensation negotiation?",
+            "Why is increasing primary earning power often the highest-ROI move in early-to-mid career financial planning, and how should a client approach pay discussions?",
+        ]
+    )
     a = (
         "Optimizing grocery budgets and cutting minor expenses has a strict mathematical floor (you can only cut to zero), but increasing your primary earning power has no upper ceiling. "
         "To negotiate compensation effectively: "
@@ -177,10 +209,12 @@ def gen_barrett_salary_negotiation(rng: random.Random, prof: str, age: str, nw: 
 
 
 def gen_barrett_tax_wrappers(rng: random.Random, prof: str, age: str, nw: str) -> tuple[str, str, str]:
-    q = rng.choice([
-        f"{prof}, {age} with {nw}, keeps all spare cash in a standard taxable savings account earning nominal interest. Explain the tax drag and how tax-advantaged accounts (pensions/ISAs/401k/IRA) protect long-term compounding.",
-        f"Explain the strategic order of operations for deploying surplus monthly savings across employer pension match, tax-free accounts, and taxable accounts.",
-    ])
+    q = rng.choice(
+        [
+            f"{prof}, {age} with {nw}, keeps all spare cash in a standard taxable savings account earning nominal interest. Explain the tax drag and how tax-advantaged accounts (pensions/ISAs/401k/IRA) protect long-term compounding.",
+            "Explain the strategic order of operations for deploying surplus monthly savings across employer pension match, tax-free accounts, and taxable accounts.",
+        ]
+    )
     a = (
         "Holding long-term investments and cash outside tax-advantaged wrappers exposes gains to significant 'tax drag'—where income tax on interest and capital gains tax on dividends continuously erode the power of compounding. "
         "The standard financial order of operations for surplus savings is: "
@@ -193,10 +227,12 @@ def gen_barrett_tax_wrappers(rng: random.Random, prof: str, age: str, nw: str) -
 
 
 def gen_barrett_emergency_fund(rng: random.Random, prof: str, age: str, nw: str) -> tuple[str, str, str]:
-    q = rng.choice([
-        f"{prof} ({age}) has zero cash savings and puts 100% of discretionary monthly income into volatile equities/crypto. Explain why an emergency buffer is the prerequisite foundation of all investing.",
-        f"How do you determine the appropriate size of an emergency fund for a client ({prof}) considering income stability and fixed overheads?",
-    ])
+    q = rng.choice(
+        [
+            f"{prof} ({age}) has zero cash savings and puts 100% of discretionary monthly income into volatile equities/crypto. Explain why an emergency buffer is the prerequisite foundation of all investing.",
+            f"How do you determine the appropriate size of an emergency fund for a client ({prof}) considering income stability and fixed overheads?",
+        ]
+    )
     a = (
         "An emergency fund is not an investment designed for high yield; it is an insurance policy designed for survival and behavioral protection. "
         "Without a dedicated 3–6 month cash buffer, any unexpected real-life shock (job loss, medical emergency, roof repair, boiler failure) forces you to become a distressed seller—liquidating volatile investments at market lows or taking on high-interest consumer debt. "
@@ -212,13 +248,16 @@ def gen_barrett_emergency_fund(rng: random.Random, prof: str, age: str, nw: str)
 # Pillar 4: Financial Math, Planning Calculations & Rehearsal
 # =====================================================================
 
+
 def gen_math_compounding_rule72(rng: random.Random, prof: str, age: str, nw: str) -> tuple[str, str, str]:
     rate = rng.choice([4, 6, 7, 8, 10])
     years = 72 // rate
-    q = rng.choice([
-        f"Calculate the doubling time of an investment portfolio growing at an annual rate of {rate}% using the Rule of 72, and explain why early compounding years feel deceptively slow.",
-        f"A client ({prof}, {age}) asks how long it takes for a portfolio to double at an annualized nominal return of {rate}%. Show the math and behavioral implications.",
-    ])
+    q = rng.choice(
+        [
+            f"Calculate the doubling time of an investment portfolio growing at an annual rate of {rate}% using the Rule of 72, and explain why early compounding years feel deceptively slow.",
+            f"A client ({prof}, {age}) asks how long it takes for a portfolio to double at an annualized nominal return of {rate}%. Show the math and behavioral implications.",
+        ]
+    )
     a = (
         f"Using the Rule of 72, the approximate time required for an investment to double at {rate}% annual return is:\n\n"
         f"$$\\text{{Doubling Time}} \\approx \\frac{{72}}{{{rate}}} = {years} \\text{{ years}}$$\n\n"
@@ -233,10 +272,12 @@ def gen_math_compounding_rule72(rng: random.Random, prof: str, age: str, nw: str
 def gen_math_swr_4percent(rng: random.Random, prof: str, age: str, nw: str) -> tuple[str, str, str]:
     annual_exp = rng.choice([40000, 60000, 80000, 100000, 120000])
     target = annual_exp * 25
-    q = rng.choice([
-        f"A client ({prof}, {age}) plans to retire with required annual living expenses of ${annual_exp:,}. Calculate their required portfolio size using the 4% Safe Withdrawal Rate rule (25x rule) and explain sequence of returns risk.",
-        f"Show the calculation for retirement sufficiency for annual living costs of ${annual_exp:,} and discuss dynamic withdrawal rate adjustments.",
-    ])
+    q = rng.choice(
+        [
+            f"A client ({prof}, {age}) plans to retire with required annual living expenses of ${annual_exp:,}. Calculate their required portfolio size using the 4% Safe Withdrawal Rate rule (25x rule) and explain sequence of returns risk.",
+            f"Show the calculation for retirement sufficiency for annual living costs of ${annual_exp:,} and discuss dynamic withdrawal rate adjustments.",
+        ]
+    )
     a = (
         f"Under the standard 4% Safe Withdrawal Rate framework (the 25x rule based on the Trinity Study), the required nest egg to fund ${annual_exp:,}/year is:\n\n"
         f"$$\\text{{Target Portfolio}} = \\text{{Annual Expenses}} \\times 25 = \\${annual_exp:,} \\times 25 = \\${target:,}$$\n\n"
@@ -248,10 +289,12 @@ def gen_math_swr_4percent(rng: random.Random, prof: str, age: str, nw: str) -> t
 
 
 def gen_housel_tail_events(rng: random.Random, prof: str, age: str, nw: str) -> tuple[str, str, str]:
-    q = rng.choice([
-        f"A client ({prof}, {age}) is frustrated that out of 500 companies in the index fund, only a handful drive most of the returns. Explain the concept of 'Tails, You Win' in long-term investing.",
-        f"Why is patience with index investing fundamentally an exercise in waiting for rare tail events to drive the entire compound return?",
-    ])
+    q = rng.choice(
+        [
+            f"A client ({prof}, {age}) is frustrated that out of 500 companies in the index fund, only a handful drive most of the returns. Explain the concept of 'Tails, You Win' in long-term investing.",
+            "Why is patience with index investing fundamentally an exercise in waiting for rare tail events to drive the entire compound return?",
+        ]
+    )
     a = (
         "In investing, business, and finance, a tiny fraction of events—the outlier 'tails'—account for the vast majority of all positive outcomes. "
         "Historically in the S&P 500, over long multi-decade periods, only about 7% of constituent companies drive nearly 100% of the index's net capital appreciation, while the majority fail, underperform, or are replaced. "
@@ -263,10 +306,12 @@ def gen_housel_tail_events(rng: random.Random, prof: str, age: str, nw: str) -> 
 
 
 def gen_barrett_talking_about_money(rng: random.Random, prof: str, age: str, nw: str) -> tuple[str, str, str]:
-    q = rng.choice([
-        f"{prof} ({age}) and their partner experience chronic tension over spending habits and avoid discussing finances together. How do you facilitate constructive, shame-free money conversations?",
-        f"What structured framework should a couple use to manage household finances when they have differing incomes and money personalities?",
-    ])
+    q = rng.choice(
+        [
+            f"{prof} ({age}) and their partner experience chronic tension over spending habits and avoid discussing finances together. How do you facilitate constructive, shame-free money conversations?",
+            "What structured framework should a couple use to manage household finances when they have differing incomes and money personalities?",
+        ]
+    )
     a = (
         "Money is deeply emotional, and in relationships, financial friction is rarely about the numbers—it is about differing money scripts, fears, and perceived loss of autonomy. "
         "To build healthy financial communication: "
@@ -283,10 +328,12 @@ def gen_math_net_worth_cashflow(rng: random.Random, prof: str, age: str, nw: str
     income = rng.choice([80000, 120000, 160000, 220000])
     savings_rate = rng.choice([15, 20, 25, 35])
     annual_savings = int(income * (savings_rate / 100))
-    q = rng.choice([
-        f"{prof} earns ${income:,}/year and wants to increase their savings rate from 10% to {savings_rate}%. Calculate their annual capital accumulation and explain how savings rate drives financial independence faster than investment return.",
-        f"Show the impact of increasing the savings rate to {savings_rate}% on a salary of ${income:,} in terms of annual investable cash flow.",
-    ])
+    q = rng.choice(
+        [
+            f"{prof} earns ${income:,}/year and wants to increase their savings rate from 10% to {savings_rate}%. Calculate their annual capital accumulation and explain how savings rate drives financial independence faster than investment return.",
+            f"Show the impact of increasing the savings rate to {savings_rate}% on a salary of ${income:,} in terms of annual investable cash flow.",
+        ]
+    )
     a = (
         f"At an annual gross income of ${income:,}, raising the savings rate to {savings_rate}% generates:\n\n"
         f"$$\\text{{Annual Investable Surplus}} = \\${income:,} \\times {savings_rate}\\% = \\${annual_savings:,} / \\text{{year}}$$\n\n"
@@ -340,19 +387,21 @@ def main() -> None:
                 if q in seen_q:
                     continue
                 seen_q.add(q)
-                by_fam.setdefault(fam, []).append({
-                    "messages": [
-                        {"role": "user", "content": q},
-                        {"role": "assistant", "content": a},
-                    ],
-                    "meta": {
-                        "source": "expanded_financial_v3",
-                        "family": fam,
-                        "profession": prof,
-                        "age": age,
-                    },
-                    "text": f"### Question:\n{q}\n\n### Answer:\n{a}",
-                })
+                by_fam.setdefault(fam, []).append(
+                    {
+                        "messages": [
+                            {"role": "user", "content": q},
+                            {"role": "assistant", "content": a},
+                        ],
+                        "meta": {
+                            "source": "expanded_financial_v3",
+                            "family": fam,
+                            "profession": prof,
+                            "age": age,
+                        },
+                        "text": f"### Question:\n{q}\n\n### Answer:\n{a}",
+                    }
+                )
 
     # Equalize new families
     per_fam = min(len(v) for v in by_fam.values())
@@ -377,9 +426,15 @@ def main() -> None:
     print("\n" + "=" * 74)
     print(f"SUCCESS: Wrote {len(total_dataset)} records to {OUT_V3}")
     print(f"  - v2 Foundation (Klontz Taxonomy & Biases): {len(existing_records)} records")
-    print(f"  - Morgan Housel (Psychology & Compounding): {sum(cnt for f, cnt in fam_counts.items() if f.startswith('housel_'))} records")
-    print(f"  - Claer Barrett (Debt Traps & Personal Fin): {sum(cnt for f, cnt in fam_counts.items() if f.startswith('barrett_'))} records")
-    print(f"  - Financial Math (Compounding & SWR Rules):  {sum(cnt for f, cnt in fam_counts.items() if f.startswith('math_'))} records")
+    print(
+        f"  - Morgan Housel (Psychology & Compounding): {sum(cnt for f, cnt in fam_counts.items() if f.startswith('housel_'))} records"
+    )
+    print(
+        f"  - Claer Barrett (Debt Traps & Personal Fin): {sum(cnt for f, cnt in fam_counts.items() if f.startswith('barrett_'))} records"
+    )
+    print(
+        f"  - Financial Math (Compounding & SWR Rules):  {sum(cnt for f, cnt in fam_counts.items() if f.startswith('math_'))} records"
+    )
     print("=" * 74)
 
 

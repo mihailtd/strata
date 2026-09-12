@@ -19,7 +19,7 @@ When serving multi-domain queries on a single GPU (e.g., Financial $\to$ Postgre
 ---
 
 ## 2. The Solution: The Pristine Buffer
-Inside `WeightFoldingEngine` ([`src/runtime/novel_peft.py`](file:///home/mihai/gnn-experiment/src/runtime/novel_peft.py)):
+Inside `WeightFoldingEngine` (`apps/runtime/novel_peft.py`):
 1. At boot, the engine creates a bit-exact, unmutated clone of base model weights in host/device RAM (`self.pristine`).
 2. On every swap, it completely bypasses subtraction arithmetic, writing $W_{\text{live}} = W_0 + s \cdot (U \times V)$ directly from the pristine buffer.
 3. On restore, it runs `w.copy_(w0)`, guaranteeing **zero drift ($L_\infty = 0.00$)** with zero memory leaks.
@@ -27,7 +27,7 @@ Inside `WeightFoldingEngine` ([`src/runtime/novel_peft.py`](file:///home/mihai/g
 ---
 
 ## 3. Empirical Verification
-* **Gate 2 Verification** in [`benchmark_weight_folding.py`](file:///home/mihai/gnn-experiment/benchmarks/runtime/folding/benchmark_weight_folding.py):
+* **Gate 2 Verification** in `benchmark_weight_folding.py`:
   ```
   GATE 2 -- 100 activate/restore cycles, drift vs pristine
   after 400 activations: L_inf drift = 0.0000000000

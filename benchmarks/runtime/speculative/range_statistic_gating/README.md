@@ -45,13 +45,13 @@ $$R_M = z_{(1)} - z_{(M)}$$
 * **Flat Distribution (Uncertainty / Outlier)**: Multiple candidates have similar scores ($z_{(1)} \approx z_{(M)}$), yielding $R_M < \tau_R$. The gate aborts the draft chain immediately at step $i$, returning a truncated chunk of width $k_{\text{actual}} < K$.
 
 ### 2. Eliminating Wasted Speculative Chunk Overhead
-Because our speculative decoder ([`src/runtime/bucketed_speculative.py`](file:///home/mihai/Projects/gnn-experiment/src/runtime/bucketed_speculative.py)) maintains **pre-captured discrete bucket graphs** for widths $1 \dots K+1$, early-exited chunks of width $k_{\text{actual}}$ execute directly on the $k_{\text{actual}}+1$ graph bucket, reducing base model verification latency from $33.5\text{ ms} \to 28.7\text{ ms}$.
+Because our speculative decoder (`apps/runtime/bucketed_speculative.py`) maintains **pre-captured discrete bucket graphs** for widths $1 \dots K+1$, early-exited chunks of width $k_{\text{actual}}$ execute directly on the $k_{\text{actual}}+1$ graph bucket, reducing base model verification latency from $33.5\text{ ms} \to 28.7\text{ ms}$.
 
 ---
 
 ## 🛠️ Usage in Codebase
 
-Import `RangeStatisticGate` from [`src/runtime/range_statistic_gate.py`](file:///home/mihai/Projects/gnn-experiment/src/runtime/range_statistic_gate.py):
+Import `RangeStatisticGate` from `apps/runtime/range_statistic_gate.py`:
 
 ```python
 from runtime.range_statistic_gate import RangeStatisticGate

@@ -126,7 +126,7 @@ reports none — which is what makes the real arm's numbers mean something.
 
 | | |
 | :--- | :--- |
-| **Ship it, conditionally** | `src/runtime/vecchia_precision.py` → `fit_vecchia_batched` |
+| **Ship it, conditionally** | `apps/runtime/vecchia_precision.py` → `fit_vecchia_batched` |
 | **Use `m = 8`** | never `m = 2`. m=2 misses 57% of the precision mass. |
 | **Only at L ≥ 64** | at L = 32 (the 4B model) it is **0.50×** — a regression. Use the dense inverse there. |
 | **Fit side only** | the banded apply loses to a dense matvec below L = 512. Use it to *build* Θ, not to apply it. |

@@ -17,14 +17,21 @@ def test_server_file_exists() -> None:
 
 def test_run_server_sh_exists_and_executable() -> None:
     import stat
+
     assert RUN_SH.exists(), "run_server.sh is missing"
     assert RUN_SH.stat().st_mode & stat.S_IXUSR, "run_server.sh must be executable"
 
 
 def test_server_has_openai_routes() -> None:
     source = SERVER.read_text()
-    for route in ["/v1/chat/completions", "/v1/models", "/health", "/api/engine/status",
-                  "/api/engine/load", "/api/engine/unload"]:
+    for route in [
+        "/v1/chat/completions",
+        "/v1/models",
+        "/health",
+        "/api/engine/status",
+        "/api/engine/load",
+        "/api/engine/unload",
+    ]:
         assert route in source, f"Route {route!r} missing from server.py"
 
 
@@ -56,13 +63,13 @@ def test_readme_exists_and_documents_port() -> None:
     assert README.exists(), "README.md is missing"
     text = README.read_text()
     assert "8000" in text, "README must document default port 8000"
-    assert "A/B" in text or "A/B Testing" in text.replace("A/B", "A/B"), \
-        "README should document A/B testing protocol"
+    assert "A/B" in text or "A/B Testing" in text.replace("A/B", "A/B"), "README should document A/B testing protocol"
 
 
 def test_no_hardcoded_performance_numbers() -> None:
     """Zero-Mock invariant: no hardcoded tok/s numbers anywhere in this engine."""
     import re
+
     source = SERVER.read_text()
     # Detect patterns like "20.9 tok/s" or "620.4 GB/s" hardcoded as string literals
     suspicious = re.findall(r'["\']\s*\d+\.\d+\s*(tok/s|GB/s)\s*["\']', source)

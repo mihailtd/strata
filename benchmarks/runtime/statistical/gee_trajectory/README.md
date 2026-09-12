@@ -134,7 +134,7 @@ correlation** — it is unreliable, not uniformly optimistic.
 
 | | |
 | :--- | :--- |
-| **Ship it** | `src/runtime/gee_trajectory.py` → `DriftMonitor` |
+| **Ship it** | `apps/runtime/gee_trajectory.py` → `DriftMonitor` |
 | **False alarms** | **31.7% → 6.0%** (4.3× fewer wasted swaps) |
 | **Cost** | 0.2–1.5 ms per refit |
 | **Hard requirement** | **K ≥ 20 concurrent conversations.** Below that the p-value is not trustworthy — batch conversations or do not run the test. |

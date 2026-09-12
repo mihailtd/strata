@@ -30,7 +30,7 @@
 
 ## 3. 🔥 Multi-Expert Additive Fold Composite (`activate_many()`)
 
-Beyond single-expert folding, the engine implements composite multi-expert stacking via `WeightFoldingEngine.activate_many()` in [`src/runtime/novel_peft.py`](file:///home/mihai/gnn-experiment/src/runtime/novel_peft.py):
+Beyond single-expert folding, the engine implements composite multi-expert stacking via `WeightFoldingEngine.activate_many()` in `apps/runtime/novel_peft.py`:
 
 $$W_{\text{live}} = W_0 + \sum_{i=1}^N \text{scaling}_i \cdot (U_i \times V_i)$$
 

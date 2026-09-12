@@ -35,6 +35,7 @@ dependencies = [
     "py-pglite[extensions]>=0.5.3",
     "psycopg>=3.3.4",
     "pgvector>=0.5.0",
+    "deepseek-harness-sdk",
     "runtime-common",
 ]
 
@@ -84,9 +85,10 @@ extend-exclude = [
     "data",                               # vendored doc/repo clones (astral_docs raw sources)
     "apps/runtime-llama/llama.cpp",       # vendored upstream repo
     "mlruns",                             # MLflow artifact store, not source
-    "tests/opencode_evals/runs",          # generated eval-run fixtures/transcripts
+    "evals/dsh_agent/runs",               # generated eval-run fixtures/transcripts
     "apps/runtime-common",                # independent uv project, own pyproject/venv/lint task
     "apps/runtime-triton",                # independent uv project, own pyproject/venv/lint task
+    "apps/runtime-vllm",                  # independent uv project, own pyproject/venv/lint task
     "apps/factory",                       # independent uv project, own pyproject/venv/lint task
 ]
 
@@ -98,19 +100,34 @@ exclude = [
     "data",
     "apps/runtime-llama/llama.cpp",
     "mlruns",
-    "tests/opencode_evals/runs",
+    "evals/dsh_agent/runs",
     "apps/runtime-common",                # independent uv project, own pyproject/venv/deps
     "apps/runtime-triton",                # independent uv project, own pyproject/venv/deps
+    "apps/runtime-vllm",                  # independent uv project, own pyproject/venv/deps
     "apps/factory",                       # independent uv project, own pyproject/venv/deps
 ]
 
 [tool.pytest.ini_options]
 testpaths = [
-    "tests",
+    "apps/runtime/tests",
     "apps/runtime-ipwf/tests",
     "apps/harness/tests",
     "apps/runtime-ollama/tests",
     "apps/runtime-llama/tests",
+    "audit/tests",
+    # Tests colocated with the experiments/benchmarks code they pin -- these
+    # trees are otherwise excluded from recursive discovery (see
+    # norecursedirs below) since they're runnable-script trees, not pytest
+    # suites; an explicit path here still collects a named directory even
+    # when an ancestor is excluded from recursion.
+    "experiments/factory/geometry/latent_variable_glasso",
+    "experiments/factory/geometry/poet_activation_crosstalk",
+    "experiments/factory/geometry/poet_decomposition",
+    "experiments/factory/geometry/activation_init_premise",
+    "experiments/factory/geometry/riemannian_metric",
+    "experiments/runtime/speculative/poet_temporal_compression",
+    "benchmarks/factory/agentic/poet_tool_causal_graph",
+    "benchmarks/multi_turn",
 ]
 pythonpath = [".","apps"]
 python_files = ["test_*.py"]
@@ -118,11 +135,12 @@ python_functions = ["test_*"]
 norecursedirs = [
     "data",
     "benchmarks",
+    "experiments",
+    "evals",
     "mlruns",
-    "tests/opencode_evals",
-    "serving",
     "apps/runtime-common",
     "apps/runtime-triton",
+    "apps/runtime-vllm",
     "apps/factory",
     "apps/runtime-llama/llama.cpp",
     "apps/runtime-next",
@@ -131,11 +149,12 @@ norecursedirs = [
 addopts = "-v --tb=short"
 
 [tool.pyright]
-include = ["apps", "benchmarks", "tests"]
+include = ["apps", "benchmarks", "experiments", "evals", "tests", "audit"]
 exclude = [
     "apps/runtime-llama/llama.cpp",
     "apps/runtime-common",   # independent uv project, own pyproject/venv
     "apps/runtime-triton",   # independent uv project, own pyproject/venv
+    "apps/runtime-vllm",     # independent uv project, own pyproject/venv
     "apps/factory",          # independent uv project, own pyproject/venv
     "apps/runtime-next",     # rust, not python
     "apps/dashboard",        # typescript, not python

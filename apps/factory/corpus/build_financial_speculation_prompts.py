@@ -47,6 +47,7 @@ import re
 from pathlib import Path
 
 from runtime_common.canon import REPO_ROOT  # noqa: E402
+
 # REPO_ROOT comes from the installed package, never from __file__ arithmetic:
 # `.parent.parent` silently resolves to the WRONG directory the moment a file
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
@@ -101,12 +102,7 @@ def main() -> None:
     print(f"Curated prompts:            {len(curated)}")
 
     training = load_jsonl(TRAINING)
-    trained_on = {
-        m["content"].strip()
-        for r in training
-        for m in r["messages"]
-        if m.get("role") == "user"
-    }
+    trained_on = {m["content"].strip() for r in training for m in r["messages"] if m.get("role") == "user"}
     curated_prompts = {r["prompt"].strip() for r in curated}
     print(f"Questions used in training: {len(trained_on)}")
 
@@ -162,27 +158,31 @@ def main() -> None:
 
     rows = []
     for r in curated:
-        rows.append({
-            "id": r["id"],
-            "category": r.get("category", "curated"),
-            "prompt": r["prompt"],
-            "source": "curated",
-        })
+        rows.append(
+            {
+                "id": r["id"],
+                "category": r.get("category", "curated"),
+                "prompt": r["prompt"],
+                "source": "curated",
+            }
+        )
     for i, (q, src) in enumerate(picked, start=len(curated) + 1):
-        rows.append({
-            "id": f"fin_{i:02d}",
-            "category": "heldout_generated",
-            "prompt": q,
-            "source": "heldout_generated",
-            "chunk_source": src,
-        })
+        rows.append(
+            {
+                "id": f"fin_{i:02d}",
+                "category": "heldout_generated",
+                "prompt": q,
+                "source": "heldout_generated",
+                "chunk_source": src,
+            }
+        )
 
     OUT.write_text("".join(json.dumps(r) + "\n" for r in rows))
     print(f"\nWrote {len(rows)} prompts -> {OUT.relative_to(REPO_ROOT)}")
     print(f"  curated:           {sum(1 for r in rows if r['source'] == 'curated')}")
     print(f"  heldout_generated: {sum(1 for r in rows if r['source'] == 'heldout_generated')}")
     print("\nSample of the held-out additions:")
-    for r in rows[len(curated):len(curated) + 5]:
+    for r in rows[len(curated) : len(curated) + 5]:
         print(f"  {r['id']}: {r['prompt'][:105]}")
 
 

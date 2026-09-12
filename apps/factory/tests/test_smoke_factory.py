@@ -31,8 +31,7 @@ def _public_names(path: Path) -> list[str]:
     return [
         node.name
         for node in ast.walk(tree)
-        if isinstance(node, (ast.ClassDef, ast.FunctionDef))
-        and not node.name.startswith("_")
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef)) and not node.name.startswith("_")
     ]
 
 
@@ -49,6 +48,7 @@ def test_ssi_quantization_has_public_api() -> None:
 def test_no_hardcoded_fake_weights() -> None:
     """Zero-Mock invariant: factory scripts must not use torch.randn as fake weights."""
     import re
+
     for fname in ["leverage_quantization.py", "ssi_quantization.py"]:
         source = (FACTORY / fname).read_text()
         # torch.randn used as weight initialization is a red flag

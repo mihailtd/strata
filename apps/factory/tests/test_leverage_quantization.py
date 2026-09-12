@@ -1,6 +1,5 @@
 """Unit tests for Chapter 21 High-Dimensional Leverage Outlier Detection & Mixed-Precision W4A16 Packing."""
 
-import pytest
 import torch
 from leverage_quantization import (
     HighDimensionalLeverageScorer,
@@ -92,7 +91,7 @@ def test_reconstruction_snr_gain_over_uniform_w4():
     Y_leverage = X.to(torch.float32) @ W_rec_leverage.to(torch.float32)
 
     # Compute Output Signal-to-Noise Ratio
-    y_norm_sq = torch.sum(Y_true ** 2).item()
+    y_norm_sq = torch.sum(Y_true**2).item()
     err_leverage = torch.sum((Y_true - Y_leverage) ** 2).item()
     err_naive = torch.sum((Y_true - Y_naive) ** 2).item()
 
@@ -100,4 +99,6 @@ def test_reconstruction_snr_gain_over_uniform_w4():
     snr_naive = 10.0 * torch.log10(torch.tensor(y_norm_sq / err_naive)).item()
 
     # Leverage mixed-precision must achieve significantly higher output SNR (+10 dB gain)
-    assert snr_leverage > snr_naive + 10.0, f"Leverage SNR ({snr_leverage:.2f} dB) should outperform naive ({snr_naive:.2f} dB)"
+    assert snr_leverage > snr_naive + 10.0, (
+        f"Leverage SNR ({snr_leverage:.2f} dB) should outperform naive ({snr_naive:.2f} dB)"
+    )

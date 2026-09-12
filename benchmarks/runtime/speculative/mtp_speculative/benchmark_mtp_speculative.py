@@ -9,11 +9,11 @@ Key Mechanics:
 3. Fast chunked verification via active `flash-linear-attention` Triton kernels on AMD ROCm (gfx1100).
 
 For full technical documentation, verification cost models, and analysis, see:
-    scripts/runtime/speculative/mtp_speculative/README.md
+    benchmarks/runtime/speculative/mtp_speculative/README.md
 
 Usage:
     uv run --env-file .env python \
-        scripts/runtime/speculative/mtp_speculative/benchmark_mtp_speculative.py --tokens 256 --k 2 4 6 8
+        benchmarks/runtime/speculative/mtp_speculative/benchmark_mtp_speculative.py --tokens 256 --k 2 4 6 8
 """
 
 import os

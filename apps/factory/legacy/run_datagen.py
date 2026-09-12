@@ -38,7 +38,7 @@ from runtime.canon import REPO_ROOT  # noqa: E402
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--config", default=str(REPO_ROOT / "configs" / "datagen.yaml"))
+    p.add_argument("--config", default=str(REPO_ROOT / "apps" / "factory" / "legacy" / "datagen.yaml"))
     p.add_argument("--repos", help="comma-separated subset, e.g. uv,ruff (overrides config)")
     p.add_argument("--no-repos", action="store_true", help="clear config's repos entirely (e.g. for an EPUB-only run)")
     p.add_argument(
