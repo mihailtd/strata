@@ -24,7 +24,7 @@ def main():
     parser.add_argument(
         "--project-dir",
         type=str,
-        default=str(REPO_ROOT / "projects" / "real_coordinated_service"),
+        default=str(REPO_ROOT / "agent_sandboxes" / "real_coordinated_service"),
         help="Target project directory",
     )
     parser.add_argument(

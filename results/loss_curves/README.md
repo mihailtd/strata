@@ -10,7 +10,7 @@ uv run --env-file .env python scripts/train/train_expert.py \
     --out results/loss_curves/adapters/astral \
     --loss-curve-out results/loss_curves/astral.json
 
-uv run python scripts/audit/analyze_loss_curves.py
+uv run python apps/factory/analyze_loss_curves.py
 ```
 
 `adapters/` holds the throwaway adapters those runs produced. **They are NOT the

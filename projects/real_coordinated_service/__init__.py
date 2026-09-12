@@ -1,1 +1,0 @@
-"""Coordinated Project Package."""
