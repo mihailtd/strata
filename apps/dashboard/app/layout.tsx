@@ -15,7 +15,8 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "Autonomous Runtime Engine — Dynamic Morphing & VRAM Dashboard",
-  description: "Real-time Riemannian Topology, Weight-Folding Telemetry, and Speculative Decoding Dashboard",
+  description:
+    "Real-time Riemannian Topology, Weight-Folding Telemetry, and Speculative Decoding Dashboard",
 };
 
 export default function RootLayout({
@@ -27,9 +28,7 @@ export default function RootLayout({
     <html lang="en" className={`${outfit.variable} ${jetbrainsMono.variable} dark`}>
       <body className="flex min-h-screen flex-col font-sans antialiased">
         <Header />
-        <main className="flex-1 w-full max-w-[1700px] mx-auto p-6">
-          {children}
-        </main>
+        <main className="flex-1 w-full max-w-[1700px] mx-auto p-6">{children}</main>
       </body>
     </html>
   );

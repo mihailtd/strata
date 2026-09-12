@@ -25,7 +25,7 @@ export function usePersistentState<T>(
     } catch {
       // corrupt or inaccessible storage -- keep the default, don't crash the page
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [key]);
 
   useEffect(() => {

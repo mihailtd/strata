@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
-from typing import List
 
 from harness.coordinator.types import DomainSpecialist, SubagentTask
 
@@ -12,9 +10,9 @@ from harness.coordinator.types import DomainSpecialist, SubagentTask
 class HarnessPlanner:
     """Decomposes a complex software engineering goal into LoRA-specialized subagent tasks."""
 
-    def plan_project(self, goal: str, project_dir: Path) -> List[SubagentTask]:
+    def plan_project(self, goal: str, project_dir: Path) -> list[SubagentTask]:
         """Analyzes the goal and generates an ordered list of specialized subagent tasks."""
-        tasks: List[SubagentTask] = []
+        tasks: list[SubagentTask] = []
         goal_lower = goal.lower()
 
         # Step 1: Project Toolchain & Environment (Astral Specialist)
@@ -52,7 +50,9 @@ class HarnessPlanner:
         )
 
         # Step 3: Database & Vector Schema (PostgreSQL Specialist)
-        if any(w in goal_lower for w in ["database", "postgres", "vector", "embedding", "search", "store", "sql", "hnsw"]):
+        if any(
+            w in goal_lower for w in ["database", "postgres", "vector", "embedding", "search", "store", "sql", "hnsw"]
+        ):
             tasks.append(
                 SubagentTask(
                     task_id="step_3_database",
@@ -70,7 +70,10 @@ class HarnessPlanner:
             )
 
         # Step 4: Analytics Engine (DuckDB Specialist)
-        if any(w in goal_lower for w in ["analytics", "duckdb", "parquet", "olap", "ranking", "percentile", "metrics", "window"]):
+        if any(
+            w in goal_lower
+            for w in ["analytics", "duckdb", "parquet", "olap", "ranking", "percentile", "metrics", "window"]
+        ):
             tasks.append(
                 SubagentTask(
                     task_id="step_4_analytics",
@@ -87,7 +90,9 @@ class HarnessPlanner:
             )
 
         # Step 5: Web API & Lifespan Architecture (FastAPI Specialist)
-        if any(w in goal_lower for w in ["api", "fastapi", "web", "service", "endpoint", "server", "microservice", "http"]):
+        if any(
+            w in goal_lower for w in ["api", "fastapi", "web", "service", "endpoint", "server", "microservice", "http"]
+        ):
             tasks.append(
                 SubagentTask(
                     task_id="step_5_web_api",

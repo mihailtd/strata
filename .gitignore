@@ -49,9 +49,16 @@ models/*
 *.gguf
 *.bin
 *.vtt
-scratch/transcript*.txt
 .adapters/
-projects/**/.adapters/
+agent_sandboxes/**/.adapters/
+# Ephemeral AI-generated harness/benchmark scratch targets -- rmtree'd and
+# regenerated on every run by benchmarks/benchmark_3way_harness.py. The other
+# named agent_sandboxes/ dirs (state_handoff_e2e_service,
+# text_prefill_e2e_service) are audited harness/eval task fixtures and stay
+# tracked -- see agent_sandboxes/README.md.
+agent_sandboxes/bench3_arm_a_handoff/
+agent_sandboxes/bench3_arm_b_reprefill/
+agent_sandboxes/bench3_arm_c_llamacpp/
 node_modules/
 **/node_modules
 target/

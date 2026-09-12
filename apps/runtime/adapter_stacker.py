@@ -95,7 +95,7 @@ class DynamicAdapterStacker:
         # 4. Fuse matching A and B matrices
         for a_key in sorted(a_keys):
             b_key = a_key.replace("lora_A", "lora_B")
-            
+
             a_parts = []
             b_parts = []
 
@@ -103,7 +103,7 @@ class DynamicAdapterStacker:
                 if a_key in tensors and b_key in tensors:
                     a_t = tensors[a_key].to(device)
                     b_t = tensors[b_key].to(device)
-                    
+
                     sqrt_gamma = math.sqrt(gamma)
                     a_parts.append(a_t * sqrt_gamma)
                     b_parts.append(b_t * sqrt_gamma)
@@ -125,9 +125,7 @@ class DynamicAdapterStacker:
                     b_fused = torch.cat(b_parts, dim=1)
                     total_rank = a_fused.shape[0]
                 else:
-                    raise ValueError(
-                        f"Incompatible LoRA shapes for key {a_key}: A={first_a.shape}, B={first_b.shape}"
-                    )
+                    raise ValueError(f"Incompatible LoRA shapes for key {a_key}: A={first_a.shape}, B={first_b.shape}")
 
                 fused_state_dict[a_key] = a_fused
                 fused_state_dict[b_key] = b_fused

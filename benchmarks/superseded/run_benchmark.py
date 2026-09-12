@@ -19,7 +19,7 @@ from runtime.canon import REPO_ROOT  # noqa: E402
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--config", default=str(REPO_ROOT / "configs" / "benchmark.yaml"))
+    p.add_argument("--config", default=str(REPO_ROOT / "benchmarks" / "superseded" / "benchmark.yaml"))
     p.add_argument("--model")
     p.add_argument("--dataset")
     p.add_argument("--methods", help="comma-separated, e.g. lora,dora,qlora")

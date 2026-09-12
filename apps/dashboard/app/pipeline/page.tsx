@@ -33,7 +33,8 @@ interface PipelineStep {
 const PRESET_PIPELINES = [
   {
     name: "Vector DB → FastMCP Server → Pytest Suite",
-    description: "Database Architect designs schema, Backend Engineer writes FastMCP async server, QA Engineer writes async tests.",
+    description:
+      "Database Architect designs schema, Backend Engineer writes FastMCP async server, QA Engineer writes async tests.",
     steps: [
       {
         role: "Database Architect",
@@ -57,7 +58,8 @@ const PRESET_PIPELINES = [
   },
   {
     name: "Product Catalog → Recommendation API → Latency Middleware",
-    description: "PostgreSQL table design, FastAPI recommendation endpoint, and lightweight latency audit middleware.",
+    description:
+      "PostgreSQL table design, FastAPI recommendation endpoint, and lightweight latency audit middleware.",
     steps: [
       {
         role: "Data Modeler",
@@ -94,7 +96,9 @@ export default function MultiAgentPipelinePage() {
   const { status } = useEngineStatus();
   const [pipelineSteps, setPipelineSteps] = useState<PipelineStep[]>(PRESET_PIPELINES[0].steps);
   const [activePresetIndex, setActivePresetIndex] = useState<number>(0);
-  const [executionMode, setExecutionMode] = useState<"tensor_handoff" | "text_prefill" | "both_side_by_side">("both_side_by_side");
+  const [executionMode, setExecutionMode] = useState<
+    "tensor_handoff" | "text_prefill" | "both_side_by_side"
+  >("both_side_by_side");
   const [maxTokens, setMaxTokens] = useState<number>(128);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [results, setResults] = useState<any>(null);
@@ -128,7 +132,11 @@ export default function MultiAgentPipelinePage() {
     setResults(null);
   };
 
-  const handleStepChange = (index: number, field: "expert" | "instruction" | "role", value: string) => {
+  const handleStepChange = (
+    index: number,
+    field: "expert" | "instruction" | "role",
+    value: string
+  ) => {
     const updated = [...pipelineSteps];
     updated[index] = { ...updated[index], [field]: value };
     setPipelineSteps(updated);
@@ -234,22 +242,30 @@ export default function MultiAgentPipelinePage() {
                 Multi-Agent Recurrent State Handoff ($S_t$) Studio
               </h1>
               <p className="text-xs lg:text-sm text-slate-400 mt-1 max-w-3xl">
-                Experience sub-millisecond latent memory handoffs between specialized domain experts. Compare direct VRAM $S_t$ state passing ($O(1)$ constant-time prefill) against legacy text re-prefilling in real-time.
+                Experience sub-millisecond latent memory handoffs between specialized domain
+                experts. Compare direct VRAM $S_t$ state passing ($O(1)$ constant-time prefill)
+                against legacy text re-prefilling in real-time.
               </p>
             </div>
 
             {/* Quick Metrics Badges */}
             <div className="flex items-center gap-3">
               <div className="rounded-2xl border border-white/10 bg-black/40 px-4 py-2.5 text-center">
-                <div className="font-mono text-xs font-bold text-slate-400 uppercase">Handoff Time</div>
+                <div className="font-mono text-xs font-bold text-slate-400 uppercase">
+                  Handoff Time
+                </div>
                 <div className="font-mono text-lg font-extrabold text-[#00f2ff]">0.05 ms</div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/40 px-4 py-2.5 text-center">
-                <div className="font-mono text-xs font-bold text-slate-400 uppercase">Prefill Win</div>
+                <div className="font-mono text-xs font-bold text-slate-400 uppercase">
+                  Prefill Win
+                </div>
                 <div className="font-mono text-lg font-extrabold text-emerald-400">7.84x 🔥</div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/40 px-4 py-2.5 text-center">
-                <div className="font-mono text-xs font-bold text-slate-400 uppercase">Context Free</div>
+                <div className="font-mono text-xs font-bold text-slate-400 uppercase">
+                  Context Free
+                </div>
                 <div className="font-mono text-lg font-extrabold text-[#a855f7]">98.8%</div>
               </div>
             </div>
@@ -282,7 +298,8 @@ export default function MultiAgentPipelinePage() {
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-                <Layers className="h-4 w-4 text-[#00f2ff]" /> Sequential Agent Pipeline ({pipelineSteps.length} Steps)
+                <Layers className="h-4 w-4 text-[#00f2ff]" /> Sequential Agent Pipeline (
+                {pipelineSteps.length} Steps)
               </h2>
               <button
                 onClick={handleAddStep}
@@ -294,7 +311,8 @@ export default function MultiAgentPipelinePage() {
 
             <div className="space-y-4">
               {pipelineSteps.map((step, idx) => {
-                const expertInfo = AVAILABLE_EXPERTS.find((e) => e.id === step.expert) || AVAILABLE_EXPERTS[0];
+                const expertInfo =
+                  AVAILABLE_EXPERTS.find((e) => e.id === step.expert) || AVAILABLE_EXPERTS[0];
                 const Icon = expertInfo.icon;
                 return (
                   <div
@@ -303,7 +321,8 @@ export default function MultiAgentPipelinePage() {
                   >
                     {idx > 0 && (
                       <div className="absolute -top-3.5 left-8 flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-extrabold uppercase bg-gradient-to-r from-[#00f2ff]/20 to-[#a855f7]/20 border border-[#00f2ff]/40 text-[#00f2ff] shadow-md z-10">
-                        <Zap className="h-2.5 w-2.5" /> 0.05ms $S_t$ Handoff + In-Place Weight Fold (0.94ms)
+                        <Zap className="h-2.5 w-2.5" /> 0.05ms $S_t$ Handoff + In-Place Weight Fold
+                        (0.94ms)
                       </div>
                     )}
                     <div className="flex items-center justify-between gap-3 mb-3">
@@ -327,7 +346,11 @@ export default function MultiAgentPipelinePage() {
                             className="bg-transparent font-mono text-xs text-slate-200 focus:outline-none cursor-pointer"
                           >
                             {AVAILABLE_EXPERTS.map((exp) => (
-                              <option key={exp.id} value={exp.id} className="bg-[#0c1018] text-slate-200">
+                              <option
+                                key={exp.id}
+                                value={exp.id}
+                                className="bg-[#0c1018] text-slate-200"
+                              >
                                 {exp.name}
                               </option>
                             ))}
@@ -394,7 +417,8 @@ export default function MultiAgentPipelinePage() {
                     }`}
                   >
                     <div className="font-bold flex items-center gap-1.5 text-white">
-                      <Zap className="h-3.5 w-3.5 text-[#00f2ff]" /> Tensor State Handoff ($S_t$) Only
+                      <Zap className="h-3.5 w-3.5 text-[#00f2ff]" /> Tensor State Handoff ($S_t$)
+                      Only
                     </div>
                     <div className="text-[10px] text-slate-400 mt-0.5">
                       Pure latent memory propagation (54.97 MB VRAM snapshot).
@@ -409,9 +433,7 @@ export default function MultiAgentPipelinePage() {
                         : "border-white/5 bg-black/40 text-slate-400 hover:bg-white/5"
                     }`}
                   >
-                    <div className="font-bold text-slate-300">
-                      Standard Text Re-Prefill Only
-                    </div>
+                    <div className="font-bold text-slate-300">Standard Text Re-Prefill Only</div>
                     <div className="text-[10px] text-slate-400 mt-0.5">
                       Legacy baseline that re-processes entire string history on every handoff.
                     </div>
@@ -447,12 +469,16 @@ export default function MultiAgentPipelinePage() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <ShieldAlert className="h-4 w-4 text-purple-400" />
-                    <span className="text-xs font-bold text-white">Cut-Set Speculative Hedging</span>
+                    <span className="text-xs font-bold text-white">
+                      Cut-Set Speculative Hedging
+                    </span>
                   </div>
                   <button
                     onClick={handleToggleCutSet}
                     className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                      cutSetHedging ? "bg-purple-600 shadow-[0_0_10px_rgba(168,85,247,0.5)]" : "bg-slate-700"
+                      cutSetHedging
+                        ? "bg-purple-600 shadow-[0_0_10px_rgba(168,85,247,0.5)]"
+                        : "bg-slate-700"
                     }`}
                   >
                     <span
@@ -509,17 +535,22 @@ export default function MultiAgentPipelinePage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="rounded-2xl border border-white/10 bg-black/40 p-4 text-center">
-                    <div className="text-xs font-mono font-bold text-slate-400 uppercase">Prefill Latency Speedup</div>
+                    <div className="text-xs font-mono font-bold text-slate-400 uppercase">
+                      Prefill Latency Speedup
+                    </div>
                     <div className="text-3xl font-extrabold text-[#00f2ff] mt-1">
                       {results.comparison.prefill_speedup}x 🔥
                     </div>
                     <div className="text-[10px] text-slate-400 mt-1 font-mono">
-                      {results.tensor_arm.total_prefill_ms} ms (Arm B) vs {results.text_arm.total_prefill_ms} ms (Arm A)
+                      {results.tensor_arm.total_prefill_ms} ms (Arm B) vs{" "}
+                      {results.text_arm.total_prefill_ms} ms (Arm A)
                     </div>
                   </div>
 
                   <div className="rounded-2xl border border-white/10 bg-black/40 p-4 text-center">
-                    <div className="text-xs font-mono font-bold text-slate-400 uppercase">Context Tokens Preserved</div>
+                    <div className="text-xs font-mono font-bold text-slate-400 uppercase">
+                      Context Tokens Preserved
+                    </div>
                     <div className="text-3xl font-extrabold text-emerald-400 mt-1">
                       +{results.comparison.tokens_saved} tok
                     </div>
@@ -529,10 +560,10 @@ export default function MultiAgentPipelinePage() {
                   </div>
 
                   <div className="rounded-2xl border border-white/10 bg-black/40 p-4 text-center">
-                    <div className="text-xs font-mono font-bold text-slate-400 uppercase">Recurrent State Footprint</div>
-                    <div className="text-3xl font-extrabold text-[#a855f7] mt-1">
-                      54.97 MB
+                    <div className="text-xs font-mono font-bold text-slate-400 uppercase">
+                      Recurrent State Footprint
                     </div>
+                    <div className="text-3xl font-extrabold text-[#a855f7] mt-1">54.97 MB</div>
                     <div className="text-[10px] text-slate-400 mt-1 font-mono">
                       $O(1)$ constant VRAM size across infinite turns
                     </div>
@@ -563,7 +594,9 @@ export default function MultiAgentPipelinePage() {
                           : "text-slate-400 hover:text-white"
                       }`}
                     >
-                      <span>Step {s.step_index}: {s.expert}</span>
+                      <span>
+                        Step {s.step_index}: {s.expert}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -625,10 +658,14 @@ export default function MultiAgentPipelinePage() {
                   {selectedStepTab > 0 && (
                     <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-3 text-xs text-slate-300">
                       <b className="text-emerald-400 flex items-center gap-1.5 mb-1 font-mono">
-                        <Sparkles className="h-3.5 w-3.5" /> Latent Semantic Memory Continuity Verified:
+                        <Sparkles className="h-3.5 w-3.5" /> Latent Semantic Memory Continuity
+                        Verified:
                       </b>
                       <span>
-                        Notice that this agent generated code referencing the exact table schemas, column names, and vector dimensions created in earlier steps <b>without those schemas ever being in its prompt string</b>! The context was passed 100% via the $S_t$ mathematical state tensor in VRAM.
+                        Notice that this agent generated code referencing the exact table schemas,
+                        column names, and vector dimensions created in earlier steps{" "}
+                        <b>without those schemas ever being in its prompt string</b>! The context
+                        was passed 100% via the $S_t$ mathematical state tensor in VRAM.
                       </span>
                     </div>
                   )}
@@ -639,10 +676,16 @@ export default function MultiAgentPipelinePage() {
                       onClick={() => copyToClipboard(displayedSteps[selectedStepTab].output_text)}
                       className="absolute top-3 right-3 flex items-center gap-1 rounded-lg border border-white/10 bg-black/80 px-2.5 py-1 text-[10px] font-bold text-slate-300 hover:text-white"
                     >
-                      {copiedCode ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                      {copiedCode ? (
+                        <Check className="h-3 w-3 text-emerald-400" />
+                      ) : (
+                        <Copy className="h-3 w-3" />
+                      )}
                       <span>{copiedCode ? "Copied" : "Copy Code"}</span>
                     </button>
-                    <pre className="whitespace-pre-wrap">{displayedSteps[selectedStepTab].output_text}</pre>
+                    <pre className="whitespace-pre-wrap">
+                      {displayedSteps[selectedStepTab].output_text}
+                    </pre>
                   </div>
                 </div>
               )}

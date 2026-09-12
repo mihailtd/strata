@@ -33,10 +33,7 @@ export default function CausalDagPage() {
     (changes) => setEdges((eds) => applyEdgeChanges(changes, eds)),
     []
   );
-  const onConnect: OnConnect = useCallback(
-    (params) => setEdges((eds) => addEdge(params, eds)),
-    []
-  );
+  const onConnect: OnConnect = useCallback((params) => setEdges((eds) => addEdge(params, eds)), []);
 
   const fetchDag = async () => {
     try {
@@ -179,7 +176,8 @@ export default function CausalDagPage() {
               NOTEARS Continuous Tool-to-Expert Causal Graph
             </h1>
             <p className="text-xs text-slate-400 mt-1">
-              Learned smooth DAG (Tr(exp(W ∘ W)) - d = 0) mapping detected tool surfaces to next expert domains for zero-latency proactive weight pre-folding.
+              Learned smooth DAG (Tr(exp(W ∘ W)) - d = 0) mapping detected tool surfaces to next
+              expert domains for zero-latency proactive weight pre-folding.
             </p>
           </div>
 
@@ -219,7 +217,9 @@ export default function CausalDagPage() {
           <div className="rounded-xl border border-white/5 bg-black/40 p-3.5">
             <div className="text-xs text-slate-400">Cumulative Time Saved</div>
             <div className="mt-1 text-2xl font-bold font-mono text-[#a855f7]">
-              {dagData?.telemetry?.prefold_saved_ms ? dagData.telemetry.prefold_saved_ms.toFixed(1) : "142.5"}{" "}
+              {dagData?.telemetry?.prefold_saved_ms
+                ? dagData.telemetry.prefold_saved_ms.toFixed(1)
+                : "142.5"}{" "}
               <span className="text-xs font-normal text-slate-400">ms</span>
             </div>
             <div className="text-[10px] text-slate-500 mt-0.5">Background GPU folding</div>
@@ -292,7 +292,10 @@ export default function CausalDagPage() {
             </thead>
             <tbody>
               {(dagData?.edges || []).slice(0, 8).map((edge, idx) => (
-                <tr key={idx} className="border-b border-[rgba(255,255,255,0.05)] hover:bg-white/[0.02]">
+                <tr
+                  key={idx}
+                  className="border-b border-[rgba(255,255,255,0.05)] hover:bg-white/[0.02]"
+                >
                   <td className="py-2.5 px-4 text-left text-[#00f2ff]">{edge.source}</td>
                   <td className="py-2.5 px-4 text-left text-white font-bold">{edge.target}</td>
                   <td className="py-2.5 px-4 text-center">

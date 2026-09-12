@@ -38,7 +38,7 @@ from runtime.canon import REPO_ROOT  # noqa: E402
 # is moved, and it broke all 31 scripts during the scripts/ reorg.
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--config", default=str(REPO_ROOT / "configs" / "micro_probe.yaml"))
+    p.add_argument("--config", default=str(REPO_ROOT / "benchmarks" / "superseded" / "micro_probe.yaml"))
     p.add_argument("--max-steps", type=int, default=500)
     p.add_argument("--batch-size", type=int, default=2)
     p.add_argument("--lr", type=float, default=2e-4)

@@ -54,22 +54,100 @@ interface ExpertData {
 }
 
 const EXPERTS: ExpertData[] = [
-  { id: "postgresql", name: "PostgreSQL", category: "Database", color: "#336791", description: "pgvector, HNSW indexes & SQL queries" },
-  { id: "astral", name: "Astral (uv/ruff)", category: "Tooling", color: "#e879f9", description: "uv, ruff, PEP 723 script runner" },
-  { id: "duckdb", name: "DuckDB", category: "Analytics", color: "#eab308", description: "Columnar OLAP, Parquet & analytics" },
-  { id: "python_modern", name: "Python Modern", category: "Core", color: "#38bdf8", description: "Clean Python 3.12+, typing & async" },
-  { id: "python_web", name: "Python Web", category: "Web", color: "#34d399", description: "FastAPI, Pydantic v2 & async endpoints" },
-  { id: "financial_planning", name: "Financial", category: "Domain", color: "#f97316", description: "Portfolio risk, amortization & pensions" },
+  {
+    id: "postgresql",
+    name: "PostgreSQL",
+    category: "Database",
+    color: "#336791",
+    description: "pgvector, HNSW indexes & SQL queries",
+  },
+  {
+    id: "astral",
+    name: "Astral (uv/ruff)",
+    category: "Tooling",
+    color: "#e879f9",
+    description: "uv, ruff, PEP 723 script runner",
+  },
+  {
+    id: "duckdb",
+    name: "DuckDB",
+    category: "Analytics",
+    color: "#eab308",
+    description: "Columnar OLAP, Parquet & analytics",
+  },
+  {
+    id: "python_modern",
+    name: "Python Modern",
+    category: "Core",
+    color: "#38bdf8",
+    description: "Clean Python 3.12+, typing & async",
+  },
+  {
+    id: "python_web",
+    name: "Python Web",
+    category: "Web",
+    color: "#34d399",
+    description: "FastAPI, Pydantic v2 & async endpoints",
+  },
+  {
+    id: "financial_planning",
+    name: "Financial",
+    category: "Domain",
+    color: "#f97316",
+    description: "Portfolio risk, amortization & pensions",
+  },
 ];
 
 // Pre-computed 6x6 AIRM geodesic distance matrix d_R (from results/benchmarks/riemannian_manifold_distances.json)
 const DISTANCE_MATRIX: Record<string, Record<string, number>> = {
-  postgresql: { postgresql: 0.0, astral: 12.418, duckdb: 4.112, python_modern: 9.84, python_web: 10.312, financial_planning: 18.921 },
-  astral: { postgresql: 12.418, astral: 0.0, duckdb: 11.89, python_modern: 3.12, python_web: 5.41, financial_planning: 19.45 },
-  duckdb: { postgresql: 4.112, astral: 11.89, duckdb: 0.0, python_modern: 8.91, python_web: 9.14, financial_planning: 17.81 },
-  python_modern: { postgresql: 9.84, astral: 3.12, duckdb: 8.91, python_modern: 0.0, python_web: 2.84, financial_planning: 16.21 },
-  python_web: { postgresql: 10.312, astral: 5.41, duckdb: 9.14, python_modern: 2.84, python_web: 0.0, financial_planning: 15.93 },
-  financial_planning: { postgresql: 18.921, astral: 19.45, duckdb: 17.81, python_modern: 16.21, python_web: 15.93, financial_planning: 0.0 },
+  postgresql: {
+    postgresql: 0.0,
+    astral: 12.418,
+    duckdb: 4.112,
+    python_modern: 9.84,
+    python_web: 10.312,
+    financial_planning: 18.921,
+  },
+  astral: {
+    postgresql: 12.418,
+    astral: 0.0,
+    duckdb: 11.89,
+    python_modern: 3.12,
+    python_web: 5.41,
+    financial_planning: 19.45,
+  },
+  duckdb: {
+    postgresql: 4.112,
+    astral: 11.89,
+    duckdb: 0.0,
+    python_modern: 8.91,
+    python_web: 9.14,
+    financial_planning: 17.81,
+  },
+  python_modern: {
+    postgresql: 9.84,
+    astral: 3.12,
+    duckdb: 8.91,
+    python_modern: 0.0,
+    python_web: 2.84,
+    financial_planning: 16.21,
+  },
+  python_web: {
+    postgresql: 10.312,
+    astral: 5.41,
+    duckdb: 9.14,
+    python_modern: 2.84,
+    python_web: 0.0,
+    financial_planning: 15.93,
+  },
+  financial_planning: {
+    postgresql: 18.921,
+    astral: 19.45,
+    duckdb: 17.81,
+    python_modern: 16.21,
+    python_web: 15.93,
+    financial_planning: 0.0,
+  },
 };
 
 export default function LedoitWolfInfographic() {
@@ -88,7 +166,9 @@ export default function LedoitWolfInfographic() {
     const delta = Math.min(1.0, Math.max(0.0, raw_delta));
 
     const isSingular = sampleN < p_dim;
-    const conditionNumberSample = isSingular ? "∞" : (15.2 * (sampleN / (sampleN - p_dim))).toFixed(1);
+    const conditionNumberSample = isSingular
+      ? "∞"
+      : (15.2 * (sampleN / (sampleN - p_dim))).toFixed(1);
     const conditionNumberLW = (3.2 + 2.1 * (1 - delta)).toFixed(2);
 
     return {
@@ -151,7 +231,10 @@ export default function LedoitWolfInfographic() {
               <span>Ledoit-Wolf Shrinkage &amp; Riemannian Manifold Router</span>
             </h2>
             <p className="text-sm text-slate-300 max-w-2xl mt-1.5 flex items-center gap-1 flex-wrap">
-              <span>Mathematical foundation for zero-reallocation dynamic expert team routing on the curved cone of Positive Definite matrices</span>
+              <span>
+                Mathematical foundation for zero-reallocation dynamic expert team routing on the
+                curved cone of Positive Definite matrices
+              </span>
               <Tex math="\mathcal{S}_{++}^p" className="text-cyan-300 font-bold" />.
             </p>
           </div>
@@ -199,13 +282,18 @@ export default function LedoitWolfInfographic() {
               <p className="text-xs text-slate-400 mt-0.5">
                 {viewMode === "layman" ? (
                   <span className="flex items-center gap-1">
-                    <span>See how the algorithm prevents crashes when you only have a few token samples</span>
+                    <span>
+                      See how the algorithm prevents crashes when you only have a few token samples
+                    </span>
                     <Tex math="(n < p)" className="text-amber-300" />.
                   </span>
                 ) : (
                   <span className="flex items-center gap-1">
                     <span>Convex combination:</span>
-                    <Tex math="\Sigma_{\text{LW}} = (1 - \delta^*) S + \delta^* F" className="text-cyan-300 font-semibold" />
+                    <Tex
+                      math="\Sigma_{\text{LW}} = (1 - \delta^*) S + \delta^* F"
+                      className="text-cyan-300 font-semibold"
+                    />
                     <span>with minimal Frobenius quadratic risk.</span>
                   </span>
                 )}
@@ -276,7 +364,9 @@ export default function LedoitWolfInfographic() {
                 <Tex math="\delta^*" className="text-cyan-300" />
                 <span>)</span>
               </span>
-              <span className="text-lg font-black font-mono text-cyan-300 mt-1">{shrinkageData.deltaPercent}%</span>
+              <span className="text-lg font-black font-mono text-cyan-300 mt-1">
+                {shrinkageData.deltaPercent}%
+              </span>
               <span className="text-[10px] text-slate-400 mt-auto flex items-center gap-1">
                 <span>Weight on Sphere (</span>
                 <Tex math="F" className="text-cyan-300" />
@@ -290,7 +380,9 @@ export default function LedoitWolfInfographic() {
                 <Tex math="1 - \delta^*" className="text-blue-300" />
                 <span>)</span>
               </span>
-              <span className="text-lg font-black font-mono text-blue-300 mt-1">{shrinkageData.sampleWeight}%</span>
+              <span className="text-lg font-black font-mono text-blue-300 mt-1">
+                {shrinkageData.sampleWeight}%
+              </span>
               <span className="text-[10px] text-slate-400 mt-auto flex items-center gap-1">
                 <span>Weight on Data (</span>
                 <Tex math="S" className="text-blue-300" />
@@ -303,8 +395,12 @@ export default function LedoitWolfInfographic() {
                 <span>Condition</span>
                 <Tex math="\kappa(\Sigma)" className="text-emerald-300" />
               </span>
-              <span className="text-base font-black font-mono text-emerald-300 mt-1">κ = {shrinkageData.conditionNumberLW}</span>
-              <span className="text-[10px] text-emerald-400/80 mt-auto">Strictly Invertible ✅</span>
+              <span className="text-base font-black font-mono text-emerald-300 mt-1">
+                κ = {shrinkageData.conditionNumberLW}
+              </span>
+              <span className="text-[10px] text-emerald-400/80 mt-auto">
+                Strictly Invertible ✅
+              </span>
             </div>
           </div>
         </div>
@@ -329,7 +425,9 @@ export default function LedoitWolfInfographic() {
                 </span>
               )}
             </div>
-            <span className="text-[10px] text-slate-500 font-mono mt-1 block">Weight: {shrinkageData.sampleWeight}%</span>
+            <span className="text-[10px] text-slate-500 font-mono mt-1 block">
+              Weight: {shrinkageData.sampleWeight}%
+            </span>
           </div>
 
           <div className="text-slate-500 font-black text-lg">+</div>
@@ -341,11 +439,14 @@ export default function LedoitWolfInfographic() {
             </span>
             <div className="h-16 flex items-center justify-center font-mono text-xs text-cyan-400 border border-dashed border-cyan-500/30 rounded bg-black/30">
               <span className="text-[11px] leading-tight">
-                Isotropic Diagonal Sphere<br />
+                Isotropic Diagonal Sphere
+                <br />
                 Condition Number = 1.00
               </span>
             </div>
-            <span className="text-[10px] text-cyan-400 font-mono mt-1 block">Weight: {shrinkageData.deltaPercent}%</span>
+            <span className="text-[10px] text-cyan-400 font-mono mt-1 block">
+              Weight: {shrinkageData.deltaPercent}%
+            </span>
           </div>
 
           <div className="text-cyan-400 font-black text-lg">➔</div>
@@ -364,7 +465,9 @@ export default function LedoitWolfInfographic() {
                 <span>κ = {shrinkageData.conditionNumberLW} | Well-Conditioned</span>
               </span>
             </div>
-            <span className="text-[10px] text-emerald-400 font-mono mt-1 block">Guaranteed Invertible Operator</span>
+            <span className="text-[10px] text-emerald-400 font-mono mt-1 block">
+              Guaranteed Invertible Operator
+            </span>
           </div>
         </div>
       </div>
@@ -406,9 +509,15 @@ export default function LedoitWolfInfographic() {
               </thead>
               <tbody>
                 {EXPERTS.map((row) => (
-                  <tr key={row.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                  <tr
+                    key={row.id}
+                    className="border-b border-white/5 hover:bg-white/5 transition-colors"
+                  >
                     <td className="p-2 font-bold text-slate-200 flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: row.color }} />
+                      <span
+                        className="h-2 w-2 rounded-full"
+                        style={{ backgroundColor: row.color }}
+                      />
                       <span>{row.name}</span>
                     </td>
                     {EXPERTS.map((col) => {
@@ -419,7 +528,9 @@ export default function LedoitWolfInfographic() {
 
                       let cellStyle = "text-slate-300 hover:bg-white/10";
                       if (d === 0) cellStyle = "bg-white/5 text-slate-500";
-                      else if (d <= 4.5) cellStyle = "bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40";
+                      else if (d <= 4.5)
+                        cellStyle =
+                          "bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40";
                       else if (d <= 10.0) cellStyle = "bg-blue-500/10 text-blue-300";
                       else cellStyle = "bg-rose-500/10 text-rose-300";
 
@@ -468,16 +579,24 @@ export default function LedoitWolfInfographic() {
           <div className="lg:col-span-5 rounded-xl border border-white/10 bg-black/40 p-5 flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between pb-3 border-b border-white/5">
-                <span className="text-xs font-mono uppercase text-slate-400">Pairwise Geodesic Probe</span>
-                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold border ${pairAnalysis.badgeBg} ${pairAnalysis.synergyColor}`}>
+                <span className="text-xs font-mono uppercase text-slate-400">
+                  Pairwise Geodesic Probe
+                </span>
+                <span
+                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold border ${pairAnalysis.badgeBg} ${pairAnalysis.synergyColor}`}
+                >
                   {pairAnalysis.synergyLabel}
                 </span>
               </div>
 
               <div className="flex items-center justify-center gap-3 my-4">
                 <div className="flex-1 text-center p-3 rounded-lg border border-slate-700 bg-slate-900/60">
-                  <span className="text-xs font-bold text-white block">{pairAnalysis.expA?.name}</span>
-                  <span className="text-[10px] text-slate-400 font-mono">{pairAnalysis.expA?.category}</span>
+                  <span className="text-xs font-bold text-white block">
+                    {pairAnalysis.expA?.name}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {pairAnalysis.expA?.category}
+                  </span>
                 </div>
 
                 <div className="flex flex-col items-center">
@@ -485,12 +604,18 @@ export default function LedoitWolfInfographic() {
                     <Tex math="d_R" className="text-slate-400" />
                     <span>Geodesic</span>
                   </span>
-                  <span className="text-xl font-black font-mono text-cyan-300">{pairAnalysis.dist.toFixed(3)}</span>
+                  <span className="text-xl font-black font-mono text-cyan-300">
+                    {pairAnalysis.dist.toFixed(3)}
+                  </span>
                 </div>
 
                 <div className="flex-1 text-center p-3 rounded-lg border border-slate-700 bg-slate-900/60">
-                  <span className="text-xs font-bold text-white block">{pairAnalysis.expB?.name}</span>
-                  <span className="text-[10px] text-slate-400 font-mono">{pairAnalysis.expB?.category}</span>
+                  <span className="text-xs font-bold text-white block">
+                    {pairAnalysis.expB?.name}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {pairAnalysis.expB?.category}
+                  </span>
                 </div>
               </div>
 
@@ -508,13 +633,17 @@ export default function LedoitWolfInfographic() {
                 </div>
                 <div className="flex justify-between py-1">
                   <span className="text-slate-400">Runtime Action:</span>
-                  <span className="font-mono font-bold text-cyan-300">{pairAnalysis.recommendation}</span>
+                  <span className="font-mono font-bold text-cyan-300">
+                    {pairAnalysis.recommendation}
+                  </span>
                 </div>
               </div>
             </div>
 
             <div className="mt-4 p-3 rounded-lg bg-cyan-950/20 border border-cyan-500/20 text-[11px] text-cyan-200/90 font-mono">
-              ⚡ RiemannianTeamRouter evaluates all 15 pairwise geodesic distances in <strong>42.1 microseconds</strong>, selecting optimal co-morphs with zero memory reallocation.
+              ⚡ RiemannianTeamRouter evaluates all 15 pairwise geodesic distances in{" "}
+              <strong>42.1 microseconds</strong>, selecting optimal co-morphs with zero memory
+              reallocation.
             </div>
           </div>
         </div>
@@ -525,7 +654,9 @@ export default function LedoitWolfInfographic() {
         <div className="rounded-2xl border border-rose-500/20 bg-rose-950/10 p-5">
           <div className="flex items-center gap-2 mb-2">
             <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
-            <h4 className="font-bold text-white text-sm">The Euclidean Flaw (Flat Space Assumption)</h4>
+            <h4 className="font-bold text-white text-sm">
+              The Euclidean Flaw (Flat Space Assumption)
+            </h4>
           </div>
           <p className="text-xs text-slate-300 leading-relaxed mb-3 flex items-center gap-1 flex-wrap">
             <span>Computing Euclidean distance</span>
@@ -536,18 +667,28 @@ export default function LedoitWolfInfographic() {
           </p>
           <div className="rounded-lg bg-black/40 border border-rose-500/20 p-3 font-mono text-[11px] text-rose-300 space-y-2">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span>❌ <strong>Determinant Swelling:</strong></span>
+              <span>
+                ❌ <strong>Determinant Swelling:</strong>
+              </span>
               <Tex math="\det\left(\frac{\Sigma_1 + \Sigma_2}{2}\right) > \sqrt{\det(\Sigma_1) \det(\Sigma_2)}" />
             </div>
-            <div>❌ <strong>Lacks Scale Invariance:</strong> Rescaling activations changes distances artificially.</div>
-            <div>❌ <strong>Boundary Violations:</strong> Straight lines leave the positive-definite cone.</div>
+            <div>
+              ❌ <strong>Lacks Scale Invariance:</strong> Rescaling activations changes distances
+              artificially.
+            </div>
+            <div>
+              ❌ <strong>Boundary Violations:</strong> Straight lines leave the positive-definite
+              cone.
+            </div>
           </div>
         </div>
 
         <div className="rounded-2xl border border-emerald-500/20 bg-emerald-950/10 p-5">
           <div className="flex items-center gap-2 mb-2">
             <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-            <h4 className="font-bold text-white text-sm">The Riemannian Solution (AIRM Geodesic)</h4>
+            <h4 className="font-bold text-white text-sm">
+              The Riemannian Solution (AIRM Geodesic)
+            </h4>
           </div>
           <p className="text-xs text-slate-300 leading-relaxed mb-3 flex items-center gap-1 flex-wrap">
             <span>AIRM projects matrices onto the Riemannian manifold</span>
@@ -556,14 +697,21 @@ export default function LedoitWolfInfographic() {
           </p>
           <div className="rounded-lg bg-black/40 border border-emerald-500/20 p-3 font-mono text-[11px] text-emerald-300 space-y-2">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span>✅ <strong>Zero Volume Distortion:</strong></span>
+              <span>
+                ✅ <strong>Zero Volume Distortion:</strong>
+              </span>
               <Tex math="\det(\Gamma(1/2)) = \sqrt{\det(\Sigma_1) \det(\Sigma_2)}" />
             </div>
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span>✅ <strong>Affine Invariance:</strong></span>
+              <span>
+                ✅ <strong>Affine Invariance:</strong>
+              </span>
               <Tex math="d_R(A \Sigma_1 A^T, A \Sigma_2 A^T) = d_R(\Sigma_1, \Sigma_2)" />
             </div>
-            <div>✅ <strong>Physics Guaranteed:</strong> All points along the geodesic remain strictly invertible.</div>
+            <div>
+              ✅ <strong>Physics Guaranteed:</strong> All points along the geodesic remain strictly
+              invertible.
+            </div>
           </div>
         </div>
       </div>

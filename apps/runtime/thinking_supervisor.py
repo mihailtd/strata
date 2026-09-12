@@ -31,9 +31,10 @@ Theoretical & Algorithmic Grounding:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import math
-from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Any
+
 import torch
 import torch.nn.functional as F
 
@@ -41,10 +42,11 @@ import torch.nn.functional as F
 @dataclass
 class SupervisorStepAction:
     """Action outcome from a single supervisor evaluation step."""
+
     modified_logits: torch.Tensor
     should_force_transition: bool = False
     transition_token_ids: list[int] = field(default_factory=lambda: [198, 248069, 271])
-    exit_reason: Optional[str] = None
+    exit_reason: str | None = None
     step_entropy: float = 0.0
     in_thinking_mode: bool = True
     renko_loop_detected: bool = False
@@ -66,14 +68,14 @@ class ThinkingRuntimeSupervisor:
         self,
         think_end_token_id: int = 248069,  # Qwen 3.5 </think> special token
         think_start_token_id: int = 248068,  # Qwen 3.5 <think> special token
-        transition_token_ids: Optional[list[int]] = None,
+        transition_token_ids: list[int] | None = None,
         budget_tier: str = "medium",
-        custom_caps: Optional[dict[str, int]] = None,
+        custom_caps: dict[str, int] | None = None,
         loop_similarity_threshold: float = 0.96,
         entropy_window_size: int = 16,
         entropy_convergence_threshold: float = 0.35,
         weibull_beta: float = 2.2,
-        weibull_eta: Optional[float] = None,
+        weibull_eta: float | None = None,
         enabled: bool = True,
     ):
         self.think_end_token_id = think_end_token_id
@@ -86,9 +88,7 @@ class ThinkingRuntimeSupervisor:
         if custom_caps:
             self.caps = custom_caps
         else:
-            self.caps = self.DEFAULT_BUDGET_TIERS.get(
-                self.budget_tier, self.DEFAULT_BUDGET_TIERS["medium"]
-            ).copy()
+            self.caps = self.DEFAULT_BUDGET_TIERS.get(self.budget_tier, self.DEFAULT_BUDGET_TIERS["medium"]).copy()
 
         # Hyperparameters
         self.loop_similarity_threshold = loop_similarity_threshold
@@ -96,24 +96,24 @@ class ThinkingRuntimeSupervisor:
         self.entropy_convergence_threshold = entropy_convergence_threshold
         self.weibull_beta = weibull_beta
         # Dynamically scale Weibull hazard threshold to 1.25x the hard_max budget if not provided
-        self.weibull_eta = weibull_eta if weibull_eta is not None else max(600.0, float(self.caps.get("hard_max", 2048)) * 1.25)
+        self.weibull_eta = (
+            weibull_eta if weibull_eta is not None else max(600.0, float(self.caps.get("hard_max", 2048)) * 1.25)
+        )
 
         # State tracking
         self.in_thinking_mode: bool = self.budget_tier != "off"
         self.step_count: int = 0
         self.recent_hidden_states: list[torch.Tensor] = []
         self.recent_entropies: list[float] = []
-        self.exit_reason: Optional[str] = None
+        self.exit_reason: str | None = None
         self.divergence_streak: int = 0
         self.was_forced: bool = False
 
-    def reset(self, budget_tier: Optional[str] = None) -> None:
+    def reset(self, budget_tier: str | None = None) -> None:
         """Resets supervisor state for a new conversation turn."""
         if budget_tier:
             self.budget_tier = budget_tier.lower()
-            self.caps = self.DEFAULT_BUDGET_TIERS.get(
-                self.budget_tier, self.DEFAULT_BUDGET_TIERS["medium"]
-            ).copy()
+            self.caps = self.DEFAULT_BUDGET_TIERS.get(self.budget_tier, self.DEFAULT_BUDGET_TIERS["medium"]).copy()
 
         self.in_thinking_mode = self.budget_tier != "off"
         self.step_count = 0
@@ -133,10 +133,10 @@ class ThinkingRuntimeSupervisor:
     def process_step(
         self,
         logits: torch.Tensor,
-        hidden_state: Optional[torch.Tensor] = None,
+        hidden_state: torch.Tensor | None = None,
     ) -> SupervisorStepAction:
         """Processes the current step's logits and hidden state, applying bias or force-exit.
-        
+
         Args:
             logits: Tensor of shape [1, vocab_size] or [vocab_size]
             hidden_state: Residual stream hidden vector of shape [1, hidden_dim] or [hidden_dim]
@@ -157,9 +157,7 @@ class ThinkingRuntimeSupervisor:
             logits_view = logits_work
 
         vocab_size = logits_view.shape[-1]
-        valid_end_token = (
-            0 <= self.think_end_token_id < vocab_size
-        )
+        valid_end_token = 0 <= self.think_end_token_id < vocab_size
 
         # Compute Shannon Entropy H(p_t)
         with torch.no_grad():
@@ -244,7 +242,7 @@ class ThinkingRuntimeSupervisor:
         # -------------------------------------------------------------
         divergence_detected = False
         if len(self.recent_entropies) >= self.entropy_window_size and self.step_count > self.caps["min"]:
-            window = self.recent_entropies[-self.entropy_window_size:]
+            window = self.recent_entropies[-self.entropy_window_size :]
             mean_h = sum(window) / len(window)
             var_h = sum((x - mean_h) ** 2 for x in window) / len(window)
             std_h = math.sqrt(var_h)
@@ -254,7 +252,9 @@ class ThinkingRuntimeSupervisor:
                 logits_view[0, self.think_end_token_id] += 12.0
                 if len(window) >= 16 and all(h < self.entropy_convergence_threshold for h in window):
                     self.in_thinking_mode = False
-                    self.exit_reason = f"entropy_cognitive_convergence (Mean_H={mean_h:.3f} < {self.entropy_convergence_threshold})"
+                    self.exit_reason = (
+                        f"entropy_cognitive_convergence (Mean_H={mean_h:.3f} < {self.entropy_convergence_threshold})"
+                    )
                     self.was_forced = True
                     return SupervisorStepAction(
                         modified_logits=logits_work,
@@ -318,11 +318,7 @@ class ThinkingRuntimeSupervisor:
 
     def get_summary(self) -> dict[str, Any]:
         """Returns structured supervisor telemetry."""
-        avg_h = (
-            sum(self.recent_entropies) / len(self.recent_entropies)
-            if self.recent_entropies
-            else 0.0
-        )
+        avg_h = sum(self.recent_entropies) / len(self.recent_entropies) if self.recent_entropies else 0.0
         return {
             "enabled": self.enabled,
             "budget_tier": self.budget_tier,

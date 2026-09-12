@@ -107,5 +107,5 @@ def record(
             path.parent.mkdir(parents=True, exist_ok=True)
             with path.open("a", encoding="utf-8") as fh:
                 fh.write(line + "\n")
-    except Exception as exc:                      # never break serving over telemetry
+    except Exception as exc:  # never break serving over telemetry
         print(f"[tool_trace] disabled for this event: {type(exc).__name__}: {exc}")

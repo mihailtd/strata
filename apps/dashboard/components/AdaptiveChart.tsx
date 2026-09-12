@@ -82,10 +82,5 @@ export default function AdaptiveChart({
     };
   }, []);
 
-  return (
-    <div
-      ref={containerRef}
-      className={`${className} transition-colors duration-200`}
-    />
-  );
+  return <div ref={containerRef} className={`${className} transition-colors duration-200`} />;
 }

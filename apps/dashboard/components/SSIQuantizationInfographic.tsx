@@ -56,7 +56,7 @@ export default function SSIQuantizationInfographic() {
     const naiveMaxScale = naiveMaxBoundary / 7.0;
 
     // Simulated SNR calculation based on empirical formula
-    const snrNaive = 15.90;
+    const snrNaive = 15.9;
     const snrGain = 0.78 + (kurtosis > 5 ? 0.05 : 0.0) + (stdDev > 0.03 ? 0.02 : 0.0);
     const snrSSI = snrNaive + snrGain;
 
@@ -92,7 +92,9 @@ export default function SSIQuantizationInfographic() {
             Stress&ndash;Strength Interference (SSI) Quantization Calibration
           </h1>
           <p className="mt-3 text-sm text-slate-300 max-w-3xl leading-relaxed">
-            Eliminates trial-and-error clipping search by solving the closed-form overlap integral between weight distribution (Stress) and INT4 hardware capacity (Strength), achieving mathematically optimal group scales in under 0.25 ms.
+            Eliminates trial-and-error clipping search by solving the closed-form overlap integral
+            between weight distribution (Stress) and INT4 hardware capacity (Strength), achieving
+            mathematically optimal group scales in under 0.25 ms.
           </p>
         </div>
       </div>
@@ -106,13 +108,19 @@ export default function SSIQuantizationInfographic() {
               Plain English: The &ldquo;Goldilocks Box for 4-Bit Numbers&rdquo;
             </h3>
             <p className="text-xs text-slate-300 leading-relaxed">
-              When storing weights in 4-bit format (16 distinct slots), choosing the scale is like choosing the size of a ruler:
+              When storing weights in 4-bit format (16 distinct slots), choosing the scale is like
+              choosing the size of a ruler:
               <br />
-              &bull; <strong>Too big a ruler (Naive Max):</strong> You fit every single outlier, but your grid marks are so coarse that 99% of normal weights get blurred (high rounding noise).
+              &bull; <strong>Too big a ruler (Naive Max):</strong> You fit every single outlier, but
+              your grid marks are so coarse that 99% of normal weights get blurred (high rounding
+              noise).
               <br />
-              &bull; <strong>Too small a ruler:</strong> Your grid is super crisp, but large weights get chopped off at the edge (destructive clipping).
+              &bull; <strong>Too small a ruler:</strong> Your grid is super crisp, but large weights
+              get chopped off at the edge (destructive clipping).
               <br />
-              &bull; <strong>The SSI Solution:</strong> Uses structural failure math to calculate the exact &ldquo;Goldilocks&rdquo; scale where rounding noise and clipping loss perfectly cancel out, boosting output quality by <strong>+0.79 dB SNR</strong>.
+              &bull; <strong>The SSI Solution:</strong> Uses structural failure math to calculate
+              the exact &ldquo;Goldilocks&rdquo; scale where rounding noise and clipping loss
+              perfectly cancel out, boosting output quality by <strong>+0.79 dB SNR</strong>.
             </p>
           </div>
         </div>
@@ -129,7 +137,9 @@ export default function SSIQuantizationInfographic() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="rounded-xl border border-white/5 bg-black/40 p-4 space-y-2">
             <div className="flex justify-between text-xs font-mono">
-              <span className="text-slate-400">Weight Kurtosis (<Tex math="\kappa" />)</span>
+              <span className="text-slate-400">
+                Weight Kurtosis (<Tex math="\kappa" />)
+              </span>
               <span className="text-emerald-400 font-bold">{kurtosis.toFixed(1)}</span>
             </div>
             <input
@@ -150,7 +160,9 @@ export default function SSIQuantizationInfographic() {
 
           <div className="rounded-xl border border-white/5 bg-black/40 p-4 space-y-2">
             <div className="flex justify-between text-xs font-mono">
-              <span className="text-slate-400">Group Standard Deviation (<Tex math="\sigma_W" />)</span>
+              <span className="text-slate-400">
+                Group Standard Deviation (<Tex math="\sigma_W" />)
+              </span>
               <span className="text-emerald-400 font-bold">{stdDev.toFixed(3)}</span>
             </div>
             <input
@@ -162,7 +174,9 @@ export default function SSIQuantizationInfographic() {
               onChange={(e) => setStdDev(parseFloat(e.target.value))}
               className="w-full accent-emerald-400"
             />
-            <p className="text-[10px] text-slate-500 font-mono">Group dispersion across G=128 weights</p>
+            <p className="text-[10px] text-slate-500 font-mono">
+              Group dispersion across G=128 weights
+            </p>
           </div>
         </div>
 
@@ -170,15 +184,24 @@ export default function SSIQuantizationInfographic() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono">
           <div className="rounded-2xl border border-slate-700 bg-black/40 p-4 space-y-1">
             <span className="text-[11px] text-slate-400">Arm A: Naive Max Scale</span>
-            <div className="text-lg font-bold text-slate-300">{metrics.naiveMaxScale.toFixed(5)}</div>
-            <div className="text-[10px] text-slate-500">Boundary: {metrics.naiveMaxBoundary.toFixed(4)}</div>
-            <div className="text-xs text-slate-400 pt-2 border-t border-white/5">SNR: {metrics.snrNaive.toFixed(2)} dB</div>
+            <div className="text-lg font-bold text-slate-300">
+              {metrics.naiveMaxScale.toFixed(5)}
+            </div>
+            <div className="text-[10px] text-slate-500">
+              Boundary: {metrics.naiveMaxBoundary.toFixed(4)}
+            </div>
+            <div className="text-xs text-slate-400 pt-2 border-t border-white/5">
+              SNR: {metrics.snrNaive.toFixed(2)} dB
+            </div>
           </div>
 
           <div className="rounded-2xl border border-emerald-500/40 bg-emerald-950/20 p-4 space-y-1 shadow-[0_0_15px_rgba(16,185,129,0.15)]">
             <span className="text-[11px] text-emerald-400 font-bold">Arm C: SSI Optimal Scale</span>
             <div className="text-lg font-bold text-emerald-300">{metrics.ssiScale.toFixed(5)}</div>
-            <div className="text-[10px] text-emerald-400/80">Boundary: {metrics.optimalBoundary.toFixed(4)} (<Tex math={`k_{\\text{SSI}} = ${metrics.k_ssi.toFixed(2)}`} />)</div>
+            <div className="text-[10px] text-emerald-400/80">
+              Boundary: {metrics.optimalBoundary.toFixed(4)} (
+              <Tex math={`k_{\\text{SSI}} = ${metrics.k_ssi.toFixed(2)}`} />)
+            </div>
             <div className="text-xs text-emerald-400 font-bold pt-2 border-t border-emerald-500/20">
               SNR: {metrics.snrSSI.toFixed(2)} dB (+{metrics.snrGain.toFixed(2)} dB)
             </div>
@@ -188,14 +211,18 @@ export default function SSIQuantizationInfographic() {
             <span className="text-[11px] text-purple-300 font-bold">Distortion Balance</span>
             <div className="space-y-1 text-[10px]">
               <div className="flex justify-between text-slate-400">
-                <span>Rounding Error (<Tex math="D_{\text{round}}" />)</span>
+                <span>
+                  Rounding Error (<Tex math="D_{\text{round}}" />)
+                </span>
                 <span>{metrics.roundDistPct}%</span>
               </div>
               <div className="w-full bg-black/60 rounded-full h-1.5 overflow-hidden">
                 <div className="h-full bg-cyan-400" style={{ width: `${metrics.roundDistPct}%` }} />
               </div>
               <div className="flex justify-between text-slate-400 pt-1">
-                <span>Clipping Loss (<Tex math="D_{\text{clip}}" />)</span>
+                <span>
+                  Clipping Loss (<Tex math="D_{\text{clip}}" />)
+                </span>
                 <span>{metrics.clipDistPct}%</span>
               </div>
               <div className="w-full bg-black/60 rounded-full h-1.5 overflow-hidden">
@@ -210,7 +237,9 @@ export default function SSIQuantizationInfographic() {
       <div className="rounded-3xl border border-white/10 bg-slate-900/60 p-6 space-y-4 backdrop-blur-xl">
         <div className="flex items-center gap-2 border-b border-white/5 pb-3">
           <Activity className="h-5 w-5 text-emerald-400" />
-          <h2 className="text-lg font-bold text-white">Empirical GPU Telemetry (AMD Radeon RX 7900 XTX)</h2>
+          <h2 className="text-lg font-bold text-white">
+            Empirical GPU Telemetry (AMD Radeon RX 7900 XTX)
+          </h2>
         </div>
 
         <div className="overflow-x-auto">
@@ -227,7 +256,9 @@ export default function SSIQuantizationInfographic() {
             </thead>
             <tbody className="divide-y divide-white/5 text-slate-200">
               <tr>
-                <td className="py-3 px-3 font-bold text-white">4B Layer (<Tex math="D=2560" />)</td>
+                <td className="py-3 px-3 font-bold text-white">
+                  4B Layer (<Tex math="D=2560" />)
+                </td>
                 <td className="py-3 px-3 text-slate-400">15.90 dB</td>
                 <td className="py-3 px-3 text-slate-400">16.09 dB (97.7ms)</td>
                 <td className="py-3 px-3 text-emerald-300 font-bold">16.67 dB</td>
@@ -235,7 +266,9 @@ export default function SSIQuantizationInfographic() {
                 <td className="py-3 px-3 text-emerald-400 font-bold">+0.78 dB ⚡</td>
               </tr>
               <tr>
-                <td className="py-3 px-3 font-bold text-white">9B Layer (<Tex math="D=4096" />)</td>
+                <td className="py-3 px-3 font-bold text-white">
+                  9B Layer (<Tex math="D=4096" />)
+                </td>
                 <td className="py-3 px-3 text-slate-400">15.89 dB</td>
                 <td className="py-3 px-3 text-slate-400">16.09 dB (0.27ms)</td>
                 <td className="py-3 px-3 text-emerald-300 font-bold">16.67 dB</td>
@@ -243,7 +276,9 @@ export default function SSIQuantizationInfographic() {
                 <td className="py-3 px-3 text-emerald-400 font-bold">+0.79 dB ⚡</td>
               </tr>
               <tr className="bg-emerald-500/5">
-                <td className="py-3 px-3 font-bold text-white">70B Layer (<Tex math="D=8192" />)</td>
+                <td className="py-3 px-3 font-bold text-white">
+                  70B Layer (<Tex math="D=8192" />)
+                </td>
                 <td className="py-3 px-3 text-slate-400">15.90 dB</td>
                 <td className="py-3 px-3 text-slate-400">16.10 dB (0.33ms)</td>
                 <td className="py-3 px-3 text-emerald-300 font-bold">16.69 dB</td>
@@ -266,26 +301,34 @@ export default function SSIQuantizationInfographic() {
           <div className="rounded-2xl border border-white/5 bg-black/40 p-4 space-y-2">
             <h4 className="text-purple-300 font-bold">1. Stress-Strength Overlap Integral</h4>
             <p className="text-slate-400">
-              Failure probability <Tex math="P_f" /> when Stress <Tex math="X \sim f(x)" /> exceeds Strength <Tex math="c = 7\gamma" />:
+              Failure probability <Tex math="P_f" /> when Stress <Tex math="X \sim f(x)" /> exceeds
+              Strength <Tex math="c = 7\gamma" />:
             </p>
             <div className="py-2 text-center text-white">
               <Tex math="P_f = P(X > 7\gamma) = \int_{7\gamma}^{\infty} f(x) \, dx" block />
             </div>
             <p className="text-slate-500 text-[11px]">
-              Clipping distortion energy: <Tex math="D_{\text{clip}} = \int_{7\gamma}^{\infty} (x - 7\gamma)^2 f(x) \, dx" />.
+              Clipping distortion energy:{" "}
+              <Tex math="D_{\text{clip}} = \int_{7\gamma}^{\infty} (x - 7\gamma)^2 f(x) \, dx" />.
             </p>
           </div>
 
           <div className="rounded-2xl border border-white/5 bg-black/40 p-4 space-y-2">
             <h4 className="text-emerald-300 font-bold">2. Closed-Form Optimal Boundary</h4>
             <p className="text-slate-400">
-              Minimizing <Tex math="\frac{\partial (D_{\text{round}} + D_{\text{clip}})}{\partial \gamma} = 0" /> yields:
+              Minimizing{" "}
+              <Tex math="\frac{\partial (D_{\text{round}} + D_{\text{clip}})}{\partial \gamma} = 0" />{" "}
+              yields:
             </p>
             <div className="py-2 text-center text-white">
-              <Tex math="\gamma^* = \frac{\min\left( (2.2 + 0.45\sqrt{\kappa})\cdot \sigma_W, \; \max(|W|) \right)}{7}" block />
+              <Tex
+                math="\gamma^* = \frac{\min\left( (2.2 + 0.45\sqrt{\kappa})\cdot \sigma_W, \; \max(|W|) \right)}{7}"
+                block
+              />
             </div>
             <p className="text-slate-500 text-[11px]">
-              Executes in <Tex math="O(1)" /> vector registers per group with 0 iterative grid searches.
+              Executes in <Tex math="O(1)" /> vector registers per group with 0 iterative grid
+              searches.
             </p>
           </div>
         </div>

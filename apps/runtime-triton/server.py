@@ -43,12 +43,10 @@ import torch
 from fastapi import Body, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from native_27b_engine import Native27BEngine
 from pydantic import BaseModel, ConfigDict, Field
-
 from runtime_common import gpu_preflight
 from runtime_common.canon import configure_deterministic_attention
-from native_27b_engine import Native27BEngine
-
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -129,6 +127,7 @@ server_telemetry: dict[str, Any] = {
 # VRAM helpers
 # ---------------------------------------------------------------------------
 
+
 def get_real_vram_allocated_gb() -> float:
     """Reads live VRAM from amdgpu sysfs or PyTorch allocator."""
     try:
@@ -149,6 +148,7 @@ def get_real_vram_allocated_gb() -> float:
 def _evict_ollama_models() -> None:
     """Best-effort eviction of Ollama-resident models to free VRAM."""
     import urllib.request
+
     try:
         req = urllib.request.Request("http://127.0.0.1:11434/api/ps")
         with urllib.request.urlopen(req, timeout=1.0) as resp:
@@ -171,6 +171,7 @@ def _evict_ollama_models() -> None:
 # Engine lifecycle
 # ---------------------------------------------------------------------------
 
+
 def _load_engine(num_layers: int = 64) -> Native27BEngine:
     """Loads the Native 27B Triton W4A16 engine into GPU VRAM."""
     global _engine, _tokenizer
@@ -187,6 +188,7 @@ def _load_engine(num_layers: int = 64) -> Native27BEngine:
 
     # Tokenizer: reuse Qwen3.5-9B snapshot (identical vocab)
     from transformers import AutoTokenizer
+
     snaps = list(Path.home().glob(".cache/huggingface/hub/models--Qwen--Qwen3.5-9B/snapshots/*"))
     if snaps:
         _tokenizer = AutoTokenizer.from_pretrained(str(snaps[0]))
@@ -212,6 +214,7 @@ def _unload_engine() -> None:
         _engine = None
         _tokenizer = None
         import gc
+
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -221,6 +224,7 @@ def _unload_engine() -> None:
 # ---------------------------------------------------------------------------
 # OpenAI-compatible Pydantic schemas
 # ---------------------------------------------------------------------------
+
 
 class ChatMessage(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -314,6 +318,7 @@ class ModelListResponse(BaseModel):
 # Prompt helpers
 # ---------------------------------------------------------------------------
 
+
 def _extract_content(content: Any) -> str:
     if content is None:
         return ""
@@ -342,9 +347,7 @@ def _classify_domain(messages: list[ChatMessage], model_name: str) -> str:
     for d in ADAPTER_MAP:
         if d in m_lower:
             return d
-    texts = " ".join(
-        _extract_content(m.content) for m in messages if m.role in ("user", "system")
-    ).lower()
+    texts = " ".join(_extract_content(m.content) for m in messages if m.role in ("user", "system")).lower()
     if any(k in texts for k in ["uv", "ruff", "pyproject", "pip", "package", "packaging"]):
         return "astral"
     if any(k in texts for k in ["duckdb", "parquet", "olap", "arrow", "columnar"]):
@@ -413,6 +416,7 @@ def _extract_thinking_and_content(text: str) -> tuple[str | None, str]:
 # Request queue (single-tenant, arrival-order dispatch)
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class _QueuedRequest:
     req: Any
@@ -442,6 +446,7 @@ async def _dispatch_loop() -> None:
 # ---------------------------------------------------------------------------
 # Core inference
 # ---------------------------------------------------------------------------
+
 
 async def _run_inference(req: ChatCompletionRequest) -> dict[str, Any]:
     engine = _load_engine()
@@ -509,7 +514,7 @@ async def _run_inference(req: ChatCompletionRequest) -> dict[str, Any]:
 
 async def _run_streaming_inference(
     req: ChatCompletionRequest,
-) -> AsyncGenerator[str, None]:
+) -> AsyncGenerator[str]:
     engine = _load_engine()
     domain = _classify_domain(req.messages, req.model)
     adapter_id = ADAPTER_MAP.get(domain)
@@ -561,6 +566,7 @@ async def _run_streaming_inference(
 # ---------------------------------------------------------------------------
 # FastAPI app + lifespan
 # ---------------------------------------------------------------------------
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -667,7 +673,9 @@ async def load_engine_endpoint(req: LoadEngineRequest = Body(default_factory=Loa
             "w4a16_enabled": True,
         }
     except Exception as exc:
-        import traceback; traceback.print_exc()
+        import traceback
+
+        traceback.print_exc()
         return JSONResponse(status_code=500, content={"error": str(exc)})
 
 
@@ -719,5 +727,6 @@ async def get_telemetry():
 
 if __name__ == "__main__":
     import uvicorn
+
     print(f"[Triton-27B] Starting on http://{SERVER_HOST}:{SERVER_PORT}")
     uvicorn.run(app, host=SERVER_HOST, port=SERVER_PORT, log_level="info")

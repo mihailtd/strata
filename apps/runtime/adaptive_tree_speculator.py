@@ -12,11 +12,11 @@ local Shannon entropy H(P) of the draft head logits:
 
 from __future__ import annotations
 
-import math
 import time
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -24,7 +24,7 @@ import torch.nn.functional as F
 
 
 class SpeculationRegime(str, Enum):
-    DEEP_BURST = "deep_burst"        # H < 0.25 (Boilerplate / Syntax keywords)
+    DEEP_BURST = "deep_burst"  # H < 0.25 (Boilerplate / Syntax keywords)
     BALANCED_TREE = "balanced_tree"  # 0.25 <= H <= 1.00 (Standard code)
     SHALLOW_GUARD = "shallow_guard"  # H > 1.00 (Complex branching logic)
 
@@ -41,17 +41,17 @@ class TreeTopology:
 
 @dataclass
 class DraftCandidateTree:
-    tokens: torch.Tensor             # Shape: (M, Depth) containing token IDs for each candidate path
-    path_mask: torch.Tensor          # Shape: (M, Depth) boolean validity mask
-    parent_indices: List[int]        # Index of parent candidate for each path
-    depths: List[int]                # Depth of each path
-    entropy: float                   # Measured Shannon entropy
-    topology: TreeTopology           # Selected tree topology
+    tokens: torch.Tensor  # Shape: (M, Depth) containing token IDs for each candidate path
+    path_mask: torch.Tensor  # Shape: (M, Depth) boolean validity mask
+    parent_indices: list[int]  # Index of parent candidate for each path
+    depths: list[int]  # Depth of each path
+    entropy: float  # Measured Shannon entropy
+    topology: TreeTopology  # Selected tree topology
 
 
 @dataclass
 class SpeculationStepResult:
-    accepted_tokens: List[int]
+    accepted_tokens: list[int]
     num_accepted: int
     entropy: float
     regime: SpeculationRegime
@@ -63,7 +63,7 @@ class SpeculationStepResult:
 class EntropyAdaptiveTreeSpeculator:
     """Dynamic Tree Speculative Decoder adapting candidate topology to local logit entropy."""
 
-    TOPOLOGY_PRESETS: Dict[SpeculationRegime, TreeTopology] = {
+    TOPOLOGY_PRESETS: dict[SpeculationRegime, TreeTopology] = {
         SpeculationRegime.DEEP_BURST: TreeTopology(
             regime=SpeculationRegime.DEEP_BURST,
             depth=4,
@@ -96,7 +96,7 @@ class EntropyAdaptiveTreeSpeculator:
         entropy_low_threshold: float = 0.25,
         entropy_high_threshold: float = 1.00,
         temperature: float = 1.0,
-        device: Optional[torch.device] = None,
+        device: torch.device | None = None,
     ):
         self.draft_head = draft_head
         self.entropy_low_threshold = entropy_low_threshold
@@ -108,7 +108,7 @@ class EntropyAdaptiveTreeSpeculator:
         self.total_cycles = 0
         self.total_accepted_tokens = 0
         self.total_time_ms = 0.0
-        self.regime_counts: Dict[SpeculationRegime, int] = {
+        self.regime_counts: dict[SpeculationRegime, int] = {
             SpeculationRegime.DEEP_BURST: 0,
             SpeculationRegime.BALANCED_TREE: 0,
             SpeculationRegime.SHALLOW_GUARD: 0,
@@ -117,7 +117,7 @@ class EntropyAdaptiveTreeSpeculator:
     @staticmethod
     def compute_shannon_entropy(logits: torch.Tensor, top_k: int = 32) -> float:
         """Calculates Shannon entropy H(P) in bits over top-k normalized logits.
-        
+
         H(P) = - sum_{i=1}^K p_i * log2(p_i)
         """
         # Ensure 1D logit tensor
@@ -213,15 +213,15 @@ class EntropyAdaptiveTreeSpeculator:
 
         # Target verification tokens
         target_preds = verify_oracle_fn(candidate_tree.tokens)
-        accepted_tokens: List[int] = []
+        accepted_tokens: list[int] = []
 
         # Find longest matching path
-        best_path_tokens: List[int] = []
+        best_path_tokens: list[int] = []
         for path_idx in range(candidate_tree.tokens.size(0)):
             path = candidate_tree.tokens[path_idx].tolist()
             preds = target_preds[path_idx].tolist() if target_preds.dim() > 1 else target_preds.tolist()
 
-            matching: List[int] = []
+            matching: list[int] = []
             for tok, pred in zip(path, preds):
                 if tok == pred:
                     matching.append(tok)
@@ -259,23 +259,15 @@ class EntropyAdaptiveTreeSpeculator:
             diverged=len(accepted_tokens) == 0,
         )
 
-    def get_telemetry_summary(self) -> Dict[str, Any]:
+    def get_telemetry_summary(self) -> dict[str, Any]:
         """Returns cumulative performance statistics across all executed speculative cycles."""
-        avg_toks_per_cycle = (
-            self.total_accepted_tokens / self.total_cycles if self.total_cycles > 0 else 0.0
-        )
-        avg_throughput = (
-            self.total_accepted_tokens / (self.total_time_ms / 1000.0)
-            if self.total_time_ms > 0
-            else 0.0
-        )
+        avg_toks_per_cycle = self.total_accepted_tokens / self.total_cycles if self.total_cycles > 0 else 0.0
+        avg_throughput = self.total_accepted_tokens / (self.total_time_ms / 1000.0) if self.total_time_ms > 0 else 0.0
 
         return {
             "total_cycles": self.total_cycles,
             "total_accepted_tokens": self.total_accepted_tokens,
             "avg_tokens_per_cycle": round(avg_toks_per_cycle, 2),
             "effective_throughput_tok_s": round(avg_throughput, 1),
-            "regime_distribution": {
-                regime.value: count for regime, count in self.regime_counts.items()
-            },
+            "regime_distribution": {regime.value: count for regime, count in self.regime_counts.items()},
         }

@@ -29,7 +29,9 @@ const AdaptiveChart = dynamic(() => import("@/components/AdaptiveChart"), {
   loading: () => (
     <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black/40 rounded-xl border border-dashed border-white/10 animate-pulse">
       <Sparkles className="h-6 w-6 text-[#00f2ff] animate-spin mb-2" />
-      <span className="text-xs font-mono text-slate-400">Loading Goldilocks Zone ECharts Canvas...</span>
+      <span className="text-xs font-mono text-slate-400">
+        Loading Goldilocks Zone ECharts Canvas...
+      </span>
     </div>
   ),
 });
@@ -165,7 +167,12 @@ export default function TrainingPage() {
       const resp = await fetch("/api/factory/calibrate_alpha", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ domain: dom, run_id: runId, adapter_name: adapterName, apply: true }),
+        body: JSON.stringify({
+          domain: dom,
+          run_id: runId,
+          adapter_name: adapterName,
+          apply: true,
+        }),
       });
       const data = await resp.json();
       if (resp.ok) {
@@ -188,7 +195,14 @@ export default function TrainingPage() {
   };
 
   const handleCalibrateAll = async () => {
-    const domains = ["astral", "postgresql", "duckdb", "financial_planning", "python_modern", "python_web"];
+    const domains = [
+      "astral",
+      "postgresql",
+      "duckdb",
+      "financial_planning",
+      "python_modern",
+      "python_web",
+    ];
     for (const d of domains) {
       await handleCalibrate(d, `bulk_${d}`);
     }
@@ -321,25 +335,22 @@ export default function TrainingPage() {
           symbol: "circle",
           symbolSize: 8,
           itemStyle: { color: "#00f2ff" },
-          lineStyle: { width: 3, color: "#00f2ff", shadowColor: "rgba(0,242,255,0.4)", shadowBlur: 10 },
+          lineStyle: {
+            width: 3,
+            color: "#00f2ff",
+            shadowColor: "rgba(0,242,255,0.4)",
+            shadowBlur: 10,
+          },
           markArea: {
             itemStyle: { color: "rgba(16, 185, 129, 0.12)" },
-            data: [
-              [
-                { name: "Goldilocks Zone (0.040 - 0.085)", yAxis: 0.04 },
-                { yAxis: 0.085 },
-              ],
-            ],
+            data: [[{ name: "Goldilocks Zone (0.040 - 0.085)", yAxis: 0.04 }, { yAxis: 0.085 }]],
             label: { color: "#10b981", fontSize: 10, fontFamily: "monospace" },
           },
           markPoint: {
             data: [
               {
                 name: "Optimal α",
-                coord: [
-                  `α=${calib.alpha_opt}`,
-                  calib.optimal_point.dw_over_w,
-                ],
+                coord: [`α=${calib.alpha_opt}`, calib.optimal_point.dw_over_w],
                 value: `🏆 Optimal α=${calib.alpha_opt}`,
                 itemStyle: { color: "#10b981" },
               },
@@ -359,7 +370,12 @@ export default function TrainingPage() {
           markLine: {
             lineStyle: { color: "#f59e0b", type: "dotted", width: 2 },
             data: [{ name: "5% Precision Floor", yAxis: 5.0 }],
-            label: { formatter: "5.0% Mantissa Limit", color: "#f59e0b", fontFamily: "monospace", fontSize: 10 },
+            label: {
+              formatter: "5.0% Mantissa Limit",
+              color: "#f59e0b",
+              fontFamily: "monospace",
+              fontSize: 10,
+            },
           },
         },
       ],
@@ -432,7 +448,9 @@ export default function TrainingPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[11px] font-bold text-slate-400">Stop ||&Delta;W||/||W||</label>
+                <label className="text-[11px] font-bold text-slate-400">
+                  Stop ||&Delta;W||/||W||
+                </label>
                 <input
                   type="number"
                   step="0.005"
@@ -527,10 +545,10 @@ export default function TrainingPage() {
                       log.includes("AIRM") || log.includes("optimal")
                         ? "text-[#10b981] font-bold"
                         : log.includes("Error") || log.includes("FAILED")
-                        ? "text-rose-400 font-bold"
-                        : log.includes("step")
-                        ? "text-cyan-300"
-                        : "text-slate-300"
+                          ? "text-rose-400 font-bold"
+                          : log.includes("step")
+                            ? "text-cyan-300"
+                            : "text-slate-300"
                     }
                   >
                     {log}
@@ -561,7 +579,8 @@ export default function TrainingPage() {
               </span>
             </div>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              Click any row to expand the interactive <b>Apache ECharts Goldilocks Zone</b> perturbation &amp; IEEE 754 precision curve.
+              Click any row to expand the interactive <b>Apache ECharts Goldilocks Zone</b>{" "}
+              perturbation &amp; IEEE 754 precision curve.
             </p>
           </div>
 
@@ -716,7 +735,9 @@ export default function TrainingPage() {
                         </td>
                         <td className="py-3 px-3 font-bold text-white flex items-center gap-2">
                           <span>{r.domain}</span>
-                          <span className="text-[10px] text-slate-500 font-normal">({r.run_id})</span>
+                          <span className="text-[10px] text-slate-500 font-normal">
+                            ({r.run_id})
+                          </span>
                         </td>
                         <td className="py-3 px-3 text-slate-400">
                           <span className="rounded bg-white/5 px-2 py-0.5 text-[11px]">
@@ -761,7 +782,9 @@ export default function TrainingPage() {
                             onClick={() => handleCalibrate(r.domain, r.run_id)}
                             className="rounded-lg border border-[#00f2ff]/40 bg-[#00f2ff]/10 px-3 py-1 text-xs font-bold text-[#00f2ff] hover:bg-[#00f2ff]/20 disabled:opacity-50 transition-all shadow-[0_0_10px_rgba(0,242,255,0.15)]"
                           >
-                            {isCalibrating === r.run_id ? "Optimizing..." : "⚡ Calibrate &amp; Save"}
+                            {isCalibrating === r.run_id
+                              ? "Optimizing..."
+                              : "⚡ Calibrate &amp; Save"}
                           </button>
                         </td>
                       </tr>
@@ -783,26 +806,34 @@ export default function TrainingPage() {
                                   </div>
                                   <h3 className="text-base font-bold text-white mt-1 flex items-center gap-2">
                                     <BarChart3 className="h-4 w-4 text-[#10b981]" />
-                                    Goldilocks Zone (0.040 &le; ||&Delta;W||/||W|| &le; 0.085) &amp; IEEE 754 Precision Floor
+                                    Goldilocks Zone (0.040 &le; ||&Delta;W||/||W|| &le; 0.085) &amp;
+                                    IEEE 754 Precision Floor
                                   </h3>
                                 </div>
 
                                 {calib && (
                                   <div className="flex items-center gap-3">
                                     <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-center">
-                                      <div className="text-[10px] text-slate-400">Optimal Alpha</div>
+                                      <div className="text-[10px] text-slate-400">
+                                        Optimal Alpha
+                                      </div>
                                       <div className="font-mono text-sm font-bold text-[#10b981]">
-                                        &alpha; = {calib.alpha_opt} ({calib.optimal_point.scaling.toFixed(1)}x)
+                                        &alpha; = {calib.alpha_opt} (
+                                        {calib.optimal_point.scaling.toFixed(1)}x)
                                       </div>
                                     </div>
                                     <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-center">
-                                      <div className="text-[10px] text-slate-400">Precision Floor</div>
+                                      <div className="text-[10px] text-slate-400">
+                                        Precision Floor
+                                      </div>
                                       <div className="font-mono text-sm font-bold text-[#f59e0b]">
                                         &alpha;_min = {calib.alpha_min}
                                       </div>
                                     </div>
                                     <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-center">
-                                      <div className="text-[10px] text-slate-400">BF16 Merge Error</div>
+                                      <div className="text-[10px] text-slate-400">
+                                        BF16 Merge Error
+                                      </div>
                                       <div className="font-mono text-sm font-bold text-[#a855f7]">
                                         {calib.optimal_point.merge_err_pct.toFixed(2)}%
                                       </div>

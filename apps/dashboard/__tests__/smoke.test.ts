@@ -18,8 +18,7 @@ describe("Dashboard smoke tests", () => {
   test("environment constants are valid", () => {
     // The dashboard reads NEXT_PUBLIC_RUNTIME_URL at build time.
     // When unset it falls back to localhost:8000 — verify that fallback is a valid URL.
-    const runtimeUrl =
-      process.env.NEXT_PUBLIC_RUNTIME_URL ?? "http://localhost:8000";
+    const runtimeUrl = process.env.NEXT_PUBLIC_RUNTIME_URL ?? "http://localhost:8000";
     expect(() => new URL(runtimeUrl)).not.toThrow();
   });
 

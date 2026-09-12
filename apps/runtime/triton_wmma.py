@@ -16,12 +16,10 @@ import torch
 import triton
 import triton.language as tl
 
-from runtime.canon import CANON, REPO_ROOT
-
-
 # -----------------------------------------------------------------------------
 # Autotune Configurations for RDNA3 (gfx1100 / Wave32)
 # -----------------------------------------------------------------------------
+
 
 def get_rdna3_wmma_configs() -> list[triton.Config]:
     """Generates tile configurations aligned to RDNA3 16x16x16 WMMA hardware tiles."""
@@ -39,13 +37,21 @@ def get_rdna3_wmma_configs() -> list[triton.Config]:
 # Core Triton WMMA Matmul Kernel
 # -----------------------------------------------------------------------------
 
+
 @triton.jit
 def _wmma_gemm_kernel_raw(
-    a_ptr, b_ptr, c_ptr,
-    M, N, K,
-    stride_am, stride_ak,
-    stride_bk, stride_bn,
-    stride_cm, stride_cn,
+    a_ptr,
+    b_ptr,
+    c_ptr,
+    M,
+    N,
+    K,
+    stride_am,
+    stride_ak,
+    stride_bk,
+    stride_bn,
+    stride_cm,
+    stride_cn,
     BLOCK_M: tl.constexpr,
     BLOCK_N: tl.constexpr,
     BLOCK_K: tl.constexpr,
@@ -116,11 +122,18 @@ def triton_wmma_matmul(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
     grid = lambda META: (triton.cdiv(M, META["BLOCK_M"]) * triton.cdiv(N, META["BLOCK_N"]),)
 
     _wmma_gemm_kernel[grid](
-        a_2d, b, c_2d,
-        M, N, K,
-        a_2d.stride(0), a_2d.stride(1),
-        b.stride(0), b.stride(1),
-        c_2d.stride(0), c_2d.stride(1),
+        a_2d,
+        b,
+        c_2d,
+        M,
+        N,
+        K,
+        a_2d.stride(0),
+        a_2d.stride(1),
+        b.stride(0),
+        b.stride(1),
+        c_2d.stride(0),
+        c_2d.stride(1),
     )
 
     if a.dim() == 3:
@@ -132,16 +145,29 @@ def triton_wmma_matmul(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
 # Fused Base GEMM + Dynamic LoRA Branch Kernel (Action 2.2)
 # -----------------------------------------------------------------------------
 
+
 @triton.jit
 def _fused_wmma_lora_kernel(
-    x_ptr, w_ptr, lora_a_ptr, lora_b_ptr, out_ptr,
-    M, N, K, R,
+    x_ptr,
+    w_ptr,
+    lora_a_ptr,
+    lora_b_ptr,
+    out_ptr,
+    M,
+    N,
+    K,
+    R,
     alpha_scale: tl.constexpr,
-    stride_xm, stride_xk,
-    stride_wk, stride_wn,
-    stride_lam, stride_lak,
-    stride_lbk, stride_lbn,
-    stride_om, stride_on,
+    stride_xm,
+    stride_xk,
+    stride_wk,
+    stride_wn,
+    stride_lam,
+    stride_lak,
+    stride_lbk,
+    stride_lbn,
+    stride_om,
+    stride_on,
     BLOCK_M: tl.constexpr,
     BLOCK_N: tl.constexpr,
     BLOCK_K: tl.constexpr,
@@ -213,6 +239,7 @@ def fused_wmma_lora_matmul(
 # ISA Inspection & Verification
 # -----------------------------------------------------------------------------
 
+
 def inspect_kernel_wmma_isa(
     m: int = 64,
     k: int = 4096,
@@ -229,11 +256,18 @@ def inspect_kernel_wmma_isa(
 
     grid = lambda META: (triton.cdiv(m, META["BLOCK_M"]) * triton.cdiv(n, META["BLOCK_N"]),)
     compiled = _wmma_gemm_kernel_raw[grid](
-        a, b, c,
-        m, n, k,
-        a.stride(0), a.stride(1),
-        b.stride(0), b.stride(1),
-        c.stride(0), c.stride(1),
+        a,
+        b,
+        c,
+        m,
+        n,
+        k,
+        a.stride(0),
+        a.stride(1),
+        b.stride(0),
+        b.stride(1),
+        c.stride(0),
+        c.stride(1),
         BLOCK_M=64,
         BLOCK_N=64,
         BLOCK_K=32,
@@ -262,6 +296,7 @@ def inspect_kernel_wmma_isa(
 # Benchmark Routine
 # -----------------------------------------------------------------------------
 
+
 def benchmark_wmma_vs_pytorch(
     shapes: list[tuple[int, int, int]] | None = None,
     warmup: int = 10,
@@ -271,12 +306,12 @@ def benchmark_wmma_vs_pytorch(
     """Runs a performance sweep comparing Triton WMMA against PyTorch reference."""
     if shapes is None:
         shapes = [
-            (2, 4096, 4096),     # MTP speculative chunk K=2
-            (4, 4096, 4096),     # MTP speculative chunk K=4
-            (16, 4096, 4096),    # Micro-batch (B=16)
-            (64, 4096, 4096),    # Medium prompt prefill
-            (256, 4096, 4096),   # Standard prefill GEMM
-            (512, 4096, 4096),   # Long context prefill
+            (2, 4096, 4096),  # MTP speculative chunk K=2
+            (4, 4096, 4096),  # MTP speculative chunk K=4
+            (16, 4096, 4096),  # Micro-batch (B=16)
+            (64, 4096, 4096),  # Medium prompt prefill
+            (256, 4096, 4096),  # Standard prefill GEMM
+            (512, 4096, 4096),  # Long context prefill
             (1024, 4096, 4096),  # Batch prefill / serving GEMM
         ]
 
@@ -312,15 +347,17 @@ def benchmark_wmma_vs_pytorch(
 
         speedup = torch_latency_ms / max(1e-5, triton_latency_ms)
 
-        results.append({
-            "M": M,
-            "K": K,
-            "N": N,
-            "torch_ms": round(torch_latency_ms, 4),
-            "triton_ms": round(triton_latency_ms, 4),
-            "speedup": round(speedup, 2),
-            "triton_tflops": round(triton_tflops, 2),
-            "torch_tflops": round(torch_tflops, 2),
-        })
+        results.append(
+            {
+                "M": M,
+                "K": K,
+                "N": N,
+                "torch_ms": round(torch_latency_ms, 4),
+                "triton_ms": round(triton_latency_ms, 4),
+                "speedup": round(speedup, 2),
+                "triton_tflops": round(triton_tflops, 2),
+                "torch_tflops": round(torch_tflops, 2),
+            }
+        )
 
     return results

@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import itertools
 import time
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -25,18 +24,17 @@ import torch
 from runtime.novel_peft import FoldableExpert, WeightFoldingEngine
 from runtime.riemannian_covariance import (
     joint_subspace_operators,
-    log_euclidean_distance,
     riemannian_affine_invariant_distance,
 )
 
 
-
 class RenkoBrickSmoother:
     """Filters high-frequency latent noise during continuous streaming generation.
-    
+
     Tracks accumulated displacement in Riemannian latent space. Only emits a routing
     re-classification event when displacement breaks a discrete Renko Brick Boundary.
     """
+
     def __init__(self, epsilon_box: float = 5.0):
         self.epsilon_box = epsilon_box
         self.last_brick: torch.Tensor | None = None
@@ -95,8 +93,12 @@ class RiemannianTeamRouter:
                 sb = self.experts[db].scaling
 
                 Sa, Sb, _ = joint_subspace_operators(
-                    ua.float().cpu(), va.float().cpu(), sa,
-                    ub.float().cpu(), vb.float().cpu(), sb,
+                    ua.float().cpu(),
+                    va.float().cpu(),
+                    sa,
+                    ub.float().cpu(),
+                    vb.float().cpu(),
+                    sb,
                     delta=0.05,
                 )
                 d_ij = riemannian_affine_invariant_distance(Sa, Sb)
@@ -149,13 +151,13 @@ class RiemannianTeamRouter:
         Returns:
             (best_team, routing_metadata)
         """
-        candidates = [d for d in candidate_scores.keys() if d in self.domain_to_idx]
+        candidates = [d for d in candidate_scores if d in self.domain_to_idx]
         if not candidates:
             return [], {"score": 0.0, "candidates": candidate_scores}
 
         ranked = sorted(candidates, key=lambda d: -candidate_scores[d])
         primary_score = candidate_scores[ranked[0]]
-        best_team = [ranked[0]]                       # the primary always folds
+        best_team = [ranked[0]]  # the primary always folds
         for d in ranked[1:max_team_size]:
             score_d = candidate_scores[d]
             if score_d >= min_secondary_relevance and score_d >= (0.50 * primary_score):
@@ -202,4 +204,3 @@ class RiemannianTeamRouter:
             "active_team": target_team,
             "folded_experts_count": len(target_experts),
         }
-

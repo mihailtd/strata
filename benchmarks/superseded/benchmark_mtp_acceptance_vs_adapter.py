@@ -69,7 +69,7 @@ from runtime.novel_peft import (  # noqa: E402
 )
 
 # DEFAULTS: the m2 expert set (bf16 + Liger, methodology-matched). Verify with
-# `uv run python scripts/audit/audit_adapters.py`. Do NOT default to m1 (4-bit NF4)
+# `uv run python audit/audit_adapters.py`. Do NOT default to m1 (4-bit NF4)
 # adapters -- every benchmark here loads a bf16 base, so an m1 adapter folds a
 # correction-to-quantized-weights into unquantized ones.
 # §33 RE-TEST: the original verdict ("a draft head must AGREE with its backbone")

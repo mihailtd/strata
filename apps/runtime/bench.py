@@ -38,24 +38,16 @@ def _load_model(model_name: str, method: str):
             bnb_4bit_compute_dtype=dtype,
             bnb_4bit_quant_type="nf4",
         )
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name, quantization_config=bnb_config, device_map={"": 0}
-        )
+        model = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=bnb_config, device_map={"": 0})
         model = prepare_model_for_kbit_training(model)
     else:
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name, dtype=dtype, device_map={"": 0}
-        )
+        model = AutoModelForCausalLM.from_pretrained(model_name, dtype=dtype, device_map={"": 0})
     return model
 
 
-def _load_dataset(
-    tokenizer, dataset_name: str, text_field: str, max_length: int, n_examples: int
-):
+def _load_dataset(tokenizer, dataset_name: str, text_field: str, max_length: int, n_examples: int):
     if Path(dataset_name).exists():
-        ds = load_dataset(
-            "json", data_files=dataset_name, split=f"train[:{n_examples}]"
-        )
+        ds = load_dataset("json", data_files=dataset_name, split=f"train[:{n_examples}]")
     else:
         ds = load_dataset(dataset_name, split=f"train[:{n_examples}]")
 
@@ -95,9 +87,7 @@ def run_one(
 
     trainable, total = model.get_nb_trainable_parameters()
 
-    train_ds = _load_dataset(
-        tokenizer, dataset_name, text_field, max_length, n_examples
-    )
+    train_ds = _load_dataset(tokenizer, dataset_name, text_field, max_length, n_examples)
     collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
 
     args = TrainingArguments(
@@ -111,9 +101,7 @@ def run_one(
         bf16=_compute_dtype() == torch.bfloat16,
         fp16=_compute_dtype() == torch.float16,
     )
-    trainer = Trainer(
-        model=model, args=args, train_dataset=train_ds, data_collator=collator
-    )
+    trainer = Trainer(model=model, args=args, train_dataset=train_ds, data_collator=collator)
 
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
@@ -121,11 +109,7 @@ def run_one(
     result = trainer.train()
     elapsed = time.perf_counter() - start
 
-    peak_vram_gb = (
-        torch.cuda.max_memory_allocated() / (1024**3)
-        if torch.cuda.is_available()
-        else 0.0
-    )
+    peak_vram_gb = torch.cuda.max_memory_allocated() / (1024**3) if torch.cuda.is_available() else 0.0
 
     del trainer, model
     if torch.cuda.is_available():

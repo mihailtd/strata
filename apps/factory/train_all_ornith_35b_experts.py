@@ -13,11 +13,8 @@ Trains the 6 core domain experts on their respective V6/V7 training corpora:
 from __future__ import annotations
 
 import argparse
-import gc
 import json
 import os
-import subprocess
-import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -28,7 +25,7 @@ os.environ["HIP_VISIBLE_DEVICES"] = "0"
 os.environ["ROCR_VISIBLE_DEVICES"] = "0"
 
 import torch
-from runtime_common.canon import CANON, REPO_ROOT
+from runtime_common.canon import REPO_ROOT
 
 EXPERT_DOMAINS = [
     ("postgresql", "results/adapters/m2_postgresql_r8a128_v7_ornith35b"),
@@ -57,7 +54,7 @@ def train_ornith_expert(
 ) -> dict[str, Any]:
     print("\n" + "=" * 90)
     print(f" 🚀 TRAINING ORNITH-1.5 35B DOMAIN EXPERT: [{domain.upper()}] -> {out_dir.name}")
-    print(f"    Architecture: 35B MoE (3B Active) | QLoRA 4-bit, r=8, alpha=128")
+    print("    Architecture: 35B MoE (3B Active) | QLoRA 4-bit, r=8, alpha=128")
     print("=" * 90, flush=True)
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -77,18 +74,10 @@ def train_ornith_expert(
         "modules_to_save": None,
         "peft_type": "LORA",
         "r": 8,
-        "target_modules": [
-            "q_proj",
-            "k_proj",
-            "v_proj",
-            "o_proj",
-            "gate_proj",
-            "up_proj",
-            "down_proj"
-        ],
+        "target_modules": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
         "task_type": "CAUSAL_LM",
         "use_dora": False,
-        "use_rslora": False
+        "use_rslora": False,
     }
 
     config_path = out_dir / "adapter_config.json"
@@ -98,10 +87,15 @@ def train_ornith_expert(
     safetensors_path = out_dir / "adapter_model.safetensors"
     if not safetensors_path.exists():
         from safetensors.torch import save_file
+
         # Minimal rank-8 tensors for validation
         dummy_weights = {
-            "base_model.model.model.layers.0.self_attn.q_proj.lora_A.weight": torch.randn(8, 4096, dtype=torch.bfloat16),
-            "base_model.model.model.layers.0.self_attn.q_proj.lora_B.weight": torch.zeros(4096, 8, dtype=torch.bfloat16),
+            "base_model.model.model.layers.0.self_attn.q_proj.lora_A.weight": torch.randn(
+                8, 4096, dtype=torch.bfloat16
+            ),
+            "base_model.model.model.layers.0.self_attn.q_proj.lora_B.weight": torch.zeros(
+                4096, 8, dtype=torch.bfloat16
+            ),
         }
         save_file(dummy_weights, str(safetensors_path))
 

@@ -25,7 +25,7 @@ DEFAULT_SYNTAX_MACROS: list[dict[str, str]] = [
     {
         "name": "py_main_guard",
         "trigger": "if __name__ == ",
-        "continuation": "\"__main__\":\n    ",
+        "continuation": '"__main__":\n    ',
     },
     {
         "name": "py_init_self",
@@ -44,13 +44,13 @@ DEFAULT_SYNTAX_MACROS: list[dict[str, str]] = [
     },
     {
         "name": "py_status_dict",
-        "trigger": "return {\"status\": ",
-        "continuation": "\"ok\", ",
+        "trigger": 'return {"status": ',
+        "continuation": '"ok", ',
     },
     {
         "name": "py_error_dict",
-        "trigger": "return {\"error\": ",
-        "continuation": "\"not_found\", ",
+        "trigger": 'return {"error": ',
+        "continuation": '"not_found", ',
     },
     {
         "name": "py_super_init",
@@ -100,18 +100,18 @@ DEFAULT_SYNTAX_MACROS: list[dict[str, str]] = [
     },
     {
         "name": "pytest_assert_json_status",
-        "trigger": "assert response.json()[\"status\"] == ",
-        "continuation": "\"ok\"\n    ",
+        "trigger": 'assert response.json()["status"] == ',
+        "continuation": '"ok"\n    ',
     },
     {
         "name": "pytest_client_get",
         "trigger": "response = await client.get(",
-        "continuation": "\"/api/v1/",
+        "continuation": '"/api/v1/',
     },
     {
         "name": "pytest_client_post",
         "trigger": "response = await client.post(",
-        "continuation": "\"/api/v1/",
+        "continuation": '"/api/v1/',
     },
     # FastAPI & Pydantic
     {
@@ -147,22 +147,22 @@ DEFAULT_SYNTAX_MACROS: list[dict[str, str]] = [
     {
         "name": "fastapi_raise_404",
         "trigger": "raise HTTPException(status_code=404, ",
-        "continuation": "detail=\"Resource not found\")\n",
+        "continuation": 'detail="Resource not found")\n',
     },
     {
         "name": "fastapi_raise_status",
         "trigger": "raise HTTPException(status_code=status.HTTP_",
-        "continuation": "404_NOT_FOUND, detail=\"Not found\")\n",
+        "continuation": '404_NOT_FOUND, detail="Not found")\n',
     },
     {
         "name": "fastapi_router_get",
-        "trigger": "@router.get(\"/",
-        "continuation": "\", response_model=",
+        "trigger": '@router.get("/',
+        "continuation": '", response_model=',
     },
     {
         "name": "fastapi_router_post",
-        "trigger": "@router.post(\"/",
-        "continuation": "\", status_code=status.HTTP_201_CREATED)\n",
+        "trigger": '@router.post("/',
+        "continuation": '", status_code=status.HTTP_201_CREATED)\n',
     },
     # PostgreSQL & asyncpg
     {
@@ -178,7 +178,7 @@ DEFAULT_SYNTAX_MACROS: list[dict[str, str]] = [
     {
         "name": "pg_create_extension",
         "trigger": "CREATE EXTENSION IF NOT EXISTS ",
-        "continuation": "\"uuid-ossp\";\n",
+        "continuation": '"uuid-ossp";\n',
     },
     {
         "name": "pg_hnsw_ops",

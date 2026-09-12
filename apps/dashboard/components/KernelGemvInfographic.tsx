@@ -54,12 +54,12 @@ export default function KernelGemvInfographic() {
     const bandwidthGBs = isCoalesced
       ? 620.4 * (clockMhz / 2500.0)
       : isHalfCoalesced
-      ? 455.6 * (clockMhz / 2500.0)
-      : 332.8 * (clockMhz / 2500.0);
+        ? 455.6 * (clockMhz / 2500.0)
+        : 332.8 * (clockMhz / 2500.0);
 
     const busSaturationPct = Math.min(100, (bandwidthGBs / 960.0) * 100);
     const forwardStepMs = isCoalesced ? 15.06 : isHalfCoalesced ? 22.91 : 28.17;
-    const tokPerSec = isCoalesced ? 66.40 : isHalfCoalesced ? 48.68 : 35.50;
+    const tokPerSec = isCoalesced ? 66.4 : isHalfCoalesced ? 48.68 : 35.5;
     const speedupVsOllama = tokPerSec / 48.68;
 
     return {
@@ -86,7 +86,9 @@ export default function KernelGemvInfographic() {
             RDNA3 128-Bit Coalesced W4A16 GEMV Kernel
           </h1>
           <p className="mt-3 text-sm text-slate-300 max-w-3xl leading-relaxed">
-            Saturates the AMD Radeon RX 7900 XTX 384-bit GDDR6 memory controller at <strong>620.4 GB/s (64.6% physical saturation)</strong> by coalescing 8 INT4 nibbles into 128-bit vector bundles, beating Ollama raw decode by <strong>+52.1%</strong>.
+            Saturates the AMD Radeon RX 7900 XTX 384-bit GDDR6 memory controller at{" "}
+            <strong>620.4 GB/s (64.6% physical saturation)</strong> by coalescing 8 INT4 nibbles
+            into 128-bit vector bundles, beating Ollama raw decode by <strong>+52.1%</strong>.
           </p>
         </div>
       </div>
@@ -100,13 +102,20 @@ export default function KernelGemvInfographic() {
               Plain English: The &ldquo;128-Bit Industrial Firehose&rdquo;
             </h3>
             <p className="text-xs text-slate-300 leading-relaxed">
-              When streaming a 27B model (16.8 GB of weights), the GPU compute cores are so fast they spend 90% of their time waiting for data to arrive across the memory bus:
+              When streaming a 27B model (16.8 GB of weights), the GPU compute cores are so fast
+              they spend 90% of their time waiting for data to arrive across the memory bus:
               <br />
-              &bull; <strong>Standard 32-Bit Loads (Ollama):</strong> The GPU fetches numbers like carrying water in small cups. The memory controller gets congested with billions of tiny requests.
+              &bull; <strong>Standard 32-Bit Loads (Ollama):</strong> The GPU fetches numbers like
+              carrying water in small cups. The memory controller gets congested with billions of
+              tiny requests.
               <br />
-              &bull; <strong>Our 128-Bit Vector Coalescing:</strong> We bundle 8 weights into a single 128-bit shipping container (<Tex math="\text{int32x4}" />), matching the exact physical highway lanes of AMD RDNA3 hardware.
+              &bull; <strong>Our 128-Bit Vector Coalescing:</strong> We bundle 8 weights into a
+              single 128-bit shipping container (<Tex math="\text{int32x4}" />
+              ), matching the exact physical highway lanes of AMD RDNA3 hardware.
               <br />
-              &bull; <strong>Wave32 In-Register Bit-Shifts:</strong> As soon as the container arrives, the GPU's 32-lane compute cores unpack all 8 numbers simultaneously using lightning-fast bit-shifts in VGPR registers with zero memory stalls.
+              &bull; <strong>Wave32 In-Register Bit-Shifts:</strong> As soon as the container
+              arrives, the GPU's 32-lane compute cores unpack all 8 numbers simultaneously using
+              lightning-fast bit-shifts in VGPR registers with zero memory stalls.
             </p>
           </div>
         </div>
@@ -123,7 +132,9 @@ export default function KernelGemvInfographic() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="rounded-xl border border-white/5 bg-black/40 p-4 space-y-3">
             <div className="flex justify-between text-xs font-mono">
-              <span className="text-slate-400">Memory Load Width (<Tex math="\text{Bits / Transaction}" />)</span>
+              <span className="text-slate-400">
+                Memory Load Width (<Tex math="\text{Bits / Transaction}" />)
+              </span>
               <span className="text-cyan-400 font-bold">{busWidth}-Bit</span>
             </div>
             <div className="grid grid-cols-3 gap-2">
@@ -142,13 +153,17 @@ export default function KernelGemvInfographic() {
               ))}
             </div>
             <div className="text-[10px] text-slate-500 font-mono">
-              {busWidth === 128 ? "Fully Coalesced 4-Word Bundle (int32x4)" : "Scalar / Fragmented Load Request"}
+              {busWidth === 128
+                ? "Fully Coalesced 4-Word Bundle (int32x4)"
+                : "Scalar / Fragmented Load Request"}
             </div>
           </div>
 
           <div className="rounded-xl border border-white/5 bg-black/40 p-4 space-y-2">
             <div className="flex justify-between text-xs font-mono">
-              <span className="text-slate-400">GPU Core Clock (<Tex math="\text{MHz}" />)</span>
+              <span className="text-slate-400">
+                GPU Core Clock (<Tex math="\text{MHz}" />)
+              </span>
               <span className="text-cyan-400 font-bold">{clockMhz} MHz</span>
             </div>
             <input
@@ -194,7 +209,9 @@ export default function KernelGemvInfographic() {
             <div className="text-2xl font-bold text-cyan-300">
               {metrics.forwardStepMs.toFixed(2)} <span className="text-xs text-cyan-400">ms</span>
             </div>
-            <div className="text-[10px] text-cyan-400/80">Full 64-layer 27B autoregressive step</div>
+            <div className="text-[10px] text-cyan-400/80">
+              Full 64-layer 27B autoregressive step
+            </div>
             <div className="text-xs text-cyan-300 font-bold pt-2 border-t border-cyan-500/20">
               Ollama Baseline: 22.91 ms
             </div>
@@ -222,22 +239,31 @@ export default function KernelGemvInfographic() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs font-mono">
           <div className="rounded-xl border border-white/5 bg-black/40 p-3 space-y-1">
             <div className="text-cyan-400 font-bold">1. 128-Bit Load</div>
-            <p className="text-[11px] text-slate-400">Loads 4x int32 words (8 nibbles each = 32 weights) in a single hardware cycle.</p>
+            <p className="text-[11px] text-slate-400">
+              Loads 4x int32 words (8 nibbles each = 32 weights) in a single hardware cycle.
+            </p>
           </div>
 
           <div className="rounded-xl border border-white/5 bg-black/40 p-3 space-y-1">
             <div className="text-purple-400 font-bold">2. Wave32 Shift</div>
-            <p className="text-[11px] text-slate-400"><Tex math="(q \gg (k \cdot 4)) \ \& \ 0\text{xF}" /> extracts 4-bit nibbles directly in VGPRs.</p>
+            <p className="text-[11px] text-slate-400">
+              <Tex math="(q \gg (k \cdot 4)) \ \& \ 0\text{xF}" /> extracts 4-bit nibbles directly
+              in VGPRs.
+            </p>
           </div>
 
           <div className="rounded-xl border border-white/5 bg-black/40 p-3 space-y-1">
             <div className="text-emerald-400 font-bold">3. Group Scaling</div>
-            <p className="text-[11px] text-slate-400"><Tex math="(nibble - 8.0) \cdot scale" /> converts to BF16 with zero bank conflicts.</p>
+            <p className="text-[11px] text-slate-400">
+              <Tex math="(nibble - 8.0) \cdot scale" /> converts to BF16 with zero bank conflicts.
+            </p>
           </div>
 
           <div className="rounded-xl border border-white/5 bg-black/40 p-3 space-y-1">
             <div className="text-amber-400 font-bold">4. WMMA Accumulate</div>
-            <p className="text-[11px] text-slate-400">Dot-product adds directly into FP32 registers for full precision.</p>
+            <p className="text-[11px] text-slate-400">
+              Dot-product adds directly into FP32 registers for full precision.
+            </p>
           </div>
         </div>
       </div>

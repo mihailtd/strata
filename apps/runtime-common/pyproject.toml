@@ -11,8 +11,8 @@ dependencies = []
 # attention()` and gpu_preflight's VRAM checks both do a *lazy* `import torch`
 # inside the function body, never at module import time. Every consumer
 # (runtime-triton, runtime-ipwf, apps/runtime) already pins its own torch
-# build/index -- they legitimately differ (see serving/, apps/factory, and the
-# root pyproject.toml for three different torch/ROCm pins already in this
+# build/index -- they legitimately differ (see runtime-vllm, apps/factory, and
+# the root pyproject.toml for three different torch/ROCm pins already in this
 # repo). Pinning torch here too would force every consumer to reconcile
 # runtime-common's pin against its own inside its own venv -- exactly the
 # isolation problem independent projects exist to avoid.

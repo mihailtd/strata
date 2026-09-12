@@ -42,9 +42,7 @@ METHODS = {
         total_step=total_steps,
         task_type="CAUSAL_LM",
     ),
-    "vera": lambda r, alpha, targets, total_steps: VeraConfig(
-        r=r, target_modules=targets, task_type="CAUSAL_LM"
-    ),
+    "vera": lambda r, alpha, targets, total_steps: VeraConfig(r=r, target_modules=targets, task_type="CAUSAL_LM"),
     "ia3": lambda r, alpha, targets, total_steps: IA3Config(
         target_modules=targets,
         feedforward_modules=targets[-1:],
@@ -60,9 +58,7 @@ METHODS = {
 QUANTIZED_METHODS = {"qlora"}
 
 
-def build_config(
-    method: str, r: int, alpha: int, target_modules: list[str], total_steps: int
-):
+def build_config(method: str, r: int, alpha: int, target_modules: list[str], total_steps: int):
     if method not in METHODS:
         raise ValueError(f"Unknown method '{method}'. Options: {sorted(METHODS)}")
     return METHODS[method](r, alpha, target_modules, total_steps)

@@ -1,8 +1,8 @@
 """Test Suite for DeepSeek Harness Connection & LoRA Model Aliases."""
 
 import json
-import urllib.request
 import time
+import urllib.request
 
 
 def test_list_models():
@@ -21,9 +21,7 @@ def test_chat_completions_with_lora_alias(model_id: str = "qwen3.8-27b-postgresq
     print(f"\nTesting POST /v1/chat/completions with model='{model_id}'...")
     payload = {
         "model": model_id,
-        "messages": [
-            {"role": "user", "content": "How do I create an HNSW cosine index in pgvector?"}
-        ],
+        "messages": [{"role": "user", "content": "How do I create an HNSW cosine index in pgvector?"}],
         "stream": True,
         "max_tokens": 128,
     }

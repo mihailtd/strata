@@ -31,11 +31,10 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 os.environ["HIP_VISIBLE_DEVICES"] = "0"
 os.environ["ROCR_VISIBLE_DEVICES"] = "0"
 
+import _bootstrap  # noqa: F401 -- adds apps/ to sys.path for the inline
 import torch
-
 from runtime_common.canon import CANON, REPO_ROOT
 
-import _bootstrap  # noqa: F401 -- adds apps/ to sys.path for the inline
 # `from runtime.novel_peft import ...` below (stays in apps/runtime, consumed
 # as source -- see apps/factory/pyproject.toml's comment)
 
@@ -66,17 +65,26 @@ def train_expert(domain: str, out_dir: Path, model_id: str = "Qwen/Qwen3.5-9B") 
     cmd = [
         sys.executable,
         str(REPO_ROOT / "apps" / "factory" / "train_expert.py"),
-        "--model-id", model_id,
-        "--domain", domain,
+        "--model-id",
+        model_id,
+        "--domain",
+        domain,
         "--v7",
-        "--out", str(out_dir),
-        "--max-length", "512",
-        "--batch-size", "1",
-        "--grad-accum", "4",
+        "--out",
+        str(out_dir),
+        "--max-length",
+        "512",
+        "--batch-size",
+        "1",
+        "--grad-accum",
+        "4",
         "--gradient-checkpointing",
-        "--vram-cap-gb", "23.0",
-        "--stop-at-dw-over-w", "0.075",
-        "--logging-steps", "10",
+        "--vram-cap-gb",
+        "23.0",
+        "--stop-at-dw-over-w",
+        "0.075",
+        "--logging-steps",
+        "10",
     ]
 
     t0 = time.perf_counter()
@@ -86,7 +94,7 @@ def train_expert(domain: str, out_dir: Path, model_id: str = "Qwen/Qwen3.5-9B") 
     if proc.returncode != 0:
         raise RuntimeError(f"Training failed for domain {domain} with exit code {proc.returncode}")
 
-    print(f"\n[Finished] Domain {domain} trained successfully in {elapsed_sec:.1f}s ({elapsed_sec/60:.2f} min)")
+    print(f"\n[Finished] Domain {domain} trained successfully in {elapsed_sec:.1f}s ({elapsed_sec / 60:.2f} min)")
 
     # Read regime and geometry if generated
     geom_file = out_dir / "geometry_trace.json"
@@ -112,8 +120,8 @@ def evaluate_9b_expert_fleet(model_id: str = "Qwen/Qwen3.5-9B") -> dict[str, Any
     print(f" >>> RUNNING MULTI-EXPERT EVALUATION ON {model_id}")
     print("=" * 90)
 
-    from transformers import AutoModelForCausalLM, AutoTokenizer
     from runtime.novel_peft import FoldableExpert, WeightFoldingEngine
+    from transformers import AutoModelForCausalLM, AutoTokenizer
 
     tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
     print("Loading base model in bfloat16 for weight folding & evaluation...")
@@ -170,7 +178,7 @@ def evaluate_9b_expert_fleet(model_id: str = "Qwen/Qwen3.5-9B") -> dict[str, Any
     # 2. SVD Subspace Orthogonality Matrix (6x6)
     print("\n[Geometric Audit] Computing 6x6 Subspace Overlap & Orthogonality Matrix...")
     dim = model.config.text_config.hidden_size if hasattr(model.config, "text_config") else model.config.hidden_size
-    expected_chance = 8.0 / dim # r / D
+    expected_chance = 8.0 / dim  # r / D
     overlap_matrix = {}
 
     for i, exp_a in enumerate(experts):
@@ -179,7 +187,7 @@ def evaluate_9b_expert_fleet(model_id: str = "Qwen/Qwen3.5-9B") -> dict[str, Any
             if i == j:
                 overlap_matrix[exp_a.name][exp_b.name] = 1.0
                 continue
-            
+
             # Compute average canonical subspace overlap across shared linear projections
             overlaps = []
             for mod_key in exp_a.factors:

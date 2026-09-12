@@ -18,8 +18,8 @@ from runtime.canon import REPO_ROOT
 
 LAW_K = 0.167  # merge_rel_err_pct * (|dW|/|W|), fitted on the empirical alpha sweep
 MERGE_ERR_FLOOR_PCT = 5.0  # Max acceptable merge error on bf16 mantissa
-TARGET_DW_W_MIN = 0.040    # Minimum perturbation to maintain domain steering
-TARGET_DW_W_MAX = 0.085    # Maximum perturbation before representation narrowing
+TARGET_DW_W_MIN = 0.040  # Minimum perturbation to maintain domain steering
+TARGET_DW_W_MAX = 0.085  # Maximum perturbation before representation narrowing
 
 
 def measure_adapter_perturbation(
@@ -87,9 +87,9 @@ def measure_adapter_perturbation(
     # Fallback denominator reference for Qwen3.5-4B adapted projection layers (128 weight matrices)
     # sqrt(den) = 501.7839764855163 across all 32 layers' q, k, v, o, gate, up, down projections
     if den <= 0.0:
-        den = 501.7839764855163 ** 2
+        den = 501.7839764855163**2
 
-    dw_over_w = (num ** 0.5) / max(1e-30, den ** 0.5)
+    dw_over_w = (num**0.5) / max(1e-30, den**0.5)
 
     return {
         "r": r,
@@ -121,17 +121,19 @@ def calibrate_adapter_alpha(
         err = LAW_K / max(1e-9, ratio)
         below_floor = err > MERGE_ERR_FLOOR_PCT
         in_target_band = TARGET_DW_W_MIN <= ratio <= TARGET_DW_W_MAX
-        curve.append({
-            "alpha": int(a),
-            "scaling": float(a / r),
-            "dw_over_w": float(ratio),
-            "merge_err_pct": float(err),
-            "below_floor": bool(below_floor),
-            "in_target_band": bool(in_target_band),
-        })
+        curve.append(
+            {
+                "alpha": int(a),
+                "scaling": float(a / r),
+                "dw_over_w": float(ratio),
+                "merge_err_pct": float(err),
+                "below_floor": bool(below_floor),
+                "in_target_band": bool(in_target_band),
+            }
+        )
 
     admissible = [c for c in curve if not c["below_floor"]]
-    
+
     # Pick optimal alpha:
     # Prefer point in target perturbation band [0.04, 0.085], closest to golden 0.071
     if admissible:
@@ -182,21 +184,25 @@ def calibrate_adapter_alpha(
     # Update SQLite database if factory.db exists
     try:
         import sqlite3
+
         db_path = REPO_ROOT / "results" / "factory.db"
         if db_path.exists():
             conn = sqlite3.connect(db_path)
-            conn.execute("""
+            conn.execute(
+                """
                 UPDATE training_runs
                 SET alpha = ?, scaling = ?, final_dw_w = ?, predicted_merge_err = ?
                 WHERE run_id LIKE ? OR domain LIKE ?
-            """, (
-                int(alpha_opt),
-                float(alpha_opt / r),
-                float(best["dw_over_w"]),
-                float(best["merge_err_pct"]),
-                f"%{adapter_dir.name}%",
-                f"%{adapter_dir.name.split('_')[1] if len(adapter_dir.name.split('_')) > 1 else adapter_dir.name}%"
-            ))
+            """,
+                (
+                    int(alpha_opt),
+                    float(alpha_opt / r),
+                    float(best["dw_over_w"]),
+                    float(best["merge_err_pct"]),
+                    f"%{adapter_dir.name}%",
+                    f"%{adapter_dir.name.split('_')[1] if len(adapter_dir.name.split('_')) > 1 else adapter_dir.name}%",
+                ),
+            )
             conn.commit()
             conn.close()
     except Exception:

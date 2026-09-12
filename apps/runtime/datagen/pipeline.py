@@ -281,7 +281,7 @@ def run_pipeline(
 
     if not client.ping():
         raise RuntimeError(
-            f"llama-server not reachable at {llm_cfg['base_url']} — start it first (see serving/README.md)."
+            f"llama-server not reachable at {llm_cfg['base_url']} — start it first (see apps/runtime-llama/README.md)."
         )
 
     verify_base_url = llm_cfg.get("verify_base_url")

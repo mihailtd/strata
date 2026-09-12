@@ -61,6 +61,7 @@ from typing import Any
 
 # --- Measured cost model -----------------------------------------------------
 
+
 @dataclass(frozen=True)
 class TransitionCosts:
     """Measured VRAM state-transition costs in milliseconds.
@@ -75,8 +76,8 @@ class TransitionCosts:
     for every transition involving pristine.
     """
 
-    restore_ms: float = 13.95        # engine.restore() -- pure pristine copy
-    fold_single_ms: float = 17.97    # engine.activate(e) -- one fused addmm
+    restore_ms: float = 13.95  # engine.restore() -- pure pristine copy
+    fold_single_ms: float = 17.97  # engine.activate(e) -- one fused addmm
     fold_extra_expert_ms: float = 7.89  # marginal cost of each extra stacked expert
 
     @classmethod
@@ -167,9 +168,7 @@ class VRAMStateGraph:
             if t_restore_ms is not None or t_fold_per_expert_ms is not None:
                 costs = TransitionCosts(
                     restore_ms=t_restore_ms if t_restore_ms is not None else costs.restore_ms,
-                    fold_single_ms=(
-                        t_fold_per_expert_ms if t_fold_per_expert_ms is not None else costs.fold_single_ms
-                    ),
+                    fold_single_ms=(t_fold_per_expert_ms if t_fold_per_expert_ms is not None else costs.fold_single_ms),
                     fold_extra_expert_ms=(
                         t_fold_per_expert_ms if t_fold_per_expert_ms is not None else costs.fold_extra_expert_ms
                     ),

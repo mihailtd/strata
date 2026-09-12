@@ -31,11 +31,11 @@ the confidence bar automatically tightens, pruning doomed tail draft tokens and 
 
 from __future__ import annotations
 
-from typing import Literal, Optional, Tuple, Dict, Any
 import math
+from typing import Any, Literal
+
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class RangeOutput(tuple):
@@ -108,7 +108,7 @@ class RangeStatisticGate(nn.Module):
         self.running_mean_spread: float = 3.0
         self.running_var_spread: float = 1.0
         self.running_atr: float = 1.0
-        self.last_spread: Optional[float] = None
+        self.last_spread: float | None = None
         self.history_count: int = 0
 
     @classmethod
@@ -158,12 +158,10 @@ class RangeStatisticGate(nn.Module):
         if not self.weibull_hazard_enabled:
             return 0.0
         step = step_idx + 1  # 1-indexed lifetime elapsed
-        hazard = (self.weibull_beta / self.weibull_eta) * (
-            (step / self.weibull_eta) ** (self.weibull_beta - 1.0)
-        )
+        hazard = (self.weibull_beta / self.weibull_eta) * ((step / self.weibull_eta) ** (self.weibull_beta - 1.0))
         return float(hazard)
 
-    def update_volatility(self, top_vals: torch.Tensor) -> Tuple[float, float, float, float, float]:
+    def update_volatility(self, top_vals: torch.Tensor) -> tuple[float, float, float, float, float]:
         """Updates rolling Bollinger Bands and ATR based on top-1 vs top-2 logit spread.
 
         Evaluates the incoming logit spread against the prior rolling volatility regime (pre-update),
@@ -204,7 +202,7 @@ class RangeStatisticGate(nn.Module):
         alpha = self.bollinger_alpha
         diff = spread - self.running_mean_spread
         self.running_mean_spread += alpha * diff
-        self.running_var_spread = (1.0 - alpha) * self.running_var_spread + alpha * (diff ** 2)
+        self.running_var_spread = (1.0 - alpha) * self.running_var_spread + alpha * (diff**2)
 
         prev_spread = self.last_spread if self.last_spread is not None else spread
         tr = max(abs(spread - prev_spread), 1e-4)
@@ -214,9 +212,7 @@ class RangeStatisticGate(nn.Module):
 
         return spread, lower_band, upper_band, self.running_atr, vol_penalty
 
-    def get_effective_threshold(
-        self, step_idx: int = 0, vol_penalty: float = 0.0
-    ) -> float:
+    def get_effective_threshold(self, step_idx: int = 0, vol_penalty: float = 0.0) -> float:
         """Computes dynamic confidence threshold taking elapsed draft horizon and volatility into account."""
         h_k = self.compute_hazard_rate(step_idx)
         weibull_mult = self.weibull_gamma * h_k if self.weibull_hazard_enabled else 0.0
@@ -249,7 +245,7 @@ class RangeStatisticGate(nn.Module):
         return RangeOutput(range_val, top_vals)
 
     @torch.no_grad()
-    def should_early_exit(self, logits: torch.Tensor, step_idx: int = 0) -> Tuple[bool, float, float]:
+    def should_early_exit(self, logits: torch.Tensor, step_idx: int = 0) -> tuple[bool, float, float]:
         """Decides whether to abort the speculative draft chain on this token."""
         flat_logits = logits.view(-1, logits.shape[-1])
         range_tensor, top_vals = self.compute_range(flat_logits)
@@ -270,7 +266,7 @@ class RangeStatisticGate(nn.Module):
         return should_abort, range_val, effective_tau
 
     @torch.no_grad()
-    def inspect_decision(self, logits: torch.Tensor, step_idx: int = 0) -> Dict[str, Any]:
+    def inspect_decision(self, logits: torch.Tensor, step_idx: int = 0) -> dict[str, Any]:
         """Returns full diagnostic telemetry for research and dashboard telemetry."""
         flat_logits = logits.view(-1, logits.shape[-1])
         range_tensor, top_vals = self.compute_range(flat_logits)

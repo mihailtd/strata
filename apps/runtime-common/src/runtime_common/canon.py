@@ -51,7 +51,7 @@ HOW TO USE
 
     results["config"] = CANON.stamp()           # ALWAYS stamp the artifact
 
-Run `uv run python scripts/audit/check_canon.py` to fail the build on any violation.
+Run `uv run python audit/check_canon.py` to fail the build on any violation.
 
 (`from runtime.canon import ...` still works everywhere else in the repo -- it's
 a compatibility shim re-exporting from here. New code should import from
@@ -62,7 +62,7 @@ runtime_common directly. See apps/runtime/canon.py.)
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 
@@ -71,7 +71,7 @@ def _find_repo_root(start: Path) -> Path:
     be nested inside whichever project currently depends on runtime_common.
 
     Never hardcode a fixed `.parent` chain here -- that already broke 31
-    scripts once when a file moved (see scripts/audit/check_canon.py). Prefer
+    scripts once when a file moved (see audit/check_canon.py). Prefer
     moon's own workspace-root env var when running under a moon-orchestrated
     task; otherwise walk up to the nearest `.git`.
     """
@@ -82,8 +82,7 @@ def _find_repo_root(start: Path) -> Path:
         if (candidate / ".git").exists():
             return candidate
     raise RuntimeError(
-        f"Could not locate monorepo root: no MOON_WORKSPACE_ROOT env var and "
-        f"no .git found walking up from {start}"
+        f"Could not locate monorepo root: no MOON_WORKSPACE_ROOT env var and no .git found walking up from {start}"
     )
 
 
@@ -121,8 +120,8 @@ class _Canon:
     BASE_MODEL: str = "Qwen/Qwen3.5-4B"
     VRAM_CAP_GB: float = 22.0
     GPU_SAFETY_THRESHOLD_GB: float = 6.0  # Accommodates desktop compositor baseline and system headroom
-    GREEDY: bool = True          # do_sample=False. Determinism is how we detect
-                                 # that an "unchanged" condition really is one.
+    GREEDY: bool = True  # do_sample=False. Determinism is how we detect
+    # that an "unchanged" condition really is one.
     LORA_RANK: int = 8
     LORA_ALPHA: int = 128
 
@@ -151,18 +150,25 @@ class _Canon:
 CANON = _Canon()
 
 # Domains that have a canonical expert. Keep in sync with results/adapters/.
-DOMAINS = ("astral", "postgresql", "duckdb", "financial",
-           # NOTE: the financial CORPUS lives in data/financial_planning/
-           # while every adapter is m2_financial_* -- legacy, normalised in
-           # the trainer rather than by renaming v1-v4 adapters.
-           # split out of astral: 88% of its generated half was generic Python /
-           # FastAPI, which taught style and syntax, never Astral tooling. See
-           # apps/factory/corpus/split_astral_domain.py and DECISIONS.md §44.
-           "python_modern", "python_web",
-           # merged corpora -- these exist to test whether STACKING earns its
-           # complexity. If one adapter trained on the union matches the stacked
-           # ast+pg+duck row, the router and folding engine are unnecessary at N=3.
-           "merged_sql", "merged_all")
+DOMAINS = (
+    "astral",
+    "postgresql",
+    "duckdb",
+    "financial",
+    # NOTE: the financial CORPUS lives in data/financial_planning/
+    # while every adapter is m2_financial_* -- legacy, normalised in
+    # the trainer rather than by renaming v1-v4 adapters.
+    # split out of astral: 88% of its generated half was generic Python /
+    # FastAPI, which taught style and syntax, never Astral tooling. See
+    # apps/factory/corpus/split_astral_domain.py and DECISIONS.md §44.
+    "python_modern",
+    "python_web",
+    # merged corpora -- these exist to test whether STACKING earns its
+    # complexity. If one adapter trained on the union matches the stacked
+    # ast+pg+duck row, the router and folding engine are unnecessary at N=3.
+    "merged_sql",
+    "merged_all",
+)
 
 
 def validate_kv_cache_precision(dtype_str: str) -> str:

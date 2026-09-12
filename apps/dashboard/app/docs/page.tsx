@@ -259,9 +259,7 @@ export default function DocsPage() {
                 >
                   {docMetadata.category}
                 </span>
-                <span className="font-mono text-xs text-slate-400">
-                  {docMetadata.relativePath}
-                </span>
+                <span className="font-mono text-xs text-slate-400">{docMetadata.relativePath}</span>
               </div>
               <h1 className="text-lg font-bold text-white mt-1 flex items-center gap-2">
                 <FileText className="h-4 w-4 text-[#00f2ff]" />
@@ -310,9 +308,7 @@ export default function DocsPage() {
           {isLoading ? (
             <div className="flex flex-col items-center justify-center h-64 space-y-3">
               <Sparkles className="h-8 w-8 text-[#00f2ff] animate-spin" />
-              <span className="font-mono text-xs text-slate-400">
-                Loading document content...
-              </span>
+              <span className="font-mono text-xs text-slate-400">Loading document content...</span>
             </div>
           ) : hasInteractive && activeTab === "interactive" ? (
             renderInteractiveComponent()

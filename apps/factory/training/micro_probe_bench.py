@@ -24,12 +24,11 @@ _FACTORY_DIR = Path(__file__).resolve().parent.parent  # apps/factory/
 # apps/ on sys.path to reuse apps/runtime's dataset loader & logger (shared
 # modules, consumed as source -- see apps/factory/pyproject.toml's comment)
 sys.path.insert(0, str(_REPO_ROOT / "apps"))
+from runtime.micro_probe.dataset import load_astral_micro_dataset
+from runtime.utils.logger import log_benchmark_metric
 from transformers import DataCollatorForLanguageModeling, TrainingArguments
 from trl import SFTTrainer
 from unsloth import FastLanguageModel
-
-from runtime.micro_probe.dataset import load_astral_micro_dataset
-from runtime.utils.logger import log_benchmark_metric
 
 
 def run_unsloth_micro_probe(
@@ -49,9 +48,7 @@ def run_unsloth_micro_probe(
             load_in_4bit=True,
         )
     except Exception as e:
-        print(
-            f"Primary model {model_name} failed: {e}. Trying fallback Qwen/Qwen3.5-2B-Instruct..."
-        )
+        print(f"Primary model {model_name} failed: {e}. Trying fallback Qwen/Qwen3.5-2B-Instruct...")
         model, tokenizer = FastLanguageModel.from_pretrained(
             model_name="Qwen/Qwen3.5-2B-Instruct",
             max_seq_length=max_seq_length,
@@ -92,9 +89,7 @@ def run_unsloth_micro_probe(
             padding="max_length",
         )
 
-    tokenized_dataset = dataset.map(
-        tokenize_function, batched=True, remove_columns=dataset.column_names
-    )
+    tokenized_dataset = dataset.map(tokenize_function, batched=True, remove_columns=dataset.column_names)
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
     training_args = TrainingArguments(
@@ -130,11 +125,7 @@ def run_unsloth_micro_probe(
     train_result = trainer.train()
     elapsed_s = time.perf_counter() - start_time
 
-    peak_vram_gb = (
-        torch.cuda.max_memory_allocated() / (1024**3)
-        if torch.cuda.is_available()
-        else 0.0
-    )
+    peak_vram_gb = torch.cuda.max_memory_allocated() / (1024**3) if torch.cuda.is_available() else 0.0
     total_tokens = max_steps * batch_size * max_seq_length
     tok_per_sec = total_tokens / max(1e-5, elapsed_s)
     steps_per_sec = max_steps / max(1e-5, elapsed_s)

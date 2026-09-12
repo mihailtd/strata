@@ -101,11 +101,11 @@ def start_run(
 ) -> str:
     """Register the start of a training run in SQLite."""
     init_db(db_path)
-    now_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
+    now_str = datetime.datetime.now(datetime.UTC).strftime("%Y%m%d_%H%M%S")
     run_id = f"run_{now_str}_{domain}"
     scaling = float(alpha) / float(rank) if rank > 0 else 1.0
 
-    created_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    created_iso = datetime.datetime.now(datetime.UTC).isoformat()
     with get_connection(db_path) as conn:
         conn.execute(
             """
@@ -186,7 +186,7 @@ def finish_run(
     db_path: Path | str | None = None,
 ) -> None:
     """Mark a training run as finished (completed, failed, or cancelled)."""
-    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    now_iso = datetime.datetime.now(datetime.UTC).isoformat()
     with get_connection(db_path) as conn:
         conn.execute(
             """

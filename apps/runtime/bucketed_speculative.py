@@ -56,8 +56,8 @@ import time
 import torch
 from transformers import PreTrainedModel, PreTrainedTokenizerBase, StaticCache
 
-from runtime.state_ring_buffer import RingBufferReplayEngine
 from runtime.macd_speculation_circuit_breaker import MACDSpeculationCircuitBreaker
+from runtime.state_ring_buffer import RingBufferReplayEngine
 
 
 class BucketedSpeculativeDecoder:
@@ -84,6 +84,7 @@ class BucketedSpeculativeDecoder:
         base_hidden = getattr(base_cfg, "hidden_size", None)
         if isinstance(head_hidden, int) and isinstance(base_hidden, int) and head_hidden != base_hidden:
             from runtime.mtp_draft import IncompatibleDraftHeadError
+
             head_id = getattr(draft_head, "target_model_id", "unknown")
             raise IncompatibleDraftHeadError(
                 f"Speculative draft head incompatible: Draft head '{head_id}' has hidden_size={head_hidden}, "
@@ -125,15 +126,22 @@ class BucketedSpeculativeDecoder:
         prompt_tokens = prompt_tokens.to(self.device)
         dtype = getattr(self.model, "dtype", torch.bfloat16)
         self.cache = StaticCache(
-            config=self.model.config, max_batch_size=1,
-            max_cache_len=self.max_seq_len, device=self.device, dtype=dtype,
+            config=self.model.config,
+            max_batch_size=1,
+            max_cache_len=self.max_seq_len,
+            device=self.device,
+            dtype=dtype,
         )
 
         # prefill once so the cache and the autotune caches are warm
         cur = prompt_tokens.shape[1]
         with torch.no_grad():
-            self.model(prompt_tokens, past_key_values=self.cache,
-                       cache_position=torch.arange(0, cur, device=self.device), use_cache=True)
+            self.model(
+                prompt_tokens,
+                past_key_values=self.cache,
+                cache_position=torch.arange(0, cur, device=self.device),
+                use_cache=True,
+            )
 
         for width in range(1, self.k + 2):
             self._capture_width(width, cur, warmup_steps)
@@ -144,7 +152,7 @@ class BucketedSpeculativeDecoder:
 
         ring_mode = os.environ.get("RING_BUFFER_MODE", "selective_hybrid")
         self.ring_engine = RingBufferReplayEngine(self.cache, max_depth=64, mode=ring_mode)
-        
+
         self._collect_length_counters()
         self._locked = True
 
@@ -165,9 +173,15 @@ class BucketedSpeculativeDecoder:
         s.wait_stream(torch.cuda.current_stream(device=self.device))
         with torch.cuda.stream(s), torch.no_grad():
             for _ in range(warmup_steps):
-                self.model(ids, attention_mask=mask, position_ids=pos_ids,
-                           cache_position=cache_pos, past_key_values=self.cache,
-                           use_cache=True, output_hidden_states=True)
+                self.model(
+                    ids,
+                    attention_mask=mask,
+                    position_ids=pos_ids,
+                    cache_position=cache_pos,
+                    past_key_values=self.cache,
+                    use_cache=True,
+                    output_hidden_states=True,
+                )
         torch.cuda.current_stream(device=self.device).wait_stream(s)
 
         g = torch.cuda.CUDAGraph()
@@ -182,21 +196,36 @@ class BucketedSpeculativeDecoder:
         # step 303/pos 891 (58-tok prompt) and step 244/pos 1193 (458-tok prompt),
         # ~20s of generation either way. A private pool per width costs a little
         # VRAM (each holds activations for <= K+1 tokens) and removes the aliasing.
-        ctx = (torch.cuda.graph(g, stream=s, pool=self._pool)
-               if (self._pool is not None and self._share_pool)
-               else torch.cuda.graph(g, stream=s))
+        ctx = (
+            torch.cuda.graph(g, stream=s, pool=self._pool)
+            if (self._pool is not None and self._share_pool)
+            else torch.cuda.graph(g, stream=s)
+        )
         with ctx, torch.no_grad():
-            out = self.model(ids, attention_mask=mask, position_ids=pos_ids,
-                             cache_position=cache_pos, past_key_values=self.cache,
-                             use_cache=True, output_hidden_states=True)
+            out = self.model(
+                ids,
+                attention_mask=mask,
+                position_ids=pos_ids,
+                cache_position=cache_pos,
+                past_key_values=self.cache,
+                use_cache=True,
+                output_hidden_states=True,
+            )
             logits = out.logits
             hidden = out.hidden_states[-1]
         torch.cuda.current_stream(device=self.device).wait_stream(s)
         if self._pool is None and self._share_pool:
             self._pool = g.pool()
 
-        self.buckets[width] = {"graph": g, "ids": ids, "pos_ids": pos_ids,
-                               "cache_pos": cache_pos, "mask": mask, "logits": logits, "hidden": hidden}
+        self.buckets[width] = {
+            "graph": g,
+            "ids": ids,
+            "pos_ids": pos_ids,
+            "cache_pos": cache_pos,
+            "mask": mask,
+            "logits": logits,
+            "hidden": hidden,
+        }
 
     # ------------------------------------------------------------- SSM state
     # RingBufferReplayEngine handles snapshotting and rollback.

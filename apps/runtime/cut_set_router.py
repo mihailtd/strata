@@ -23,21 +23,23 @@ Mathematical Formulation:
 
 from __future__ import annotations
 
-from typing import Dict, List, Set, Tuple, Optional, Callable, Any
-from dataclasses import dataclass, field
 import itertools
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
 class ReliabilityNode:
     """Represents a tool execution step in the agent reasoning DAG."""
+
     node_id: str
     name: str
     reliability: float = 0.90  # Historical / empirical success probability
-    execute_fn: Optional[Callable[..., Any]] = None
-    fallback_fn: Optional[Callable[..., Any]] = None
+    execute_fn: Callable[..., Any] | None = None
+    fallback_fn: Callable[..., Any] | None = None
 
 
 class ReliabilityGraph:
@@ -46,9 +48,9 @@ class ReliabilityGraph:
     def __init__(self, source: str, sink: str) -> None:
         self.source = source
         self.sink = sink
-        self.nodes: Dict[str, ReliabilityNode] = {}
-        self.adj: Dict[str, List[str]] = {}
-        self.in_degree: Dict[str, int] = {}
+        self.nodes: dict[str, ReliabilityNode] = {}
+        self.adj: dict[str, list[str]] = {}
+        self.in_degree: dict[str, int] = {}
 
     def add_node(self, node: ReliabilityNode) -> None:
         self.nodes[node.node_id] = node
@@ -63,11 +65,11 @@ class ReliabilityGraph:
         self.adj[u].append(v)
         self.in_degree[v] = self.in_degree.get(v, 0) + 1
 
-    def find_all_paths(self) -> List[List[str]]:
+    def find_all_paths(self) -> list[list[str]]:
         """Finds all simple directed paths from source to sink using DFS."""
-        paths: List[List[str]] = []
+        paths: list[list[str]] = []
 
-        def dfs(current: str, current_path: List[str], visited: Set[str]):
+        def dfs(current: str, current_path: list[str], visited: set[str]):
             if current == self.sink:
                 paths.append(list(current_path))
                 return
@@ -85,7 +87,7 @@ class ReliabilityGraph:
 
         return paths
 
-    def find_minimal_cut_sets(self) -> List[Set[str]]:
+    def find_minimal_cut_sets(self) -> list[set[str]]:
         """Computes all Minimal Cut Sets of the execution DAG.
 
         A cut set is a set of nodes whose removal destroys all source-to-sink paths.
@@ -97,7 +99,7 @@ class ReliabilityGraph:
 
         # Candidate nodes (excluding source and sink or including intermediate nodes)
         all_nodes = set(self.nodes.keys())
-        cut_sets: List[Set[str]] = []
+        cut_sets: list[set[str]] = []
 
         # Check candidate subsets from size 1 upwards
         for r in range(1, len(all_nodes) + 1):
@@ -113,13 +115,13 @@ class ReliabilityGraph:
 
         return cut_sets
 
-    def get_order_1_cut_sets(self) -> List[str]:
+    def get_order_1_cut_sets(self) -> list[str]:
         """Returns all Single Points of Failure (Order-1 Minimal Cut Sets)."""
         minimal_cuts = self.find_minimal_cut_sets()
         order_1 = [list(c)[0] for c in minimal_cuts if len(c) == 1]
         return order_1
 
-    def compute_system_reliability(self, active_hedges: Optional[Set[str]] = None) -> float:
+    def compute_system_reliability(self, active_hedges: set[str] | None = None) -> float:
         """Computes analytical system reliability under optional k=1-of-n=2 hedging."""
         paths = self.find_all_paths()
         if not paths:
@@ -160,7 +162,7 @@ class ReliabilityGraph:
 
         return float(max(0.0, min(1.0, r_sys)))
 
-    def get_critical_bottlenecks(self, target_reliability: float = 0.95) -> List[str]:
+    def get_critical_bottlenecks(self, target_reliability: float = 0.95) -> list[str]:
         """Identifies vulnerable Order-1 Cut Sets requiring speculative hedging."""
         order_1_cuts = self.get_order_1_cut_sets()
         bottlenecks = []
@@ -181,8 +183,8 @@ class ReliabilityDAGExecutor:
     def execute_dag(
         self,
         graph: ReliabilityGraph,
-        initial_context: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        initial_context: dict[str, Any] | None = None,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Executes the agent DAG with automatic minimal cut-set speculative hedging.
 
         Returns:
@@ -240,7 +242,7 @@ class ReliabilityDAGExecutor:
                             if not success:
                                 first_res = res
                                 success = True
-                        except Exception as exc:
+                        except Exception:
                             if arm == "primary":
                                 primary_failed = True
 

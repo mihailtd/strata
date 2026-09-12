@@ -5,8 +5,7 @@ without HTTP/REST serialization overhead.
 """
 
 import time
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from harness.native_plugin.direct_binding import DirectNativeLlamaEngine
 
@@ -19,7 +18,7 @@ class NativeHarnessDirectProvider:
         self.enable_jump_tokens = enable_jump_tokens
         self.engine = DirectNativeLlamaEngine()
 
-    def run_agent_step(self, instruction: str, system_prompt: str = "", max_tokens: int = 350) -> Dict[str, Any]:
+    def run_agent_step(self, instruction: str, system_prompt: str = "", max_tokens: int = 350) -> dict[str, Any]:
         """Executes a single multi-turn agent step directly in-process."""
         t_start = time.perf_counter()
         tokens = 0
@@ -40,9 +39,10 @@ class NativeHarnessDirectProvider:
             full_text += chunk
 
         import re
+
         t_end = time.perf_counter()
         ttft_val = ttft if ttft is not None else ((t_end - t_start) * 1000.0)
-        
+
         # Extract native generation speed from llama.cpp runtime output
         match = re.search(r"Generation:\s*([\d,\.]+)\s*t/s", full_text)
         if match:

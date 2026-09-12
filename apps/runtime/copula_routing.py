@@ -172,9 +172,7 @@ def sample_gumbel_copula(n: int, theta: float, rng: np.random.Generator) -> np.n
     alpha = 1.0 / theta
     th = rng.uniform(0.0, np.pi, size=n)
     w = rng.exponential(1.0, size=n)
-    V = (np.sin(alpha * th) / np.sin(th) ** (1.0 / alpha)) * (np.sin((1.0 - alpha) * th) / w) ** (
-        (1.0 - alpha) / alpha
-    )
+    V = (np.sin(alpha * th) / np.sin(th) ** (1.0 / alpha)) * (np.sin((1.0 - alpha) * th) / w) ** ((1.0 - alpha) / alpha)
     E = rng.exponential(1.0, size=(n, 2))
     return np.exp(-((E / V[:, None]) ** alpha))
 

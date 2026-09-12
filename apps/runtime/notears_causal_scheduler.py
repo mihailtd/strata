@@ -14,22 +14,20 @@ Provides:
 
 from __future__ import annotations
 
-import asyncio
 import concurrent.futures
 import hashlib
 import json
 import threading
 import time
 from collections import Counter, defaultdict
-from pathlib import Path
 from typing import Any
 
 import numpy as np
 import scipy.linalg as sla
 from scipy.optimize import minimize
 
-from runtime.canon import CANON, REPO_ROOT
-from runtime.tool_trace import TOOL_PATTERNS, detect_tools
+from runtime.canon import REPO_ROOT
+from runtime.tool_trace import TOOL_PATTERNS
 
 EXPERTS = ["astral", "postgresql", "duckdb", "financial", "python_modern", "python_web"]
 
@@ -65,7 +63,7 @@ def notears_linear(
     def _loss(W: np.ndarray) -> tuple[float, np.ndarray]:
         """Least squares loss and gradient."""
         R = X - X @ W
-        loss = 0.5 / float(n) * float(np.sum(R ** 2))
+        loss = 0.5 / float(n) * float(np.sum(R**2))
         G_loss = -1.0 / float(n) * (X.T @ R)
         return loss, G_loss
 
@@ -155,13 +153,11 @@ class NotearsCausalScheduler:
             (["duckdb_query", "export_parquet"], "duckdb", ["fastapi_route", "pydantic_model"], "python_web"),
             (["fastapi_route", "pydantic_model"], "python_web", ["pytest", "dataclass"], "python_modern"),
             (["dataclass", "ruff_check"], "python_modern", ["uv_run", "pytest"], "astral"),
-
             # 2. Financial Analytics & Trading Pipeline
             ([], "financial", ["duckdb_query"], "duckdb"),
             (["duckdb_query"], "duckdb", ["sql_ddl", "sql_select"], "postgresql"),
             (["sql_ddl", "sql_select"], "postgresql", ["fastapi_route", "pydantic_model"], "python_web"),
             (["fastapi_route"], "python_web", ["uv_lock", "uv_sync", "pytest"], "astral"),
-
             # 3. Modern Microservice CI/CD Pipeline
             (["uv_init", "uv_add"], "astral", ["dataclass", "ty_check"], "python_modern"),
             (["dataclass", "ty_check"], "python_modern", ["fastapi_route", "pydantic_model"], "python_web"),
@@ -370,19 +366,17 @@ class NotearsCausalScheduler:
             for j in range(self.d):
                 val = float(self.W[i, j])
                 if abs(val) > 0.05:
-                    edges.append({
-                        "source": self.nodes[i],
-                        "target": self.nodes[j],
-                        "weight": round(val, 4),
-                    })
+                    edges.append(
+                        {
+                            "source": self.nodes[i],
+                            "target": self.nodes[j],
+                            "weight": round(val, 4),
+                        }
+                    )
 
         edges.sort(key=lambda e: -abs(e["weight"]))
         total_transitions = self.telemetry["prefold_hits"] + self.telemetry["prefold_misses"]
-        hit_rate = (
-            self.telemetry["prefold_hits"] / total_transitions
-            if total_transitions > 0
-            else 0.0
-        )
+        hit_rate = self.telemetry["prefold_hits"] / total_transitions if total_transitions > 0 else 0.0
 
         return {
             "nodes": self.nodes,

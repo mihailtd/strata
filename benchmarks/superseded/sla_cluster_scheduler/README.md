@@ -113,7 +113,7 @@ scheduling is bounded by that number. Two specific traps already paid for:
 **Stacking is disabled on purpose.** Co-residency is cheaper (25.86 ms vs
 2 × 18.14 = 36.28 ms, saving ~10.4 ms), but the accuracy question is already
 answered and the answer is no — see
-[`CURRENT.md`](../../../CURRENT.md) open question 1: `ast+fin` costs astral
+[`CURRENT.md`](../../../docs/CURRENT.md) open question 1: `ast+fin` costs astral
 **−10.96pp, 95% CI [−21.50, −1.62]** (resolved loss, n=40). Trading 11 accuracy
 points for 10.4 ms — 0.55% of a request — is not a trade worth making.
 
@@ -137,7 +137,7 @@ uv run --env-file .env python benchmarks/runtime/router/vram_state_routing/calib
 uv run --env-file .env python benchmarks/runtime/router/vram_state_routing/benchmark_vram_router.py --num-requests 200
 
 # 3. Live A/B (server must be running)
-uv run --env-file .env python scripts/serve/run_openai_api_server.py &
+uv run --env-file .env python apps/runtime/run_server.py &
 uv run --env-file .env python benchmarks/runtime/router/vram_state_routing/benchmark_router_e2e.py --repeats 2
 ```
 

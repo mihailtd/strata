@@ -33,7 +33,7 @@ os.environ["HIP_VISIBLE_DEVICES"] = "0"
 os.environ["ROCR_VISIBLE_DEVICES"] = "0"
 
 import torch
-from runtime_common.canon import CANON, REPO_ROOT
+from runtime_common.canon import REPO_ROOT
 
 EXPERT_DOMAINS = [
     ("postgresql", "results/adapters/m2_postgresql_r8a128_v7_27b_qlora"),
@@ -67,18 +67,27 @@ def train_expert(
     cmd = [
         sys.executable,
         str(REPO_ROOT / "apps" / "factory" / "train_expert.py"),
-        "--model-id", model_id,
-        "--domain", domain,
+        "--model-id",
+        model_id,
+        "--domain",
+        domain,
         "--v7",
-        "--out", str(out_dir),
+        "--out",
+        str(out_dir),
         "--qlora",
-        "--max-length", "512",
-        "--batch-size", "1",
-        "--grad-accum", "4",
+        "--max-length",
+        "512",
+        "--batch-size",
+        "1",
+        "--grad-accum",
+        "4",
         "--gradient-checkpointing",
-        "--vram-cap-gb", str(vram_cap),
-        "--stop-at-dw-over-w", "0.075",
-        "--logging-steps", "10",
+        "--vram-cap-gb",
+        str(vram_cap),
+        "--stop-at-dw-over-w",
+        "0.075",
+        "--logging-steps",
+        "10",
     ]
 
     t0 = time.perf_counter()
@@ -88,7 +97,7 @@ def train_expert(
     if proc.returncode != 0:
         raise RuntimeError(f"Training failed for domain {domain} with exit code {proc.returncode}")
 
-    print(f"\n[Finished] Domain {domain} trained successfully in {elapsed_sec:.1f}s ({elapsed_sec/60:.2f} min)")
+    print(f"\n[Finished] Domain {domain} trained successfully in {elapsed_sec:.1f}s ({elapsed_sec / 60:.2f} min)")
 
     geom_file = out_dir / "geometry_trace.json"
     geom_data = []
@@ -123,7 +132,7 @@ def main():
     print("🚀 LAUNCHING 27B/32B MULTI-EXPERT FLEET TRAINING PIPELINE")
     print(f"   Target Base Model: {args.model_id}")
     print(f"   Domains Scheduled ({len(domains_to_train)}): {[d[0] for d in domains_to_train]}")
-    print(f"   Output Directory:  results/adapters/m2_*_r8a128_v7_27b_qlora")
+    print("   Output Directory:  results/adapters/m2_*_r8a128_v7_27b_qlora")
     print("=" * 90)
 
     results = []
@@ -145,7 +154,7 @@ def main():
 
     total_time = time.perf_counter() - t_start
     print("\n" + "=" * 90)
-    print(f"✅ ALL DOMAIN EXPERTS COMPLETED in {total_time/60:.2f} minutes!")
+    print(f"✅ ALL DOMAIN EXPERTS COMPLETED in {total_time / 60:.2f} minutes!")
     print("=" * 90)
 
 

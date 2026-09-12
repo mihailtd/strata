@@ -47,8 +47,9 @@ export default function FusedSwigluInfographic() {
   const metrics = useMemo(() => {
     // Memory traffic comparison in MB per token across 64 layers:
     // Separate GEMMs: Load W_gate, Write Gate, Load W_up, Write Up, Read Gate+Up, Write Act, Read Act, Load W_down
-    const bytesSeparatePerLayer = (hiddenDim * ffnDim * 2 * 0.5) + (ffnDim * 2 * 3) + (hiddenDim * ffnDim * 0.5);
-    const bytesFusedPerLayer = (hiddenDim * ffnDim * 2 * 0.5) + (ffnDim * 2) + (hiddenDim * ffnDim * 0.5);
+    const bytesSeparatePerLayer =
+      hiddenDim * ffnDim * 2 * 0.5 + ffnDim * 2 * 3 + hiddenDim * ffnDim * 0.5;
+    const bytesFusedPerLayer = hiddenDim * ffnDim * 2 * 0.5 + ffnDim * 2 + hiddenDim * ffnDim * 0.5;
 
     const trafficSavedMbPerLayer = (bytesSeparatePerLayer - bytesFusedPerLayer) / (1024 * 1024);
     const totalTrafficSavedMb = trafficSavedMbPerLayer * 64;
@@ -84,7 +85,9 @@ export default function FusedSwigluInfographic() {
             Fused SwiGLU In-Register GEMV Kernel
           </h1>
           <p className="mt-3 text-sm text-slate-300 max-w-3xl leading-relaxed">
-            Fuses Gate + Up projections and SiLU elementwise activation directly inside Wave32 registers, eliminating intermediate VRAM roundtrips and achieving <strong>733.3 GB/s (76.4% memory bus saturation)</strong> on AMD RDNA3.
+            Fuses Gate + Up projections and SiLU elementwise activation directly inside Wave32
+            registers, eliminating intermediate VRAM roundtrips and achieving{" "}
+            <strong>733.3 GB/s (76.4% memory bus saturation)</strong> on AMD RDNA3.
           </p>
         </div>
       </div>
@@ -104,9 +107,13 @@ export default function FusedSwigluInfographic() {
               <br />
               2. Compute Up &rarr; Write to memory.
               <br />
-              3. Read both back from memory, multiply them together, apply <Tex math="\text{SiLU}" />, and write to memory again.
+              3. Read both back from memory, multiply them together, apply{" "}
+              <Tex math="\text{SiLU}" />, and write to memory again.
               <br />
-              <strong>Our Fused SwiGLU:</strong> Loads the weights once, computes both Gate and Up side-by-side in the GPU&apos;s registers, and calculates <Tex math="\text{silu}(\text{Gate}) \cdot \text{Up}" /> instantly before storing only the final result.
+              <strong>Our Fused SwiGLU:</strong> Loads the weights once, computes both Gate and Up
+              side-by-side in the GPU&apos;s registers, and calculates{" "}
+              <Tex math="\text{silu}(\text{Gate}) \cdot \text{Up}" /> instantly before storing only
+              the final result.
             </p>
           </div>
         </div>

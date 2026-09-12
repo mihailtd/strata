@@ -52,16 +52,23 @@ from __future__ import annotations
 import torch
 
 __all__ = [
-    "matrix_sym_eigh", "matrix_log", "matrix_sqrt", "matrix_inv_sqrt",
-    "spherical_shrinkage", "ledoit_wolf_from_samples",
-    "joint_subspace_operators", "airm_components",
-    "riemannian_affine_invariant_distance", "log_euclidean_distance",
+    "matrix_sym_eigh",
+    "matrix_log",
+    "matrix_sqrt",
+    "matrix_inv_sqrt",
+    "spherical_shrinkage",
+    "ledoit_wolf_from_samples",
+    "joint_subspace_operators",
+    "airm_components",
+    "riemannian_affine_invariant_distance",
+    "log_euclidean_distance",
 ]
 
 
 # ---------------------------------------------------------------------------
 # SPD primitives
 # ---------------------------------------------------------------------------
+
 
 def matrix_sym_eigh(A: torch.Tensor, eps: float = 1e-7):
     """Symmetric eigendecomposition with an eigenvalue floor."""
@@ -87,6 +94,7 @@ def matrix_inv_sqrt(A: torch.Tensor, eps: float = 1e-7) -> torch.Tensor:
 # ---------------------------------------------------------------------------
 # Shrinkage
 # ---------------------------------------------------------------------------
+
 
 def spherical_shrinkage(S: torch.Tensor, delta: float) -> torch.Tensor:
     r"""Sigma = (1 - delta) S + delta * (tr(S)/p) I -- Ch.8 (8.2) with F = mu I.
@@ -146,10 +154,16 @@ def ledoit_wolf_from_samples(X: torch.Tensor) -> tuple[torch.Tensor, float]:
 # The comparison that is actually well defined
 # ---------------------------------------------------------------------------
 
+
 def joint_subspace_operators(
-    Ua: torch.Tensor, Va: torch.Tensor, sa: float,
-    Ub: torch.Tensor, Vb: torch.Tensor, sb: float,
-    delta: float = 0.05, tol: float = 1e-6,
+    Ua: torch.Tensor,
+    Va: torch.Tensor,
+    sa: float,
+    Ub: torch.Tensor,
+    Vb: torch.Tensor,
+    sb: float,
+    delta: float = 0.05,
+    tol: float = 1e-6,
 ) -> tuple[torch.Tensor, torch.Tensor, int]:
     r"""Project two LoRA deltas into ONE shared basis and return two SPD operators.
 
@@ -175,23 +189,24 @@ def joint_subspace_operators(
     Ua, Va, Ub, Vb = (t.to(torch.float64) for t in (Ua, Va, Ub, Vb))
     # Shared output-side subspace. SVD not QR: the ranges can overlap, and then
     # QR hands back near-null columns whose coordinates are numerical dust.
-    stacked = torch.cat([Ua, Ub], dim=1)                     # (d_out, 2r)
+    stacked = torch.cat([Ua, Ub], dim=1)  # (d_out, 2r)
     Q, S, _ = torch.linalg.svd(stacked, full_matrices=False)
-    k = int((S > tol * S[0]).sum())
-    Q = Q[:, :k]                                             # (d_out, k)
+    k = int((tol * S[0] < S).sum())
+    Q = Q[:, :k]  # (d_out, k)
 
     def project(U, V, s):
-        P = Q.T @ U                                          # (k, r)
-        M = (s * s) * (V @ V.T)                              # (r, r), SPD
-        return P @ M @ P.T                                   # (k, k), rank <= r
+        P = Q.T @ U  # (k, r)
+        M = (s * s) * (V @ V.T)  # (r, r), SPD
+        return P @ M @ P.T  # (k, k), rank <= r
 
     Sa = spherical_shrinkage(project(Ua, Va, sa), delta)
     Sb = spherical_shrinkage(project(Ub, Vb, sb), delta)
     return Sa, Sb, k
 
 
-def airm_components(A: torch.Tensor, B: torch.Tensor, eps: float = 1e-12,
-                    A_inv_sqrt: torch.Tensor | None = None) -> dict:
+def airm_components(
+    A: torch.Tensor, B: torch.Tensor, eps: float = 1e-12, A_inv_sqrt: torch.Tensor | None = None
+) -> dict:
     r"""AIRM distance split into the part that is scale and the part that is shape.
 
     With L = log(A^{-1/2} B A^{-1/2}) and k = dim,
@@ -213,15 +228,14 @@ def airm_components(A: torch.Tensor, B: torch.Tensor, eps: float = 1e-12,
     L = matrix_log(Ai @ B @ Ai, eps)
     tr = float(torch.trace(L))
     dev = L - (tr / k) * torch.eye(k, dtype=L.dtype, device=L.device)
-    scale = abs(tr) / (k ** 0.5)
+    scale = abs(tr) / (k**0.5)
     shape = float(torch.norm(dev, p="fro"))
-    return {"total": float((scale ** 2 + shape ** 2) ** 0.5),
-            "scale": scale, "shape": shape, "k": k}
+    return {"total": float((scale**2 + shape**2) ** 0.5), "scale": scale, "shape": shape, "k": k}
 
 
-def riemannian_affine_invariant_distance(A: torch.Tensor, B: torch.Tensor,
-                                         eps: float = 1e-12,
-                                         A_inv_sqrt: torch.Tensor | None = None) -> float:
+def riemannian_affine_invariant_distance(
+    A: torch.Tensor, B: torch.Tensor, eps: float = 1e-12, A_inv_sqrt: torch.Tensor | None = None
+) -> float:
     """d_R(A, B) = ||log(A^{-1/2} B A^{-1/2})||_F. Both must be SPD.
 
     Pass `A_inv_sqrt` when A is a fixed reference compared against many B."""
@@ -229,8 +243,7 @@ def riemannian_affine_invariant_distance(A: torch.Tensor, B: torch.Tensor,
     return float(torch.norm(matrix_log(Ai @ B @ Ai, eps), p="fro"))
 
 
-def log_euclidean_distance(A: torch.Tensor, B: torch.Tensor,
-                           eps: float = 1e-12) -> float:
+def log_euclidean_distance(A: torch.Tensor, B: torch.Tensor, eps: float = 1e-12) -> float:
     """d_LE(A, B) = ||log A - log B||_F. Cheaper than AIRM, agrees with it when
     A and B nearly commute -- so d_LE == d_R to 4 decimals is a WARNING that both
     are dominated by a shared regulariser, not a confirmation."""

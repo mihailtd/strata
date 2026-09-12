@@ -24,9 +24,7 @@ routing them to protected bfloat16 storage while quantizing 99.5% normal channel
 
 from __future__ import annotations
 
-from typing import Tuple, List, Optional
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 
 
@@ -74,11 +72,11 @@ class HighDimensionalLeverageScorer:
 
         # Step 3: Diagnostic Leverage computation
         # Subspace energy weighted by singular values: sum_k (V_{jk}^2 * S_k^2)
-        subspace_energy = torch.sum((V ** 2) * (S.unsqueeze(0) ** 2), dim=-1)  # Shape: (D,)
+        subspace_energy = torch.sum((V**2) * (S.unsqueeze(0) ** 2), dim=-1)  # Shape: (D,)
 
         # Marginal extreme deviation factor
         max_abs = torch.max(torch.abs(X_centered), dim=0).values
-        marginal_factor = (max_abs / mad_clamped)
+        marginal_factor = max_abs / mad_clamped
 
         # Composite Chapter 21 Diagnostic Leverage Score
         leverage_scores = marginal_factor * subspace_energy
@@ -89,7 +87,7 @@ class HighDimensionalLeverageScorer:
         self,
         X: torch.Tensor,
         top_k: int = 16,
-        ratio_threshold: Optional[float] = None,
+        ratio_threshold: float | None = None,
     ) -> torch.Tensor:
         """Returns sorted indices of top outlier channels to protect in bfloat16.
 
@@ -132,7 +130,7 @@ class MixedPrecisionW4A16Packer:
         self,
         W: torch.Tensor,
         outlier_indices: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Splits weight matrix W into normal INT4 channels and protected BF16 channels.
 
         Args:
@@ -162,8 +160,8 @@ class MixedPrecisionW4A16Packer:
     def quantize_normal_channels(
         self,
         W_normal: torch.Tensor,
-        calibration_mode: Literal["ssi", "naive_max"] = "ssi",
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        calibration_mode: Literal[ssi, naive_max] = "ssi",
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Quantizes normal channel weights to symmetric 4-bit with group scales.
 
         Args:
@@ -195,8 +193,8 @@ class MixedPrecisionW4A16Packer:
             var = torch.var(grouped, dim=1, unbiased=True, keepdim=True).clamp(min=1e-6)
             std = torch.sqrt(var)
             centered = grouped - mean
-            m4 = torch.mean(centered ** 4, dim=1, keepdim=True)
-            kurt = (m4 / (var ** 2)).clamp(min=1.0, max=25.0)
+            m4 = torch.mean(centered**4, dim=1, keepdim=True)
+            kurt = (m4 / (var**2)).clamp(min=1.0, max=25.0)
 
             k_ssi = 2.2 + 0.45 * torch.sqrt(kurt)
             boundary = torch.minimum(k_ssi * std, max_abs)
@@ -218,7 +216,7 @@ class MixedPrecisionW4A16Packer:
         W_protected: torch.Tensor,
         outlier_indices: torch.Tensor,
         normal_indices: torch.Tensor,
-        original_shape: Tuple[int, int],
+        original_shape: tuple[int, int],
     ) -> torch.Tensor:
         """Reconstructs full dense float tensor from mixed-precision representation for SNR testing."""
         D_in, D_out = original_shape

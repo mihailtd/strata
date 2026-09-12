@@ -121,9 +121,7 @@ def domain_prompts(
         if not rows:
             continue
         pick = rng.choice(len(rows), size=min(n_per_domain, len(rows)), replace=False)
-        out.extend(
-            {"domain": d, "prompt": rows[int(i)][field], "corpus": corpus.name} for i in pick
-        )
+        out.extend({"domain": d, "prompt": rows[int(i)][field], "corpus": corpus.name} for i in pick)
     return out
 
 
@@ -201,10 +199,7 @@ def residual_stream_features(
     if not d_model:
         raise ValueError("could not determine d_model from any residual-input projection")
 
-    attn_layers = [
-        ell for ell in layers
-        if "self_attn.o_proj" in grouped[ell] and "self_attn.v_proj" in grouped[ell]
-    ]
+    attn_layers = [ell for ell in layers if "self_attn.o_proj" in grouped[ell] and "self_attn.v_proj" in grouped[ell]]
 
     h = rng.standard_normal((n_samples, d_model)) / np.sqrt(d_model)
     deltas = np.zeros((n_samples, len(layers)))
@@ -226,11 +221,11 @@ def residual_stream_features(
         if vp is not None and o is not None:
             u_v, v_v = vp
             u_o, v_o = o
-            kv = scale * ((h @ v_v.T) @ u_v.T)              # [n, kv_heads * head_dim]
+            kv = scale * ((h @ v_v.T) @ u_v.T)  # [n, kv_heads * head_dim]
             o_in = int(v_o.shape[1])
             repeat = max(o_in // max(kv.shape[1], 1), 1)
             a = np.repeat(kv.reshape(n_samples, -1, head_dim), repeat, axis=1)
-            a = a.reshape(n_samples, -1)[:, :o_in]          # [n, heads * head_dim]
+            a = a.reshape(n_samples, -1)[:, :o_in]  # [n, heads * head_dim]
             contribution += scale * ((a @ v_o.T) @ u_o.T)
             per_head = np.linalg.norm(a.reshape(n_samples, o_in // head_dim, head_dim), axis=2)
             head_blocks.append(per_head)
@@ -278,10 +273,7 @@ def expert_magnitudes(
     Every expert starts from the same seeded stream, so the columns are comparable.
     """
     names = sorted(experts)
-    cols = [
-        residual_stream_features(experts[name], n_samples=n_samples, seed=seed)["total_response"]
-        for name in names
-    ]
+    cols = [residual_stream_features(experts[name], n_samples=n_samples, seed=seed)["total_response"] for name in names]
     return np.column_stack(cols), names
 
 
@@ -386,9 +378,10 @@ def real_expert_response_magnitudes(
             if acc["buf"] is None or acc["buf"].shape[0] != xf.shape[0]:
                 acc["buf"] = torch.zeros(xf.shape[0], len(names), device=xf.device, dtype=torch.float32)
             for ei, v32, g32, scale in entries:
-                z = xf @ v32.T                                   # [T, r]
+                z = xf @ v32.T  # [T, r]
                 q = torch.einsum("ta,ab,tb->t", z, g32, z).clamp_min(0.0)
                 acc["buf"][:, ei] += scale * torch.sqrt(q)
+
         return hook
 
     matched = 0
@@ -413,7 +406,7 @@ def real_expert_response_magnitudes(
                 buf = acc["buf"]
                 if buf is None or buf.shape[0] < 2:
                     continue
-                rows.append(buf[1:].cpu().numpy())          # drop position 0
+                rows.append(buf[1:].cpu().numpy())  # drop position 0
                 token_domains.extend([item.get("domain", "?")] * (buf.shape[0] - 1))
     finally:
         for h in handles:
@@ -440,9 +433,13 @@ def real_expert_response_magnitudes(
         cached.parent.mkdir(parents=True, exist_ok=True)
         np.savez_compressed(
             cached,
-            magnitudes=magnitudes, expert_names=np.array(names),
-            token_domains=np.array(token_domains), model_id=model_id,
-            n_prompts=len(prompts), n_tokens=result["n_tokens"], device=device,
+            magnitudes=magnitudes,
+            expert_names=np.array(names),
+            token_domains=np.array(token_domains),
+            model_id=model_id,
+            n_prompts=len(prompts),
+            n_tokens=result["n_tokens"],
+            device=device,
         )
     return result
 
@@ -530,6 +527,7 @@ def capture_real_hidden_states(
             x = args[0] if isinstance(args, tuple) else args
             if isinstance(x, torch.Tensor):
                 captured[idx] = x.detach()[0].float().cpu()
+
         return hook
 
     decoder_layers = model.model.layers if hasattr(model.model, "layers") else []
@@ -551,14 +549,13 @@ def capture_real_hidden_states(
                 enc = tok(prompt, return_tensors="pt", truncation=True, max_length=max_length)
                 enc = {k: v.to(device) for k, v in enc.items()}
                 out = model(**enc, output_hidden_states=True)
-                hs = out.hidden_states                       # tuple length L+1, each [1, T, d]
+                hs = out.hidden_states  # tuple length L+1, each [1, T, d]
                 n_layers = len(hs) - 1
 
                 deltas = [
-                    torch.linalg.norm((hs[ell + 1] - hs[ell])[0].float(), dim=-1).cpu()
-                    for ell in range(n_layers)
+                    torch.linalg.norm((hs[ell + 1] - hs[ell])[0].float(), dim=-1).cpu() for ell in range(n_layers)
                 ]
-                layer_rows.append(torch.stack(deltas, dim=1)[1:].numpy())    # [T-1, L]
+                layer_rows.append(torch.stack(deltas, dim=1)[1:].numpy())  # [T-1, L]
 
                 blocks = []
                 names: list[str] = []
@@ -583,9 +580,7 @@ def capture_real_hidden_states(
             torch.cuda.empty_cache()
 
     layer_delta = np.log(np.maximum(np.vstack(layer_rows).astype(np.float64), 1e-30))
-    head_slice = (
-        np.log(np.maximum(np.vstack(head_rows).astype(np.float64), 1e-30)) if head_rows else np.zeros((0, 0))
-    )
+    head_slice = np.log(np.maximum(np.vstack(head_rows).astype(np.float64), 1e-30)) if head_rows else np.zeros((0, 0))
 
     result = {
         "layer_delta": layer_delta,
@@ -607,10 +602,16 @@ def capture_real_hidden_states(
         cached.parent.mkdir(parents=True, exist_ok=True)
         np.savez_compressed(
             cached,
-            layer_delta=layer_delta, head_slice=head_slice,
-            head_names=np.array(head_names), layers=np.array(result["layers"]),
-            model_id=model_id, dtype=dtype, n_prompts=len(prompts),
-            n_tokens=result["n_tokens"], head_dim=result["head_dim"], device=device,
+            layer_delta=layer_delta,
+            head_slice=head_slice,
+            head_names=np.array(head_names),
+            layers=np.array(result["layers"]),
+            model_id=model_id,
+            dtype=dtype,
+            n_prompts=len(prompts),
+            n_tokens=result["n_tokens"],
+            head_dim=result["head_dim"],
+            device=device,
         )
     return result
 

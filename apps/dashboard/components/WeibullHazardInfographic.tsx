@@ -181,7 +181,11 @@ export default function WeibullHazardInfographic() {
             Weibull Hazard &amp; Bollinger Band Volatility Gating
           </h1>
           <p className="mt-3 text-sm text-slate-300 max-w-3xl leading-relaxed">
-            Unifies temporal wear-out hazard modeling (<Tex math="h(k) \propto k^{\beta-1}" />) with rolling logit volatility bands (<Tex math="\mu \pm 2\sigma" />). Dynamically tightens speculative acceptance thresholds as draft depth grows and intercepts unexpected reasoning collapses before doomed tokens ever reach the backbone verifier.
+            Unifies temporal wear-out hazard modeling (<Tex math="h(k) \propto k^{\beta-1}" />) with
+            rolling logit volatility bands (<Tex math="\mu \pm 2\sigma" />
+            ). Dynamically tightens speculative acceptance thresholds as draft depth grows and
+            intercepts unexpected reasoning collapses before doomed tokens ever reach the backbone
+            verifier.
           </p>
         </div>
       </div>
@@ -195,9 +199,15 @@ export default function WeibullHazardInfographic() {
               Plain English: The Fatigued Runner + Sudden Earthquake
             </h3>
             <p className="text-xs text-slate-300 leading-relaxed">
-              &bull; <strong>Weibull Wear-Out (Time Hazard):</strong> Just like a sprinter gets tired after 400 meters, speculative draft heads get less reliable as draft depth grows (<Tex math="k=1 \to 8" />). Weibull naturally raises the required confidence bar for tokens 4, 5, and 6.
+              &bull; <strong>Weibull Wear-Out (Time Hazard):</strong> Just like a sprinter gets
+              tired after 400 meters, speculative draft heads get less reliable as draft depth grows
+              (<Tex math="k=1 \to 8" />
+              ). Weibull naturally raises the required confidence bar for tokens 4, 5, and 6.
               <br />
-              &bull; <strong>Bollinger Bands (Volatility Breakdown):</strong> Even at token 2 or 3, if the model hits a tricky reasoning step, its top-1 vs runner-up margin suddenly collapses. Bollinger Bands catch this sudden volatility crash instantly, halting speculation before wasting GPU compute on doomed tokens.
+              &bull; <strong>Bollinger Bands (Volatility Breakdown):</strong> Even at token 2 or 3,
+              if the model hits a tricky reasoning step, its top-1 vs runner-up margin suddenly
+              collapses. Bollinger Bands catch this sudden volatility crash instantly, halting
+              speculation before wasting GPU compute on doomed tokens.
             </p>
           </div>
         </div>
@@ -215,7 +225,9 @@ export default function WeibullHazardInfographic() {
             <button
               onClick={() => setScenario("vol_crash")}
               className={`px-3 py-1.5 rounded-lg transition-all ${
-                scenario === "vol_crash" ? "bg-cyan-600 text-white font-bold" : "text-slate-400 hover:text-white"
+                scenario === "vol_crash"
+                  ? "bg-cyan-600 text-white font-bold"
+                  : "text-slate-400 hover:text-white"
               }`}
             >
               Sudden Volatility Crash
@@ -223,7 +235,9 @@ export default function WeibullHazardInfographic() {
             <button
               onClick={() => setScenario("decay")}
               className={`px-3 py-1.5 rounded-lg transition-all ${
-                scenario === "decay" ? "bg-cyan-600 text-white font-bold" : "text-slate-400 hover:text-white"
+                scenario === "decay"
+                  ? "bg-cyan-600 text-white font-bold"
+                  : "text-slate-400 hover:text-white"
               }`}
             >
               Gradual Tail Wear-Out
@@ -231,7 +245,9 @@ export default function WeibullHazardInfographic() {
             <button
               onClick={() => setScenario("high_conf")}
               className={`px-3 py-1.5 rounded-lg transition-all ${
-                scenario === "high_conf" ? "bg-cyan-600 text-white font-bold" : "text-slate-400 hover:text-white"
+                scenario === "high_conf"
+                  ? "bg-cyan-600 text-white font-bold"
+                  : "text-slate-400 hover:text-white"
               }`}
             >
               High Confidence Streak
@@ -243,7 +259,9 @@ export default function WeibullHazardInfographic() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="rounded-xl border border-white/5 bg-black/40 p-4 space-y-2">
             <div className="flex justify-between text-xs font-mono">
-              <span className="text-slate-400">Weibull Shape (<Tex math="\beta" />)</span>
+              <span className="text-slate-400">
+                Weibull Shape (<Tex math="\beta" />)
+              </span>
               <span className="text-cyan-400 font-bold">{beta.toFixed(1)}</span>
             </div>
             <input
@@ -255,12 +273,16 @@ export default function WeibullHazardInfographic() {
               onChange={(e) => setBeta(parseFloat(e.target.value))}
               className="w-full accent-cyan-400"
             />
-            <p className="text-[10px] text-slate-500 font-mono"><Tex math="\beta > 1" />: Accelerating wear-out risk</p>
+            <p className="text-[10px] text-slate-500 font-mono">
+              <Tex math="\beta > 1" />: Accelerating wear-out risk
+            </p>
           </div>
 
           <div className="rounded-xl border border-white/5 bg-black/40 p-4 space-y-2">
             <div className="flex justify-between text-xs font-mono">
-              <span className="text-slate-400">Weibull Weight (<Tex math="\gamma_w" />)</span>
+              <span className="text-slate-400">
+                Weibull Weight (<Tex math="\gamma_w" />)
+              </span>
               <span className="text-cyan-400 font-bold">{gammaW.toFixed(2)}</span>
             </div>
             <input
@@ -277,8 +299,13 @@ export default function WeibullHazardInfographic() {
 
           <div className="rounded-xl border border-white/5 bg-black/40 p-4 space-y-2">
             <div className="flex justify-between text-xs font-mono">
-              <span className="text-slate-400">Bollinger Multiplier (<Tex math="k_{\text{bb}}" />)</span>
-              <span className="text-purple-400 font-bold">{bollingerK.toFixed(1)}<Tex math="\sigma" /></span>
+              <span className="text-slate-400">
+                Bollinger Multiplier (<Tex math="k_{\text{bb}}" />)
+              </span>
+              <span className="text-purple-400 font-bold">
+                {bollingerK.toFixed(1)}
+                <Tex math="\sigma" />
+              </span>
             </div>
             <input
               type="range"
@@ -289,12 +316,16 @@ export default function WeibullHazardInfographic() {
               onChange={(e) => setBollingerK(parseFloat(e.target.value))}
               className="w-full accent-purple-400"
             />
-            <p className="text-[10px] text-slate-500 font-mono">Confidence band standard deviations</p>
+            <p className="text-[10px] text-slate-500 font-mono">
+              Confidence band standard deviations
+            </p>
           </div>
 
           <div className="rounded-xl border border-white/5 bg-black/40 p-4 space-y-2">
             <div className="flex justify-between text-xs font-mono">
-              <span className="text-slate-400">Bollinger Weight (<Tex math="\gamma_b" />)</span>
+              <span className="text-slate-400">
+                Bollinger Weight (<Tex math="\gamma_b" />)
+              </span>
               <span className="text-purple-400 font-bold">{gammaB.toFixed(2)}</span>
             </div>
             <input
@@ -306,16 +337,22 @@ export default function WeibullHazardInfographic() {
               onChange={(e) => setGammaB(parseFloat(e.target.value))}
               className="w-full accent-purple-400"
             />
-            <p className="text-[10px] text-slate-500 font-mono">Volatility breakout penalty weight</p>
+            <p className="text-[10px] text-slate-500 font-mono">
+              Volatility breakout penalty weight
+            </p>
           </div>
         </div>
 
         {/* Step-by-Step Dynamic Decision Matrix */}
         <div className="space-y-3">
           <div className="flex justify-between items-center text-xs font-mono text-slate-400">
-            <span>Intra-Round Speculative Draft Sequence (<Tex math="K=8" /> Horizon)</span>
+            <span>
+              Intra-Round Speculative Draft Sequence (<Tex math="K=8" /> Horizon)
+            </span>
             <span className="text-cyan-400 font-bold">
-              {earlyExitStep < 8 ? `Early Exit Triggered at Step K=${earlyExitStep}` : "Full Draft Horizon (K=8) Passed"}
+              {earlyExitStep < 8
+                ? `Early Exit Triggered at Step K=${earlyExitStep}`
+                : "Full Draft Horizon (K=8) Passed"}
             </span>
           </div>
 
@@ -330,8 +367,8 @@ export default function WeibullHazardInfographic() {
                     isFirstAbort
                       ? "border-red-500/80 bg-red-950/40 shadow-[0_0_15px_rgba(239,68,68,0.3)] ring-2 ring-red-400"
                       : isAborted
-                      ? "border-slate-800 bg-slate-950/30 opacity-40"
-                      : "border-cyan-500/30 bg-slate-900/80"
+                        ? "border-slate-800 bg-slate-950/30 opacity-40"
+                        : "border-cyan-500/30 bg-slate-900/80"
                   }`}
                 >
                   <div>
@@ -350,7 +387,9 @@ export default function WeibullHazardInfographic() {
 
                   <div className="mt-3 pt-2 border-t border-white/5 space-y-1 text-[10px]">
                     <div className="flex justify-between text-slate-400">
-                      <span><Tex math="\tau_{\text{eff}}" /></span>
+                      <span>
+                        <Tex math="\tau_{\text{eff}}" />
+                      </span>
                       <span className="font-bold text-cyan-300">{m.tauEff.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-slate-400">
@@ -382,7 +421,9 @@ export default function WeibullHazardInfographic() {
       <div className="rounded-3xl border border-white/10 bg-slate-900/60 p-6 space-y-4 backdrop-blur-xl">
         <div className="flex items-center gap-2 border-b border-white/5 pb-3">
           <Activity className="h-5 w-5 text-emerald-400" />
-          <h2 className="text-lg font-bold text-white">AMD RX 7900 XTX Measured GPU Telemetry (500 Rounds)</h2>
+          <h2 className="text-lg font-bold text-white">
+            AMD RX 7900 XTX Measured GPU Telemetry (500 Rounds)
+          </h2>
         </div>
 
         <div className="overflow-x-auto">
@@ -431,7 +472,9 @@ export default function WeibullHazardInfographic() {
       <div className="rounded-3xl border border-white/10 bg-slate-900/60 p-6 space-y-4 backdrop-blur-xl">
         <div className="flex items-center gap-2 border-b border-white/5 pb-3">
           <Cpu className="h-5 w-5 text-cyan-400" />
-          <h2 className="text-lg font-bold text-white">Mathematical Rigor: Composite Spatio-Temporal Volatility Formulation</h2>
+          <h2 className="text-lg font-bold text-white">
+            Mathematical Rigor: Composite Spatio-Temporal Volatility Formulation
+          </h2>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
@@ -441,7 +484,10 @@ export default function WeibullHazardInfographic() {
               For shape <Tex math="\beta > 1" /> and characteristic horizon <Tex math="\eta" />:
             </p>
             <div className="py-2 text-center text-white">
-              <Tex math="h(k) = \frac{\beta}{\eta} \left(\frac{k+1}{\eta}\right)^{\beta - 1}" block />
+              <Tex
+                math="h(k) = \frac{\beta}{\eta} \left(\frac{k+1}{\eta}\right)^{\beta - 1}"
+                block
+              />
             </div>
             <p className="text-slate-500 text-[11px]">
               Models monotonic decline of draft token acceptance across sequential tokens.
@@ -449,22 +495,31 @@ export default function WeibullHazardInfographic() {
           </div>
 
           <div className="rounded-2xl border border-white/5 bg-black/40 p-4 space-y-2">
-            <h4 className="text-purple-300 font-bold">2. Bollinger Bands on Logit Spread (Chapter 5)</h4>
+            <h4 className="text-purple-300 font-bold">
+              2. Bollinger Bands on Logit Spread (Chapter 5)
+            </h4>
             <p className="text-slate-400">
-              Tracks margin spread <Tex math="\Delta l_t = z_{(1)} - z_{(2)}" /> with rolling variance:
+              Tracks margin spread <Tex math="\Delta l_t = z_{(1)} - z_{(2)}" /> with rolling
+              variance:
             </p>
             <div className="py-2 text-center text-white">
               <Tex math="\text{Lower Band}_t = \mu_t - k_{\text{bb}} \cdot \sigma_t" block />
             </div>
             <p className="text-slate-500 text-[11px]">
-              Catches local uncertainty collapses and spikes dynamic penalty <Tex math="\text{VolPenalty}" />.
+              Catches local uncertainty collapses and spikes dynamic penalty{" "}
+              <Tex math="\text{VolPenalty}" />.
             </p>
           </div>
         </div>
 
         <div className="rounded-2xl border border-white/5 bg-black/40 p-4 text-center text-xs font-mono">
-          <span className="text-emerald-300 font-bold block mb-2">Composite Tri-Modal Gating Threshold Formula</span>
-          <Tex math="\tau_{\text{eff}}(k, \Delta l_t) = \tau_0 \cdot \left[ 1 + \gamma_w \cdot h(k) + \gamma_b \cdot \max\left(0, \frac{\text{Lower Band}_t - \Delta l_t}{\text{ATR}_t + 10^{-6}}\right) \right]" block />
+          <span className="text-emerald-300 font-bold block mb-2">
+            Composite Tri-Modal Gating Threshold Formula
+          </span>
+          <Tex
+            math="\tau_{\text{eff}}(k, \Delta l_t) = \tau_0 \cdot \left[ 1 + \gamma_w \cdot h(k) + \gamma_b \cdot \max\left(0, \frac{\text{Lower Band}_t - \Delta l_t}{\text{ATR}_t + 10^{-6}}\right) \right]"
+            block
+          />
         </div>
       </div>
     </div>

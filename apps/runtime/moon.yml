@@ -10,7 +10,7 @@ tags: ['python', 'shared-root-venv']
 # (see .moon/workspace.yml) because moon 2.5.4 does a pathological full-repo
 # scan for a project whose source is the workspace root itself. So these
 # tasks shell out to the root project explicitly instead; the wider
-# lint/format/test/update-deps commands for benchmarks/scripts/tests/evals
+# lint/format/test/update-deps commands for benchmarks/experiments/evals/audit
 # stay as plain `uv run` invocations from the repo root until Stage 4 gives
 # apps/runtime its own independent pyproject.toml/uv.lock/.venv.
 dependsOn:
@@ -18,9 +18,9 @@ dependsOn:
 
 tasks:
   test:
-    command: 'uv run pytest ../../tests -q'
+    command: 'uv run pytest tests -q'
   check-canon:
-    command: 'uv run python ../../scripts/audit/check_canon.py'
+    command: 'uv run python ../../audit/check_canon.py'
   lint:
     command: 'uv run ruff check .'
   format:

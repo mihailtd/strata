@@ -25,9 +25,9 @@ clipping threshold gamma* in closed-form based on the empirical moment ratio
 
 from __future__ import annotations
 
-from typing import Tuple, Optional, Literal
+from typing import Literal
+
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 
 
@@ -48,7 +48,7 @@ class StressStrengthInterferenceCalibrator:
         self.eps = eps
 
     @torch.no_grad()
-    def compute_group_moments(self, W: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def compute_group_moments(self, W: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Computes mean, standard deviation, and standardized excess kurtosis per group.
 
         Args:
@@ -77,8 +77,8 @@ class StressStrengthInterferenceCalibrator:
 
         # 4th standardized moment (Kurtosis)
         centered = grouped - mean.unsqueeze(1)
-        m4 = torch.mean(centered ** 4, dim=1)
-        kurtosis = (m4 / (var ** 2)).clamp(min=1.0, max=25.0)
+        m4 = torch.mean(centered**4, dim=1)
+        kurtosis = (m4 / (var**2)).clamp(min=1.0, max=25.0)
 
         return mean, std, kurtosis
 
@@ -162,7 +162,7 @@ class StressStrengthInterferenceCalibrator:
         self,
         W: torch.Tensor,
         mode: Literal["closed_form_ssi", "empirical_ssi", "naive_max"] = "closed_form_ssi",
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Quantizes weight tensor to symmetric 4-bit with SSI calibrated scales.
 
         Returns:
@@ -192,7 +192,7 @@ class StressStrengthInterferenceCalibrator:
         self,
         W_q: torch.Tensor,
         scales: torch.Tensor,
-        original_shape: Tuple[int, int],
+        original_shape: tuple[int, int],
     ) -> torch.Tensor:
         """Dequantizes 4-bit tensor back to bfloat16 for evaluation."""
         D_in, D_out = original_shape

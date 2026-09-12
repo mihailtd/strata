@@ -7,11 +7,11 @@ instant prefill (<25 ms)
 while dynamically switching domain-specific LoRA adapters (77 ms) directly on the AMD RX 7900 XTX.
 """
 
-from dataclasses import dataclass, field
 import logging
-import os
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Any
+
 import torch
 
 from runtime.native_27b_engine import Native27BEngine
@@ -28,10 +28,11 @@ if not logger.handlers:
 @dataclass
 class AgentTurn:
     """Specification of a single agent's execution step in a multi-agent pipeline."""
+
     agent_id: str
     role: str
     instruction: str
-    expert_lora: Optional[str] = None
+    expert_lora: str | None = None
     max_new_tokens: int = 256
     temperature: float = 0.2
     use_speculative: bool = True
@@ -40,9 +41,10 @@ class AgentTurn:
 @dataclass
 class TurnResult:
     """Telemetry and generated artifact from a completed agent turn."""
+
     agent_id: str
     role: str
-    expert_lora: Optional[str]
+    expert_lora: str | None
     output_text: str
     tokens_generated: int
     prefill_tokens: int
@@ -62,8 +64,8 @@ class StateHandoffSession:
 
     def __init__(
         self,
-        engine: Optional[Native27BEngine] = None,
-        session_id: Optional[str] = None,
+        engine: Native27BEngine | None = None,
+        session_id: str | None = None,
         clone_on_handoff: bool = True,
     ):
         self.session_id = session_id or f"session_{int(time.time())}"
@@ -73,11 +75,11 @@ class StateHandoffSession:
 
         self.tokenizer = get_27b_tokenizer()
         self.clone_on_handoff = clone_on_handoff
-        self.active_state: Optional[Dict[str, Any]] = None
-        self.active_lora: Optional[str] = None
+        self.active_state: dict[str, Any] | None = None
+        self.active_lora: str | None = None
         self.cumulative_history_tokens: int = 0
-        self.turn_history: List[TurnResult] = []
-        self.all_session_tokens: List[int] = []
+        self.turn_history: list[TurnResult] = []
+        self.all_session_tokens: list[int] = []
 
     def reset(self) -> None:
         """Clears active conversation state and resets sequence history."""
@@ -128,7 +130,9 @@ class StateHandoffSession:
                 torch.cuda.synchronize()
             handoff_ms = (time.perf_counter() - t_h0) * 1000.0
             tokens_avoided = self.cumulative_history_tokens
-            logger.info(f"[{turn.agent_id}] Inherited state bundle S_t ({tokens_avoided} past tokens avoided) in {handoff_ms:.2f} ms")
+            logger.info(
+                f"[{turn.agent_id}] Inherited state bundle S_t ({tokens_avoided} past tokens avoided) in {handoff_ms:.2f} ms"
+            )
         else:
             exec_state = None
             tokens_avoided = 0
@@ -184,7 +188,8 @@ class StateHandoffSession:
             mtp_kv = None
             if self.engine.mtp_layer is not None:
                 mtp_kv = PreallocatedKVCache(
-                    num_heads=4, head_dim=256,
+                    num_heads=4,
+                    head_dim=256,
                     max_seq_len=past_len + prefill_tokens + turn.max_new_tokens + 32,
                     device=self.engine.device,
                 )
@@ -206,11 +211,14 @@ class StateHandoffSession:
 
                 # 2. Fallback: Neural MTP Drafter (blk.64) if N-gram had no match
                 if not draft and self.engine.mtp_layer is not None and mtp_kv is not None and h_curr is not None:
-                    tok_emb = self.engine.token_embd[verified_token: verified_token + 1].view(1, 1, -1)
+                    tok_emb = self.engine.token_embd[verified_token : verified_token + 1].view(1, 1, -1)
                     mtp_cos_sin = self.engine._get_cos_sin(1, offset=pos)
                     mtp_out = self.engine.mtp_layer(
-                        h_curr.view(1, 1, -1), tok_emb,
-                        pos=pos, kv_cache=mtp_kv, cos_sin=mtp_cos_sin,
+                        h_curr.view(1, 1, -1),
+                        tok_emb,
+                        pos=pos,
+                        kv_cache=mtp_kv,
+                        cos_sin=mtp_cos_sin,
                     )
                     d_cand = int(torch.argmax(self.engine.lm_head(mtp_out)[0, -1]).item())
                     draft = [d_cand]
@@ -269,7 +277,7 @@ class StateHandoffSession:
                         break
 
                     verified_token = bonus_token
-                    pos += (n_acc + 1)
+                    pos += n_acc + 1
                 else:
                     # Single-token fallback decode when neither produces draft
                     logits, updated_state, h_next = self.engine.forward_token(
@@ -292,9 +300,7 @@ class StateHandoffSession:
             for _ in range(turn.max_new_tokens - 1):
                 if first_token in self.engine.STOP_TOKEN_IDS or turn.max_new_tokens <= 1:
                     break
-                logits, updated_state = self.engine.forward_token(
-                    curr_token, updated_state, pos=pos, use_graph=True
-                )
+                logits, updated_state = self.engine.forward_token(curr_token, updated_state, pos=pos, use_graph=True)
                 next_token = int(torch.argmax(logits[0, :]).item())
                 gen_tokens.append(next_token)
                 self.all_session_tokens.append(next_token)
@@ -311,17 +317,20 @@ class StateHandoffSession:
 
         # 5. Commit updated state as session persistent memory
         self.active_state = updated_state
-        self.cumulative_history_tokens += (prefill_tokens + len(gen_tokens))
+        self.cumulative_history_tokens += prefill_tokens + len(gen_tokens)
 
         output_text = self.tokenizer.decode(gen_tokens)
-        vram_used = torch.cuda.memory_allocated() / (1024 ** 3)
+        vram_used = torch.cuda.memory_allocated() / (1024**3)
         state_mb = 0.0
         if isinstance(self.active_state, dict):
             for v in self.active_state.values():
                 if isinstance(v, torch.Tensor):
                     state_mb += v.nelement() * v.element_size() / (1024 * 1024)
                 elif hasattr(v, "k_cache") and isinstance(v.k_cache, torch.Tensor):
-                    state_mb += (v.k_cache.nelement() * v.k_cache.element_size() + v.v_cache.nelement() * v.v_cache.element_size()) / (1024 * 1024)
+                    state_mb += (
+                        v.k_cache.nelement() * v.k_cache.element_size()
+                        + v.v_cache.nelement() * v.v_cache.element_size()
+                    ) / (1024 * 1024)
 
         result = TurnResult(
             agent_id=turn.agent_id,
@@ -343,7 +352,7 @@ class StateHandoffSession:
         self.turn_history.append(result)
         return result
 
-    def run_pipeline(self, turns: List[AgentTurn]) -> List[TurnResult]:
+    def run_pipeline(self, turns: list[AgentTurn]) -> list[TurnResult]:
         """Executes a list of agent turns in sequence with tensor state handoff."""
         results = []
         for turn in turns:
@@ -351,7 +360,7 @@ class StateHandoffSession:
             results.append(res)
         return results
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> dict[str, Any]:
         """Returns aggregated summary metrics across all turns in the session."""
         tot_gen = sum(r.tokens_generated for r in self.turn_history)
         tot_avoided = sum(r.tokens_avoided for r in self.turn_history)
@@ -367,5 +376,5 @@ class StateHandoffSession:
             "total_prefill_ms": tot_prefill_ms,
             "total_decode_ms": tot_decode_ms,
             "average_decode_tok_per_sec": avg_tok_s,
-            "final_vram_gb": torch.cuda.memory_allocated() / (1024 ** 3),
+            "final_vram_gb": torch.cuda.memory_allocated() / (1024**3),
         }

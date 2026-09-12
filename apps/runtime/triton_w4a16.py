@@ -9,17 +9,16 @@ Exploits AMD RDNA3 (gfx1100 / RX 7900 XTX) hardware tensor cores:
 
 from __future__ import annotations
 
-import time
 from typing import Any
 
 import torch
 import triton
 import triton.language as tl
 
-
 # -----------------------------------------------------------------------------
 # Vectorized Quantization and Packing Helpers (PyTorch GPU)
 # -----------------------------------------------------------------------------
+
 
 def _quantize_and_pack_w4_block(
     weight: torch.Tensor,
@@ -63,7 +62,7 @@ def quantize_and_pack_w4(
     assert K % group_size == 0, f"K ({K}) must be divisible by group_size ({group_size})"
     assert group_size % 8 == 0, f"group_size ({group_size}) must be divisible by 8"
 
-    if N <= chunk_size:
+    if chunk_size >= N:
         return _quantize_and_pack_w4_block(weight, group_size)
 
     qweight_chunks = []
@@ -100,6 +99,7 @@ def unpack_and_dequantize_w4(
 # Autotune Configurations for RDNA3 W4A16 Kernels
 # -----------------------------------------------------------------------------
 
+
 def get_rdna3_w4a16_configs() -> list[triton.Config]:
     """Generates tile configurations tuned for RDNA3 16x16x16 WMMA with INT4 unpacking."""
     return [
@@ -118,14 +118,23 @@ def get_rdna3_w4a16_configs() -> list[triton.Config]:
 # Core Triton W4A16 GEMM Kernel
 # -----------------------------------------------------------------------------
 
+
 @triton.jit
 def _w4a16_gemm_kernel_raw(
-    a_ptr, q_ptr, scale_ptr, c_ptr,
-    M, N, K,
-    stride_am, stride_ak,
-    stride_qk, stride_qn,
+    a_ptr,
+    q_ptr,
+    scale_ptr,
+    c_ptr,
+    M,
+    N,
+    K,
+    stride_am,
+    stride_ak,
+    stride_qk,
+    stride_qn,
     stride_sn,
-    stride_cm, stride_cn,
+    stride_cm,
+    stride_cn,
     BLOCK_M: tl.constexpr,
     BLOCK_N: tl.constexpr,
     BLOCK_K: tl.constexpr,
@@ -194,12 +203,20 @@ _w4a16_gemm_kernel = triton.autotune(
 
 @triton.jit
 def _w4a16_gemv_kernel(
-    a_ptr, q_ptr, scale_ptr, c_ptr,
-    M, N, K,
-    stride_am, stride_ak,
-    stride_qk, stride_qn,
+    a_ptr,
+    q_ptr,
+    scale_ptr,
+    c_ptr,
+    M,
+    N,
+    K,
+    stride_am,
+    stride_ak,
+    stride_qk,
+    stride_qn,
     stride_sn,
-    stride_cm, stride_cn,
+    stride_cm,
+    stride_cn,
     BLOCK_N: tl.constexpr,
     BLOCK_K: tl.constexpr,
     GROUP_SIZE: tl.constexpr,
@@ -301,12 +318,20 @@ def w4a16_matmul(
         BLOCK_K = 128
         grid_m = (triton.cdiv(N, BLOCK_N), M)
         _w4a16_gemv_kernel[grid_m](
-            x_2d, qweight, scales, c_2d,
-            M, N, K,
-            x_2d.stride(0) if M > 1 else 0, x_2d.stride(1),
-            qweight.stride(0), qweight.stride(1),
+            x_2d,
+            qweight,
+            scales,
+            c_2d,
+            M,
+            N,
+            K,
+            x_2d.stride(0) if M > 1 else 0,
+            x_2d.stride(1),
+            qweight.stride(0),
+            qweight.stride(1),
             scales.stride(0),
-            c_2d.stride(0) if M > 1 else 0, c_2d.stride(1),
+            c_2d.stride(0) if M > 1 else 0,
+            c_2d.stride(1),
             BLOCK_N=BLOCK_N,
             BLOCK_K=BLOCK_K,
             GROUP_SIZE=group_size,
@@ -316,12 +341,20 @@ def w4a16_matmul(
     else:
         grid = lambda META: (triton.cdiv(M, META["BLOCK_M"]) * triton.cdiv(N, META["BLOCK_N"]),)
         _w4a16_gemm_kernel[grid](
-            x_2d, qweight, scales, c_2d,
-            M, N, K,
-            x_2d.stride(0), x_2d.stride(1),
-            qweight.stride(0), qweight.stride(1),
+            x_2d,
+            qweight,
+            scales,
+            c_2d,
+            M,
+            N,
+            K,
+            x_2d.stride(0),
+            x_2d.stride(1),
+            qweight.stride(0),
+            qweight.stride(1),
             scales.stride(0),
-            c_2d.stride(0), c_2d.stride(1),
+            c_2d.stride(0),
+            c_2d.stride(1),
             GROUP_SIZE=group_size,
         )
 
@@ -334,19 +367,31 @@ def w4a16_matmul(
 # Fused W4A16 Base GEMM + Dynamic LoRA Branch Kernel
 # -----------------------------------------------------------------------------
 
+
 @triton.jit
 def _fused_w4a16_lora_kernel_raw(
-    a_ptr, q_ptr, scale_ptr,
-    lora_mid_ptr, lora_b_ptr,
+    a_ptr,
+    q_ptr,
+    scale_ptr,
+    lora_mid_ptr,
+    lora_b_ptr,
     c_ptr,
-    M, N, K, R,
+    M,
+    N,
+    K,
+    R,
     alpha,
-    stride_am, stride_ak,
-    stride_qk, stride_qn,
+    stride_am,
+    stride_ak,
+    stride_qk,
+    stride_qn,
     stride_sn,
-    stride_lmm, stride_lmr,
-    stride_lbr, stride_lbn,
-    stride_cm, stride_cn,
+    stride_lmm,
+    stride_lmr,
+    stride_lbr,
+    stride_lbn,
+    stride_cm,
+    stride_cn,
     BLOCK_M: tl.constexpr,
     BLOCK_N: tl.constexpr,
     BLOCK_K: tl.constexpr,
@@ -474,17 +519,28 @@ def fused_w4a16_lora_matmul(
     grid = lambda META: (triton.cdiv(M, META["BLOCK_M"]) * triton.cdiv(N, META["BLOCK_N"]),)
 
     _fused_w4a16_lora_kernel[grid](
-        x_2d, qweight, scales,
-        lora_mid, lora_b,
+        x_2d,
+        qweight,
+        scales,
+        lora_mid,
+        lora_b,
         c_2d,
-        M, N, K, R,
+        M,
+        N,
+        K,
+        R,
         float(alpha),
-        x_2d.stride(0), x_2d.stride(1),
-        qweight.stride(0), qweight.stride(1),
+        x_2d.stride(0),
+        x_2d.stride(1),
+        qweight.stride(0),
+        qweight.stride(1),
         scales.stride(0),
-        lora_mid.stride(0), lora_mid.stride(1),
-        lora_b.stride(0), lora_b.stride(1),
-        c_2d.stride(0), c_2d.stride(1),
+        lora_mid.stride(0),
+        lora_mid.stride(1),
+        lora_b.stride(0),
+        lora_b.stride(1),
+        c_2d.stride(0),
+        c_2d.stride(1),
         GROUP_SIZE=group_size,
     )
 
@@ -496,6 +552,7 @@ def fused_w4a16_lora_matmul(
 # -----------------------------------------------------------------------------
 # ISA Inspection & Verification
 # -----------------------------------------------------------------------------
+
 
 def inspect_kernel_w4a16_isa(
     m: int = 64,
@@ -514,12 +571,20 @@ def inspect_kernel_w4a16_isa(
 
     grid = lambda META: (triton.cdiv(m, META["BLOCK_M"]) * triton.cdiv(n, META["BLOCK_N"]),)
     compiled = _w4a16_gemm_kernel_raw[grid](
-        a, q, scales, c,
-        m, n, k,
-        a.stride(0), a.stride(1),
-        q.stride(0), q.stride(1),
+        a,
+        q,
+        scales,
+        c,
+        m,
+        n,
+        k,
+        a.stride(0),
+        a.stride(1),
+        q.stride(0),
+        q.stride(1),
         scales.stride(0),
-        c.stride(0), c.stride(1),
+        c.stride(0),
+        c.stride(1),
         BLOCK_M=64,
         BLOCK_N=64,
         BLOCK_K=32,

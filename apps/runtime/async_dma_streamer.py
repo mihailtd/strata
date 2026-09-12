@@ -10,8 +10,7 @@ by overlapping background host-to-device PCIe DMA transfers with GPU matrix exec
 
 from __future__ import annotations
 
-import time
-from typing import Any, Callable
+from collections.abc import Callable
 
 import torch
 

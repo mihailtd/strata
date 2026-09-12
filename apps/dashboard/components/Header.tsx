@@ -3,15 +3,55 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Zap, Activity, MessageSquare, Factory, Network, BookOpen, Cpu, ChevronDown, Layers } from "lucide-react";
+import {
+  Zap,
+  Activity,
+  MessageSquare,
+  Factory,
+  Network,
+  BookOpen,
+  Cpu,
+  ChevronDown,
+  Layers,
+} from "lucide-react";
 import { useEngineStatus } from "@/lib/useEngineStatus";
 
 export const AVAILABLE_BASE_MODELS = [
-  { id: "Qwen/Qwen3.5-4B", name: "Qwen 3.5 4B (Dense BF16)", vram: "~10.5 GB", adapters_count: 6, available: true },
-  { id: "Qwen/Qwen3.5-9B", name: "Qwen 3.5 9B (Dense BF16)", vram: "~18.2 GB", adapters_count: 6, available: true },
-  { id: "qwen3.8:27b", name: "Qwen 3.8 27B (Native W4A16 + LoRA)", vram: "~16.8 GB", adapters_count: 6, available: true },
-  { id: "Qwen/Qwen3.5-2B", name: "Qwen 3.5 2B (Dense BF16)", vram: "~4.8 GB", adapters_count: 0, available: false },
-  { id: "Qwen/Qwen3.5-0.8B", name: "Qwen 3.5 0.8B (Draft Head)", vram: "~2.2 GB", adapters_count: 0, available: false },
+  {
+    id: "Qwen/Qwen3.5-4B",
+    name: "Qwen 3.5 4B (Dense BF16)",
+    vram: "~10.5 GB",
+    adapters_count: 6,
+    available: true,
+  },
+  {
+    id: "Qwen/Qwen3.5-9B",
+    name: "Qwen 3.5 9B (Dense BF16)",
+    vram: "~18.2 GB",
+    adapters_count: 6,
+    available: true,
+  },
+  {
+    id: "qwen3.8:27b",
+    name: "Qwen 3.8 27B (Native W4A16 + LoRA)",
+    vram: "~16.8 GB",
+    adapters_count: 6,
+    available: true,
+  },
+  {
+    id: "Qwen/Qwen3.5-2B",
+    name: "Qwen 3.5 2B (Dense BF16)",
+    vram: "~4.8 GB",
+    adapters_count: 0,
+    available: false,
+  },
+  {
+    id: "Qwen/Qwen3.5-0.8B",
+    name: "Qwen 3.5 0.8B (Draft Head)",
+    vram: "~2.2 GB",
+    adapters_count: 0,
+    available: false,
+  },
 ];
 
 export default function Header() {
@@ -28,8 +68,9 @@ export default function Header() {
     }
   }, [status?.model_id, status?.loaded]);
 
-  const activeModelId = status?.loaded ? (status.model_id || selectedModel) : selectedModel;
-  const activeModelMeta = AVAILABLE_BASE_MODELS.find((m) => m.id === activeModelId) || AVAILABLE_BASE_MODELS[0];
+  const activeModelId = status?.loaded ? status.model_id || selectedModel : selectedModel;
+  const activeModelMeta =
+    AVAILABLE_BASE_MODELS.find((m) => m.id === activeModelId) || AVAILABLE_BASE_MODELS[0];
 
   const handleSelectModel = async (modelId: string) => {
     setSelectedModel(modelId);
@@ -146,7 +187,9 @@ export default function Header() {
                 : "border-[rgba(255,255,255,0.1)] bg-black/40 text-slate-300 hover:border-[#00f2ff]/40"
             } disabled:opacity-60`}
           >
-            <Cpu className={`h-3.5 w-3.5 ${status?.loaded ? "text-emerald-400" : "text-[#00f2ff]"}`} />
+            <Cpu
+              className={`h-3.5 w-3.5 ${status?.loaded ? "text-emerald-400" : "text-[#00f2ff]"}`}
+            />
             <span className="font-bold">{activeModelMeta.name.split(" (")[0]}</span>
             {status?.loaded && (
               <span className="rounded bg-emerald-500/20 px-1.5 py-0.2 text-[10px] text-emerald-300 font-semibold">
@@ -160,10 +203,14 @@ export default function Header() {
             <div className="absolute left-0 top-full mt-2 w-72 rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(12,16,24,0.98)] p-2 shadow-2xl backdrop-blur-2xl z-50">
               <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2 py-1 flex justify-between">
                 <span>Select Architecture</span>
-                {status?.loaded && <span className="text-emerald-400 font-mono">Live: {status.model_id?.split("/")[1]}</span>}
+                {status?.loaded && (
+                  <span className="text-emerald-400 font-mono">
+                    Live: {status.model_id?.split("/")[1]}
+                  </span>
+                )}
               </div>
               {AVAILABLE_BASE_MODELS.map((m) => {
-                const isCurrentLive = status?.loaded && (status.model_id === m.id);
+                const isCurrentLive = status?.loaded && status.model_id === m.id;
                 const isSelected = selectedModel === m.id;
                 return (
                   <button
@@ -174,21 +221,25 @@ export default function Header() {
                       isCurrentLive
                         ? "bg-emerald-500/15 border border-emerald-500/40 text-white font-bold"
                         : isSelected
-                        ? "bg-[#00f2ff]/15 border border-[#00f2ff]/30 text-white font-bold"
-                        : m.available
-                        ? "hover:bg-white/5 text-slate-300"
-                        : "opacity-40 cursor-not-allowed text-slate-500"
+                          ? "bg-[#00f2ff]/15 border border-[#00f2ff]/30 text-white font-bold"
+                          : m.available
+                            ? "hover:bg-white/5 text-slate-300"
+                            : "opacity-40 cursor-not-allowed text-slate-500"
                     }`}
                   >
                     <div className="flex justify-between items-center">
                       <span className="flex items-center gap-1.5">
-                        {isCurrentLive && <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />}
+                        {isCurrentLive && (
+                          <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                        )}
                         {m.name}
                       </span>
                       <span className="font-mono text-[10px] text-[#00f2ff]">{m.vram}</span>
                     </div>
                     <div className="flex justify-between items-center text-[10px] text-slate-400">
-                      <span>{m.adapters_count > 0 ? `6 Domain Adapters Ready` : "No Adapters"}</span>
+                      <span>
+                        {m.adapters_count > 0 ? `6 Domain Adapters Ready` : "No Adapters"}
+                      </span>
                       {!m.available && <span className="text-amber-400">Coming soon</span>}
                     </div>
                   </button>
@@ -208,7 +259,9 @@ export default function Header() {
               className="flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/15 px-3 py-1.5 text-xs font-bold text-amber-300 hover:bg-amber-500/25 transition-all shadow-[0_0_10px_rgba(245,158,11,0.2)] disabled:opacity-50"
             >
               <Zap className="h-3.5 w-3.5" />
-              {isLoading ? "Purging..." : `Purge Residual VRAM (${status.total_vram_used_gb || status.residual_vram_gb || 0} GB)`}
+              {isLoading
+                ? "Purging..."
+                : `Purge Residual VRAM (${status.total_vram_used_gb || status.residual_vram_gb || 0} GB)`}
             </button>
           )}
 
@@ -225,8 +278,8 @@ export default function Header() {
             {isLoading
               ? "Working..."
               : status?.loaded
-              ? `Unload VRAM (${status.vram_allocated_gb} GB)`
-              : "Load Engine to VRAM"}
+                ? `Unload VRAM (${status.vram_allocated_gb} GB)`
+                : "Load Engine to VRAM"}
           </button>
         </div>
 
@@ -237,16 +290,16 @@ export default function Header() {
               status?.loaded
                 ? "bg-emerald-400 shadow-[0_0_8px_#10b981] animate-pulse"
                 : status?.has_residual_vram
-                ? "bg-amber-400 animate-ping"
-                : "bg-slate-400"
+                  ? "bg-amber-400 animate-ping"
+                  : "bg-slate-400"
             }`}
           />
           <span>
             {status?.loaded
               ? `ACTIVE (${status.vram_allocated_gb} GB)`
               : status?.has_residual_vram
-              ? `RESIDUAL (${status.total_vram_used_gb || status.residual_vram_gb || 0} GB)`
-              : "STANDBY (0 GB)"}
+                ? `RESIDUAL (${status.total_vram_used_gb || status.residual_vram_gb || 0} GB)`
+                : "STANDBY (0 GB)"}
           </span>
         </div>
       </div>

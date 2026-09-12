@@ -12,23 +12,14 @@ Usage:
 
 from __future__ import annotations
 
-import os
-import sys
-
 import argparse
 import json
 import time
 from pathlib import Path
 
-import torch
-from torch import nn
-from torch.utils.data import DataLoader, Dataset
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
-from runtime_common.canon import CANON, REPO_ROOT, adapter_path
-from runtime_common.gpu_preflight import ensure_gpu_exclusive
-
 import _bootstrap  # noqa: F401 -- apps/ on sys.path for the shared apps/runtime
+import torch
+
 # modules below (mtp_draft, novel_peft) -- see pyproject.toml's comment
 from runtime.mtp_draft import Qwen35MTPDraftHead, mtp_adapter_path
 from runtime.novel_peft import (
@@ -37,6 +28,11 @@ from runtime.novel_peft import (
     WeightFoldingEngine,
     set_hard_vram_cap,
 )
+from runtime_common.canon import CANON, REPO_ROOT, adapter_path
+from runtime_common.gpu_preflight import ensure_gpu_exclusive
+from torch import nn
+from torch.utils.data import DataLoader, Dataset
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 DOMAINS_DATA = {
     "astral": "apps/factory/data/astral/training_data_v6.jsonl",
@@ -51,7 +47,7 @@ DOMAINS_DATA = {
 class DomainJsonlDataset(Dataset):
     def __init__(self, jsonl_path: Path):
         self.rows = []
-        with open(jsonl_path, "r", encoding="utf-8") as f:
+        with open(jsonl_path, encoding="utf-8") as f:
             for line in f:
                 if line.strip():
                     item = json.loads(line)
@@ -193,8 +189,8 @@ def train_single_mtp_expert(
             hidden_states = outputs.hidden_states[-1]
 
         # Step 2: MTP Draft Head Forward Pass with Feature Representation Alignment
-        h_in = hidden_states[:, :-1, :]          # (B, N-1, H)
-        next_ids = input_ids[:, 1:]               # (B, N-1)
+        h_in = hidden_states[:, :-1, :]  # (B, N-1, H)
+        next_ids = input_ids[:, 1:]  # (B, N-1)
         target_hidden = hidden_states[:, 1:, :]  # (B, N-1, H) exact next-state target from backbone
 
         mtp_logits, draft_hidden, _ = mtp_head(h_in, next_ids, return_hidden=True)
@@ -226,10 +222,20 @@ def train_single_mtp_expert(
         if step % 25 == 0 or step == 1:
             elapsed = time.perf_counter() - start_t
             rate = step / max(1e-5, elapsed)
-            print(f"  Step {step:4d}/{steps} | Total: {loss.item():.4f} (Cos: {loss_cos.item():.4f}, L1: {loss_l1.item():.4f}) | {rate:.2f} steps/s")
+            print(
+                f"  Step {step:4d}/{steps} | Total: {loss.item():.4f} (Cos: {loss_cos.item():.4f}, L1: {loss_l1.item():.4f}) | {rate:.2f} steps/s"
+            )
 
     # 4. Save MTP adapter
-    version_tag = "v7_9b" if ("9B" in str(base_model.config.name_or_path) or "9b" in str(base_model.config.name_or_path) or base_model.config.get_text_config().hidden_size == 4096) else "v7"
+    version_tag = (
+        "v7_9b"
+        if (
+            "9B" in str(base_model.config.name_or_path)
+            or "9b" in str(base_model.config.name_or_path)
+            or base_model.config.get_text_config().hidden_size == 4096
+        )
+        else "v7"
+    )
     out_dir = mtp_adapter_path(domain, version=version_tag)
     save_mtp_adapter(wrapped, out_dir, rank=rank, alpha=alpha)
 
@@ -269,9 +275,7 @@ def main():
         tokenizer.pad_token = tokenizer.eos_token
 
     print(f"Loading Base Backbone: {args.model_id}...")
-    base_model = AutoModelForCausalLM.from_pretrained(
-        args.model_id, torch_dtype=torch.bfloat16, device_map="cuda:0"
-    )
+    base_model = AutoModelForCausalLM.from_pretrained(args.model_id, torch_dtype=torch.bfloat16, device_map="cuda:0")
     base_model.eval()
     base_model.requires_grad_(False)
 

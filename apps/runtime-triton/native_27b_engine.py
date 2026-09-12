@@ -20,15 +20,15 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, cast
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-from gguf_unpacker import GGUFStreamingUnpacker, DEFAULT_GGUF_PATH, DEFAULT_CACHE_DIR
+from gguf_unpacker import DEFAULT_CACHE_DIR, DEFAULT_GGUF_PATH, GGUFStreamingUnpacker
 from w4a16_loader import W4A16Linear
 
 
@@ -40,7 +40,7 @@ class RMSNorm(nn.Module):
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
         return super().__call__(x)
 
-    def __init__(self, dim: int, eps: float = 1e-6, device: Optional[torch.device] = None):
+    def __init__(self, dim: int, eps: float = 1e-6, device: torch.device | None = None):
         super().__init__()
         self.eps = eps
         self.weight = nn.Parameter(torch.ones(dim, dtype=torch.bfloat16, device=device), requires_grad=False)
@@ -72,6 +72,7 @@ def apply_rotary_emb(
 @dataclass
 class EngineConfig27B:
     """Configuration container for Native27BEngine."""
+
     num_layers: int = 64
     max_seq_len: int = 4096
     kv_cache_mode: str = "bf16"
@@ -87,7 +88,7 @@ class NGramDrafter:
         self.k = k
         self.max_search_tokens = max_search_tokens
 
-    def find_draft(self, tokens: List[int]) -> List[int]:
+    def find_draft(self, tokens: list[int]) -> list[int]:
         """Finds continuation of the longest matching suffix in tokens."""
         seq_len = len(tokens)
         for cur_n in range(self.max_n, self.min_n - 1, -1):
@@ -118,8 +119,8 @@ class PreallocatedKVCache:
     current_len: int
     k_cache: torch.Tensor
     v_cache: torch.Tensor
-    k_scales: Optional[torch.Tensor]
-    v_scales: Optional[torch.Tensor]
+    k_scales: torch.Tensor | None
+    v_scales: torch.Tensor | None
 
     def __init__(
         self,
@@ -128,7 +129,7 @@ class PreallocatedKVCache:
         head_dim: int = 256,
         max_seq_len: int = 4096,
         mode: str = "bf16",
-        device: Optional[torch.device] = None,
+        device: torch.device | None = None,
     ):
         self.batch_size = batch_size
         self.num_heads = num_heads
@@ -175,18 +176,14 @@ class PreallocatedKVCache:
         else:
             raise ValueError(f"Unsupported KV cache mode: {self.mode}. Expected 'bf16' or 'q8_0'.")
 
-    def update(
-        self, k_new: torch.Tensor, v_new: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    def update(self, k_new: torch.Tensor, v_new: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Appends new tokens in-place and returns the active context slice."""
         b, h, s, d = k_new.shape
         start = self.current_len
         end = start + s
 
         if end > self.max_seq_len:
-            raise RuntimeError(
-                f"KV Cache overflow: attempted sequence length {end} > max_seq_len {self.max_seq_len}"
-            )
+            raise RuntimeError(f"KV Cache overflow: attempted sequence length {end} > max_seq_len {self.max_seq_len}")
 
         if self.mode == "bf16":
             self.k_cache[:, :, start:end, :] = k_new
@@ -215,13 +212,13 @@ class PreallocatedKVCache:
 
     def get_k(self) -> torch.Tensor:
         if self.mode == "bf16" or self.k_scales is None:
-            return self.k_cache[:, :, :self.current_len, :]
-        return self.k_cache[:, :, :self.current_len, :].to(torch.bfloat16) * self.k_scales[:, :, :self.current_len, :]
+            return self.k_cache[:, :, : self.current_len, :]
+        return self.k_cache[:, :, : self.current_len, :].to(torch.bfloat16) * self.k_scales[:, :, : self.current_len, :]
 
     def get_v(self) -> torch.Tensor:
         if self.mode == "bf16" or self.v_scales is None:
-            return self.v_cache[:, :, :self.current_len, :]
-        return self.v_cache[:, :, :self.current_len, :].to(torch.bfloat16) * self.v_scales[:, :, :self.current_len, :]
+            return self.v_cache[:, :, : self.current_len, :]
+        return self.v_cache[:, :, : self.current_len, :].to(torch.bfloat16) * self.v_scales[:, :, : self.current_len, :]
 
     def __getitem__(self, idx: int) -> torch.Tensor:
         if idx == 0:
@@ -237,7 +234,7 @@ class PreallocatedKVCache:
         """Resets active sequence length in O(1) time without reallocating buffers."""
         self.current_len = 0
 
-    def clone(self) -> "PreallocatedKVCache":
+    def clone(self) -> PreallocatedKVCache:
         """Fast clone avoiding reallocation memsets by directly cloning active tensors."""
         new_cache = object.__new__(PreallocatedKVCache)
         new_cache.batch_size = self.batch_size
@@ -269,19 +266,19 @@ class Qwen35SSMBlock(nn.Module):
     attn_norm: RMSNorm
     post_attention_norm: RMSNorm
     ssm_norm: RMSNorm
-    attn_qkv: Optional[W4A16Linear]
-    attn_gate: Optional[W4A16Linear]
-    ssm_alpha: Optional[W4A16Linear]
-    ssm_beta: Optional[W4A16Linear]
-    ssm_out: Optional[W4A16Linear]
-    ffn_gate: Optional[W4A16Linear]
-    ffn_up: Optional[W4A16Linear]
-    ffn_down: Optional[W4A16Linear]
+    attn_qkv: W4A16Linear | None
+    attn_gate: W4A16Linear | None
+    ssm_alpha: W4A16Linear | None
+    ssm_beta: W4A16Linear | None
+    ssm_out: W4A16Linear | None
+    ffn_gate: W4A16Linear | None
+    ffn_up: W4A16Linear | None
+    ffn_down: W4A16Linear | None
     ssm_conv1d: torch.Tensor
     ssm_a: torch.Tensor
     ssm_dt_bias: torch.Tensor
 
-    def __init__(self, layer_idx: int, device: Optional[torch.device] = None):
+    def __init__(self, layer_idx: int, device: torch.device | None = None):
         super().__init__()
         self.layer_idx = layer_idx
         self.device = device or (torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu"))
@@ -305,15 +302,19 @@ class Qwen35SSMBlock(nn.Module):
         self.register_buffer("ssm_a", torch.zeros((48,), dtype=torch.float32, device=self.device))
         self.register_buffer("ssm_dt_bias", torch.zeros((48,), dtype=torch.float32, device=self.device))
 
-    def load_weights(self, layer_dict: Dict[str, Any]) -> None:
+    def load_weights(self, layer_dict: dict[str, Any]) -> None:
         """Loads layer tensors unpacked from GGUF."""
         with torch.no_grad():
-            self.attn_norm.weight.data.copy_(layer_dict["attn_norm.weight"]["weight"].to(self.device).to(torch.bfloat16))
+            self.attn_norm.weight.data.copy_(
+                layer_dict["attn_norm.weight"]["weight"].to(self.device).to(torch.bfloat16)
+            )
             self.post_attention_norm.weight.data.copy_(
                 layer_dict["post_attention_norm.weight"]["weight"].to(self.device).to(torch.bfloat16)
             )
             if "ssm_norm.weight" in layer_dict:
-                self.ssm_norm.weight.data.copy_(layer_dict["ssm_norm.weight"]["weight"].to(self.device).to(torch.bfloat16))
+                self.ssm_norm.weight.data.copy_(
+                    layer_dict["ssm_norm.weight"]["weight"].to(self.device).to(torch.bfloat16)
+                )
 
             if "ssm_conv1d.weight" in layer_dict:
                 self.ssm_conv1d.copy_(layer_dict["ssm_conv1d.weight"]["weight"].to(self.device))
@@ -338,9 +339,9 @@ class Qwen35SSMBlock(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        ssm_state: Optional[torch.Tensor] = None,
-        conv_state: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        ssm_state: torch.Tensor | None = None,
+        conv_state: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Executes single-token or batched prompt forward pass through Gated DeltaNet block."""
         if x.dim() == 3 and x.size(1) > 1:
             # --- Batched Sequence Path (Prefill) ---
@@ -348,8 +349,16 @@ class Qwen35SSMBlock(nn.Module):
             x_norm = self.attn_norm(x)
             qkv = self.attn_qkv(x_norm) if self.attn_qkv is not None else x_norm
             z = self.attn_gate(x_norm) if self.attn_gate is not None else x_norm
-            alpha = self.ssm_alpha(x_norm) if self.ssm_alpha is not None else torch.zeros((b, s, 48), dtype=x.dtype, device=x.device)
-            beta = self.ssm_beta(x_norm) if self.ssm_beta is not None else torch.zeros((b, s, 48), dtype=x.dtype, device=x.device)
+            alpha = (
+                self.ssm_alpha(x_norm)
+                if self.ssm_alpha is not None
+                else torch.zeros((b, s, 48), dtype=x.dtype, device=x.device)
+            )
+            beta = (
+                self.ssm_beta(x_norm)
+                if self.ssm_beta is not None
+                else torch.zeros((b, s, 48), dtype=x.dtype, device=x.device)
+            )
 
             # 1D Convolution over sequence length
             conv_w = self.ssm_conv1d.unsqueeze(1).to(dtype=x.dtype)  # (10240, 1, 4)
@@ -367,7 +376,7 @@ class Qwen35SSMBlock(nn.Module):
             v_all = conv_out[:, :, 4096:10240].view(b, s, 48, 128).float()
 
             eps = 1e-6
-            q_all = q_all / torch.clamp(torch.norm(q_all, p=2, dim=-1, keepdim=True), min=eps) * (128.0 ** -0.5)
+            q_all = q_all / torch.clamp(torch.norm(q_all, p=2, dim=-1, keepdim=True), min=eps) * (128.0**-0.5)
             k_all = k_all / torch.clamp(torch.norm(k_all, p=2, dim=-1, keepdim=True), min=eps)
 
             # Repeat Q & K to 48 heads (tiled repeat to match GGUF tiled V-heads: [0..15] repeated 3 times)
@@ -413,7 +422,7 @@ class Qwen35SSMBlock(nn.Module):
             return out, ssm_state.float(), new_conv_state
 
         # --- Single-Token Fast Path (Decode) ---
-        orig_2d = (x.dim() == 2)
+        orig_2d = x.dim() == 2
         if orig_2d:
             x = x.unsqueeze(1)
         b, s, d = x.shape  # s == 1
@@ -422,8 +431,16 @@ class Qwen35SSMBlock(nn.Module):
         # 1. QKV, Gate, Alpha, Beta Projections via Triton W4A16
         qkv = self.attn_qkv(x_norm) if self.attn_qkv is not None else x_norm
         z = self.attn_gate(x_norm) if self.attn_gate is not None else x_norm
-        alpha = self.ssm_alpha(x_norm) if self.ssm_alpha is not None else torch.zeros((b, s, 48), dtype=x.dtype, device=x.device)
-        beta = self.ssm_beta(x_norm) if self.ssm_beta is not None else torch.zeros((b, s, 48), dtype=x.dtype, device=x.device)
+        alpha = (
+            self.ssm_alpha(x_norm)
+            if self.ssm_alpha is not None
+            else torch.zeros((b, s, 48), dtype=x.dtype, device=x.device)
+        )
+        beta = (
+            self.ssm_beta(x_norm)
+            if self.ssm_beta is not None
+            else torch.zeros((b, s, 48), dtype=x.dtype, device=x.device)
+        )
 
         # 2. 1D Convolution rolling buffer update
         if conv_state is None:
@@ -438,13 +455,13 @@ class Qwen35SSMBlock(nn.Module):
         v = conv_out[4096:10240].view(48, 128).float()
 
         eps = 1e-6
-        q = q / torch.clamp(torch.norm(q, p=2, dim=-1, keepdim=True), min=eps) * (128.0 ** -0.5)
+        q = q / torch.clamp(torch.norm(q, p=2, dim=-1, keepdim=True), min=eps) * (128.0**-0.5)
         k = k / torch.clamp(torch.norm(k, p=2, dim=-1, keepdim=True), min=eps)
 
         # Tiled repeat to match GGUF tiled V-heads: [0..15] repeated 3 times -> 48 heads
         q = q.repeat(3, 1).unsqueeze(-1)  # (48, 128, 1)
         k = k.repeat(3, 1).unsqueeze(-1)  # (48, 128, 1)
-        v = v.unsqueeze(-1)               # (48, 128, 1)
+        v = v.unsqueeze(-1)  # (48, 128, 1)
 
         # Gating
         gate_val = self.ssm_a * F.softplus(alpha.squeeze(0).squeeze(0).float() + self.ssm_dt_bias)  # (48,)
@@ -493,15 +510,15 @@ class Qwen35FullAttentionBlock(nn.Module):
     post_attention_norm: RMSNorm
     attn_q_norm: RMSNorm
     attn_k_norm: RMSNorm
-    attn_q: Optional[W4A16Linear]
-    attn_k: Optional[W4A16Linear]
-    attn_v: Optional[W4A16Linear]
-    attn_output: Optional[W4A16Linear]
-    ffn_gate: Optional[W4A16Linear]
-    ffn_up: Optional[W4A16Linear]
-    ffn_down: Optional[W4A16Linear]
+    attn_q: W4A16Linear | None
+    attn_k: W4A16Linear | None
+    attn_v: W4A16Linear | None
+    attn_output: W4A16Linear | None
+    ffn_gate: W4A16Linear | None
+    ffn_up: W4A16Linear | None
+    ffn_down: W4A16Linear | None
 
-    def __init__(self, layer_idx: int, device: Optional[torch.device] = None):
+    def __init__(self, layer_idx: int, device: torch.device | None = None):
         super().__init__()
         self.layer_idx = layer_idx
         self.device = device or (torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu"))
@@ -520,17 +537,23 @@ class Qwen35FullAttentionBlock(nn.Module):
         self.ffn_up = None
         self.ffn_down = None
 
-    def load_weights(self, layer_dict: Dict[str, Any]) -> None:
+    def load_weights(self, layer_dict: dict[str, Any]) -> None:
         """Loads layer tensors unpacked from GGUF."""
         with torch.no_grad():
-            self.attn_norm.weight.data.copy_(layer_dict["attn_norm.weight"]["weight"].to(self.device).to(torch.bfloat16))
+            self.attn_norm.weight.data.copy_(
+                layer_dict["attn_norm.weight"]["weight"].to(self.device).to(torch.bfloat16)
+            )
             self.post_attention_norm.weight.data.copy_(
                 layer_dict["post_attention_norm.weight"]["weight"].to(self.device).to(torch.bfloat16)
             )
             if "attn_q_norm.weight" in layer_dict:
-                self.attn_q_norm.weight.data.copy_(layer_dict["attn_q_norm.weight"]["weight"].to(self.device).to(torch.bfloat16))
+                self.attn_q_norm.weight.data.copy_(
+                    layer_dict["attn_q_norm.weight"]["weight"].to(self.device).to(torch.bfloat16)
+                )
             if "attn_k_norm.weight" in layer_dict:
-                self.attn_k_norm.weight.data.copy_(layer_dict["attn_k_norm.weight"]["weight"].to(self.device).to(torch.bfloat16))
+                self.attn_k_norm.weight.data.copy_(
+                    layer_dict["attn_k_norm.weight"]["weight"].to(self.device).to(torch.bfloat16)
+                )
 
         for key in ["attn_q", "attn_k", "attn_v", "attn_output", "ffn_gate", "ffn_up", "ffn_down"]:
             k_name = f"{key}.weight"
@@ -547,11 +570,11 @@ class Qwen35FullAttentionBlock(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        kv_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        cos_sin: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        kv_cache: tuple[torch.Tensor, torch.Tensor] | None = None,
+        cos_sin: tuple[torch.Tensor, torch.Tensor] | None = None,
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         """Executes full multi-head attention forward pass."""
-        orig_2d = (x.dim() == 2)
+        orig_2d = x.dim() == 2
         if orig_2d:
             x = x.unsqueeze(1)
 
@@ -562,9 +585,7 @@ class Qwen35FullAttentionBlock(nn.Module):
         # attn_q projects to 12288 (query + gate)
         if self.attn_q is not None:
             q_full = self.attn_q(x_norm)
-            query_states, gate = torch.chunk(
-                q_full.view(b, s, 24, 256 * 2), 2, dim=-1
-            )
+            query_states, gate = torch.chunk(q_full.view(b, s, 24, 256 * 2), 2, dim=-1)
             gate = gate.reshape(b, s, -1)  # (b, s, 6144)
         else:
             query_states = x_norm[..., :6144].view(b, s, 24, 256)
@@ -651,21 +672,21 @@ class Qwen35MTPBlock(nn.Module):
 
     hnorm: RMSNorm
     enorm: RMSNorm
-    eh_proj: Optional[W4A16Linear]
+    eh_proj: W4A16Linear | None
     attn_norm: RMSNorm
     post_attention_norm: RMSNorm
     attn_q_norm: RMSNorm
     attn_k_norm: RMSNorm
-    attn_q: Optional[W4A16Linear]
-    attn_k: Optional[W4A16Linear]
-    attn_v: Optional[W4A16Linear]
-    attn_output: Optional[W4A16Linear]
-    ffn_gate: Optional[W4A16Linear]
-    ffn_up: Optional[W4A16Linear]
-    ffn_down: Optional[W4A16Linear]
+    attn_q: W4A16Linear | None
+    attn_k: W4A16Linear | None
+    attn_v: W4A16Linear | None
+    attn_output: W4A16Linear | None
+    ffn_gate: W4A16Linear | None
+    ffn_up: W4A16Linear | None
+    ffn_down: W4A16Linear | None
     shared_head_norm: RMSNorm
 
-    def __init__(self, device: Optional[torch.device] = None):
+    def __init__(self, device: torch.device | None = None):
         super().__init__()
         self.device = device or (torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu"))
 
@@ -693,16 +714,26 @@ class Qwen35MTPBlock(nn.Module):
         # Final head norm before shared LM head
         self.shared_head_norm = RMSNorm(5120, device=self.device)
 
-    def load_weights(self, layer_dict: Dict[str, Any]) -> None:
+    def load_weights(self, layer_dict: dict[str, Any]) -> None:
         """Loads all 15 MTP tensors unpacked from layer_64.pt."""
         with torch.no_grad():
             self.hnorm.weight.data.copy_(layer_dict["nextn.hnorm.weight"]["weight"].to(self.device).to(torch.bfloat16))
             self.enorm.weight.data.copy_(layer_dict["nextn.enorm.weight"]["weight"].to(self.device).to(torch.bfloat16))
-            self.attn_norm.weight.data.copy_(layer_dict["attn_norm.weight"]["weight"].to(self.device).to(torch.bfloat16))
-            self.post_attention_norm.weight.data.copy_(layer_dict["post_attention_norm.weight"]["weight"].to(self.device).to(torch.bfloat16))
-            self.attn_q_norm.weight.data.copy_(layer_dict["attn_q_norm.weight"]["weight"].to(self.device).to(torch.bfloat16))
-            self.attn_k_norm.weight.data.copy_(layer_dict["attn_k_norm.weight"]["weight"].to(self.device).to(torch.bfloat16))
-            self.shared_head_norm.weight.data.copy_(layer_dict["nextn.shared_head_norm.weight"]["weight"].to(self.device).to(torch.bfloat16))
+            self.attn_norm.weight.data.copy_(
+                layer_dict["attn_norm.weight"]["weight"].to(self.device).to(torch.bfloat16)
+            )
+            self.post_attention_norm.weight.data.copy_(
+                layer_dict["post_attention_norm.weight"]["weight"].to(self.device).to(torch.bfloat16)
+            )
+            self.attn_q_norm.weight.data.copy_(
+                layer_dict["attn_q_norm.weight"]["weight"].to(self.device).to(torch.bfloat16)
+            )
+            self.attn_k_norm.weight.data.copy_(
+                layer_dict["attn_k_norm.weight"]["weight"].to(self.device).to(torch.bfloat16)
+            )
+            self.shared_head_norm.weight.data.copy_(
+                layer_dict["nextn.shared_head_norm.weight"]["weight"].to(self.device).to(torch.bfloat16)
+            )
 
         # W4A16 Linear Projections
         projs = {
@@ -732,10 +763,10 @@ class Qwen35MTPBlock(nn.Module):
         tok_emb: torch.Tensor,
         pos: int,
         kv_cache: PreallocatedKVCache,
-        cos_sin: Tuple[torch.Tensor, torch.Tensor],
+        cos_sin: tuple[torch.Tensor, torch.Tensor],
     ) -> torch.Tensor:
         """Executes forward pass of MTP block for candidate token prediction.
-        
+
         Args:
             h: Target model output hidden state (b, 1, 5120) before output_norm
             tok_emb: Token embedding of predicted token (b, 1, 5120)
@@ -745,7 +776,7 @@ class Qwen35MTPBlock(nn.Module):
         Returns:
             Hidden state before lm_head (b, 1, 5120)
         """
-        orig_2d = (h.dim() == 2)
+        orig_2d = h.dim() == 2
         if orig_2d:
             h = h.unsqueeze(1)
             tok_emb = tok_emb.unsqueeze(1)
@@ -802,7 +833,7 @@ class SSMChunkGraph:
     into a pre-compiled GPU command buffer.
     """
 
-    def __init__(self, layers: List[Qwen35SSMBlock], device: torch.device):
+    def __init__(self, layers: list[Qwen35SSMBlock], device: torch.device):
         self.layers = layers
         self.device = device
         self.static_in = torch.zeros((1, 5120), dtype=torch.bfloat16, device=device)
@@ -854,7 +885,7 @@ class SSMChunkVerifyGraph:
     and DeltaNet recurrence into a pre-compiled GPU command buffer with intermediate state snapshots.
     """
 
-    def __init__(self, layers: List[Qwen35SSMBlock], k: int = 4, device: Optional[torch.device] = None):
+    def __init__(self, layers: list[Qwen35SSMBlock], k: int = 4, device: torch.device | None = None):
         self.layers = layers
         self.k = k
         self.device = device or layers[0].device
@@ -875,8 +906,16 @@ class SSMChunkVerifyGraph:
                 x_norm = layer.attn_norm(curr)
                 qkv = layer.attn_qkv(x_norm) if layer.attn_qkv is not None else x_norm
                 z = layer.attn_gate(x_norm) if layer.attn_gate is not None else x_norm
-                alpha = layer.ssm_alpha(x_norm) if layer.ssm_alpha is not None else torch.zeros((b, seq_len, 48), dtype=curr.dtype, device=self.device)
-                beta = layer.ssm_beta(x_norm) if layer.ssm_beta is not None else torch.zeros((b, seq_len, 48), dtype=curr.dtype, device=self.device)
+                alpha = (
+                    layer.ssm_alpha(x_norm)
+                    if layer.ssm_alpha is not None
+                    else torch.zeros((b, seq_len, 48), dtype=curr.dtype, device=self.device)
+                )
+                beta = (
+                    layer.ssm_beta(x_norm)
+                    if layer.ssm_beta is not None
+                    else torch.zeros((b, seq_len, 48), dtype=curr.dtype, device=self.device)
+                )
 
                 conv_w = layer.ssm_conv1d.unsqueeze(1).to(dtype=curr.dtype)
                 qkv_t = qkv.transpose(1, 2)
@@ -888,7 +927,7 @@ class SSMChunkVerifyGraph:
                 v_all = conv_out[:, :, 4096:10240].view(b, seq_len, 48, 128).float()
 
                 eps = 1e-6
-                q_all = q_all / torch.clamp(torch.norm(q_all, p=2, dim=-1, keepdim=True), min=eps) * (128.0 ** -0.5)
+                q_all = q_all / torch.clamp(torch.norm(q_all, p=2, dim=-1, keepdim=True), min=eps) * (128.0**-0.5)
                 k_all = k_all / torch.clamp(torch.norm(k_all, p=2, dim=-1, keepdim=True), min=eps)
                 q_all = q_all.repeat(1, 1, 3, 1)
                 k_all = k_all.repeat(1, 1, 3, 1)
@@ -945,7 +984,9 @@ class SSMChunkVerifyGraph:
             s_hist.zero_()
             c_hist.zero_()
 
-    def replay(self, x: torch.Tensor, init_ssm_list: List[torch.Tensor], init_conv_list: List[torch.Tensor]) -> Tuple[torch.Tensor, List[torch.Tensor], List[torch.Tensor]]:
+    def replay(
+        self, x: torch.Tensor, init_ssm_list: list[torch.Tensor], init_conv_list: list[torch.Tensor]
+    ) -> tuple[torch.Tensor, list[torch.Tensor], list[torch.Tensor]]:
         """Executes the pre-compiled hardware graph for multi-token verification."""
         self.static_in.copy_(x)
         for j in range(len(self.layers)):
@@ -965,26 +1006,26 @@ class Native27BEngine(nn.Module):
     max_seq_len: int
     kv_cache_mode: str
     output_norm: RMSNorm
-    token_embd: Optional[torch.Tensor]
-    lm_head: Optional[W4A16Linear]
+    token_embd: torch.Tensor | None
+    lm_head: W4A16Linear | None
     layers: nn.ModuleList
-    active_loras: Dict[str, Any]
-    ssm_graphs: List[SSMChunkGraph]
-    verify_graphs_k2: List[SSMChunkVerifyGraph]
-    verify_graphs_k4: List[SSMChunkVerifyGraph]
+    active_loras: dict[str, Any]
+    ssm_graphs: list[SSMChunkGraph]
+    verify_graphs_k2: list[SSMChunkVerifyGraph]
+    verify_graphs_k4: list[SSMChunkVerifyGraph]
     hip_graph_captured: bool
-    mtp_layer: Optional[Qwen35MTPBlock]
-    syntax_drafter: Optional[Any]
+    mtp_layer: Qwen35MTPBlock | None
+    syntax_drafter: Any | None
     inv_freq: torch.Tensor
 
     def __init__(
         self,
         cache_dir: str | Path = DEFAULT_CACHE_DIR,
-        device: Optional[str] = None,
+        device: str | None = None,
         num_layers: int = 64,
         max_seq_len: int = 4096,
         kv_cache_mode: str = "bf16",
-        config: Optional[EngineConfig27B] = None,
+        config: EngineConfig27B | None = None,
     ):
         super().__init__()
         if config is not None:
@@ -1001,8 +1042,8 @@ class Native27BEngine(nn.Module):
 
         # Global layers
         self.output_norm = RMSNorm(5120, device=self.device)
-        self.token_embd: Optional[torch.Tensor] = None
-        self.lm_head: Optional[W4A16Linear] = None
+        self.token_embd: torch.Tensor | None = None
+        self.lm_head: W4A16Linear | None = None
 
         # 64 Blocks: 48 SSM + 16 Full Attention
         self.layers = nn.ModuleList()
@@ -1016,33 +1057,35 @@ class Native27BEngine(nn.Module):
         self._init_rope(dim=64, base=10000000.0)
 
         # Active LoRA registry
-        self.active_loras: Dict[str, Any] = {}
+        self.active_loras: dict[str, Any] = {}
 
         # ROCm HIP Graph acceleration
-        self.ssm_graphs: List[SSMChunkGraph] = []
-        self.verify_graphs_k2: List[SSMChunkVerifyGraph] = []
-        self.verify_graphs_k4: List[SSMChunkVerifyGraph] = []
+        self.ssm_graphs: list[SSMChunkGraph] = []
+        self.verify_graphs_k2: list[SSMChunkVerifyGraph] = []
+        self.verify_graphs_k4: list[SSMChunkVerifyGraph] = []
         self.hip_graph_captured: bool = False
 
         # Neural Multi-Token Prediction (blk.64)
-        self.mtp_layer: Optional[Qwen35MTPBlock] = None
+        self.mtp_layer: Qwen35MTPBlock | None = None
 
         # Deterministic AST & Syntax Drafter
-        self.syntax_drafter: Optional[Any] = None
+        self.syntax_drafter: Any | None = None
 
     def init_syntax_drafter(self, tokenizer: Any = None) -> None:
         """Initializes the Deterministic AST & Syntax Fast-Forwarding Drafter."""
         if tokenizer is None:
             from runtime.server import get_27b_tokenizer
+
             tokenizer = get_27b_tokenizer()
         from runtime.syntax_drafter import SyntaxTrieDrafter
+
         self.syntax_drafter = SyntaxTrieDrafter(tokenizer)
 
     def _init_rope(self, dim: int = 64, base: float = 1e7) -> None:
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float32) / dim))
         self.register_buffer("inv_freq", inv_freq.to(self.device))
 
-    def _get_cos_sin(self, seq_len: int, offset: int = 0) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _get_cos_sin(self, seq_len: int, offset: int = 0) -> tuple[torch.Tensor, torch.Tensor]:
         t = torch.arange(offset, offset + seq_len, dtype=torch.float32, device=self.device)
         freqs = torch.outer(t, self.inv_freq)
         cos = torch.cos(freqs).to(torch.bfloat16)
@@ -1095,10 +1138,14 @@ class Native27BEngine(nn.Module):
             self.mtp_layer = Qwen35MTPBlock(device=self.device)
             mtp_data = torch.load(layer_64_file, map_location=str(self.device), weights_only=False)
             self.mtp_layer.load_weights(mtp_data)
-            print(f"[Native 27B Triton] Loaded Neural MTP Layer (blk.64) in {(time.perf_counter() - t_mtp)*1000:.1f}ms!")
+            print(
+                f"[Native 27B Triton] Loaded Neural MTP Layer (blk.64) in {(time.perf_counter() - t_mtp) * 1000:.1f}ms!"
+            )
 
         vram_gb = torch.cuda.memory_allocated(self.device) / (1024**3) if torch.cuda.is_available() else 0.0
-        print(f"[Native 27B Triton] All {self.num_layers} layers loaded successfully in {time.perf_counter() - t0:.2f}s! Active VRAM: {vram_gb:.2f} GB")
+        print(
+            f"[Native 27B Triton] All {self.num_layers} layers loaded successfully in {time.perf_counter() - t0:.2f}s! Active VRAM: {vram_gb:.2f} GB"
+        )
 
         # Auto-capture HIP Graphs for SSM chunks if enabled
         if self.num_layers % 4 == 0 and torch.cuda.is_available():
@@ -1148,7 +1195,9 @@ class Native27BEngine(nn.Module):
             self.verify_graphs_k4.append(v_chunk_k4)
 
         self.hip_graph_captured = True
-        print(f"[Native 27B Triton] Captured {len(self.ssm_graphs)} SSM Graphs & {len(self.verify_graphs_k2)} K=2 / {len(self.verify_graphs_k4)} K=4 Verify Graphs in {(time.perf_counter() - t0)*1000:.1f}ms")
+        print(
+            f"[Native 27B Triton] Captured {len(self.ssm_graphs)} SSM Graphs & {len(self.verify_graphs_k2)} K=2 / {len(self.verify_graphs_k4)} K=4 Verify Graphs in {(time.perf_counter() - t0) * 1000:.1f}ms"
+        )
         return True
 
     def reset_hip_graphs(self) -> None:
@@ -1160,7 +1209,7 @@ class Native27BEngine(nn.Module):
         for vg in self.verify_graphs_k4:
             vg.reset_states()
 
-    def sync_states_to_graphs(self, state_dict: Dict[str, Any]) -> None:
+    def sync_states_to_graphs(self, state_dict: dict[str, Any]) -> None:
         """Synchronizes recurrent and conv states into pre-compiled HIP Graph buffers."""
         if not self.hip_graph_captured:
             return
@@ -1195,7 +1244,7 @@ class Native27BEngine(nn.Module):
                     mod.clear_lora()
         self.active_lora_domain = None
 
-    def set_active_lora(self, domain_name: Optional[str], adapter_dir: Optional[Path | str] = None) -> bool:
+    def set_active_lora(self, domain_name: str | None, adapter_dir: Path | str | None = None) -> bool:
         """Dynamically binds PyTorch LoRA adapter weights directly into W4A16Linear Triton layers."""
         if not domain_name or domain_name.lower() in ("none", "base", "default"):
             self.clear_loras()
@@ -1214,7 +1263,7 @@ class Native27BEngine(nn.Module):
                 expert_weights = {e: 1.0 for e in experts}
                 return self.set_active_stacked_lora(expert_weights)
 
-        target_path: Optional[Path] = None
+        target_path: Path | None = None
         repo_root = Path(__file__).resolve().parent.parent.parent
         if adapter_dir is not None:
             target_path = Path(adapter_dir)
@@ -1234,10 +1283,11 @@ class Native27BEngine(nn.Module):
             print(f"[Native 27B Triton] Warning: Adapter path not found for [{domain_name}]: {target_path}")
             return False
 
-        weights: Dict[str, torch.Tensor] = {}
+        weights: dict[str, torch.Tensor] = {}
         sf_path = target_path / "adapter_model.safetensors"
         if sf_path.exists():
             from safetensors.torch import load_file
+
             weights = load_file(str(sf_path), device=str(self.device))
         else:
             for p in target_path.glob("*.pt"):
@@ -1264,7 +1314,7 @@ class Native27BEngine(nn.Module):
 
     def set_active_stacked_lora(
         self,
-        expert_weights: Dict[str, float],
+        expert_weights: dict[str, float],
         alpha: float = 16.0,
     ) -> bool:
         """Dynamically fuses multiple LoRA adapters in-memory and binds them to static VRAM buffers."""
@@ -1274,13 +1324,14 @@ class Native27BEngine(nn.Module):
             return True
 
         from runtime.adapter_stacker import DynamicAdapterStacker
+
         stacker = DynamicAdapterStacker()
         fused_dict, fused_cfg = stacker.stack_adapters(expert_weights, normalize_weights=False)
         return self.bind_lora_state_dict(fused_dict, domain_name=target_name, alpha=alpha)
 
     def bind_lora_state_dict(
         self,
-        weights: Dict[str, torch.Tensor],
+        weights: dict[str, torch.Tensor],
         domain_name: str = "stacked",
         alpha: float = 16.0,
     ) -> bool:
@@ -1288,19 +1339,21 @@ class Native27BEngine(nn.Module):
         t0 = time.perf_counter()
         applied_count = 0
         for i, layer in enumerate(self.layers):
-            is_attn = ((i + 1) % 4 == 0)
+            is_attn = (i + 1) % 4 == 0
             mod_mappings = [
                 ("ffn_gate", f"model.layers.{i}.mlp.gate_proj"),
                 ("ffn_up", f"model.layers.{i}.mlp.up_proj"),
                 ("ffn_down", f"model.layers.{i}.mlp.down_proj"),
             ]
             if is_attn:
-                mod_mappings.extend([
-                    ("attn_q", f"model.layers.{i}.self_attn.q_proj"),
-                    ("attn_k", f"model.layers.{i}.self_attn.k_proj"),
-                    ("attn_v", f"model.layers.{i}.self_attn.v_proj"),
-                    ("attn_output", f"model.layers.{i}.self_attn.o_proj"),
-                ])
+                mod_mappings.extend(
+                    [
+                        ("attn_q", f"model.layers.{i}.self_attn.q_proj"),
+                        ("attn_k", f"model.layers.{i}.self_attn.k_proj"),
+                        ("attn_v", f"model.layers.{i}.self_attn.v_proj"),
+                        ("attn_output", f"model.layers.{i}.self_attn.o_proj"),
+                    ]
+                )
 
             for attr_name, key_prefix in mod_mappings:
                 mod = getattr(layer, attr_name, None)
@@ -1329,19 +1382,21 @@ class Native27BEngine(nn.Module):
 
         self.active_lora_domain = domain_name
 
-        print(f"[Native 27B Triton] Bound LoRA [{domain_name}] ({applied_count} modules, alpha={alpha:.1f}) in {(time.perf_counter() - t0)*1000:.1f}ms")
+        print(
+            f"[Native 27B Triton] Bound LoRA [{domain_name}] ({applied_count} modules, alpha={alpha:.1f}) in {(time.perf_counter() - t0) * 1000:.1f}ms"
+        )
         return True
 
     def init_kv_caches(
         self,
         batch_size: int = 1,
-        max_seq_len: Optional[int] = None,
-        mode: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        max_seq_len: int | None = None,
+        mode: str | None = None,
+    ) -> dict[str, Any]:
         """Initializes preallocated KV caches for attention layers and recurrent states for SSM layers."""
         max_len = max_seq_len or self.max_seq_len
         cache_mode = mode or self.kv_cache_mode
-        caches: Dict[str, Any] = {}
+        caches: dict[str, Any] = {}
         for i, layer in enumerate(self.layers):
             if isinstance(layer, Qwen35FullAttentionBlock):
                 caches[f"kv_{i}"] = PreallocatedKVCache(
@@ -1360,7 +1415,7 @@ class Native27BEngine(nn.Module):
     def forward_token(
         self,
         token_id: int,
-        state_dict: Optional[Dict[str, Any]] = None,
+        state_dict: dict[str, Any] | None = None,
         pos: int = 0,
         use_graph: bool = True,
         return_hidden: bool = False,
@@ -1378,11 +1433,7 @@ class Native27BEngine(nn.Module):
         new_states = {}
 
         # 2. Hybrid Execution: 3-SSM HIP Graphs + Eager Attention
-        can_use_graphs = (
-            use_graph
-            and self.hip_graph_captured
-            and len(self.ssm_graphs) == (self.num_layers // 4)
-        )
+        can_use_graphs = use_graph and self.hip_graph_captured and len(self.ssm_graphs) == (self.num_layers // 4)
 
         if can_use_graphs:
             chunk_count = self.num_layers // 4
@@ -1448,10 +1499,10 @@ class Native27BEngine(nn.Module):
 
     def forward_prompt(
         self,
-        prompt_ids: List[int],
-        state_dict: Optional[Dict[str, Any]] = None,
+        prompt_ids: list[int],
+        state_dict: dict[str, Any] | None = None,
         pos: int = 0,
-    ) -> Tuple[torch.Tensor, Dict[str, Any]]:
+    ) -> tuple[torch.Tensor, dict[str, Any]]:
         """Batched forward pass through all 64 layers processing the prompt tokens in one single pass.
 
         Supports incremental prefill: if state_dict contains past KV / SSM states, offset is
@@ -1513,16 +1564,16 @@ class Native27BEngine(nn.Module):
 
     def generate(
         self,
-        prompt_ids: List[int],
+        prompt_ids: list[int],
         max_new_tokens: int = 64,
         temperature: float = 0.7,
-        kv_cache_mode: Optional[str] = None,
+        kv_cache_mode: str | None = None,
         use_hip_graph: bool = True,
-    ) -> List[int]:
+    ) -> list[int]:
         """Autoregressively generates next tokens using batched prefill and HIP Graph accelerated decode."""
-        generated: List[int] = []
+        generated: list[int] = []
         mode = kv_cache_mode or self.kv_cache_mode
-        state_dict: Dict[str, Any] = self.init_kv_caches(
+        state_dict: dict[str, Any] = self.init_kv_caches(
             batch_size=1,
             max_seq_len=len(prompt_ids) + max_new_tokens + 16,
             mode=mode,
@@ -1555,13 +1606,11 @@ class Native27BEngine(nn.Module):
 
         return generated
 
-    def clone_state_dict(self, state_dict: Dict[str, Any]) -> Dict[str, Any]:
+    def clone_state_dict(self, state_dict: dict[str, Any]) -> dict[str, Any]:
         """Clones all SSM, Conv, and KV cache tensors in GPU VRAM in sub-millisecond time (<1.0 ms)."""
         new_state = {}
         for k, v in state_dict.items():
-            if isinstance(v, torch.Tensor):
-                new_state[k] = v.clone()
-            elif isinstance(v, PreallocatedKVCache):
+            if isinstance(v, torch.Tensor) or isinstance(v, PreallocatedKVCache):
                 new_state[k] = v.clone()
             else:
                 new_state[k] = v
@@ -1569,21 +1618,21 @@ class Native27BEngine(nn.Module):
 
     def generate_with_state(
         self,
-        prompt_ids: List[int],
-        state_dict: Optional[Dict[str, Any]] = None,
+        prompt_ids: list[int],
+        state_dict: dict[str, Any] | None = None,
         max_new_tokens: int = 64,
         temperature: float = 0.7,
         use_hip_graph: bool = True,
-    ) -> Tuple[List[int], Dict[str, Any]]:
+    ) -> tuple[list[int], dict[str, Any]]:
         """Executes generation with state handoff (incremental prefill + decode).
 
         Bypasses re-prefill of past turns. If state_dict is provided, only prefills
         prompt_ids and continues generation from the inherited recurrent and KV state.
         Returns (generated_tokens, updated_state_dict).
         """
-        generated: List[int] = []
+        generated: list[int] = []
         if state_dict is None:
-            active_state_dict: Dict[str, Any] = self.init_kv_caches(
+            active_state_dict: dict[str, Any] = self.init_kv_caches(
                 batch_size=1,
                 max_seq_len=len(prompt_ids) + max_new_tokens + 16,
                 mode=self.kv_cache_mode,
@@ -1611,7 +1660,9 @@ class Native27BEngine(nn.Module):
 
         # Autoregressive decode loop
         for _ in range(max_new_tokens - 1):
-            logits, active_state_dict = self.forward_token(curr_token, active_state_dict, pos=pos, use_graph=use_hip_graph)
+            logits, active_state_dict = self.forward_token(
+                curr_token, active_state_dict, pos=pos, use_graph=use_hip_graph
+            )
             next_token = int(torch.argmax(logits[0, :]).item())
             generated.append(next_token)
             if next_token in self.STOP_TOKEN_IDS:
@@ -1623,11 +1674,11 @@ class Native27BEngine(nn.Module):
 
     def forward_verify(
         self,
-        candidate_tokens: List[int],
-        state_dict: Dict[str, Any],
+        candidate_tokens: list[int],
+        state_dict: dict[str, Any],
         pos: int,
         return_hidden: bool = False,
-    ) -> Tuple[torch.Tensor, Dict[str, List[torch.Tensor]], Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, dict[str, list[torch.Tensor]], torch.Tensor | None]:
         """Parallel verification forward pass over candidate tokens with intermediate state history.
 
         Computes logits for all candidate tokens in one single forward pass across all 64 layers.
@@ -1644,21 +1695,19 @@ class Native27BEngine(nn.Module):
         for i in range(s):
             mask[0, 0, i, : past_len + i + 1] = True
 
-        history: Dict[str, List[torch.Tensor]] = {}
+        history: dict[str, list[torch.Tensor]] = {}
 
         # Fast path: ROCm HIP Graph replay for fixed K=2 or K=4 candidate verification
         chunk_count = self.num_layers // 4
         vg_list = self.verify_graphs_k2 if s == 2 else (self.verify_graphs_k4 if s == 4 else None)
-        if (
-            vg_list is not None
-            and self.hip_graph_captured
-            and len(vg_list) == chunk_count
-        ):
+        if vg_list is not None and self.hip_graph_captured and len(vg_list) == chunk_count:
             curr = x
             b, seq_len, _ = curr.shape
             for k in range(chunk_count):
                 init_ssms = [
-                    state_dict.get(f"ssm_{4 * k + j}", torch.zeros((48, 128, 128), dtype=curr.dtype, device=self.device))
+                    state_dict.get(
+                        f"ssm_{4 * k + j}", torch.zeros((48, 128, 128), dtype=curr.dtype, device=self.device)
+                    )
                     for j in range(3)
                 ]
                 init_convs = [
@@ -1690,7 +1739,11 @@ class Native27BEngine(nn.Module):
                 attn_out = attn_out.transpose(1, 2).contiguous().view(b, s, -1) * torch.sigmoid(gate)
                 curr = curr + (attn_layer.attn_output(attn_out) if attn_layer.attn_output is not None else attn_out)
                 x_ffn_norm = attn_layer.post_attention_norm(curr)
-                assert attn_layer.ffn_gate is not None and attn_layer.ffn_up is not None and attn_layer.ffn_down is not None
+                assert (
+                    attn_layer.ffn_gate is not None
+                    and attn_layer.ffn_up is not None
+                    and attn_layer.ffn_down is not None
+                )
                 mlp_out = attn_layer.ffn_down(F.silu(attn_layer.ffn_gate(x_ffn_norm)) * attn_layer.ffn_up(x_ffn_norm))
                 curr = curr + mlp_out
 
@@ -1711,8 +1764,16 @@ class Native27BEngine(nn.Module):
                 x_norm = layer.attn_norm(x)
                 qkv = layer.attn_qkv(x_norm) if layer.attn_qkv is not None else x_norm
                 z = layer.attn_gate(x_norm) if layer.attn_gate is not None else x_norm
-                alpha = layer.ssm_alpha(x_norm) if layer.ssm_alpha is not None else torch.zeros((b, seq_len, 48), dtype=x.dtype, device=x.device)
-                beta = layer.ssm_beta(x_norm) if layer.ssm_beta is not None else torch.zeros((b, seq_len, 48), dtype=x.dtype, device=x.device)
+                alpha = (
+                    layer.ssm_alpha(x_norm)
+                    if layer.ssm_alpha is not None
+                    else torch.zeros((b, seq_len, 48), dtype=x.dtype, device=x.device)
+                )
+                beta = (
+                    layer.ssm_beta(x_norm)
+                    if layer.ssm_beta is not None
+                    else torch.zeros((b, seq_len, 48), dtype=x.dtype, device=x.device)
+                )
 
                 conv_w = layer.ssm_conv1d.unsqueeze(1).to(dtype=x.dtype)
                 qkv_t = qkv.transpose(1, 2)
@@ -1727,7 +1788,7 @@ class Native27BEngine(nn.Module):
                 v_all = conv_out[:, :, 4096:10240].view(b, seq_len, 48, 128).float()
 
                 eps = 1e-6
-                q_all = q_all / torch.clamp(torch.norm(q_all, p=2, dim=-1, keepdim=True), min=eps) * (128.0 ** -0.5)
+                q_all = q_all / torch.clamp(torch.norm(q_all, p=2, dim=-1, keepdim=True), min=eps) * (128.0**-0.5)
                 k_all = k_all / torch.clamp(torch.norm(k_all, p=2, dim=-1, keepdim=True), min=eps)
                 q_all = q_all.repeat(1, 1, 3, 1)
                 k_all = k_all.repeat(1, 1, 3, 1)
@@ -1736,10 +1797,14 @@ class Native27BEngine(nn.Module):
                 decay_all = torch.exp(gate_all)
                 beta_all = torch.sigmoid(beta.float())
 
-                curr_ssm = ssm_state.clone().float() if ssm_state is not None else torch.zeros((48, 128, 128), dtype=torch.float32, device=x.device)
+                curr_ssm = (
+                    ssm_state.clone().float()
+                    if ssm_state is not None
+                    else torch.zeros((48, 128, 128), dtype=torch.float32, device=x.device)
+                )
                 o_all = torch.zeros(b, seq_len, 48, 128, dtype=torch.float32, device=x.device)
-                ssm_hist: List[torch.Tensor] = []
-                conv_hist: List[torch.Tensor] = []
+                ssm_hist: list[torch.Tensor] = []
+                conv_hist: list[torch.Tensor] = []
                 for t in range(seq_len):
                     q_t = q_all[0, t].unsqueeze(-1)
                     k_t = k_all[0, t].unsqueeze(-1)
@@ -1818,17 +1883,17 @@ class Native27BEngine(nn.Module):
 
     def generate_stream_speculative(
         self,
-        prompt_ids: List[int],
+        prompt_ids: list[int],
         max_new_tokens: int = 128,
         temperature: float = 0.7,
-        kv_cache_mode: Optional[str] = None,
+        kv_cache_mode: str | None = None,
         use_hip_graph: bool = True,
         draft_k: int = 3,
         draft_n: int = 5,
         min_n: int = 4,
         use_mtp: bool = True,
         use_syntax_drafter: bool = True,
-        stats: Optional[Dict[str, Any]] = None,
+        stats: dict[str, Any] | None = None,
     ):
         """Synchronously yields next token IDs in bursts using Tiered Speculation:
 
@@ -1840,7 +1905,7 @@ class Native27BEngine(nn.Module):
         Guarantees 100% mathematical equivalence to greedy decode with zero quality loss.
         """
         mode = kv_cache_mode or self.kv_cache_mode
-        state_dict: Dict[str, Any] = self.init_kv_caches(
+        state_dict: dict[str, Any] = self.init_kv_caches(
             batch_size=1,
             max_seq_len=len(prompt_ids) + max_new_tokens + 32,
             mode=mode,
@@ -1889,7 +1954,7 @@ class Native27BEngine(nn.Module):
         while emitted_count < max_new_tokens and curr_token not in self.STOP_TOKEN_IDS:
             if stats is not None:
                 stats["total_steps"] += 1
-            draft_source: Optional[str] = None
+            draft_source: str | None = None
 
             # 1. Try Deterministic Syntax Trie Drafter (<0.001 ms)
             draft = (
@@ -1927,10 +1992,8 @@ class Native27BEngine(nn.Module):
                 candidates = [curr_token] + draft[:draft_k]
                 K = len(candidates)
                 if stats is not None:
-                    stats[f"{draft_source}_drafts_proposed"] += (K - 1)
-                chunk_logits, history, h_final = self.forward_verify(
-                    candidates, state_dict, pos, return_hidden=True
-                )
+                    stats[f"{draft_source}_drafts_proposed"] += K - 1
+                chunk_logits, history, h_final = self.forward_verify(candidates, state_dict, pos, return_hidden=True)
 
                 n_acc = 0
                 bonus_token = None
@@ -2006,10 +2069,10 @@ class Native27BEngine(nn.Module):
 
     def generate_speculative(
         self,
-        prompt_ids: List[int],
+        prompt_ids: list[int],
         max_new_tokens: int = 64,
         temperature: float = 0.7,
-        kv_cache_mode: Optional[str] = None,
+        kv_cache_mode: str | None = None,
         use_hip_graph: bool = True,
         draft_k: int = 3,
         draft_n: int = 5,
@@ -2017,12 +2080,12 @@ class Native27BEngine(nn.Module):
         use_mtp: bool = True,
         use_syntax_drafter: bool = False,
         return_stats: bool = False,
-    ) -> Union[List[int], Tuple[List[int], Dict[str, Any]]]:
+    ) -> list[int] | tuple[list[int], dict[str, Any]]:
         """Speculative decoding using Neural MTP (blk.64), context n-gram drafter, and syntax trie.
 
         Guarantees 100% mathematical equivalence to greedy decode with zero quality loss.
         """
-        stats: Optional[Dict[str, Any]] = (
+        stats: dict[str, Any] | None = (
             {
                 "total_steps": 0,
                 "tokens_generated": 0,
@@ -2037,7 +2100,7 @@ class Native27BEngine(nn.Module):
             if return_stats
             else None
         )
-        generated: List[int] = []
+        generated: list[int] = []
         for tok in self.generate_stream_speculative(
             prompt_ids=prompt_ids,
             max_new_tokens=max_new_tokens,
@@ -2060,15 +2123,15 @@ class Native27BEngine(nn.Module):
 
     def generate_stream_tokens(
         self,
-        prompt_ids: List[int],
+        prompt_ids: list[int],
         max_new_tokens: int = 128,
         temperature: float = 0.7,
-        kv_cache_mode: Optional[str] = None,
+        kv_cache_mode: str | None = None,
         use_hip_graph: bool = True,
     ):
         """Synchronously yields next token IDs with batched prefill and HIP Graph acceleration."""
         mode = kv_cache_mode or self.kv_cache_mode
-        state_dict: Dict[str, Any] = self.init_kv_caches(
+        state_dict: dict[str, Any] = self.init_kv_caches(
             batch_size=1,
             max_seq_len=len(prompt_ids) + max_new_tokens + 16,
             mode=mode,
@@ -2101,12 +2164,12 @@ class Native27BEngine(nn.Module):
 
     async def generate_stream(
         self,
-        prompt_ids: List[int],
+        prompt_ids: list[int],
         max_new_tokens: int = 128,
         temperature: float = 0.7,
-        kv_cache_mode: Optional[str] = None,
+        kv_cache_mode: str | None = None,
         use_hip_graph: bool = True,
-    ) -> AsyncGenerator[int, None]:
+    ) -> AsyncGenerator[int]:
         """Autoregressively generates next tokens with batched prefill and yields each token ID."""
         for token in self.generate_stream_tokens(
             prompt_ids=prompt_ids,
@@ -2116,4 +2179,3 @@ class Native27BEngine(nn.Module):
             use_hip_graph=use_hip_graph,
         ):
             yield token
-

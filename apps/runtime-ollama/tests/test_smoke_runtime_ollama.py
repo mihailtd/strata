@@ -50,5 +50,6 @@ def test_no_hardcoded_throughput_numbers() -> None:
 def test_no_ollama_proxying_references() -> None:
     """runtime-ollama talks TO Ollama natively; it must not proxy another engine through Ollama."""
     source = (OLLAMA / "run_server.sh").read_text()
-    assert "port 8000" not in source and "localhost:8000" not in source, \
+    assert "port 8000" not in source and "localhost:8000" not in source, (
         "runtime-ollama must not proxy to port 8000 (runtime-triton's port)"
+    )

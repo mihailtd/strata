@@ -127,7 +127,10 @@ export default function SweBenchInfographic() {
             Autonomous SWE-Bench Coding Benchmark (27B LLM)
           </h1>
           <p className="mt-3 text-sm text-slate-300 max-w-3xl leading-relaxed">
-            Rigorous empirical evaluation across 6 authentic software engineering codebases with isolated <code>pytest</code> execution sandboxes, proving our Specialist LoRA + Speculative Engine is <strong>281x Faster in Total Velocity and 100% Pass@1 Accurate</strong>.
+            Rigorous empirical evaluation across 6 authentic software engineering codebases with
+            isolated <code>pytest</code> execution sandboxes, proving our Specialist LoRA +
+            Speculative Engine is{" "}
+            <strong>281x Faster in Total Velocity and 100% Pass@1 Accurate</strong>.
           </p>
         </div>
       </div>
@@ -141,11 +144,16 @@ export default function SweBenchInfographic() {
               Plain English: The Specialist Surgeon vs The General Practitioner
             </h3>
             <p className="text-xs text-slate-300 leading-relaxed">
-              When solving complex codebase bugs, a generalist model writes rambling essays with incomplete code that fails unit tests:
+              When solving complex codebase bugs, a generalist model writes rambling essays with
+              incomplete code that fails unit tests:
               <br />
-              &bull; <strong>Generalist Model (Ollama 27B):</strong> Took <strong>253.0 seconds (4.2 minutes)</strong> across the suite, generated conversational clutter, and passed <strong>0% (0/6)</strong> on the first try.
+              &bull; <strong>Generalist Model (Ollama 27B):</strong> Took{" "}
+              <strong>253.0 seconds (4.2 minutes)</strong> across the suite, generated
+              conversational clutter, and passed <strong>0% (0/6)</strong> on the first try.
               <br />
-              &bull; <strong>Our Specialist LoRA Engine:</strong> Delivered the exact drop-in production fix on the very first try (<strong>Pass@1 100%</strong>) and resolved the entire suite in <strong>0.9 seconds (281.1x faster)</strong>!
+              &bull; <strong>Our Specialist LoRA Engine:</strong> Delivered the exact drop-in
+              production fix on the very first try (<strong>Pass@1 100%</strong>) and resolved the
+              entire suite in <strong>0.9 seconds (281.1x faster)</strong>!
             </p>
           </div>
         </div>
@@ -171,7 +179,9 @@ export default function SweBenchInfographic() {
           </div>
 
           <div className="rounded-2xl border border-emerald-500/40 bg-emerald-950/20 p-4 space-y-1 shadow-[0_0_15px_rgba(16,185,129,0.15)]">
-            <span className="text-[11px] text-emerald-400 font-bold">Total Suite Wall-Clock Time</span>
+            <span className="text-[11px] text-emerald-400 font-bold">
+              Total Suite Wall-Clock Time
+            </span>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-bold text-white">0.9s</span>
               <span className="text-xs text-slate-400">vs 253.0s Ollama</span>
@@ -195,7 +205,9 @@ export default function SweBenchInfographic() {
 
         {/* Task Selector Pills */}
         <div className="space-y-3 pt-2">
-          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Inspect Task Results:</div>
+          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+            Inspect Task Results:
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {SWE_BENCH_CARDS.map((task) => (
               <button
@@ -223,7 +235,9 @@ export default function SweBenchInfographic() {
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-white flex items-center gap-2">
               <Terminal className="h-4 w-4 text-emerald-400" />
-              <span>{activeTask.title} ({activeTask.domain})</span>
+              <span>
+                {activeTask.title} ({activeTask.domain})
+              </span>
             </h3>
             <span className="rounded bg-emerald-500/20 border border-emerald-500/40 px-2 py-0.5 text-[10px] text-emerald-300 font-bold">
               Pass@1 Verified
@@ -240,7 +254,9 @@ export default function SweBenchInfographic() {
             <div className="rounded-xl bg-emerald-950/20 border border-emerald-500/30 p-3 space-y-1">
               <div className="text-emerald-400 font-bold">Arm B (Our Specialist LoRA Engine):</div>
               <div className="text-emerald-200 font-bold">Result: {activeTask.armB_result}</div>
-              <div className="text-emerald-300 font-bold">Time: {activeTask.armB_time} (Fast &amp; Accurate)</div>
+              <div className="text-emerald-300 font-bold">
+                Time: {activeTask.armB_time} (Fast &amp; Accurate)
+              </div>
             </div>
           </div>
 

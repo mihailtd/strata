@@ -49,8 +49,7 @@ from __future__ import annotations
 
 import torch
 
-__all__ = ["soft_threshold", "hard_threshold", "mcp_prox", "scad_prox",
-           "mcp_penalty", "scad_penalty", "velocity_gain"]
+__all__ = ["soft_threshold", "hard_threshold", "mcp_prox", "scad_prox", "mcp_penalty", "scad_penalty", "velocity_gain"]
 
 
 def soft_threshold(z: torch.Tensor, lam: float) -> torch.Tensor:
@@ -86,8 +85,7 @@ def mcp_penalty(z: torch.Tensor, lam: float, gamma: float = 3.0) -> torch.Tensor
     """p_lambda(|z|), the penalty value itself. Flat above gamma*lam -- zero gradient
     on large coefficients, which is what 'unbiased' means here."""
     a = z.abs()
-    return torch.where(a <= gamma * lam, lam * a - a * a / (2.0 * gamma),
-                       torch.full_like(a, gamma * lam * lam / 2.0))
+    return torch.where(a <= gamma * lam, lam * a - a * a / (2.0 * gamma), torch.full_like(a, gamma * lam * lam / 2.0))
 
 
 def scad_penalty(z: torch.Tensor, lam: float, gamma: float = 3.7) -> torch.Tensor:

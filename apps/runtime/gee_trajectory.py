@@ -69,8 +69,8 @@ class GEEFit:
     """Coefficients plus BOTH variance estimates -- the comparison is the whole point."""
 
     beta: np.ndarray
-    se_model: np.ndarray       # naive / model-based: assumes R(alpha) is correct
-    se_sandwich: np.ndarray    # Huber-White: consistent under misspecified R
+    se_model: np.ndarray  # naive / model-based: assumes R(alpha) is correct
+    se_sandwich: np.ndarray  # Huber-White: consistent under misspecified R
     alpha: float
     phi: float
     n_clusters: int
@@ -86,8 +86,12 @@ class GEEFit:
         """Two-sided Wald test on one coefficient. `robust=False` is the naive arm."""
         se = (self.se_sandwich if robust else self.se_model)[index]
         z = float(self.beta[index] / se) if se > _EPS else 0.0
-        return {"coefficient": float(self.beta[index]), "se": float(se), "z": z,
-                "p_value": float(2.0 * norm.sf(abs(z)))}
+        return {
+            "coefficient": float(self.beta[index]),
+            "se": float(se),
+            "z": z,
+            "p_value": float(2.0 * norm.sf(abs(z))),
+        }
 
     def confidence_interval(self, index: int, level: float = 0.95, robust: bool = True) -> tuple[float, float]:
         se = (self.se_sandwich if robust else self.se_model)[index]
@@ -323,8 +327,10 @@ class DriftMonitor:
             return {"status": "insufficient_data", "n_clusters": 0, "drifting": False}
 
         fit = fit_gee(
-            y_list, X_list,
-            corr=self.corr, family=self.family,
+            y_list,
+            X_list,
+            corr=self.corr,
+            family=self.family,
             small_sample_correction=self.small_sample_correction,
         )
         robust = fit.wald(1, robust=True)

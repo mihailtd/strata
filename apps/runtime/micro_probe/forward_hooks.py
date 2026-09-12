@@ -33,17 +33,11 @@ class MicroProbeForwardHooks:
             return list(self.model.model.layers)
         elif hasattr(self.model, "layers"):
             return list(self.model.layers)
-        elif hasattr(self.model, "transformer") and hasattr(
-            self.model.transformer, "h"
-        ):
+        elif hasattr(self.model, "transformer") and hasattr(self.model.transformer, "h"):
             return list(self.model.transformer.h)
         else:
             # Fallback: inspect module children
-            return [
-                m
-                for name, m in self.model.named_modules()
-                if "layer" in name.lower() or "block" in name.lower()
-            ]
+            return [m for name, m in self.model.named_modules() if "layer" in name.lower() or "block" in name.lower()]
 
     def _register_hooks(self):
         layers = self._get_decoder_layers()
@@ -97,11 +91,7 @@ class MicroProbeForwardHooks:
                 total_evals += len(v_list)
                 total_quiet += q_count
 
-        overall_avg_velocity = (
-            sum(avg_velocities.values()) / len(avg_velocities)
-            if avg_velocities
-            else 0.0
-        )
+        overall_avg_velocity = sum(avg_velocities.values()) / len(avg_velocities) if avg_velocities else 0.0
         quiet_ratio = (total_quiet / total_evals) if total_evals > 0 else 0.0
 
         summary["overall_avg_velocity"] = overall_avg_velocity

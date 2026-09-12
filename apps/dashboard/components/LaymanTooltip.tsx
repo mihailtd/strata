@@ -49,17 +49,15 @@ export function LaymanTooltip({
             side === "right"
               ? "left-5 top-1/2 -translate-y-1/2"
               : side === "left"
-              ? "right-5 top-1/2 -translate-y-1/2"
-              : side === "top"
-              ? "bottom-5 left-1/2 -translate-x-1/2"
-              : "top-5 left-1/2 -translate-x-1/2"
+                ? "right-5 top-1/2 -translate-y-1/2"
+                : side === "top"
+                  ? "bottom-5 left-1/2 -translate-x-1/2"
+                  : "top-5 left-1/2 -translate-x-1/2"
           }`}
         >
           {/* Header with Title & Chapter */}
           <div className="flex items-center justify-between border-b border-white/10 pb-1.5 mb-2">
-            <span className="font-bold text-xs text-white flex items-center gap-1">
-              {title}
-            </span>
+            <span className="font-bold text-xs text-white flex items-center gap-1">{title}</span>
             {chapter && (
               <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-[#00f2ff]/15 text-[#00f2ff] border border-[#00f2ff]/30">
                 {chapter}
@@ -88,7 +86,9 @@ export function LaymanTooltip({
             {requires && (
               <div className="flex items-center gap-1 text-[10px] font-mono text-cyan-300 bg-cyan-500/10 p-1.5 rounded-lg border border-cyan-400/20 mt-1">
                 <CheckCircle2 className="h-3 w-3 shrink-0" />
-                <span>Requires: <b>{requires}</b></span>
+                <span>
+                  Requires: <b>{requires}</b>
+                </span>
               </div>
             )}
 
@@ -98,9 +98,7 @@ export function LaymanTooltip({
                 <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
                 <div>
                   <span className="font-bold">⚠️ Incompatible with:</span>
-                  <div className="text-[9px] text-amber-200/80">
-                    {incompatibleWith.join(", ")}
-                  </div>
+                  <div className="text-[9px] text-amber-200/80">{incompatibleWith.join(", ")}</div>
                 </div>
               </div>
             )}

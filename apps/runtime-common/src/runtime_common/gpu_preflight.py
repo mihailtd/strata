@@ -20,6 +20,7 @@ def get_sysfs_vram_info() -> dict[str, Any] | None:
     """Reads raw hardware VRAM metrics directly from amdgpu sysfs (independent of PyTorch)."""
     try:
         from pathlib import Path
+
         # Search for primary discrete card (e.g. card0 / RX 7900 XTX)
         for card_dev in sorted(Path("/sys/class/drm").glob("card*/device")):
             used_path = card_dev / "mem_info_vram_used"
@@ -130,11 +131,22 @@ def find_conflicting_processes() -> list[dict[str, Any]]:
                     if pid in (current_pid, parent_pid) or ppid == current_pid or pid in seen_pids:
                         continue
                     # Ignore internal IDE servers, pytest runner, language servers, and system daemons
-                    if any(ignored in cmd for ignored in (
-                        "antigravity-ide-server", "vscode-server", "subiquity",
-                        "pylsp", "pyright", "pytest", "krunner", "plasmashell",
-                        "plasma-systemmonitor", "Xwayland", "electron"
-                    )):
+                    if any(
+                        ignored in cmd
+                        for ignored in (
+                            "antigravity-ide-server",
+                            "vscode-server",
+                            "subiquity",
+                            "pylsp",
+                            "pyright",
+                            "pytest",
+                            "krunner",
+                            "plasmashell",
+                            "plasma-systemmonitor",
+                            "Xwayland",
+                            "electron",
+                        )
+                    ):
                         continue
 
                     # Direct hardware match: process holds open /dev/kfd or /dev/dri render node
@@ -142,19 +154,26 @@ def find_conflicting_processes() -> list[dict[str, Any]]:
 
                     # Workload keyword match: python training/serving/eval scripts or standalone LLM servers
                     is_workload = (
-                        ("python" in cmd and any(k in cmd for k in ("gnn", "train", "benchmark", "probe", "torch", "calibrate", "server")))
-                        or any(server_bin in cmd for server_bin in ("ollama", "llama-server", "vllm", "unsloth", "tgi", "sglang"))
+                        "python" in cmd
+                        and any(
+                            k in cmd for k in ("gnn", "train", "benchmark", "probe", "torch", "calibrate", "server")
+                        )
+                    ) or any(
+                        server_bin in cmd
+                        for server_bin in ("ollama", "llama-server", "vllm", "unsloth", "tgi", "sglang")
                     )
 
                     if is_kfd_holder or is_workload:
                         seen_pids.add(pid)
-                        conflicts.append({
-                            "pid": pid,
-                            "cpu_pct": cpu,
-                            "mem_pct": mem,
-                            "cmd": cmd[:90] + ("..." if len(cmd) > 90 else ""),
-                            "is_kfd_holder": is_kfd_holder,
-                        })
+                        conflicts.append(
+                            {
+                                "pid": pid,
+                                "cpu_pct": cpu,
+                                "mem_pct": mem,
+                                "cmd": cmd[:90] + ("..." if len(cmd) > 90 else ""),
+                                "is_kfd_holder": is_kfd_holder,
+                            }
+                        )
     except Exception:
         pass
     return conflicts
@@ -216,7 +235,9 @@ def ensure_gpu_exclusive(
     conflict_lines = ""
     if conflicts:
         for c in conflicts:
-            conflict_lines += f"║   • PID {c['pid']:<6} (CPU: {c['cpu_pct']}%, MEM: {c['mem_pct']}%): {c['cmd']:<40} ║\n"
+            conflict_lines += (
+                f"║   • PID {c['pid']:<6} (CPU: {c['cpu_pct']}%, MEM: {c['mem_pct']}%): {c['cmd']:<40} ║\n"
+            )
     else:
         conflict_lines = "║   • Another process or background worker is currently holding VRAM.     ║\n"
 
@@ -232,7 +253,7 @@ def ensure_gpu_exclusive(
 {conflict_lines}╠══════════════════════════════════════════════════════════════════════════════╣
 ║ 🛑 DANGER: Concurrent GPU allocation causes OOM or Host Crash (DECISIONS §55)║
 ║                                                                              ║
-║ {'ABORTING EXECUTION: Terminate active PID before starting this workload.' if exit_on_conflict else 'WARNING ONLY: Proceeding with concurrent allocation risks crash.'}   ║
+║ {"ABORTING EXECUTION: Terminate active PID before starting this workload." if exit_on_conflict else "WARNING ONLY: Proceeding with concurrent allocation risks crash."}   ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 """
     print(alert_box, file=sys.stderr, flush=True)

@@ -11,17 +11,15 @@ Vendored into runtime-triton for self-sufficiency -- see native_27b_engine.py's 
 from __future__ import annotations
 
 import gc
-import math
 import time
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import torch
 import torch.nn as nn
 from triton_w4a16 import (
     fused_w4a16_lora_matmul,
     quantize_and_pack_w4,
-    unpack_and_dequantize_w4,
     w4a16_matmul,
 )
 
@@ -34,16 +32,16 @@ class W4A16Linear(nn.Module):
     group_size: int
     qweight: torch.Tensor
     scales: torch.Tensor
-    bias: Optional[torch.Tensor]
-    lora_a: Optional[torch.Tensor]
-    lora_b: Optional[torch.Tensor]
+    bias: torch.Tensor | None
+    lora_a: torch.Tensor | None
+    lora_b: torch.Tensor | None
     lora_alpha: float
     max_lora_rank: int
-    static_lora_a: Optional[torch.Tensor]
-    static_lora_b: Optional[torch.Tensor]
+    static_lora_a: torch.Tensor | None
+    static_lora_b: torch.Tensor | None
     has_active_lora: bool
 
-    def __call__(self, x: torch.Tensor, out: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def __call__(self, x: torch.Tensor, out: torch.Tensor | None = None) -> torch.Tensor:
         return super().__call__(x, out=out)
 
     def __init__(
@@ -52,7 +50,7 @@ class W4A16Linear(nn.Module):
         out_features: int,
         bias: bool = False,
         group_size: int = 128,
-        device: Optional[torch.device] = None,
+        device: torch.device | None = None,
     ):
         super().__init__()
         self.in_features = in_features
@@ -60,7 +58,9 @@ class W4A16Linear(nn.Module):
         self.group_size = group_size
 
         assert in_features % 8 == 0, f"in_features ({in_features}) must be divisible by 8"
-        assert in_features % group_size == 0, f"in_features ({in_features}) must be divisible by group_size ({group_size})"
+        assert in_features % group_size == 0, (
+            f"in_features ({in_features}) must be divisible by group_size ({group_size})"
+        )
 
         # Packed INT4 weights: (K // 8, N) in int32
         k_words = in_features // 8
@@ -84,8 +84,8 @@ class W4A16Linear(nn.Module):
             self.bias = None
 
         # Dynamic LoRA Adapter Branch (in GPU memory / L2 cache)
-        self.lora_a: Optional[torch.Tensor] = None  # Shape: (in_features, r) in bfloat16
-        self.lora_b: Optional[torch.Tensor] = None  # Shape: (r, out_features) in bfloat16
+        self.lora_a: torch.Tensor | None = None  # Shape: (in_features, r) in bfloat16
+        self.lora_b: torch.Tensor | None = None  # Shape: (r, out_features) in bfloat16
         self.lora_alpha: float = 1.0
 
     @classmethod
@@ -93,7 +93,7 @@ class W4A16Linear(nn.Module):
         cls,
         linear: nn.Linear,
         group_size: int = 128,
-        device: Optional[torch.device] = None,
+        device: torch.device | None = None,
     ) -> W4A16Linear:
         """Quantizes an existing unquantized nn.Linear into a W4A16Linear module."""
         w = linear.weight.detach().to(dtype=torch.bfloat16)
@@ -123,9 +123,9 @@ class W4A16Linear(nn.Module):
         cls,
         qweight: torch.Tensor,
         scales: torch.Tensor,
-        bias: Optional[torch.Tensor] = None,
+        bias: torch.Tensor | None = None,
         group_size: int = 128,
-        device: Optional[torch.device] = None,
+        device: torch.device | None = None,
     ) -> W4A16Linear:
         """Instantiates W4A16Linear directly from pre-quantized qweight and scales."""
         k_words, out_features = qweight.shape
@@ -159,8 +159,8 @@ class W4A16Linear(nn.Module):
 
     def set_lora_adapter(
         self,
-        lora_a: Optional[torch.Tensor],
-        lora_b: Optional[torch.Tensor],
+        lora_a: torch.Tensor | None,
+        lora_b: torch.Tensor | None,
         alpha: float = 1.0,
     ) -> None:
         """Sets or clears the active LoRA adapter branch for this linear module."""
@@ -169,7 +169,12 @@ class W4A16Linear(nn.Module):
             assert lora_b.shape[1] == self.out_features, f"LoRA B output dim {lora_b.shape[1]} != {self.out_features}"
             assert lora_a.shape[1] == lora_b.shape[0], f"Rank mismatch: A is {lora_a.shape}, B is {lora_b.shape}"
             r = lora_a.shape[1]
-            if hasattr(self, "static_lora_a") and self.static_lora_a is not None and self.static_lora_b is not None and r <= self.max_lora_rank:
+            if (
+                hasattr(self, "static_lora_a")
+                and self.static_lora_a is not None
+                and self.static_lora_b is not None
+                and r <= self.max_lora_rank
+            ):
                 self.static_lora_a.zero_()
                 self.static_lora_b.zero_()
                 self.static_lora_a[:, :r].copy_(lora_a.to(dtype=torch.bfloat16, device=self.qweight.device))
@@ -200,7 +205,7 @@ class W4A16Linear(nn.Module):
             self.lora_alpha = 1.0
             self.has_active_lora = False
 
-    def forward(self, x: torch.Tensor, out: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, out: torch.Tensor | None = None) -> torch.Tensor:
         """Executes fused W4A16 matrix multiplication."""
         x_bf16 = x.to(torch.bfloat16) if x.dtype != torch.bfloat16 else x
 
@@ -243,12 +248,17 @@ class W4A16Linear(nn.Module):
     @property
     def weight_bytes(self) -> int:
         """Returns total bytes used by this module's packed weights."""
-        return (self.qweight.numel() * 4) + (self.scales.numel() * 2) + (self.bias.numel() * 2 if self.bias is not None else 0)
+        return (
+            (self.qweight.numel() * 4)
+            + (self.scales.numel() * 2)
+            + (self.bias.numel() * 2 if self.bias is not None else 0)
+        )
 
 
 @dataclass
 class ModelQuantizationSummary:
     """Summary of model quantization and VRAM savings."""
+
     total_linear_layers: int
     unquantized_weight_gb: float
     quantized_weight_gb: float
@@ -264,7 +274,7 @@ class W4A16ModelLoader:
     def replace_linear_modules(
         module: nn.Module,
         group_size: int = 128,
-        skip_modules: Optional[list[str]] = None,
+        skip_modules: list[str] | None = None,
         verbose: bool = False,
     ) -> ModelQuantizationSummary:
         """Recursively replaces all nn.Linear modules with W4A16Linear modules layer-by-layer."""
@@ -339,7 +349,9 @@ class W4A16ModelLoader:
         # Self-attention: Q (5120x5120), K (5120x1024), V (5120x1024), O (5120x5120) -> 62.9M params
         # MLP: Gate (5120x27392), Up (5120x27392), Down (27392x5120) -> 420.7M params
         # Total params per layer = ~483.6M params
-        qkv_o_params = (hidden_size * hidden_size) + (2 * hidden_size * (num_kv_heads * head_dim)) + (hidden_size * hidden_size)
+        qkv_o_params = (
+            (hidden_size * hidden_size) + (2 * hidden_size * (num_kv_heads * head_dim)) + (hidden_size * hidden_size)
+        )
         mlp_params = (2 * hidden_size * intermediate_size) + (intermediate_size * hidden_size)
         layer_params = qkv_o_params + mlp_params
         total_model_params = layer_params * num_layers

@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import time
 import urllib.request
-from typing import Any, Dict, Generator, List, Optional, Tuple
+from typing import Any
 
 
 class PinnedPrefixCache:
@@ -24,7 +24,7 @@ class PinnedPrefixCache:
         self.pinned_token_count = len(pinned_system_prompt.split()) * 2  # Approximate token count
         self.is_pinned = True
 
-    def get_prefix_info(self) -> Dict[str, Any]:
+    def get_prefix_info(self) -> dict[str, Any]:
         return {
             "model": self.model_name,
             "pinned_tokens_est": self.pinned_token_count,
@@ -46,10 +46,10 @@ class LongContextVRAMManager:
         """Calculate KV cache size in GB for 35B MoE (48 layers, 4 KV heads, GQA, 128 dim)."""
         bytes_per_token = 2 * 48 * 4 * 128 * (kv_bits / 8.0)
         total_bytes = context_tokens * bytes_per_token
-        return round(total_bytes / (1024 ** 3), 3)
+        return round(total_bytes / (1024**3), 3)
 
     @classmethod
-    def get_total_vram_usage(cls, context_tokens: int, kv_bits: int = 4) -> Dict[str, Any]:
+    def get_total_vram_usage(cls, context_tokens: int, kv_bits: int = 4) -> dict[str, Any]:
         kv_gb = cls.calculate_kv_cache_gb(context_tokens, kv_bits)
         total_gb = round(cls.BASE_MODEL_35B_Q4_GB + kv_gb + cls.DESKTOP_HEADROOM_GB, 2)
         will_spill = total_gb > cls.TOTAL_VRAM_GB
@@ -81,7 +81,7 @@ class LongContextAgentEngine:
         self.max_context = max_context
         self.kv_quant_bits = kv_quant_bits
         self.endpoint_url = endpoint_url
-        self.prefix_cache: Optional[PinnedPrefixCache] = None
+        self.prefix_cache: PinnedPrefixCache | None = None
 
     def initialize_pinned_prefix(self, system_prompt: str) -> None:
         """Lock system prompt and 6-domain expert routing in memory."""
@@ -89,9 +89,9 @@ class LongContextAgentEngine:
 
     def context_shift_if_needed(
         self,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         max_allowed_tokens: int = 30000,
-    ) -> Tuple[List[Dict[str, Any]], bool]:
+    ) -> tuple[list[dict[str, Any]], bool]:
         """Apply context shift rolling buffer to keep total tokens under the hardware limit."""
         # Fast token estimation (avg 4 chars per token)
         total_chars = sum(len(m.get("content", "")) for m in messages)
@@ -116,10 +116,10 @@ class LongContextAgentEngine:
 
     def stream_chat(
         self,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         max_tokens: int = 512,
         temperature: float = 0.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Stream chat completions with latency tracking and VRAM monitoring."""
         # 1. Apply context shift rolling buffer if approaching 30k tokens
         active_messages, shifted = self.context_shift_if_needed(messages, max_allowed_tokens=self.max_context)

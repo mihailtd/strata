@@ -59,22 +59,20 @@ os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 os.environ.setdefault("HIP_VISIBLE_DEVICES", "0")
 os.environ.setdefault("ROCR_VISIBLE_DEVICES", "0")
 
+import _bootstrap  # noqa: E402,F401  -- adds apps/ to sys.path for the shared
 import torch
 from peft import LoraConfig, get_peft_model
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers import TrainerCallback
-from trl import SFTConfig, SFTTrainer
+from runtime import training_db  # noqa: E402
 
-from runtime_common.canon import CANON, REPO_ROOT  # noqa: E402
-from runtime_common.gpu_preflight import ensure_gpu_exclusive  # noqa: E402
-
-import _bootstrap  # noqa: E402,F401  -- adds apps/ to sys.path for the shared
 # apps/runtime modules below (novel_peft, training_db). These stay in
 # apps/runtime (heavily used by the live serving engine too) and are
 # consumed as source here, not as a package dependency -- see
 # apps/factory/pyproject.toml's comment on why (torch version conflict).
 from runtime.novel_peft import set_hard_vram_cap  # noqa: E402
-from runtime import training_db  # noqa: E402
+from runtime_common.canon import CANON, REPO_ROOT  # noqa: E402
+from runtime_common.gpu_preflight import ensure_gpu_exclusive  # noqa: E402
+from transformers import AutoModelForCausalLM, AutoTokenizer, TrainerCallback
+from trl import SFTConfig, SFTTrainer
 
 METHODOLOGY = "m2"  # bf16 + Liger fused kernels; see docstring
 
@@ -91,10 +89,8 @@ DOMAINS = {
     # the same 150 steps as a solo one gives each domain a FRACTION of the
     # exposure (merged_all: 14% of an epoch vs solo's 43%), which would make
     # merging look bad for reasons that have nothing to do with merging.
-    "merged_sql": ("apps/factory/data/merged_sql/training_data_v4.jsonl",
-                   "results/adapters/m2_merged_sql_r8a128_v4"),
-    "merged_all": ("apps/factory/data/merged_all/training_data_v4.jsonl",
-                   "results/adapters/m2_merged_all_r8a128_v4"),
+    "merged_sql": ("apps/factory/data/merged_sql/training_data_v4.jsonl", "results/adapters/m2_merged_sql_r8a128_v4"),
+    "merged_all": ("apps/factory/data/merged_all/training_data_v4.jsonl", "results/adapters/m2_merged_all_r8a128_v4"),
 }
 
 # v6 = corpus v5 + geometric stopping. NOT v5: adapter v5/v5b/v5c are the failed
@@ -105,14 +101,17 @@ DOMAINS = {
 # data/financial_planning/ but every adapter since v1 is m2_financial_*. Keep the
 # stem canonical so adapter_path("financial") resolves.
 _V6_STEM = {"financial_planning": "financial"}
-_GEN_DOMAINS = ("astral", "postgresql", "duckdb", "financial_planning",
-                "python_modern", "python_web")
+_GEN_DOMAINS = ("astral", "postgresql", "duckdb", "financial_planning", "python_modern", "python_web")
 
 
 def _gen_table(corpus_ver: str, adapter_ver: str) -> dict[str, tuple[str, str]]:
-    return {d: (f"apps/factory/data/{d}/training_data_{corpus_ver}.jsonl",
-                f"results/adapters/m2_{_V6_STEM.get(d, d)}_r8a128_{adapter_ver}")
-            for d in _GEN_DOMAINS}
+    return {
+        d: (
+            f"apps/factory/data/{d}/training_data_{corpus_ver}.jsonl",
+            f"results/adapters/m2_{_V6_STEM.get(d, d)}_r8a128_{adapter_ver}",
+        )
+        for d in _GEN_DOMAINS
+    }
 
 
 # ╔════════════════════════════════════════════════════════════════════════════╗
@@ -166,18 +165,16 @@ def load_dataset_records(path: Path, completion_only: bool = True):
                 a = d["messages"][1]["content"]
             elif "text" in d and ANSWER_MARKER in d["text"]:
                 head, a = d["text"].split(ANSWER_MARKER, 1)
-                u = head[len("### Question:\n"):] if head.startswith("### Question:\n") else head
+                u = head[len("### Question:\n") :] if head.startswith("### Question:\n") else head
             else:
                 # no recoverable split -- keep it, but it cannot be masked
                 records.append({"text": d.get("text", "")})
                 continue
             if completion_only:
-                records.append({"prompt": f"### Question:\n{u}{ANSWER_MARKER}",
-                                "completion": a})
+                records.append({"prompt": f"### Question:\n{u}{ANSWER_MARKER}", "completion": a})
             else:
                 records.append({"text": f"### Question:\n{u}{ANSWER_MARKER}{a}"})
     return records
-
 
 
 class GoldilocksStoppingCallback(TrainerCallback):
@@ -262,10 +259,18 @@ class GoldilocksStoppingCallback(TrainerCallback):
     and has not been run.
     """
 
-    def __init__(self, model, alpha: int, rank: int, target: float | None,
-                 hard_ceiling: float = 0.100, every: int = 10,
-                 plateau: float | None = None, floor: float = 0.035,
-                 run_id: str | None = None):
+    def __init__(
+        self,
+        model,
+        alpha: int,
+        rank: int,
+        target: float | None,
+        hard_ceiling: float = 0.100,
+        every: int = 10,
+        plateau: float | None = None,
+        floor: float = 0.035,
+        run_id: str | None = None,
+    ):
         self.model, self.alpha, self.rank = model, alpha, rank
         self.target, self.hard_ceiling, self.every = target, hard_ceiling, every
         # floor: never call it "converged" below the precision floor, where bf16
@@ -279,8 +284,7 @@ class GoldilocksStoppingCallback(TrainerCallback):
     def _ratio(self) -> float:
         num = den = 0.0
         for mod in self.model.modules():
-            A, B, W = (getattr(mod, "lora_A", None), getattr(mod, "lora_B", None),
-                       getattr(mod, "base_layer", None))
+            A, B, W = (getattr(mod, "lora_A", None), getattr(mod, "lora_B", None), getattr(mod, "base_layer", None))
             if A is None or B is None or W is None:
                 continue
             try:
@@ -291,7 +295,7 @@ class GoldilocksStoppingCallback(TrainerCallback):
                 continue
             num += float(((b @ a) * (self.alpha / self.rank)).norm() ** 2)
             den += float(w.norm() ** 2)
-        return (num ** 0.5) / max(1e-30, den ** 0.5)
+        return (num**0.5) / max(1e-30, den**0.5)
 
     def on_step_end(self, args, state, control, **kwargs):
         if state.global_step % self.every:
@@ -299,9 +303,14 @@ class GoldilocksStoppingCallback(TrainerCallback):
         r = self._ratio()
         prev = self.trace[-1]["dw_over_w"] if self.trace else 0.0
         rel = (r - prev) / r if r > 0 else 1.0
-        self.trace.append({"step": int(state.global_step), "dw_over_w": round(r, 6),
-                           "rel_growth": round(rel, 5),
-                           "merge_err_pct": round(0.167 / max(1e-9, r), 3)})
+        self.trace.append(
+            {
+                "step": int(state.global_step),
+                "dw_over_w": round(r, 6),
+                "rel_growth": round(rel, 5),
+                "merge_err_pct": round(0.167 / max(1e-9, r), 3),
+            }
+        )
         if self.run_id:
             training_db.record_step(
                 run_id=self.run_id,
@@ -311,26 +320,36 @@ class GoldilocksStoppingCallback(TrainerCallback):
                 merge_err_pct=round(0.167 / max(1e-9, r), 3),
             )
         if state.global_step % (self.every * 5) == 0:
-            print(f"  [geometry] step {state.global_step:4d}  |dW|/|W|={r:.4f}  "
-                  f"rel_growth={rel*100:.1f}%  merge_err~{0.167 / max(1e-9, r):.2f}%",
-                  flush=True)
+            print(
+                f"  [geometry] step {state.global_step:4d}  |dW|/|W|={r:.4f}  "
+                f"rel_growth={rel * 100:.1f}%  merge_err~{0.167 / max(1e-9, r):.2f}%",
+                flush=True,
+            )
 
         if r >= self.hard_ceiling:
-            print(f"  [geometry] STOP step {state.global_step}: |dW|/|W|={r:.4f} "
-                  f"reached band ceiling {self.hard_ceiling} "
-                  f"(merge_err~{0.167 / max(1e-9, r):.2f}%)", flush=True)
+            print(
+                f"  [geometry] STOP step {state.global_step}: |dW|/|W|={r:.4f} "
+                f"reached band ceiling {self.hard_ceiling} "
+                f"(merge_err~{0.167 / max(1e-9, r):.2f}%)",
+                flush=True,
+            )
             self.stop_reason = "hard_ceiling"
             control.should_training_stop = True
         elif self.plateau and len(self.trace) >= 4 and rel < self.plateau and r >= self.floor:
-            print(f"  [geometry] STOP step {state.global_step}: converged -- "
-                  f"rel_growth {rel*100:.2f}% < {self.plateau*100:.1f}% at "
-                  f"|dW|/|W|={r:.4f} (in band, merge_err~"
-                  f"{0.167 / max(1e-9, r):.2f}%)", flush=True)
+            print(
+                f"  [geometry] STOP step {state.global_step}: converged -- "
+                f"rel_growth {rel * 100:.2f}% < {self.plateau * 100:.1f}% at "
+                f"|dW|/|W|={r:.4f} (in band, merge_err~"
+                f"{0.167 / max(1e-9, r):.2f}%)",
+                flush=True,
+            )
             self.stop_reason = "plateau"
             control.should_training_stop = True
         elif self.target and r >= self.target:
-            print(f"  [geometry] STOP step {state.global_step}: |dW|/|W|={r:.4f} "
-                  f">= fixed target {self.target}", flush=True)
+            print(
+                f"  [geometry] STOP step {state.global_step}: |dW|/|W|={r:.4f} >= fixed target {self.target}",
+                flush=True,
+            )
             self.stop_reason = "target_reached"
             control.should_training_stop = True
         return control
@@ -416,8 +435,7 @@ class InertiaSFTTrainer(SFTTrainer):
        uniform.
     """
 
-    def __init__(self, *args, lambda_inert: float = 0.0,
-                 replay_batches: list | None = None, **kwargs):
+    def __init__(self, *args, lambda_inert: float = 0.0, replay_batches: list | None = None, **kwargs):
         super().__init__(*args, **kwargs)
         self.lambda_inert = lambda_inert
         self.replay_batches = replay_batches or []
@@ -430,6 +448,7 @@ class InertiaSFTTrainer(SFTTrainer):
     def _register_inertia_hooks(self):
         for _name, module in self.model.named_modules():
             if hasattr(module, "lora_A") and hasattr(module, "lora_B") and "default" in module.lora_A:
+
                 def make_hook(mod):
                     def forward_hook(m, inp, out):
                         if not (self.model.training and self.lambda_inert > 0):
@@ -448,7 +467,9 @@ class InertiaSFTTrainer(SFTTrainer):
                         # CheckpointError. A forward hook must be a pure function
                         # of its inputs. Padding is masked in compute_loss instead.
                         self._energy[self._mode].append(delta.float().norm(dim=-1) / hn)
+
                     return forward_hook
+
                 module.register_forward_hook(make_hook(module))
 
     def _trunk(self):
@@ -475,7 +496,8 @@ class InertiaSFTTrainer(SFTTrainer):
 
         if num_items_in_batch is not None:
             loss, outputs = super().compute_loss(
-                model, inputs, return_outputs=True, num_items_in_batch=num_items_in_batch)
+                model, inputs, return_outputs=True, num_items_in_batch=num_items_in_batch
+            )
         else:
             loss, outputs = super().compute_loss(model, inputs, return_outputs=True)
 
@@ -499,21 +521,26 @@ class InertiaSFTTrainer(SFTTrainer):
                 # and nothing else. That is exactly what v5b did: training ASR rose
                 # to 1.073 while the probe measured 0.965, unchanged from v4.
                 keep = attn.bool()
-                per_layer = torch.stack([
-                    (e[keep] ** 2).mean() for e in self._energy["replay"]
-                    if e.shape == attn.shape
-                ])
+                per_layer = torch.stack(
+                    [(e[keep] ** 2).mean() for e in self._energy["replay"] if e.shape == attn.shape]
+                )
                 l_inert = per_layer.mean()
                 loss = loss + self.lambda_inert * l_inert
 
                 # Log ASR live. Discovering after a 1h run that selectivity never
                 # moved is the failure this avoids -- it should be visible by step 20.
                 with torch.no_grad():
-                    e_out = torch.stack([e[keep].mean() for e in self._energy["replay"]
-                                         if e.shape == attn.shape]).mean().item()
+                    e_out = (
+                        torch.stack([e[keep].mean() for e in self._energy["replay"] if e.shape == attn.shape])
+                        .mean()
+                        .item()
+                    )
                     tmask = inputs.get("attention_mask")
-                    tr = [e[tmask.bool()].mean() for e in self._energy["train"]
-                          if tmask is not None and e.shape == tmask.shape]
+                    tr = [
+                        e[tmask.bool()].mean()
+                        for e in self._energy["train"]
+                        if tmask is not None and e.shape == tmask.shape
+                    ]
                     e_in = torch.stack(tr).mean().item() if tr else 0.0
                     # lora_B is initialised to ZERO, so delta = B(Ah) is exactly 0
                     # at step 0 and both energies are 0.0. That also means L_inert
@@ -521,27 +548,33 @@ class InertiaSFTTrainer(SFTTrainer):
                     # the SFT loss necessarily moves first, and the penalty only
                     # engages once B leaves zero. Expected, not a fault.
                     asr = (e_in / e_out) if e_out > 0 else float("nan")
-                    self.inert_log.append({
-                        "step": int(self.state.global_step),
-                        "e_in": e_in, "e_out": e_out, "asr": asr,
-                        "l_inert": float(l_inert),
-                    })
+                    self.inert_log.append(
+                        {
+                            "step": int(self.state.global_step),
+                            "e_in": e_in,
+                            "e_out": e_out,
+                            "asr": asr,
+                            "l_inert": float(l_inert),
+                        }
+                    )
                     if self.state.global_step % 10 == 0 and e_out > 0:
-                        print(f"  [inert] step {self.state.global_step:4d}  "
-                              f"e_in={e_in:.4f} e_out={e_out:.4f}  ASR={asr:.3f}x",
-                              flush=True)
+                        print(
+                            f"  [inert] step {self.state.global_step:4d}  "
+                            f"e_in={e_in:.4f} e_out={e_out:.4f}  ASR={asr:.3f}x",
+                            flush=True,
+                        )
 
         return (loss, outputs) if return_outputs else loss
 
 
-def build_replay_batches(domain: str, tokenizer, n_batches: int = 64,
-                         batch_size: int = 2, max_len: int = 512) -> list:
+def build_replay_batches(domain: str, tokenizer, n_batches: int = 64, batch_size: int = 2, max_len: int = 512) -> list:
     """Out-of-domain replay batches drawn from the OTHER domains' corpora.
 
     This is the token set L_inert is computed on. It must NOT overlap the training
     domain -- that was the entire defect in the first version.
     """
     import random
+
     texts = []
     for other, (rel, _out) in DOMAINS.items():
         if other == domain:
@@ -567,7 +600,7 @@ def build_replay_batches(domain: str, tokenizer, n_batches: int = 64,
     random.Random(0).shuffle(texts)
     batches = []
     for i in range(n_batches):
-        chunk = texts[i * batch_size:(i + 1) * batch_size]
+        chunk = texts[i * batch_size : (i + 1) * batch_size]
         if len(chunk) < batch_size:
             break
         # padding="longest", NOT "max_length". Corpus records run ~120-170 tokens;
@@ -576,24 +609,20 @@ def build_replay_batches(domain: str, tokenizer, n_batches: int = 64,
         # <pad>. That is free -- it costs the SFT loss nothing -- so training ASR
         # rose to 1.073 while the probe measured 0.965, unchanged from v4.
         # The attention mask below is the real fix; this just avoids the waste.
-        enc = tokenizer(chunk, return_tensors="pt", padding="longest",
-                        truncation=True, max_length=max_len)
-        batches.append({"input_ids": enc["input_ids"],
-                        "attention_mask": enc["attention_mask"]})
-    print(f"  [replay] built {len(batches)} out-of-domain batches "
-          f"from {len(texts)} records (domain {domain!r} EXCLUDED)")
+        enc = tokenizer(chunk, return_tensors="pt", padding="longest", truncation=True, max_length=max_len)
+        batches.append({"input_ids": enc["input_ids"], "attention_mask": enc["attention_mask"]})
+    print(
+        f"  [replay] built {len(batches)} out-of-domain batches from {len(texts)} records (domain {domain!r} EXCLUDED)"
+    )
     return batches
 
 
 def main():
-    ap = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     # union of both tables: --v6 swaps DOMAINS for DOMAINS_V6, but argparse
     # validates BEFORE that happens, so restricting to the v4 keys rejected
     # python_modern/python_web with exit 2 before the model ever loaded.
-    ap.add_argument("--domain", required=True,
-                    choices=sorted(set(DOMAINS) | set(DOMAINS_V6) | set(DOMAINS_V7)))
+    ap.add_argument("--domain", required=True, choices=sorted(set(DOMAINS) | set(DOMAINS_V6) | set(DOMAINS_V7)))
     ap.add_argument("--model-id", default="Qwen/Qwen3.5-4B")
     ap.add_argument("--rank", type=int, default=8)
     ap.add_argument("--alpha", type=int, default=128)
@@ -614,66 +643,95 @@ def main():
         "--dataset",
         default=None,
         help="override the domain's training file (e.g. a corpus revision). Recorded in "
-             "regime.json so an adapter never loses track of what it was trained on.",
+        "regime.json so an adapter never loses track of what it was trained on.",
     )
-    ap.add_argument("--max-steps", type=int, default=150,
-                    help="SAFETY CAP when --stop-at-dw-over-w is set, not a target. "
-                         "A fixed step count gave the v5 corpora 0.37-0.99 epochs "
-                         "depending on size -- a confound in every cross-domain "
-                         "comparison. Prefer the geometric stop.")
-    ap.add_argument("--v4", action="store_true",
-                    help="explicit opt-in to LEGACY v4 corpus/adapter version. "
-                         "The default is CANON.ADAPTER_VERSION (currently "
-                         f"{CANON.ADAPTER_VERSION!r}) -- pass this only for a "
-                         "deliberate, labelled ablation against the legacy version.")
-    ap.add_argument("--v6", action="store_true",
-                    help="explicit opt-in to LEGACY adapter v6 <- corpus v5 "
-                         "(disposition + command data, deduplicated) -> "
-                         "results/adapters/*_v6. The default is CANON.ADAPTER_VERSION "
-                         f"(currently {CANON.ADAPTER_VERSION!r}).")
-    ap.add_argument("--v7", action="store_true",
-                    help="adapter v7 <- corpus v6 (round-2 rebuild: astral command "
-                         "families, postgres asyncpg, duckdb analytics, python "
-                         "capability records) -> results/adapters/*_v7. This is "
-                         "already the default when CANON.ADAPTER_VERSION == 'v7' -- "
-                         "pass explicitly only to be unambiguous in a script.")
-    ap.add_argument("--stop-at-dw-over-w", type=float, default=None,
-                    help="Stop when ||dW||/||W|| reaches this. 0.075 matches what the "
-                         "v4 adapters landed on (0.0754-0.0758) and sits mid-band with "
-                         "~2.2%% predicted merge error. The Goldilocks band is "
-                         "[0.035, 0.100]; below it bf16 truncates the delta, above "
-                         "0.150 base representations are overwritten. See "
-                         "docs/THE_FACTORY_FINE_TUNING_AND_GEOMETRY.md Ch.4.")
-    ap.add_argument("--stop-at-plateau", type=float, default=None,
-                    help="Stop when relative growth (increment/current) falls below "
-                         "this, i.e. training has converged -- 0.02 is a reasonable "
-                         "start. This is the ON-THE-FLY criterion: it adapts per "
-                         "corpus, where a fixed |dW|/|W| target does not. Combined "
-                         "with the 0.100 band ceiling, whichever fires first wins.")
-    ap.add_argument("--geometry-every", type=int, default=10,
-                    help="steps between ||dW||/||W|| checks")
+    ap.add_argument(
+        "--max-steps",
+        type=int,
+        default=150,
+        help="SAFETY CAP when --stop-at-dw-over-w is set, not a target. "
+        "A fixed step count gave the v5 corpora 0.37-0.99 epochs "
+        "depending on size -- a confound in every cross-domain "
+        "comparison. Prefer the geometric stop.",
+    )
+    ap.add_argument(
+        "--v4",
+        action="store_true",
+        help="explicit opt-in to LEGACY v4 corpus/adapter version. "
+        "The default is CANON.ADAPTER_VERSION (currently "
+        f"{CANON.ADAPTER_VERSION!r}) -- pass this only for a "
+        "deliberate, labelled ablation against the legacy version.",
+    )
+    ap.add_argument(
+        "--v6",
+        action="store_true",
+        help="explicit opt-in to LEGACY adapter v6 <- corpus v5 "
+        "(disposition + command data, deduplicated) -> "
+        "results/adapters/*_v6. The default is CANON.ADAPTER_VERSION "
+        f"(currently {CANON.ADAPTER_VERSION!r}).",
+    )
+    ap.add_argument(
+        "--v7",
+        action="store_true",
+        help="adapter v7 <- corpus v6 (round-2 rebuild: astral command "
+        "families, postgres asyncpg, duckdb analytics, python "
+        "capability records) -> results/adapters/*_v7. This is "
+        "already the default when CANON.ADAPTER_VERSION == 'v7' -- "
+        "pass explicitly only to be unambiguous in a script.",
+    )
+    ap.add_argument(
+        "--stop-at-dw-over-w",
+        type=float,
+        default=None,
+        help="Stop when ||dW||/||W|| reaches this. 0.075 matches what the "
+        "v4 adapters landed on (0.0754-0.0758) and sits mid-band with "
+        "~2.2%% predicted merge error. The Goldilocks band is "
+        "[0.035, 0.100]; below it bf16 truncates the delta, above "
+        "0.150 base representations are overwritten. See "
+        "docs/THE_FACTORY_FINE_TUNING_AND_GEOMETRY.md Ch.4.",
+    )
+    ap.add_argument(
+        "--stop-at-plateau",
+        type=float,
+        default=None,
+        help="Stop when relative growth (increment/current) falls below "
+        "this, i.e. training has converged -- 0.02 is a reasonable "
+        "start. This is the ON-THE-FLY criterion: it adapts per "
+        "corpus, where a fixed |dW|/|W| target does not. Combined "
+        "with the 0.100 band ceiling, whichever fires first wins.",
+    )
+    ap.add_argument("--geometry-every", type=int, default=10, help="steps between ||dW||/||W|| checks")
     ap.add_argument("--lr", type=float, default=2e-4)
     ap.add_argument("--vram-cap-gb", type=float, default=22.0)
     ap.add_argument("--no-liger", action="store_true", help="disable Liger fused kernels (A/B baseline)")
-    ap.add_argument("--no-completion-only", action="store_true",
-                    help="train on the FULL sequence (prompt+answer). The pre-2026-08-18 "
-                         "behaviour, kept only as an A/B baseline.")
-    ap.add_argument("--out", default=None, help="override the default output dir")
-    ap.add_argument("--seed", type=int, default=42,
-                    help="RNG seed. Until this existed the trainer seeded NOTHING: "
-                         "lora_A's init drew from an unseeded global RNG, so every run "
-                         "landed in a different rank-8 subspace and no adapter in this "
-                         "repo was reproducible. Two runs of one identical config "
-                         "measured 22.40 and 15.94 on activation scale and stopped at "
-                         "step 130 vs 150.")
     ap.add_argument(
-        "--logging-steps", type=int, default=10,
-        help="loss logging interval. Use 1 to capture a per-step convergence curve; "
-             "the default 10 gives only 15 points on a 150-step run, which is too "
-             "coarse to locate a plateau or to drive any early-stopping rule.",
+        "--no-completion-only",
+        action="store_true",
+        help="train on the FULL sequence (prompt+answer). The pre-2026-08-18 behaviour, kept only as an A/B baseline.",
+    )
+    ap.add_argument("--out", default=None, help="override the default output dir")
+    ap.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="RNG seed. Until this existed the trainer seeded NOTHING: "
+        "lora_A's init drew from an unseeded global RNG, so every run "
+        "landed in a different rank-8 subspace and no adapter in this "
+        "repo was reproducible. Two runs of one identical config "
+        "measured 22.40 and 15.94 on activation scale and stopped at "
+        "step 130 vs 150.",
     )
     ap.add_argument(
-        "--loss-curve-out", default=None,
+        "--logging-steps",
+        type=int,
+        default=10,
+        help="loss logging interval. Use 1 to capture a per-step convergence curve; "
+        "the default 10 gives only 15 points on a 150-step run, which is too "
+        "coarse to locate a plateau or to drive any early-stopping rule.",
+    )
+    ap.add_argument(
+        "--loss-curve-out",
+        default=None,
         help="dump the full per-step loss history to this JSON path",
     )
     ap.add_argument(
@@ -681,16 +739,21 @@ def main():
         type=float,
         default=0.0,
         help="Activation-space inertia penalty weight (Selective Silence). Penalizes "
-             "||BAh||/||h|| on OUT-OF-DOMAIN replay tokens drawn from the other "
-             "domains' corpora. 0 = off. Try 0.05 first and watch the [inert] ASR "
-             "line: it must RISE. If e_in falls as fast as e_out, lambda is too high "
-             "and you are just shrinking alpha again.",
+        "||BAh||/||h|| on OUT-OF-DOMAIN replay tokens drawn from the other "
+        "domains' corpora. 0 = off. Try 0.05 first and watch the [inert] ASR "
+        "line: it must RISE. If e_in falls as fast as e_out, lambda is too high "
+        "and you are just shrinking alpha again.",
     )
-    ap.add_argument("--inert-replay-batches", type=int, default=64,
-                    help="how many out-of-domain replay batches to pre-tokenize")
-    ap.add_argument("--inert-replay-len", type=int, default=512,
-                    help="replay sequence length. Short is fine -- this measures "
-                         "whether the adapter FIRES, not whether it answers well.")
+    ap.add_argument(
+        "--inert-replay-batches", type=int, default=64, help="how many out-of-domain replay batches to pre-tokenize"
+    )
+    ap.add_argument(
+        "--inert-replay-len",
+        type=int,
+        default=512,
+        help="replay sequence length. Short is fine -- this measures "
+        "whether the adapter FIRES, not whether it answers well.",
+    )
     ap.add_argument(
         "--gradient-checkpointing",
         action="store_true",
@@ -700,13 +763,16 @@ def main():
     ap.add_argument("--max-length", type=int, default=512, help="maximum sequence length (default: 512)")
     ap.add_argument("--batch-size", type=int, default=2, help="per-device training batch size (default: 2)")
     ap.add_argument("--grad-accum", type=int, default=2, help="gradient accumulation steps (default: 2)")
-    ap.add_argument("--qlora", action="store_true", help="use 4-bit NF4 base model for training 9B/27B models on 24GB VRAM")
+    ap.add_argument(
+        "--qlora", action="store_true", help="use 4-bit NF4 base model for training 9B/27B models on 24GB VRAM"
+    )
     args = ap.parse_args()
 
     # Seed BEFORE anything constructs a tensor. peft builds lora_A with kaiming init
     # off the global RNG the moment get_peft_model() runs, so seeding after that point
     # would not make the subspace reproducible.
     from transformers import set_seed
+
     set_seed(args.seed)
 
     # Version selection: default to CANON.ADAPTER_VERSION (the single source of
@@ -716,23 +782,25 @@ def main():
     # deliberate, labelled ablation against a non-canonical version.
     _version_flags = [v for v in ("v4", "v6", "v7") if getattr(args, v)]
     if len(_version_flags) > 1:
-        raise SystemExit(f"  pass at most one of --v4/--v6/--v7 "
-                         f"(got {', '.join('--' + v for v in _version_flags)})")
+        raise SystemExit(f"  pass at most one of --v4/--v6/--v7 (got {', '.join('--' + v for v in _version_flags)})")
     version = _version_flags[0] if _version_flags else CANON.ADAPTER_VERSION
     _version_tables = {"v4": DOMAINS, "v6": DOMAINS_V6, "v7": DOMAINS_V7}
     if version not in _version_tables:
-        raise SystemExit(f"  CANON.ADAPTER_VERSION={CANON.ADAPTER_VERSION!r} has no "
-                         f"matching table in this script; pass --v4/--v6/--v7 explicitly "
-                         f"or add a DOMAINS_{version.upper()} table.")
+        raise SystemExit(
+            f"  CANON.ADAPTER_VERSION={CANON.ADAPTER_VERSION!r} has no "
+            f"matching table in this script; pass --v4/--v6/--v7 explicitly "
+            f"or add a DOMAINS_{version.upper()} table."
+        )
     table = _version_tables[version]
     if args.domain not in table:
-        raise SystemExit(f"domain {args.domain!r} not available in "
-                         f"{version} table: {sorted(table)}")
+        raise SystemExit(f"domain {args.domain!r} not available in {version} table: {sorted(table)}")
     data_rel, out_rel = table[args.domain]
     if args.domain in FAIR_STEPS and args.max_steps == 150:
         args.max_steps = FAIR_STEPS[args.domain]
-        print(f"  [fair-steps] {args.domain}: 150 -> {args.max_steps} steps so each "
-              f"merged domain gets the same exposure a solo adapter gets")
+        print(
+            f"  [fair-steps] {args.domain}: 150 -> {args.max_steps} steps so each "
+            f"merged domain gets the same exposure a solo adapter gets"
+        )
     if args.dataset:
         data_rel = args.dataset
     dataset_path = REPO_ROOT / data_rel
@@ -744,7 +812,9 @@ def main():
 
     set_hard_vram_cap(args.vram_cap_gb)
     dev = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
-    print(f"TRAINING {'QLORA (4-bit base)' if args.qlora else 'bf16 STOCK LORA'} [{args.domain}] r={args.rank} alpha={args.alpha} on {dev}")
+    print(
+        f"TRAINING {'QLORA (4-bit base)' if args.qlora else 'bf16 STOCK LORA'} [{args.domain}] r={args.rank} alpha={args.alpha} on {dev}"
+    )
     print(f"  data: {dataset_path}")
     print(f"  out:  {out_dir}")
     print("=" * 88)
@@ -775,8 +845,9 @@ def main():
         print("Liger fused kernels applied (fused_linear_cross_entropy, rms_norm, swiglu; rope=off)")
 
     if args.qlora:
-        from transformers import BitsAndBytesConfig
         from peft import prepare_model_for_kbit_training
+        from transformers import BitsAndBytesConfig
+
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",
@@ -838,11 +909,15 @@ def main():
     records = load_dataset_records(dataset_path, completion_only=completion_only)
     n_split = sum(1 for r in records if "prompt" in r)
     print(f"Loaded {len(records)} records from {dataset_path}")
-    print(f"  prompt/completion split: {n_split}/{len(records)} "
-          f"({'completion-only loss ON' if completion_only else 'FULL-SEQUENCE loss'})")
+    print(
+        f"  prompt/completion split: {n_split}/{len(records)} "
+        f"({'completion-only loss ON' if completion_only else 'FULL-SEQUENCE loss'})"
+    )
     if completion_only and n_split < len(records):
-        print(f"  WARNING: {len(records) - n_split} records had no '### Answer:' marker "
-              "and will train on the full sequence")
+        print(
+            f"  WARNING: {len(records) - n_split} records had no '### Answer:' marker "
+            "and will train on the full sequence"
+        )
     train_dataset = Dataset.from_list(records)
 
     sft_config = SFTConfig(
@@ -867,8 +942,8 @@ def main():
     if args.lambda_inert > 0:
         print(f"  L_inert ACTIVE lambda={args.lambda_inert} -- building out-of-domain replay")
         replay_batches = build_replay_batches(
-            args.domain, tokenizer,
-            n_batches=args.inert_replay_batches, max_len=args.inert_replay_len)
+            args.domain, tokenizer, n_batches=args.inert_replay_batches, max_len=args.inert_replay_len
+        )
 
     run_id = training_db.start_run(
         domain=args.domain,
@@ -901,12 +976,19 @@ def main():
     geom_cb = None
     if args.stop_at_dw_over_w or args.stop_at_plateau:
         geom_cb = GoldilocksStoppingCallback(
-            model, args.alpha, args.rank, args.stop_at_dw_over_w,
-            every=args.geometry_every, plateau=args.stop_at_plateau,
-            run_id=run_id)
+            model,
+            args.alpha,
+            args.rank,
+            args.stop_at_dw_over_w,
+            every=args.geometry_every,
+            plateau=args.stop_at_plateau,
+            run_id=run_id,
+        )
         trainer.add_callback(geom_cb)
-        print(f"  [geometry] geometric stop ACTIVE: train until |dW|/|W| >= "
-              f"{args.stop_at_dw_over_w} (safety cap {args.max_steps} steps)")
+        print(
+            f"  [geometry] geometric stop ACTIVE: train until |dW|/|W| >= "
+            f"{args.stop_at_dw_over_w} (safety cap {args.max_steps} steps)"
+        )
 
     # VERIFY THE MASK IS REAL, do not assume it.
     # §13 in docs/DECISIONS.md records an entire training run whose
@@ -922,12 +1004,19 @@ def main():
         # a prompt-masked batch must have SOME masked and SOME unmasked positions
         assert n_masked > 0, (
             "completion_only_loss=True but NO labels are -100 -- the prompt is not "
-            "being masked and the adapter is still training on question text")
+            "being masked and the adapter is still training on question text"
+        )
         assert n_masked < n_total, "every label masked -- nothing left to learn from"
-        mask_report = {"checked": True, "masked_frac": round(n_masked / n_total, 4),
-                       "masked": n_masked, "total": n_total}
-        print(f"  MASK VERIFIED: {n_masked}/{n_total} label positions are -100 "
-              f"({n_masked / n_total:.1%} of the batch is prompt, excluded from loss)")
+        mask_report = {
+            "checked": True,
+            "masked_frac": round(n_masked / n_total, 4),
+            "masked": n_masked,
+            "total": n_total,
+        }
+        print(
+            f"  MASK VERIFIED: {n_masked}/{n_total} label positions are -100 "
+            f"({n_masked / n_total:.1%} of the batch is prompt, excluded from loss)"
+        )
 
     # POST-TRAIN GEOMETRY GATE (pre-flight SVD probe + times-above-chance).
     # Both probes compare TWO adapters, so they can only run once this one exists.
@@ -947,15 +1036,18 @@ def main():
             ret = sum(m["retained_energy_pct"] for m in res.values()) / len(res)
             fl = sum(m["random_floor_pct"] for m in res.values()) / len(res)
             return ret, fl, ret / max(1e-30, fl)
+
         out = {}
         for sib in sorted((REPO_ROOT / "results/adapters").glob("m2_*")):
             if sib.resolve() == new_dir.resolve() or not (sib / "adapter_model.safetensors").exists():
                 continue
             try:
                 ret, floor, ratio = summarise(new_dir, sib, 32)
-                out[sib.name] = {"retained_pct": round(ret, 3),
-                                 "random_floor_pct": round(floor, 3),
-                                 "times_above_chance": round(ratio, 3)}
+                out[sib.name] = {
+                    "retained_pct": round(ret, 3),
+                    "random_floor_pct": round(floor, 3),
+                    "times_above_chance": round(ratio, 3),
+                }
             except Exception as ex:
                 out[sib.name] = {"error": f"{type(ex).__name__}"}
         return out
@@ -989,11 +1081,14 @@ def main():
                 pairs += 1
             if pairs == 0:
                 return {"error": "no lora/base pairs found"}
-            ratio = (num ** 0.5) / max(1e-30, den ** 0.5)
+            ratio = (num**0.5) / max(1e-30, den**0.5)
             # law fitted across the 5-point alpha sweep: err_pct * |dW|/|W| ~= 0.167
-            return {"pairs": pairs, "dw_over_w": round(ratio, 6),
-                    "predicted_merge_err_pct": round(0.167 / max(1e-9, ratio), 4),
-                    "note": "|dW|/|W| is linear in alpha; divide/multiply to re-derive"}
+            return {
+                "pairs": pairs,
+                "dw_over_w": round(ratio, 6),
+                "predicted_merge_err_pct": round(0.167 / max(1e-9, ratio), 4),
+                "note": "|dW|/|W| is linear in alpha; divide/multiply to re-derive",
+            }
         except Exception as ex:
             return {"error": f"{type(ex).__name__}: {ex}"}
 
@@ -1020,8 +1115,16 @@ def main():
     prec = precision_report()
     final_dw_w = prec.get("dw_over_w") if isinstance(prec, dict) else None
     pred_merge_err = prec.get("predicted_merge_err_pct") if isinstance(prec, dict) else None
-    stop_reason = geom_cb.stop_reason if (geom_cb and geom_cb.stop_reason) else ("max_steps" if stopped_step >= args.max_steps else "completed")
-    runtime_sec = float(train_result.metrics.get("train_runtime", 0.0)) if hasattr(train_result, "metrics") and "train_runtime" in train_result.metrics else None
+    stop_reason = (
+        geom_cb.stop_reason
+        if (geom_cb and geom_cb.stop_reason)
+        else ("max_steps" if stopped_step >= args.max_steps else "completed")
+    )
+    runtime_sec = (
+        float(train_result.metrics.get("train_runtime", 0.0))
+        if hasattr(train_result, "metrics") and "train_runtime" in train_result.metrics
+        else None
+    )
 
     training_db.finish_run(
         run_id=run_id,
@@ -1067,9 +1170,7 @@ def main():
         # Emits dW = scaling*(B_trained@A_trained - B0@A0) refactorised as a plain
         # LoRA on pristine W0 -- which is what WeightFoldingEngine requires. The
         # refactorisation of a difference of two rank-r products is rank 2r.
-        model.save_pretrained(
-            str(out_dir), path_initial_model_for_weight_conversion=str(init_adapter_dir)
-        )
+        model.save_pretrained(str(out_dir), path_initial_model_for_weight_conversion=str(init_adapter_dir))
     else:
         model.save_pretrained(str(out_dir))
     tokenizer.save_pretrained(str(out_dir))
@@ -1082,32 +1183,48 @@ def main():
         # The trace lives next to the adapter: "what geometry did this stop at, and
         # after how many steps" must be answerable from the artifact, not from a
         # log that scrolled away.
-        (out_dir / "geometry_trace.json").write_text(json.dumps({
-            "target_dw_over_w": args.stop_at_dw_over_w,
-            "stopped_at_step": geom_cb.trace[-1]["step"],
-            "final": geom_cb.trace[-1],
-            "goldilocks_band": [0.035, 0.100],
-            "trace": geom_cb.trace,
-        }, indent=2))
+        (out_dir / "geometry_trace.json").write_text(
+            json.dumps(
+                {
+                    "target_dw_over_w": args.stop_at_dw_over_w,
+                    "stopped_at_step": geom_cb.trace[-1]["step"],
+                    "final": geom_cb.trace[-1],
+                    "goldilocks_band": [0.035, 0.100],
+                    "trace": geom_cb.trace,
+                },
+                indent=2,
+            )
+        )
         f = geom_cb.trace[-1]
-        print(f"  [geometry] FINAL |dW|/|W|={f['dw_over_w']} at step {f['step']} "
-              f"(merge_err~{f['merge_err_pct']}%) -> geometry_trace.json")
+        print(
+            f"  [geometry] FINAL |dW|/|W|={f['dw_over_w']} at step {f['step']} "
+            f"(merge_err~{f['merge_err_pct']}%) -> geometry_trace.json"
+        )
 
     if trainer.inert_log:
-        (out_dir / "inert_trace.json").write_text(json.dumps({
-            "lambda_inert": args.lambda_inert,
-            "replay_domains": [d for d in DOMAINS if d != args.domain],
-            "replay_batches": len(replay_batches),
-            "trace": trainer.inert_log,
-            "final": trainer.inert_log[-1],
-        }, indent=2))
+        (out_dir / "inert_trace.json").write_text(
+            json.dumps(
+                {
+                    "lambda_inert": args.lambda_inert,
+                    "replay_domains": [d for d in DOMAINS if d != args.domain],
+                    "replay_batches": len(replay_batches),
+                    "trace": trainer.inert_log,
+                    "final": trainer.inert_log[-1],
+                },
+                indent=2,
+            )
+        )
         f = trainer.inert_log[-1]
-        print(f"  [inert] FINAL e_in={f['e_in']:.4f} e_out={f['e_out']:.4f} "
-              f"ASR={f['asr']:.3f}x  -> {out_dir / 'inert_trace.json'}")
+        print(
+            f"  [inert] FINAL e_in={f['e_in']:.4f} e_out={f['e_out']:.4f} "
+            f"ASR={f['asr']:.3f}x  -> {out_dir / 'inert_trace.json'}"
+        )
         if not (f["asr"] > 1.0):
-            print("  [inert] WARNING: ASR did not exceed 1.0 -- the adapter is NOT "
-                  "selective. Check whether e_in fell alongside e_out (lambda too "
-                  "high, you are shrinking alpha) before trusting this adapter.")
+            print(
+                "  [inert] WARNING: ASR did not exceed 1.0 -- the adapter is NOT "
+                "selective. Check whether e_in fell alongside e_out (lambda too "
+                "high, you are shrinking alpha) before trusting this adapter."
+            )
     # Record the regime in the adapter itself. 0 of 69 existing adapters do this,
     # so provenance was previously recoverable only from directory-layout side
     # effects (export_adapter.py leaves no checkpoints/ subdir; this one does).

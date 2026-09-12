@@ -14,7 +14,6 @@ import json
 import re
 import sys
 import time
-from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Inline the routing math here so we never import adapter_stacker
@@ -23,46 +22,71 @@ from pathlib import Path
 
 DOMAIN_PATTERNS = {
     "postgresql": [
-        r"postgres", r"psql", r"asyncpg", r"pgvector", r"hnsw",
-        r"cosine distance", r"vector\(", r"<=>",
+        r"postgres",
+        r"psql",
+        r"asyncpg",
+        r"pgvector",
+        r"hnsw",
+        r"cosine distance",
+        r"vector\(",
+        r"<=>",
     ],
     "python_web": [
-        r"fastapi", r"lifespan", r"endpoint", r"router", r"pydantic",
-        r"asynccontextmanager", r"starlette",
+        r"fastapi",
+        r"lifespan",
+        r"endpoint",
+        r"router",
+        r"pydantic",
+        r"asynccontextmanager",
+        r"starlette",
     ],
     "duckdb": [
-        r"duckdb", r"parquet", r"qualify", r"olap", r"columnar",
-        r"window function", r"percentile",
+        r"duckdb",
+        r"parquet",
+        r"qualify",
+        r"olap",
+        r"columnar",
+        r"window function",
+        r"percentile",
     ],
     "astral": [r"uv", r"ruff", r"pyproject\.toml", r"linter", r"formatter", r"workspace"],
     "python_modern": [
-        r"pep\s*695", r"generics", r"type parameter", r"type alias",
-        r"class\s+\w+\[T\]", r"def\s+\w+\[T\]",
+        r"pep\s*695",
+        r"generics",
+        r"type parameter",
+        r"type alias",
+        r"class\s+\w+\[T\]",
+        r"def\s+\w+\[T\]",
     ],
     "financial_planning": [
-        r"var", r"cvar", r"monte carlo", r"volatility", r"wealth",
-        r"expected return", r"portfolio risk",
+        r"var",
+        r"cvar",
+        r"monte carlo",
+        r"volatility",
+        r"wealth",
+        r"expected return",
+        r"portfolio risk",
     ],
 }
 
 DOMAIN_PROMPTS = {
-    "postgresql":       "PostgreSQL 17 pgvector HNSW (<=>) & asyncpg parameterized pooling",
-    "python_web":       "FastAPI @asynccontextmanager lifespan & Pydantic v2 ConfigDict",
-    "duckdb":           "DuckDB vectorized SQL with native QUALIFY window analytics",
-    "astral":           "Astral uv workspace & strict [tool.ruff.lint] tables",
-    "python_modern":    "Python 3.12 PEP 695 type parameter syntax without legacy TypeVar",
+    "postgresql": "PostgreSQL 17 pgvector HNSW (<=>) & asyncpg parameterized pooling",
+    "python_web": "FastAPI @asynccontextmanager lifespan & Pydantic v2 ConfigDict",
+    "duckdb": "DuckDB vectorized SQL with native QUALIFY window analytics",
+    "astral": "Astral uv workspace & strict [tool.ruff.lint] tables",
+    "python_modern": "Python 3.12 PEP 695 type parameter syntax without legacy TypeVar",
     "financial_planning": "Vectorized numpy Value-at-Risk (VaR) and Conditional VaR (CVaR)",
 }
 
 # Maps (frozenset of active domains) → the pre-registered stacked model ID.
 # Single-domain → single specialist. Multi-domain → pre-fused stack or auto router.
 _STACK_MODEL_MAP: dict[frozenset[str], str] = {
-    frozenset({"postgresql"}):                             "qwen3.8-27b-postgresql",
-    frozenset({"python_web"}):                             "qwen3.8-27b-fastapi",
-    frozenset({"duckdb"}):                                 "qwen3.8-27b-duckdb",
-    frozenset({"financial_planning"}):                     "qwen3.8-27b-financial",
-    frozenset({"postgresql", "python_web"}):               "ornith-1.5-stack-pg-web",
-    frozenset({"postgresql", "duckdb", "python_web"}):     "ornith-1.5-stack-pg-duck-web",
+    frozenset({"postgresql"}): "qwen3.8-27b-postgresql",
+    frozenset({"python_web"}): "qwen3.8-27b-fastapi",
+    frozenset({"duckdb"}): "qwen3.8-27b-duckdb",
+    frozenset({"financial_planning"}): "qwen3.8-27b-financial",
+    frozenset({"postgresql", "python_web"}): "ornith-1.5-stack-pg-web",
+    frozenset({"postgresql", "duckdb", "python_web"}): "ornith-1.5-stack-pg-duck-web",
 }
 
 _FALLBACK_MULTI_MODEL = "qwen3.8-27b-auto"
@@ -86,8 +110,7 @@ def route(prompt: str) -> dict:
             "recommended_model_id": _FALLBACK_GENERAL_MODEL,
             "active_domains": [],
             "system_prompt_prefix": (
-                "You are an expert autonomous software engineer "
-                "writing clean modern Python code."
+                "You are an expert autonomous software engineer writing clean modern Python code."
             ),
             "rationale": "No domain-specific patterns detected — using general engine.",
             "routing_latency_ms": round((time.perf_counter() - t0) * 1000.0, 2),
@@ -121,9 +144,7 @@ def route(prompt: str) -> dict:
             + "\n".join(active_specs)
             + "\nStrictly follow all modern conventions across all active domains."
         )
-        detected_str = ", ".join(
-            f"{d} (γ={w:.2f})" for d, w in sorted(weights.items(), key=lambda x: -x[1])
-        )
+        detected_str = ", ".join(f"{d} (γ={w:.2f})" for d, w in sorted(weights.items(), key=lambda x: -x[1]))
         rationale = f"Multi-domain task detected: {detected_str}."
     else:
         domain = next(iter(weights))

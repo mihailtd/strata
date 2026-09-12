@@ -32,8 +32,8 @@ from __future__ import annotations
 import asyncio
 import os
 import re
-import time
 import threading
+import time
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -45,8 +45,6 @@ from fastapi import Body, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
-from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenizerBase
-
 from runtime import gpu_preflight
 from runtime.canon import (
     CANON,
@@ -63,7 +61,7 @@ from runtime.fused_norm import (
 )
 from runtime.novel_peft import FoldableExpert, WeightFoldingEngine, set_hard_vram_cap
 from runtime.range_statistic_gate import RangeStatisticGate
-
+from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenizerBase
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -132,6 +130,7 @@ server_telemetry: dict[str, Any] = {
 # VRAM helpers
 # ---------------------------------------------------------------------------
 
+
 def get_real_vram_allocated_gb() -> float:
     try:
         sysfs = gpu_preflight.get_sysfs_vram_info()
@@ -151,6 +150,7 @@ def get_real_vram_allocated_gb() -> float:
 # ---------------------------------------------------------------------------
 # Engine lifecycle
 # ---------------------------------------------------------------------------
+
 
 async def load_inference_engine(model_id: str = DEFAULT_MODEL_ID) -> dict[str, Any]:
     """Loads base model + expert adapters + CUDA graphs into VRAM."""
@@ -178,11 +178,7 @@ async def load_inference_engine(model_id: str = DEFAULT_MODEL_ID) -> dict[str, A
 
     set_hard_vram_cap(22.0)
 
-    compute_dtype = (
-        torch.bfloat16
-        if torch.cuda.is_available() and torch.cuda.is_bf16_supported()
-        else torch.float16
-    )
+    compute_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
 
     print(f"[IPWF] Loading base model {model_id}...")
     base_model = AutoModelForCausalLM.from_pretrained(
@@ -202,9 +198,7 @@ async def load_inference_engine(model_id: str = DEFAULT_MODEL_ID) -> dict[str, A
 
     fold_norms_enabled = (os.environ.get("FLASH_NORM_FOLD", "1") != "0") and not is_9b
     folded_norm_count = (
-        fold_rmsnorm_into_linear(base_model, fold_weights=fold_norms_enabled)
-        if fold_norms_enabled
-        else 0
+        fold_rmsnorm_into_linear(base_model, fold_weights=fold_norms_enabled) if fold_norms_enabled else 0
     )
     if folded_norm_count > 0:
         print(f"[IPWF] FlashNorm: Folded {folded_norm_count} RMSNorm weights into Linears.")
@@ -215,11 +209,7 @@ async def load_inference_engine(model_id: str = DEFAULT_MODEL_ID) -> dict[str, A
     all_experts: list[FoldableExpert] = []
 
     for d in domains:
-        ad_dir = (
-            REPO_ROOT / "results" / "adapters" / f"m2_{d}_r8a128_v7_9b"
-            if is_9b
-            else adapter_path(d)
-        )
+        ad_dir = REPO_ROOT / "results" / "adapters" / f"m2_{d}_r8a128_v7_9b" if is_9b else adapter_path(d)
         if ad_dir.exists():
             exp = FoldableExpert.from_dir(ad_dir, name=d)
             expert_dict[d] = exp
@@ -235,10 +225,12 @@ async def load_inference_engine(model_id: str = DEFAULT_MODEL_ID) -> dict[str, A
     folding_engine = WeightFoldingEngine(base_model, all_experts, keep_pristine=True)
 
     from runtime.dynamic_team_router import RiemannianTeamRouter
+
     team_router = RiemannianTeamRouter(experts=expert_dict, domains=list(expert_dict.keys()))
     print(f"[IPWF] RiemannianTeamRouter initialized with {len(expert_dict)} experts.")
 
     from runtime.notears_causal_scheduler import NotearsCausalScheduler
+
     causal_scheduler = NotearsCausalScheduler(experts=list(expert_dict.keys()))
     model_state["causal_scheduler"] = causal_scheduler
     print("[IPWF] NotearsCausalScheduler active (predictive pre-folding).")
@@ -265,9 +257,7 @@ async def load_inference_engine(model_id: str = DEFAULT_MODEL_ID) -> dict[str, A
         folding_engine.activate(all_experts[0])
 
     assert isinstance(tokenizer, PreTrainedTokenizerBase)
-    graph_decoder = FoldedCudaGraphDecoder(
-        base_model, tokenizer, max_seq_len=max_seq_len, device=base_model.device
-    )
+    graph_decoder = FoldedCudaGraphDecoder(base_model, tokenizer, max_seq_len=max_seq_len, device=base_model.device)
 
     dummy_tokens = tokenizer(
         "<|im_start|>user\nWarmup prompt\n<|im_end|>\n<|im_start|>assistant\n",
@@ -286,11 +276,16 @@ async def load_inference_engine(model_id: str = DEFAULT_MODEL_ID) -> dict[str, A
         try:
             from runtime.bucketed_speculative import BucketedSpeculativeDecoder
             from runtime.mtp_draft import Qwen35MTPDraftHead
+
             draft_head = Qwen35MTPDraftHead(base_model, model_id)
             folding_engine.register_draft_head(draft_head)
             spec_decoder = BucketedSpeculativeDecoder(
-                base_model, tokenizer, draft_head, k=spec_k,
-                max_seq_len=spec_max_len, device=base_model.device,
+                base_model,
+                tokenizer,
+                draft_head,
+                k=spec_k,
+                max_seq_len=spec_max_len,
+                device=base_model.device,
             )
             spec_decoder.capture(dummy_tokens)
             print(f"[IPWF] Speculative buckets captured: {sorted(spec_decoder.buckets)}")
@@ -330,11 +325,7 @@ async def load_inference_engine(model_id: str = DEFAULT_MODEL_ID) -> dict[str, A
         stop_event=threading.Event(),
     )
 
-    vram_alloc = (
-        round(torch.cuda.memory_allocated() / (1024**3), 2)
-        if torch.cuda.is_available()
-        else 0.0
-    )
+    vram_alloc = round(torch.cuda.memory_allocated() / (1024**3), 2) if torch.cuda.is_available() else 0.0
     print(f"[IPWF] Engine loaded. VRAM: {vram_alloc:.2f} GB")
     return {
         "status": "loaded",
@@ -352,6 +343,7 @@ async def unload_inference_engine() -> dict[str, Any]:
             pass
     model_state.clear()
     import gc
+
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
@@ -365,6 +357,7 @@ async def unload_inference_engine() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # OpenAI-compatible Pydantic schemas
 # ---------------------------------------------------------------------------
+
 
 class ChatMessage(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -457,6 +450,7 @@ class ModelListResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Prompt helpers (shared with runtime-triton but kept local for isolation)
 # ---------------------------------------------------------------------------
+
 
 def _extract_content(content: Any) -> str:
     if content is None:
@@ -560,6 +554,7 @@ def _extract_thinking_and_content(text: str) -> tuple[str | None, str]:
 # Request queue (single-tenant, arrival-order)
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class _QueuedRequest:
     req: Any
@@ -588,6 +583,7 @@ async def _dispatch_loop() -> None:
 # ---------------------------------------------------------------------------
 # Core inference
 # ---------------------------------------------------------------------------
+
 
 def _apply_expert(expert: FoldableExpert | str | None) -> str | None:
     """Activates the given expert in the folding engine; returns the expert key."""
@@ -630,9 +626,7 @@ async def _run_inference(req: ChatCompletionRequest) -> dict[str, Any]:
     max_new = req.max_completion_tokens or req.max_tokens or 4096
     temperature = req.temperature if req.temperature is not None else 0.7
 
-    input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(
-        model_state["base_model"].device
-    )
+    input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(model_state["base_model"].device)
     prompt_tokens = input_ids.shape[-1]
 
     t0 = time.perf_counter()
@@ -643,7 +637,9 @@ async def _run_inference(req: ChatCompletionRequest) -> dict[str, Any]:
         raw_ids = await asyncio.get_event_loop().run_in_executor(
             None,
             lambda: spec_decoder.generate(
-                input_ids, max_new_tokens=max_new, temperature=temperature,
+                input_ids,
+                max_new_tokens=max_new,
+                temperature=temperature,
                 stop_token_ids=stop_ids,
             ),
         )
@@ -651,7 +647,9 @@ async def _run_inference(req: ChatCompletionRequest) -> dict[str, Any]:
         raw_ids = await asyncio.get_event_loop().run_in_executor(
             None,
             lambda: graph_decoder.generate(
-                input_ids, max_new_tokens=max_new, temperature=temperature,
+                input_ids,
+                max_new_tokens=max_new,
+                temperature=temperature,
                 stop_token_ids=stop_ids,
             ),
         )
@@ -701,7 +699,7 @@ async def _run_inference(req: ChatCompletionRequest) -> dict[str, Any]:
     }
 
 
-async def _run_streaming_inference(req: ChatCompletionRequest) -> AsyncGenerator[str, None]:
+async def _run_streaming_inference(req: ChatCompletionRequest) -> AsyncGenerator[str]:
     if not model_state.get("base_model"):
         yield "data: " + '{"error": "Engine not loaded"}' + "\n\n"
         return
@@ -717,9 +715,7 @@ async def _run_streaming_inference(req: ChatCompletionRequest) -> AsyncGenerator
     max_new = req.max_completion_tokens or req.max_tokens or 4096
     temperature = req.temperature if req.temperature is not None else 0.7
 
-    input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(
-        model_state["base_model"].device
-    )
+    input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(model_state["base_model"].device)
 
     request_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
     created_ts = int(time.time())
@@ -728,7 +724,9 @@ async def _run_streaming_inference(req: ChatCompletionRequest) -> AsyncGenerator
 
     try:
         for token_text in graph_decoder.stream_generate(
-            input_ids, max_new_tokens=max_new, temperature=temperature,
+            input_ids,
+            max_new_tokens=max_new,
+            temperature=temperature,
             stop_token_ids=stop_ids,
         ):
             token_count += 1
@@ -763,6 +761,7 @@ async def _run_streaming_inference(req: ChatCompletionRequest) -> AsyncGenerator
 # ---------------------------------------------------------------------------
 # FastAPI app + lifespan
 # ---------------------------------------------------------------------------
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -889,7 +888,9 @@ async def load_engine_endpoint(req: LoadEngineRequest = Body(default_factory=Loa
         res = await load_inference_engine(model_id=req.model_id)
         return res
     except Exception as exc:
-        import traceback; traceback.print_exc()
+        import traceback
+
+        traceback.print_exc()
         return JSONResponse(status_code=500, content={"error": str(exc)})
 
 
@@ -953,5 +954,6 @@ async def get_telemetry():
 
 if __name__ == "__main__":
     import uvicorn
+
     print(f"[IPWF] Starting on http://{SERVER_HOST}:{SERVER_PORT}")
     uvicorn.run(app, host=SERVER_HOST, port=SERVER_PORT, log_level="info")

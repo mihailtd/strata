@@ -93,6 +93,7 @@ def load_mtp_weights(model_id: str = "Qwen/Qwen3.5-4B") -> dict[str, torch.Tenso
 
 class IncompatibleDraftHeadError(ValueError):
     """Raised when a draft head does not match the base model architecture or dimension."""
+
     pass
 
 
@@ -203,11 +204,7 @@ class Qwen35MTPDraftHead(nn.Module):
         """
         B, T, _ = hidden.shape
         fused = self._fuse(hidden, input_ids)  # (B, T, H)
-        positions = (
-            torch.arange(T, device=fused.device)
-            if position_ids is None
-            else position_ids
-        )
+        positions = torch.arange(T, device=fused.device) if position_ids is None else position_ids
 
         norm_out = self._run_layer(fused, positions, cache)
         logits = self._lm_head(norm_out)
@@ -360,6 +357,7 @@ def state_nbytes(cache) -> int:
 def mtp_adapter_path(domain: str, version: str = "v7") -> Path:
     """Canonical path for domain-adapted MTP micro-adapter."""
     from runtime.canon import REPO_ROOT
+
     return REPO_ROOT / "results" / "adapters" / f"mtp_{domain}_r64_a64_{version}"
 
 
@@ -369,7 +367,7 @@ def fold_mtp_adapter(
     pristine: dict[str, torch.Tensor] | None = None,
 ) -> dict[str, torch.Tensor]:
     """Folds an MTP micro-adapter directly into head projection weights in-place.
-    
+
     Returns the pristine weight dictionary for zero-copy rollback and instant expert swapping.
     """
     adapter_dir = Path(adapter_dir)
@@ -409,4 +407,3 @@ def fold_mtp_adapter(
             target_param.data.addmm_(b.T, a.T, alpha=scaling)
 
     return pristine
-

@@ -166,7 +166,9 @@ def fold_rmsnorm_into_linear(model: nn.Module, fold_weights: bool = True) -> int
                 for proj in downstream:
                     with torch.no_grad():
                         w_dtype = proj.weight.dtype
-                        proj.weight.data.copy_((proj.weight.data.float() * gamma_col.to(proj.weight.device)).to(w_dtype))
+                        proj.weight.data.copy_(
+                            (proj.weight.data.float() * gamma_col.to(proj.weight.device)).to(w_dtype)
+                        )
 
                 # Replace with ScaleFreeRMSNorm
                 eps = getattr(input_norm, "variance_epsilon", getattr(input_norm, "eps", 1e-6))
@@ -198,7 +200,9 @@ def fold_rmsnorm_into_linear(model: nn.Module, fold_weights: bool = True) -> int
                 for proj in downstream:
                     with torch.no_grad():
                         w_dtype = proj.weight.dtype
-                        proj.weight.data.copy_((proj.weight.data.float() * gamma_col.to(proj.weight.device)).to(w_dtype))
+                        proj.weight.data.copy_(
+                            (proj.weight.data.float() * gamma_col.to(proj.weight.device)).to(w_dtype)
+                        )
 
                 # Replace with ScaleFreeRMSNorm
                 eps = getattr(post_norm, "variance_epsilon", getattr(post_norm, "eps", 1e-6))
@@ -232,7 +236,9 @@ def fold_rmsnorm_into_linear(model: nn.Module, fold_weights: bool = True) -> int
 
             with torch.no_grad():
                 w_dtype = lm_head.weight.dtype
-                lm_head.weight.data.copy_((lm_head.weight.data.float() * gamma_col.to(lm_head.weight.device)).to(w_dtype))
+                lm_head.weight.data.copy_(
+                    (lm_head.weight.data.float() * gamma_col.to(lm_head.weight.device)).to(w_dtype)
+                )
 
             eps = getattr(final_norm, "variance_epsilon", getattr(final_norm, "eps", 1e-6))
             sf_norm = ScaleFreeRMSNorm(
@@ -284,7 +290,9 @@ def unfold_rmsnorm(model: nn.Module) -> int:
                 for proj in downstream:
                     with torch.no_grad():
                         w_dtype = proj.weight.dtype
-                        proj.weight.data.copy_((proj.weight.data.float() * inv_gamma.to(proj.weight.device)).to(w_dtype))
+                        proj.weight.data.copy_(
+                            (proj.weight.data.float() * inv_gamma.to(proj.weight.device)).to(w_dtype)
+                        )
 
                 exact_norm = ExactRMSNorm(sf_norm.hidden_size, eps=sf_norm.variance_epsilon, unit_offset=unit_offset)
                 exact_norm.weight.data.copy_(orig_w)
@@ -311,7 +319,9 @@ def unfold_rmsnorm(model: nn.Module) -> int:
                 for proj in downstream:
                     with torch.no_grad():
                         w_dtype = proj.weight.dtype
-                        proj.weight.data.copy_((proj.weight.data.float() * inv_gamma.to(proj.weight.device)).to(w_dtype))
+                        proj.weight.data.copy_(
+                            (proj.weight.data.float() * inv_gamma.to(proj.weight.device)).to(w_dtype)
+                        )
 
                 exact_norm = ExactRMSNorm(sf_norm.hidden_size, eps=sf_norm.variance_epsilon, unit_offset=unit_offset)
                 exact_norm.weight.data.copy_(orig_w)
@@ -331,7 +341,9 @@ def unfold_rmsnorm(model: nn.Module) -> int:
 
             with torch.no_grad():
                 w_dtype = lm_head.weight.dtype
-                lm_head.weight.data.copy_((lm_head.weight.data.float() * inv_gamma.to(lm_head.weight.device)).to(w_dtype))
+                lm_head.weight.data.copy_(
+                    (lm_head.weight.data.float() * inv_gamma.to(lm_head.weight.device)).to(w_dtype)
+                )
 
             exact_norm = ExactRMSNorm(final_norm.hidden_size, eps=final_norm.variance_epsilon, unit_offset=unit_offset)
             exact_norm.weight.data.copy_(orig_w)
@@ -443,5 +455,3 @@ def scale_expert_factors_for_folded_norms(model: nn.Module, experts: list | tupl
                         scaled_count += 1
 
     return scaled_count
-
-

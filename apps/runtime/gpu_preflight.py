@@ -10,11 +10,11 @@ apps/runtime-common/src/runtime_common/gpu_preflight.py, not here.
 from __future__ import annotations
 
 from runtime_common.gpu_preflight import (
-    get_sysfs_vram_info,
-    get_gpu_vram_info,
-    find_conflicting_processes,
     check_gpu_availability,
     ensure_gpu_exclusive,
+    find_conflicting_processes,
+    get_gpu_vram_info,
+    get_sysfs_vram_info,
 )
 
 __all__ = [

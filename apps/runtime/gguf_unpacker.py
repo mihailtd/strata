@@ -15,11 +15,9 @@ from __future__ import annotations
 import concurrent.futures
 import gc
 import json
-import os
-import re
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import gguf
 import numpy as np
@@ -43,10 +41,10 @@ class GGUFStreamingUnpacker:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-    def get_metadata(self) -> Dict[str, Any]:
+    def get_metadata(self) -> dict[str, Any]:
         """Reads architecture hyperparameters directly from GGUF metadata fields."""
         reader = gguf.GGUFReader(str(self.gguf_path))
-        meta: Dict[str, Any] = {}
+        meta: dict[str, Any] = {}
 
         field_map = {
             "qwen35.block_count": "num_layers",
@@ -90,7 +88,7 @@ class GGUFStreamingUnpacker:
         tensor_type: int,
         group_size: int = 128,
         device: str = "cpu",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Dequantizes GGUF tensor and packs into 128-bit W4A16 format."""
         if tensor_type in (gguf.GGMLQuantizationType.Q4_K, gguf.GGMLQuantizationType.Q6_K):
             dequant = gguf.quants.dequantize(data, tensor_type)
@@ -118,13 +116,13 @@ class GGUFStreamingUnpacker:
         layer_idx: int,
         group_size: int = 128,
         device: str = "cpu",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Unpacks all tensors for a single block layer (e.g. blk.0.*)."""
         reader = gguf.GGUFReader(str(self.gguf_path))
         prefix = f"blk.{layer_idx}."
         layer_tensors = [t for t in reader.tensors if t.name.startswith(prefix)]
 
-        packed: Dict[str, Any] = {}
+        packed: dict[str, Any] = {}
         for t in layer_tensors:
             name_short = t.name[len(prefix) :]
             converted = self._convert_tensor_to_w4a16(
@@ -137,10 +135,10 @@ class GGUFStreamingUnpacker:
 
         return packed
 
-    def unpack_globals(self, group_size: int = 128) -> Dict[str, Any]:
+    def unpack_globals(self, group_size: int = 128) -> dict[str, Any]:
         """Unpacks global embedding, output norm, and LM head tensors."""
         reader = gguf.GGUFReader(str(self.gguf_path))
-        globals_dict: Dict[str, Any] = {}
+        globals_dict: dict[str, Any] = {}
 
         for t in reader.tensors:
             if not t.name.startswith("blk."):
@@ -189,7 +187,7 @@ class GGUFStreamingUnpacker:
         self,
         max_workers: int = 4,
         force: bool = False,
-        progress_cb: Optional[Any] = None,
+        progress_cb: Any | None = None,
     ) -> None:
         """Executes streamed conversion of all layers and globals to disk cache."""
         meta = self.get_metadata()
@@ -217,10 +215,7 @@ class GGUFStreamingUnpacker:
 
         # 2. Unpack layers in parallel workers to keep RAM bounded
         group_sz = meta.get("group_size", 128)
-        tasks = [
-            (str(self.gguf_path), str(self.cache_dir), i, group_sz, force)
-            for i in range(num_layers)
-        ]
+        tasks = [(str(self.gguf_path), str(self.cache_dir), i, group_sz, force) for i in range(num_layers)]
 
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             futures = [executor.submit(_worker_unpack_layer, task) for task in tasks]
@@ -230,9 +225,11 @@ class GGUFStreamingUnpacker:
                     progress_cb(layer_done)
 
         total_elapsed = time.perf_counter() - t0
-        print(f"[GGUF Unpacker] Finished converting {num_layers} layers in {total_elapsed:.1f}s ({total_elapsed/60:.2f} min).")
+        print(
+            f"[GGUF Unpacker] Finished converting {num_layers} layers in {total_elapsed:.1f}s ({total_elapsed / 60:.2f} min)."
+        )
 
-    def load_layer(self, layer_idx: int, device: str = "cuda:0") -> Dict[str, Any]:
+    def load_layer(self, layer_idx: int, device: str = "cuda:0") -> dict[str, Any]:
         """Fast memory-mapped loading of a single layer into target device."""
         layer_file = self.cache_dir / f"layer_{layer_idx}.pt"
         if not layer_file.exists():
@@ -241,7 +238,7 @@ class GGUFStreamingUnpacker:
         data = torch.load(layer_file, map_location=device, weights_only=False)
         return data
 
-    def load_globals(self, device: str = "cuda:0") -> Dict[str, Any]:
+    def load_globals(self, device: str = "cuda:0") -> dict[str, Any]:
         """Fast loading of global embedding, output norm, and LM head."""
         globals_file = self.cache_dir / "globals.pt"
         if not globals_file.exists():
@@ -249,7 +246,7 @@ class GGUFStreamingUnpacker:
         return torch.load(globals_file, map_location=device, weights_only=False)
 
 
-def _worker_unpack_layer(args: Tuple[str, str, int, int, bool]) -> int:
+def _worker_unpack_layer(args: tuple[str, str, int, int, bool]) -> int:
     gguf_path, cache_dir, layer_i, group_size, force = args
     out_file = Path(cache_dir) / f"layer_{layer_i}.pt"
     if not force and out_file.exists():

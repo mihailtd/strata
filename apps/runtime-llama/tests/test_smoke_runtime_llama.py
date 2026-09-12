@@ -45,13 +45,12 @@ def test_no_hardcoded_throughput_numbers() -> None:
         if path.exists():
             src = path.read_text()
             matches = re.findall(r"\d+\.\d+\s*(tok/s|GB/s)", src, re.IGNORECASE)
-            assert not matches, (
-                f"{fname} contains hardcoded metrics {matches} (Zero-Mock invariant)"
-            )
+            assert not matches, f"{fname} contains hardcoded metrics {matches} (Zero-Mock invariant)"
 
 
 def test_no_triton_engine_references() -> None:
     """runtime-llama is a pure llama.cpp baseline; must not embed or call the Triton engine."""
     source = (LLAMA / "run_server.sh").read_text()
-    assert "port 8000" not in source and "localhost:8000" not in source, \
+    assert "port 8000" not in source and "localhost:8000" not in source, (
         "runtime-llama must not reference port 8000 (runtime-triton's port)"
+    )

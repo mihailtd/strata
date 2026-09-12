@@ -333,6 +333,12 @@ uv run python corpus/audit_corpora.py   # see Known issues -- python_modern/pyth
 
 # Unsloth micro-probe
 uv run --env-file .env python training/micro_probe_bench.py
+
+# Sanity-check a freshly trained adapter by talking to it directly (no server)
+uv run python chat.py --adapter results/adapters/m2_astral_r8a128_v7
+
+# Inspect a training run's loss curve (converged? still descending? early-stop point?)
+uv run python analyze_loss_curves.py --dir results/loss_curves
 ```
 
 ### Unsloth Studio (local web UI)

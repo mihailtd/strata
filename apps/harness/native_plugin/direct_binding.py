@@ -6,10 +6,9 @@ Enables in-process streaming, direct KV-cache management, and Jump-Token macro i
 
 import ctypes
 import os
-import sys
 import time
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator, List, Optional, Tuple
 
 # Locate compiled ROCm shared libraries
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -62,7 +61,7 @@ class DirectNativeLlamaEngine:
     def _load_libs(self):
         # Set dynamic linker path
         os.environ["LD_LIBRARY_PATH"] = f"{LIB_DIR}:{os.environ.get('LD_LIBRARY_PATH', '')}"
-        
+
         # Load GGML and LLaMA shared dependencies in topological order
         base_so = LIB_DIR / "libggml-base.so.0"
         cpu_so = LIB_DIR / "libggml-cpu.so.0"
@@ -92,12 +91,8 @@ class DirectNativeLlamaEngine:
         print(f"[Native Harness Plugin] Direct ROCm FFI successfully initialized from: {llama_so}")
 
     def execute_in_process_stream(
-        self,
-        prompt: str,
-        system_prompt: str = "",
-        max_tokens: int = 350,
-        enable_jump_tokens: bool = True
-    ) -> Generator[Tuple[str, float], None, None]:
+        self, prompt: str, system_prompt: str = "", max_tokens: int = 350, enable_jump_tokens: bool = True
+    ) -> Generator[tuple[str, float]]:
         """Streams tokens in-process with Jump-Token fast-path and sub-millisecond dispatch."""
         from runtime.jump_streamer import JumpTokenStreamFilter
 
@@ -109,33 +104,47 @@ class DirectNativeLlamaEngine:
 
         # Format ChatML prompt
         full_prompt = (
-            f"<|im_start|>system\n{system_prompt}<|im_end|>\n"
-            f"<|im_start|>user\n{prompt}<|im_end|>\n"
-            f"<|im_start|>assistant\n"
-        ) if system_prompt else (
-            f"<|im_start|>user\n{prompt}<|im_end|>\n"
-            f"<|im_start|>assistant\n"
+            (
+                f"<|im_start|>system\n{system_prompt}<|im_end|>\n"
+                f"<|im_start|>user\n{prompt}<|im_end|>\n"
+                f"<|im_start|>assistant\n"
+            )
+            if system_prompt
+            else (f"<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n")
         )
 
         cli_bin = LIB_DIR / "llama-cli"
         cmd = [
             str(cli_bin),
-            "-m", self.model_path,
-            "-ngl", "99",
-            "-fa", "on",
-            "-c", "8192",
-            "-b", "512",
-            "-ub", "512",
-            "-t", "8",
-            "--spec-type", "draft-mtp,ngram-mod",
-            "--spec-draft-n-max", "4",
-            "--spec-ngram-mod-n-max", "4",
+            "-m",
+            self.model_path,
+            "-ngl",
+            "99",
+            "-fa",
+            "on",
+            "-c",
+            "8192",
+            "-b",
+            "512",
+            "-ub",
+            "512",
+            "-t",
+            "8",
+            "--spec-type",
+            "draft-mtp,ngram-mod",
+            "--spec-draft-n-max",
+            "4",
+            "--spec-ngram-mod-n-max",
+            "4",
             "--spec-draft-backend-sampling",
-            "-n", str(max_tokens),
-            "-p", full_prompt,
+            "-n",
+            str(max_tokens),
+            "-p",
+            full_prompt,
             "--no-display-prompt",
             "-st",
-            "--temp", "0.0",
+            "--temp",
+            "0.0",
         ]
 
         t0 = time.perf_counter()
@@ -144,21 +153,14 @@ class DirectNativeLlamaEngine:
         env = os.environ.copy()
         env["LD_LIBRARY_PATH"] = f"{LIB_DIR}:{env.get('LD_LIBRARY_PATH', '')}"
 
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-            env=env
-        )
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, env=env)
 
         for line in proc.stdout:
             if not line:
                 continue
             if ttft is None and line.strip():
                 ttft = (time.perf_counter() - t0) * 1000.0
-            
+
             # Pass through Jump-Token AST fast-path filter
             chunks = jump_filter.process_delta(line)
             for c in chunks:

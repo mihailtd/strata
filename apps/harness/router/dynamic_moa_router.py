@@ -20,16 +20,25 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 DOMAIN_PATTERNS = {
     "postgresql": [r"postgres", r"psql", r"asyncpg", r"pgvector", r"hnsw", r"cosine distance", r"vector\(", r"<=>"],
-    "python_web": [
-        r"fastapi", r"lifespan", r"endpoint", r"router", r"pydantic", r"asynccontextmanager", r"starlette"
-    ],
+    "python_web": [r"fastapi", r"lifespan", r"endpoint", r"router", r"pydantic", r"asynccontextmanager", r"starlette"],
     "duckdb": [r"duckdb", r"parquet", r"qualify", r"olap", r"columnar", r"window function", r"percentile"],
     "astral": [r"uv", r"ruff", r"pyproject\.toml", r"linter", r"formatter", r"workspace"],
     "python_modern": [
-        r"pep\s*695", r"generics", r"type parameter", r"type alias", r"class\s+\w+\[T\]", r"def\s+\w+\[T\]"
+        r"pep\s*695",
+        r"generics",
+        r"type parameter",
+        r"type alias",
+        r"class\s+\w+\[T\]",
+        r"def\s+\w+\[T\]",
     ],
     "financial_planning": [
-        r"var", r"cvar", r"monte carlo", r"volatility", r"wealth", r"expected return", r"portfolio risk"
+        r"var",
+        r"cvar",
+        r"monte carlo",
+        r"volatility",
+        r"wealth",
+        r"expected return",
+        r"portfolio risk",
     ],
 }
 
@@ -53,7 +62,7 @@ class DynamicMoARouter:
     def route_and_stack(self, prompt: str) -> dict[str, Any]:
         """Analyzes prompt, determines active experts, and fuses them if multi-domain."""
         t0 = time.perf_counter()
-        
+
         # 1. Compute domain match counts
         scores: dict[str, float] = {}
         text_lower = prompt.lower()
@@ -94,7 +103,8 @@ class DynamicMoARouter:
         active_specs = [f"• {DOMAIN_PROMPTS[d]}" for d in expert_weights]
         system_prompt = (
             "You are an expert autonomous software engineer with simultaneous multi-domain mastery:\n"
-            + "\n".join(active_specs) + "\n"
+            + "\n".join(active_specs)
+            + "\n"
             "Strictly follow all modern conventions across all active domains."
         )
 

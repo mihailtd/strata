@@ -11,15 +11,12 @@ Combines all physical and architectural breakthroughs:
 
 from __future__ import annotations
 
-import math
-import time
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Optional
+from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
-from runtime.triton_w4a16 import quantize_and_pack_w4, w4a16_matmul
+
+from runtime.triton_w4a16 import w4a16_matmul
 
 
 @dataclass
@@ -41,7 +38,9 @@ class SuperchargedEngineConfig:
 class OutlierProtectedW4Linear(nn.Module):
     """W4A16 Linear layer with top-16 outlier channel protection."""
 
-    def __init__(self, in_features: int, out_features: int, group_size: int = 128, n_outliers: int = 16, device: str = "cuda:0"):
+    def __init__(
+        self, in_features: int, out_features: int, group_size: int = 128, n_outliers: int = 16, device: str = "cuda:0"
+    ):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
@@ -49,14 +48,21 @@ class OutlierProtectedW4Linear(nn.Module):
         self.n_outliers = n_outliers
 
         # INT4 weights
-        self.qw = nn.Parameter(torch.zeros((in_features // 8, out_features), dtype=torch.int32, device=device), requires_grad=False)
-        self.scales = nn.Parameter(torch.ones((in_features // group_size, out_features), dtype=torch.bfloat16, device=device), requires_grad=False)
+        self.qw = nn.Parameter(
+            torch.zeros((in_features // 8, out_features), dtype=torch.int32, device=device), requires_grad=False
+        )
+        self.scales = nn.Parameter(
+            torch.ones((in_features // group_size, out_features), dtype=torch.bfloat16, device=device),
+            requires_grad=False,
+        )
 
         # Outlier channels in BF16
         self.outlier_idx = torch.arange(n_outliers, device=device)
-        self.outlier_w = nn.Parameter(torch.zeros((n_outliers, out_features), dtype=torch.bfloat16, device=device), requires_grad=False)
+        self.outlier_w = nn.Parameter(
+            torch.zeros((n_outliers, out_features), dtype=torch.bfloat16, device=device), requires_grad=False
+        )
 
-    def forward(self, x: torch.Tensor, out: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, out: torch.Tensor | None = None) -> torch.Tensor:
         res = w4a16_matmul(x, self.qw, self.scales, out=out, group_size=self.group_size)
         # Add outlier slice
         res.add_(x[:, self.outlier_idx] @ self.outlier_w)
@@ -82,8 +88,12 @@ class SuperchargedTransformerBlock(nn.Module):
         self.o_proj = OutlierProtectedW4Linear(config.d_model, config.d_model, group_size=config.group_size, device=dev)
 
         # SwiGLU MLP: Gate + Up and Down
-        self.gate_up_proj = OutlierProtectedW4Linear(config.d_model, config.ffn_dim * 2, group_size=config.group_size, device=dev)
-        self.down_proj = OutlierProtectedW4Linear(config.ffn_dim, config.d_model, group_size=config.group_size, device=dev)
+        self.gate_up_proj = OutlierProtectedW4Linear(
+            config.d_model, config.ffn_dim * 2, group_size=config.group_size, device=dev
+        )
+        self.down_proj = OutlierProtectedW4Linear(
+            config.ffn_dim, config.d_model, group_size=config.group_size, device=dev
+        )
 
         # Preallocated static execution buffers (Zero allocation overhead)
         self.buf_qkv = torch.empty((1, total_qkv), dtype=torch.bfloat16, device=dev)
@@ -91,14 +101,14 @@ class SuperchargedTransformerBlock(nn.Module):
         self.buf_gate_up = torch.empty((1, config.ffn_dim * 2), dtype=torch.bfloat16, device=dev)
         self.buf_down = torch.empty((1, config.d_model), dtype=torch.bfloat16, device=dev)
 
-    def forward(self, h: torch.Tensor, state_s_t: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, h: torch.Tensor, state_s_t: torch.Tensor | None = None) -> torch.Tensor:
         # 1. Attention path
         normed_h = self.input_norm(h)
         self.qkv_proj(normed_h, out=self.buf_qkv)
 
         # Extract Q, K, V and perform attention / Gated DeltaNet update
         # Attention projection
-        self.o_proj(self.buf_qkv[:, :self.config.d_model], out=self.buf_attn_out)
+        self.o_proj(self.buf_qkv[:, : self.config.d_model], out=self.buf_attn_out)
         h.add_(self.buf_attn_out)
 
         # 2. MLP SwiGLU path
@@ -106,8 +116,8 @@ class SuperchargedTransformerBlock(nn.Module):
         self.gate_up_proj(normed_mlp, out=self.buf_gate_up)
 
         # In-register SiLU activation: silu(gate) * up
-        gate = self.buf_gate_up[:, :self.config.ffn_dim]
-        up = self.buf_gate_up[:, self.config.ffn_dim:]
+        gate = self.buf_gate_up[:, : self.config.ffn_dim]
+        up = self.buf_gate_up[:, self.config.ffn_dim :]
         act = torch.nn.functional.silu(gate) * up
 
         self.down_proj(act, out=self.buf_down)
@@ -122,14 +132,16 @@ class Supercharged27BEngine(nn.Module):
     def __init__(self, config: SuperchargedEngineConfig = SuperchargedEngineConfig()):
         super().__init__()
         self.config = config
-        self.blocks = nn.ModuleList([
-            SuperchargedTransformerBlock(config, i) for i in range(config.n_layers)
-        ])
+        self.blocks = nn.ModuleList([SuperchargedTransformerBlock(config, i) for i in range(config.n_layers)])
         self.final_norm = nn.RMSNorm(config.d_model, eps=1e-6).to(config.device)
-        self.lm_head = OutlierProtectedW4Linear(config.d_model, config.vocab_size, group_size=config.group_size, device=config.device)
+        self.lm_head = OutlierProtectedW4Linear(
+            config.d_model, config.vocab_size, group_size=config.group_size, device=config.device
+        )
 
         # Tree Draft Head (Lightweight Next-Token Predictor)
-        self.draft_head = nn.Linear(config.d_model, config.vocab_size, bias=False, dtype=torch.bfloat16, device=config.device)
+        self.draft_head = nn.Linear(
+            config.d_model, config.vocab_size, bias=False, dtype=torch.bfloat16, device=config.device
+        )
 
     def forward_single_step(self, h: torch.Tensor) -> torch.Tensor:
         """Executes a single 64-layer forward pass."""

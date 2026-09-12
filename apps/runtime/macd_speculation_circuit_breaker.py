@@ -23,7 +23,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
-import torch
 
 
 @dataclass
@@ -42,7 +41,7 @@ class CircuitBreakerTelemetry:
 
 class MACDSpeculationCircuitBreaker:
     """Intelligent algorithmic thermostat for speculative decoding.
-    
+
     Dynamically engages/disengages speculative drafting based on real-time
     dual-EMA MACD momentum of draft acceptance rate tau.
     """
@@ -86,7 +85,7 @@ class MACDSpeculationCircuitBreaker:
 
     def update_acceptance(self, tau_step: float) -> bool:
         """Updates EMA and MACD with the latest step's acceptance yield (tau_step).
-        
+
         tau_step is typically (n_accepted + 1), the number of committed tokens this step.
         Returns True if speculation is currently ENGAGED, False if DISENGAGED.
         """
@@ -127,7 +126,7 @@ class MACDSpeculationCircuitBreaker:
 
     def should_draft(self) -> tuple[bool, int]:
         """Determines whether the upcoming step should run speculative drafting.
-        
+
         Returns:
             (run_speculative, effective_k)
             - If ENGAGED: (True, standard_k)

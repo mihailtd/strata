@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Any
 
 import torch
 from transformers import PreTrainedModel, PreTrainedTokenizerBase
@@ -34,7 +33,9 @@ def clone_hybrid_cache(cache: DynamicCache) -> DynamicCache:
             elif isinstance(v, list):
                 setattr(new_layer, k, list(v))
             elif isinstance(v, dict):
-                setattr(new_layer, k, {dk: (dv.clone() if isinstance(dv, torch.Tensor) else dv) for dk, dv in v.items()})
+                setattr(
+                    new_layer, k, {dk: (dv.clone() if isinstance(dv, torch.Tensor) else dv) for dk, dv in v.items()}
+                )
             else:
                 setattr(new_layer, k, v)
         new_cache.layers.append(new_layer)

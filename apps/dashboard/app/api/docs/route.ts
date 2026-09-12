@@ -17,7 +17,10 @@ export async function GET(request: NextRequest) {
   const fullPath = path.join(repoRoot, item.relativePath);
 
   if (!fs.existsSync(fullPath)) {
-    return NextResponse.json({ error: `File not found on disk: ${item.relativePath}` }, { status: 404 });
+    return NextResponse.json(
+      { error: `File not found on disk: ${item.relativePath}` },
+      { status: 404 }
+    );
   }
 
   try {

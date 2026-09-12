@@ -8,7 +8,7 @@ into high-density structural digests, while preserving the active turn in full r
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class SemanticStateCompactor:
@@ -48,12 +48,12 @@ class SemanticStateCompactor:
 
             files_str = ", ".join(sorted(list(match_files))[:5])
             if len(match_files) > 5:
-                files_str += f" (+{len(match_files)-5} more)"
+                files_str += f" (+{len(match_files) - 5} more)"
 
             sample_str = "\n  ".join(sample_matches)
             return (
                 f"[Grep Digest: {match_count} matches in {len(match_files)} files: {files_str}]\n"
-                f"  Sample matches:\n  {sample_str}\n  ... ({len(lines)-len(sample_matches)} lines folded)"
+                f"  Sample matches:\n  {sample_str}\n  ... ({len(lines) - len(sample_matches)} lines folded)"
             )
 
         # 2. View / Read File compaction
@@ -63,14 +63,20 @@ class SemanticStateCompactor:
             return (
                 f"[File Read Digest: {len(lines)} lines total]\n"
                 f"{first_lines}\n"
-                f"  ... [{len(lines)-7} lines folded for brevity] ...\n"
+                f"  ... [{len(lines) - 7} lines folded for brevity] ...\n"
                 f"{last_lines}"
             )
 
         # 3. Test Runner / Pytest / Cargo / UV compaction
         if "test" in tool_lower or "pytest" in tool_lower or "cargo" in tool_lower or "run" in tool_lower:
-            failed_lines = [line for line in lines if any(k in line.lower() for k in ["fail", "error", "traceback", "assert", "exit code"])]
-            passed_lines = [line for line in lines if "passed" in line.lower() or "ok" in line.lower() or "success" in line.lower()]
+            failed_lines = [
+                line
+                for line in lines
+                if any(k in line.lower() for k in ["fail", "error", "traceback", "assert", "exit code"])
+            ]
+            passed_lines = [
+                line for line in lines if "passed" in line.lower() or "ok" in line.lower() or "success" in line.lower()
+            ]
 
             digest_parts = [f"[Execution Digest: {len(lines)} lines total]"]
             if failed_lines:
@@ -79,19 +85,19 @@ class SemanticStateCompactor:
                 digest_parts.append(f"  Passed summary: {passed_lines[-1]}")
             if not failed_lines and not passed_lines:
                 digest_parts.append("  Output head: " + "\n  ".join(lines[:3]))
-                digest_parts.append(f"  ... ({len(lines)-3} lines folded)")
+                digest_parts.append(f"  ... ({len(lines) - 3} lines folded)")
             return "\n".join(digest_parts)
 
         # 4. Generic fallback truncation
         head = "\n".join(lines[:5])
         tail = "\n".join(lines[-3:])
-        return f"{head}\n  ... [{len(lines)-8} lines folded] ...\n{tail}"
+        return f"{head}\n  ... [{len(lines) - 8} lines folded] ...\n{tail}"
 
     def compact_turn_history(
         self,
-        messages: List[Dict[str, Any]],
-        current_turn_index: Optional[int] = None,
-    ) -> List[Dict[str, Any]]:
+        messages: list[dict[str, Any]],
+        current_turn_index: int | None = None,
+    ) -> list[dict[str, Any]]:
         """Compact older turns while keeping the active turn and system prompt intact."""
         if not messages:
             return []
@@ -141,7 +147,7 @@ class SemanticStateCompactor:
             if len(lines) > self.max_raw_tool_lines:
                 head = "\n".join(lines[:4])
                 tail = "\n".join(lines[-3:])
-                return f"```{lang}\n{head}\n// ... [{len(lines)-7} lines folded for past context efficiency] ...\n{tail}\n```"
+                return f"```{lang}\n{head}\n// ... [{len(lines) - 7} lines folded for past context efficiency] ...\n{tail}\n```"
             return match.group(0)
 
         return re.sub(pattern, _replace_match, text)

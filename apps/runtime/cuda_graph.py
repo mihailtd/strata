@@ -119,7 +119,11 @@ class FoldedCudaGraphDecoder:
         with torch.no_grad():
             cache_pos = torch.arange(0, cur_pos, device=self.device, dtype=torch.long)
             outputs = self.model(
-                prompt_tokens, past_key_values=self.past_key_values, cache_position=cache_pos, use_cache=True, output_hidden_states=True
+                prompt_tokens,
+                past_key_values=self.past_key_values,
+                cache_position=cache_pos,
+                use_cache=True,
+                output_hidden_states=True,
             )
             next_token = torch.argmax(outputs.logits[:, -1, :], dim=-1, keepdim=True)
 
@@ -194,7 +198,11 @@ class FoldedCudaGraphDecoder:
         with torch.no_grad():
             cache_pos = torch.arange(0, cur_pos, device=self.device, dtype=torch.long)
             outputs = self.model(
-                prompt_tokens, past_key_values=self.past_key_values, cache_position=cache_pos, use_cache=True, output_hidden_states=True
+                prompt_tokens,
+                past_key_values=self.past_key_values,
+                cache_position=cache_pos,
+                use_cache=True,
+                output_hidden_states=True,
             )
             next_token = torch.argmax(outputs.logits[:, -1, :], dim=-1, keepdim=True)
 

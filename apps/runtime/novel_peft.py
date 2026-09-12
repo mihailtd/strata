@@ -1131,11 +1131,19 @@ class FoldableExpert:
         return f"{module_path}.weight"
 
     @classmethod
-    def _load_matching_mtp_factors(cls, adapter_dir: Path, name: str) -> tuple[dict[str, tuple[torch.Tensor, torch.Tensor]], float]:
+    def _load_matching_mtp_factors(
+        cls, adapter_dir: Path, name: str
+    ) -> tuple[dict[str, tuple[torch.Tensor, torch.Tensor]], float]:
         """Loads matched MTP micro-adapter factors (§23) if available on disk."""
         draft_factors = {}
         draft_scaling = 1.0
-        clean_domain = name.replace("m2_", "").replace("_r8a128_v7_9b", "").replace("_r8a128_v7", "").replace("_v7_9b", "").replace("_v7", "")
+        clean_domain = (
+            name.replace("m2_", "")
+            .replace("_r8a128_v7_9b", "")
+            .replace("_r8a128_v7", "")
+            .replace("_v7_9b", "")
+            .replace("_v7", "")
+        )
         for candidate_name in [
             f"mtp_{clean_domain}_r64_a64_v7_9b",
             f"mtp_{name}_r64_a64_v7_9b",
@@ -1155,7 +1163,7 @@ class FoldableExpert:
                             if b_key in mtp_state:
                                 clean_mod = mod_base.replace("mtp.", "") + ".weight"
                                 u = mtp_state[b_key].float().T  # (out, r)
-                                v_mat = mtp_state[k].float().T   # (r, in)
+                                v_mat = mtp_state[k].float().T  # (r, in)
                                 draft_factors[clean_mod] = (u, v_mat)
                     if draft_factors:
                         break
@@ -1262,9 +1270,9 @@ def compute_surgical_notch_masks(
     max_conflict_modules: int = 2,
 ) -> dict[str, torch.Tensor]:
     """Computes surgical POET channel notch masks for identified multi-expert conflict modules.
-    
+
     Theoretical Reference: DECISIONS.md §50, §51 & LV-GLasso/POET Chapter 7/9.
-    
+
     Attention heads and clean MLP modules have S = 0 (100% conditionally orthogonal) and
     are never masked. For identified or detected conflict modules (e.g. Layer 3 gate_proj),
     zeros out the top-k conflicting output neurons to suppress localized cross-talk.
@@ -1276,9 +1284,11 @@ def compute_surgical_notch_masks(
     notch_masks: dict[str, torch.Tensor] = {}
 
     # Target candidate conflict keys (MLP projections only; attention is conditionally orthogonal)
-    target_keys = conflict_keys if conflict_keys is not None else [
-        k for k in keys if any(p in k for p in ("gate_proj", "down_proj", "up_proj"))
-    ]
+    target_keys = (
+        conflict_keys
+        if conflict_keys is not None
+        else [k for k in keys if any(p in k for p in ("gate_proj", "down_proj", "up_proj"))]
+    )
 
     candidate_spikes: list[tuple[float, str, torch.Tensor]] = []
 
@@ -1335,9 +1345,7 @@ def compute_surgical_notch_masks(
     return notch_masks
 
 
-
 class WeightFoldingEngine:
-
     """Folds experts into a plain (unwrapped) model's weights and back out.
 
     Holds a pristine copy of every weight any expert touches, so `activate`
@@ -1400,12 +1408,12 @@ class WeightFoldingEngine:
         self.draft_head = draft_head
         draft_params = dict(draft_head.named_parameters())
         self.draft_slots = {}
-        
+
         # Register both layer and fc projection weights on draft head
         for k, p in draft_params.items():
             if ("layer." in k or "fc." in k) and k.endswith(".weight"):
                 self.draft_slots[k] = p
-                
+
         if self.keep_pristine and self.draft_slots:
             if self.pristine_on_cpu:
                 self.draft_pristine = {k: v.detach().to("cpu").pin_memory() for k, v in self.draft_slots.items()}
@@ -1491,8 +1499,6 @@ class WeightFoldingEngine:
                 dw.copy_(self.draft_pristine[dkey], non_blocking=True)
         self.active = None
 
-
-
     @torch.no_grad()
     def activate_many(
         self,
@@ -1501,7 +1507,7 @@ class WeightFoldingEngine:
         notch_masks: dict[str, torch.Tensor] | None = None,
     ) -> None:
         """W_live = W0 + sum_i scaling_i * (U_i_eff @ V_i).
-        
+
         scale_mode:
           - "surgical" (DEFAULT / RECOMMENDED, §50-§51): Attention and clean MLP run at 100%
             full alpha (0% attenuation). Surgical POET channel notch masks are applied strictly
@@ -1516,9 +1522,11 @@ class WeightFoldingEngine:
         if not experts:
             self.restore()
             return
-            
+
         k = len(experts)
-        scale_mult = 1.0 / (math.sqrt(k) if scale_mode == "sqrt" and k > 1 else (k if scale_mode == "linear" and k > 1 else 1.0))
+        scale_mult = 1.0 / (
+            math.sqrt(k) if scale_mode == "sqrt" and k > 1 else (k if scale_mode == "linear" and k > 1 else 1.0)
+        )
 
         # Auto-compute surgical notch masks if in surgical mode and none provided
         if scale_mode == "surgical" and notch_masks is None and k > 1:
@@ -1552,7 +1560,6 @@ class WeightFoldingEngine:
             if first:
                 w.copy_(w0)
 
-
         # 2. Fold Matched Draft Head Co-Mutation (§23)
         if self.draft_head is not None and self.draft_slots:
             for dkey, dw in self.draft_slots.items():
@@ -1577,12 +1584,10 @@ class WeightFoldingEngine:
 
         self.active = "+".join(e.name for e in experts)
 
-
     @torch.no_grad()
     def restore(self) -> None:
         """Exact: copies the pristine weights back for backbone and draft head."""
         for key, w in self.slots.items():
-
             w.copy_(self.pristine[key])
         if self.draft_head is not None and self.draft_slots:
             for dkey, dw in self.draft_slots.items():

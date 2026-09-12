@@ -15,8 +15,8 @@ from runtime_common.canon import (
     DOMAINS,
     REPO_ROOT,
     adapter_path,
-    validate_kv_cache_precision,
     configure_deterministic_attention,
+    validate_kv_cache_precision,
 )
 
 __all__ = [

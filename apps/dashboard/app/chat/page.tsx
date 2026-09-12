@@ -60,20 +60,24 @@ export default function ChatPage() {
 
   // Stacking Mode: "auto" | "manual" | "base" | "single"
   const [routingMode, setRoutingMode] = usePersistentState<"auto" | "manual" | "base" | "single">(
-    "gnn_chat_routingMode", "auto"
+    "gnn_chat_routingMode",
+    "auto"
   );
   const [selectedAdapters, setSelectedAdapters] = usePersistentState<string[]>(
-    "gnn_chat_selectedAdapters", ["astral", "python_modern"]
+    "gnn_chat_selectedAdapters",
+    ["astral", "python_modern"]
   );
   const [singleAdapter, setSingleAdapter] = usePersistentState<string>(
-    "gnn_chat_singleAdapter", "postgresql"
+    "gnn_chat_singleAdapter",
+    "postgresql"
   );
   const [minAdapters, setMinAdapters] = usePersistentState<number>("gnn_chat_minAdapters", 1);
   const [maxAdapters, setMaxAdapters] = usePersistentState<number>("gnn_chat_maxAdapters", 2);
 
   // Thinking Effort & Max Tokens Controls
   const [thinkingEffort, setThinkingEffort] = usePersistentState<"off" | "low" | "medium" | "high">(
-    "gnn_chat_thinkingEffort", "off"
+    "gnn_chat_thinkingEffort",
+    "off"
   );
   const [maxTokens, setMaxTokens] = usePersistentState<number>("gnn_chat_maxTokens", 400);
 
@@ -91,7 +95,8 @@ export default function ChatPage() {
   const currentActiveStack = useMemo(() => {
     if (routingMode === "base") return ["Base (Pristine W0)"];
     if (routingMode === "single") return [singleAdapter];
-    if (routingMode === "manual") return selectedAdapters.length > 0 ? selectedAdapters : ["Base (Pristine W0)"];
+    if (routingMode === "manual")
+      return selectedAdapters.length > 0 ? selectedAdapters : ["Base (Pristine W0)"];
     return activeTeam.length > 0 ? activeTeam : ["Base (Pristine W0)"];
   }, [routingMode, singleAdapter, selectedAdapters, activeTeam]);
 
@@ -130,7 +135,9 @@ export default function ChatPage() {
     setTogglesBusy("spec_decode");
     setToggleError(null);
     try {
-      const data = await postEngine("set_speculative_decode", { enabled: !status?.spec_decode_enabled });
+      const data = await postEngine("set_speculative_decode", {
+        enabled: !status?.spec_decode_enabled,
+      });
       patchStatus({
         spec_decode_enabled: data.spec_decode_enabled,
         spec_k: data.spec_k ?? status?.spec_k,
@@ -246,7 +253,10 @@ export default function ChatPage() {
     setToggleError(null);
     try {
       const data = await postEngine("set_speculative_k", { k });
-      patchStatus({ spec_k: data.spec_k, ring_buffer_mode: data.ring_buffer_mode ?? status?.ring_buffer_mode });
+      patchStatus({
+        spec_k: data.spec_k,
+        ring_buffer_mode: data.ring_buffer_mode ?? status?.ring_buffer_mode,
+      });
     } catch (e) {
       setToggleError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -301,7 +311,9 @@ export default function ChatPage() {
     setTogglesBusy("state_handoff");
     setToggleError(null);
     try {
-      const data = await postEngine("set_state_handoff", { enabled: !status?.state_handoff_enabled });
+      const data = await postEngine("set_state_handoff", {
+        enabled: !status?.state_handoff_enabled,
+      });
       patchStatus({
         state_handoff_enabled: data.state_handoff_enabled,
         state_handoff_mb: data.state_handoff_mb,
@@ -469,22 +481,61 @@ export default function ChatPage() {
       targetModel = "dynamic";
       const pLower = textToSend.toLowerCase();
       const matched: string[] = [];
-      if (pLower.includes("postgres") || pLower.includes("asyncpg") || pLower.includes("vector") || pLower.includes("sql") || pLower.includes("database")) {
+      if (
+        pLower.includes("postgres") ||
+        pLower.includes("asyncpg") ||
+        pLower.includes("vector") ||
+        pLower.includes("sql") ||
+        pLower.includes("database")
+      ) {
         matched.push("postgresql");
       }
-      if (pLower.includes("fastapi") || pLower.includes("pydantic") || pLower.includes("route") || pLower.includes("endpoint") || pLower.includes("http") || pLower.includes("web")) {
+      if (
+        pLower.includes("fastapi") ||
+        pLower.includes("pydantic") ||
+        pLower.includes("route") ||
+        pLower.includes("endpoint") ||
+        pLower.includes("http") ||
+        pLower.includes("web")
+      ) {
         matched.push("python_web");
       }
-      if (pLower.includes("duckdb") || pLower.includes("parquet") || pLower.includes("olap") || pLower.includes("analytics") || pLower.includes("arrow")) {
+      if (
+        pLower.includes("duckdb") ||
+        pLower.includes("parquet") ||
+        pLower.includes("olap") ||
+        pLower.includes("analytics") ||
+        pLower.includes("arrow")
+      ) {
         matched.push("duckdb");
       }
-      if (pLower.includes("finance") || pLower.includes("stock") || pLower.includes("portfolio") || pLower.includes("interest") || pLower.includes("valuation") || pLower.includes("dividend")) {
+      if (
+        pLower.includes("finance") ||
+        pLower.includes("stock") ||
+        pLower.includes("portfolio") ||
+        pLower.includes("interest") ||
+        pLower.includes("valuation") ||
+        pLower.includes("dividend")
+      ) {
         matched.push("financial");
       }
-      if (pLower.includes("uv") || pLower.includes("ruff") || pLower.includes("ty") || pLower.includes("pip") || pLower.includes("package") || pLower.includes("astral")) {
+      if (
+        pLower.includes("uv") ||
+        pLower.includes("ruff") ||
+        pLower.includes("ty") ||
+        pLower.includes("pip") ||
+        pLower.includes("package") ||
+        pLower.includes("astral")
+      ) {
         matched.push("astral");
       }
-      if (pLower.includes("python") || pLower.includes("def ") || pLower.includes("class ") || pLower.includes("async") || pLower.includes("type")) {
+      if (
+        pLower.includes("python") ||
+        pLower.includes("def ") ||
+        pLower.includes("class ") ||
+        pLower.includes("async") ||
+        pLower.includes("type")
+      ) {
         if (!matched.includes("python_modern")) matched.push("python_modern");
       }
 
@@ -699,7 +750,9 @@ export default function ChatPage() {
             <div className="mt-2.5 space-y-1.5 rounded-xl bg-white/[0.02] border border-white/5 p-2.5">
               <div className="text-[10px] font-bold text-slate-300 flex justify-between items-center">
                 <span>Riemannian Intent Co-Routing</span>
-                <span className="font-mono text-[9px] text-emerald-400">0..{maxAdapters} Experts</span>
+                <span className="font-mono text-[9px] text-emerald-400">
+                  0..{maxAdapters} Experts
+                </span>
               </div>
               <div className="grid grid-cols-2 gap-2 pt-1 font-mono text-xs">
                 <div>
@@ -709,7 +762,9 @@ export default function ChatPage() {
                     min={0}
                     max={6}
                     value={minAdapters}
-                    onChange={(e) => setMinAdapters(Math.max(0, Math.min(6, parseInt(e.target.value, 10) || 0)))}
+                    onChange={(e) =>
+                      setMinAdapters(Math.max(0, Math.min(6, parseInt(e.target.value, 10) || 0)))
+                    }
                     className="w-full rounded border border-white/10 bg-black/40 p-1 text-white text-xs mt-0.5"
                   />
                 </div>
@@ -720,7 +775,9 @@ export default function ChatPage() {
                     min={1}
                     max={6}
                     value={maxAdapters}
-                    onChange={(e) => setMaxAdapters(Math.max(1, Math.min(6, parseInt(e.target.value, 10) || 1)))}
+                    onChange={(e) =>
+                      setMaxAdapters(Math.max(1, Math.min(6, parseInt(e.target.value, 10) || 1)))
+                    }
                     className="w-full rounded border border-white/10 bg-black/40 p-1 text-white text-xs mt-0.5"
                   />
                 </div>
@@ -788,7 +845,9 @@ export default function ChatPage() {
               <Zap className="h-3 w-3" /> Live Active Stack
             </span>
             <span className="rounded bg-white/5 border border-white/10 px-1.5 py-0.5 font-mono text-[10px] text-slate-300">
-              {routingMode === "base" || currentActiveStack[0] === "Base (Pristine W0)" ? "Base $W_0$" : "In-VRAM Folded"}
+              {routingMode === "base" || currentActiveStack[0] === "Base (Pristine W0)"
+                ? "Base $W_0$"
+                : "In-VRAM Folded"}
             </span>
           </div>
 
@@ -810,7 +869,9 @@ export default function ChatPage() {
           {morphAlert && (
             <div className="mt-2 flex items-center gap-1.5 rounded-lg border border-[#00f2ff]/40 bg-[#00f2ff]/10 p-1.5 font-mono text-[10px] text-[#00f2ff] animate-pulse">
               <Zap className="h-3 w-3" />
-              <span>Morphing stack to: <b>{morphAlert}</b></span>
+              <span>
+                Morphing stack to: <b>{morphAlert}</b>
+              </span>
             </div>
           )}
         </div>
@@ -899,7 +960,9 @@ export default function ChatPage() {
             </div>
 
             {/* 3. Range Spec Gate */}
-            <div className={`flex items-center justify-between ${!status?.spec_decode_enabled ? "opacity-40" : ""}`}>
+            <div
+              className={`flex items-center justify-between ${!status?.spec_decode_enabled ? "opacity-40" : ""}`}
+            >
               <div className="flex items-center">
                 <span className="text-[11px] text-slate-300">⚡ Range Spec Gate</span>
                 <LaymanTooltip
@@ -919,14 +982,22 @@ export default function ChatPage() {
                     : "border-white/10 bg-black/40 text-slate-400"
                 }`}
               >
-                {togglesBusy === "range_gate" ? "..." : status?.spec_range_gate_enabled ? "ON" : "OFF"}
+                {togglesBusy === "range_gate"
+                  ? "..."
+                  : status?.spec_range_gate_enabled
+                    ? "ON"
+                    : "OFF"}
               </button>
             </div>
 
             {/* 3b. Dual-EMA / MACD Circuit-Breaker */}
-            <div className={`flex items-center justify-between ${!status?.spec_decode_enabled ? "opacity-40" : ""}`}>
+            <div
+              className={`flex items-center justify-between ${!status?.spec_decode_enabled ? "opacity-40" : ""}`}
+            >
               <div className="flex items-center">
-                <span className="text-[11px] text-slate-300 font-medium">⚡ MACD Circuit-Breaker</span>
+                <span className="text-[11px] text-slate-300 font-medium">
+                  ⚡ MACD Circuit-Breaker
+                </span>
                 <LaymanTooltip
                   title="Dual-EMA / MACD Speculation Circuit-Breaker"
                   simpleExplanation="An automatic thermostat. When acceptance rate tau drops below 1.8 (hard reasoning/unfamiliar code), speculation is temporarily disengaged to avoid the verification penalty, guaranteeing raw CUDA Graph baseline speed. Once confidence resumes (>2.2), speculation automatically re-engages!"
@@ -944,7 +1015,11 @@ export default function ChatPage() {
                     : "border-white/10 bg-black/40 text-slate-400"
                 }`}
               >
-                {togglesBusy === "circuit_breaker" ? "..." : status?.spec_circuit_breaker_enabled !== false ? "ON" : "OFF"}
+                {togglesBusy === "circuit_breaker"
+                  ? "..."
+                  : status?.spec_circuit_breaker_enabled !== false
+                    ? "ON"
+                    : "OFF"}
               </button>
             </div>
 
@@ -969,14 +1044,20 @@ export default function ChatPage() {
                       : "border-white/10 bg-black/40 text-slate-400"
                   }`}
                 >
-                  {togglesBusy === "renko" ? "..." : status?.renko_smoothing_enabled !== false ? "ON" : "OFF"}
+                  {togglesBusy === "renko"
+                    ? "..."
+                    : status?.renko_smoothing_enabled !== false
+                      ? "ON"
+                      : "OFF"}
                 </button>
               </div>
 
               {/* Epsilon Box Selector */}
               {status?.renko_smoothing_enabled !== false && (
                 <div className="flex items-center justify-between gap-1 mt-1 bg-black/40 p-1 rounded-lg border border-white/5">
-                  <span className="text-[9px] font-mono text-slate-400 pl-1">Threshold ($\epsilon$):</span>
+                  <span className="text-[9px] font-mono text-slate-400 pl-1">
+                    Threshold ($\epsilon$):
+                  </span>
                   <div className="flex gap-1">
                     {(status?.renko_epsilon_options || [3.0, 5.0, 8.0]).map((eps) => (
                       <button
@@ -1000,7 +1081,9 @@ export default function ChatPage() {
             {/* 4b. Thinking Supervisor (Chapters 3, 4, 5 & 8) */}
             <div className="flex items-center justify-between border-t border-white/5 pt-2">
               <div className="flex items-center">
-                <span className="text-[11px] text-slate-300 font-medium">🧠 Thinking Supervisor</span>
+                <span className="text-[11px] text-slate-300 font-medium">
+                  🧠 Thinking Supervisor
+                </span>
                 <LaymanTooltip
                   title="Runtime Thinking Supervisor"
                   simpleExplanation="Eliminates infinite reasoning loops and enforces strict thinking budgets (Low/Med/High) at the GPU sampler level. Uses Renko latent attractor detection to break repetitive loops and Shannon entropy stoploss to exit the instant the answer is found."
@@ -1017,7 +1100,11 @@ export default function ChatPage() {
                     : "border-white/10 bg-black/40 text-slate-400"
                 }`}
               >
-                {togglesBusy === "thinking_sup" ? "..." : status?.thinking_supervisor_enabled !== false ? "ON" : "OFF"}
+                {togglesBusy === "thinking_sup"
+                  ? "..."
+                  : status?.thinking_supervisor_enabled !== false
+                    ? "ON"
+                    : "OFF"}
               </button>
             </div>
 
@@ -1091,7 +1178,9 @@ export default function ChatPage() {
                 )}
               </div>
               <div className="flex rounded-lg bg-black/40 p-0.5 border border-white/10">
-                {(status?.ring_buffer_options || ["dense", "poet", "selective_hybrid", "pointer"]).map((mode) => (
+                {(
+                  status?.ring_buffer_options || ["dense", "poet", "selective_hybrid", "pointer"]
+                ).map((mode) => (
                   <button
                     key={mode}
                     onClick={() => setRingBufferMode(mode)}
@@ -1128,7 +1217,11 @@ export default function ChatPage() {
                     : "border-white/10 bg-black/40 text-slate-400"
                 }`}
               >
-                {togglesBusy === "state_handoff" ? "..." : status?.state_handoff_enabled !== false ? "ON" : "OFF"}
+                {togglesBusy === "state_handoff"
+                  ? "..."
+                  : status?.state_handoff_enabled !== false
+                    ? "ON"
+                    : "OFF"}
               </button>
             </div>
 
@@ -1179,7 +1272,11 @@ export default function ChatPage() {
                     : "bg-gradient-to-br from-[#00f2ff] to-[#a855f7] text-slate-950 shadow-[0_0_12px_rgba(0,242,255,0.3)]"
                 }`}
               >
-                {m.role === "user" ? <User className="h-3.5 w-3.5" /> : <Bot className="h-3.5 w-3.5 fill-current" />}
+                {m.role === "user" ? (
+                  <User className="h-3.5 w-3.5" />
+                ) : (
+                  <Bot className="h-3.5 w-3.5 fill-current" />
+                )}
               </div>
 
               {/* Message Bubble */}
@@ -1192,7 +1289,9 @@ export default function ChatPage() {
               >
                 {m.reasoning && (
                   <div className="mb-2 rounded-lg border-l-2 border-[#a855f7] bg-black/40 p-2 text-[11px] italic text-slate-400">
-                    <div className="font-mono text-[9px] font-bold text-[#a855f7] mb-0.5">Reasoning Chain</div>
+                    <div className="font-mono text-[9px] font-bold text-[#a855f7] mb-0.5">
+                      Reasoning Chain
+                    </div>
                     {m.reasoning}
                   </div>
                 )}

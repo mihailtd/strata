@@ -17,14 +17,21 @@ def test_server_file_exists() -> None:
 
 def test_run_server_sh_exists_and_executable() -> None:
     import stat
+
     assert RUN_SH.exists(), "run_server.sh is missing"
     assert RUN_SH.stat().st_mode & stat.S_IXUSR, "run_server.sh must be executable"
 
 
 def test_server_has_openai_routes() -> None:
     source = SERVER.read_text()
-    for route in ["/v1/chat/completions", "/v1/models", "/health", "/api/engine/status",
-                  "/api/engine/load", "/api/engine/unload"]:
+    for route in [
+        "/v1/chat/completions",
+        "/v1/models",
+        "/health",
+        "/api/engine/status",
+        "/api/engine/load",
+        "/api/engine/unload",
+    ]:
         assert route in source, f"Route {route!r} missing from server.py"
 
 
@@ -38,14 +45,14 @@ def test_server_uses_ipwf_engine_components() -> None:
 def test_server_does_not_use_triton_27b_engine() -> None:
     """Separation invariant: IPWF server must not import Native27BEngine."""
     source = SERVER.read_text()
-    assert "Native27BEngine" not in source, \
-        "runtime-ipwf must NOT use Native27BEngine (belongs in runtime-triton)"
+    assert "Native27BEngine" not in source, "runtime-ipwf must NOT use Native27BEngine (belongs in runtime-triton)"
 
 
 def test_server_default_port_is_8002() -> None:
     source = SERVER.read_text()
-    assert '"8002"' in source or "'8002'" in source, \
+    assert '"8002"' in source or "'8002'" in source, (
         "Default port must be 8002 (not 8000 — avoid collision with runtime-triton)"
+    )
 
 
 def test_server_is_single_tenant() -> None:
@@ -56,8 +63,7 @@ def test_server_is_single_tenant() -> None:
 def test_server_supports_9b_model() -> None:
     """IPWF engine must handle both 4B and 9B model loading."""
     source = SERVER.read_text()
-    assert "9b" in source.lower() or "9B" in source, \
-        "server.py must handle Qwen3.5-9B as well as 4B"
+    assert "9b" in source.lower() or "9B" in source, "server.py must handle Qwen3.5-9B as well as 4B"
 
 
 def test_server_has_riemannian_router() -> None:
@@ -78,6 +84,7 @@ def test_readme_exists_and_documents_port() -> None:
 
 def test_no_hardcoded_performance_numbers() -> None:
     import re
+
     source = SERVER.read_text()
     suspicious = re.findall(r'["\']\s*\d+\.\d+\s*(tok/s|GB/s)\s*["\']', source)
     assert not suspicious, f"Hardcoded metric strings found: {suspicious} (Zero-Mock invariant)"

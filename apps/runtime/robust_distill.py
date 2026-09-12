@@ -17,7 +17,8 @@ Mathematical Formulation:
    Provides simultaneous 50% breakdown robustness and sparse low-rank support.
 """
 
-from typing import Literal, Optional
+from typing import Literal
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -35,7 +36,7 @@ class HuberDistillationLoss(nn.Module):
         self,
         delta: float = 1.0,
         reduction: Literal["mean", "sum", "none"] = "mean",
-        feature_dim: Optional[int] = None,
+        feature_dim: int | None = None,
     ) -> None:
         super().__init__()
         if delta <= 0:
@@ -48,7 +49,7 @@ class HuberDistillationLoss(nn.Module):
         self,
         student_hidden: torch.Tensor,
         teacher_hidden: torch.Tensor,
-        mask: Optional[torch.Tensor] = None,
+        mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Compute Huber distillation loss between student and teacher hidden tensors.
 
@@ -68,7 +69,7 @@ class HuberDistillationLoss(nn.Module):
         # Linear region:    |e| > delta
         quadratic = torch.clamp(abs_err, max=self.delta)
         linear = abs_err - quadratic
-        loss = 0.5 * (quadratic ** 2) + self.delta * linear
+        loss = 0.5 * (quadratic**2) + self.delta * linear
 
         if mask is not None:
             # Broadcast mask across hidden dimensions if necessary
@@ -112,8 +113,8 @@ class LADLassoLoss(nn.Module):
         self,
         student_hidden: torch.Tensor,
         teacher_hidden: torch.Tensor,
-        model_parameters: Optional[list[torch.Tensor]] = None,
-        mask: Optional[torch.Tensor] = None,
+        model_parameters: list[torch.Tensor] | None = None,
+        mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Computes LAD loss + optional L1 LASSO parameter penalty."""
         residual = student_hidden - teacher_hidden

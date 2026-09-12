@@ -5,8 +5,6 @@ instantaneously, bypassing sequential single-token autoregressive memory-bus bot
 """
 
 import re
-import time
-from typing import Generator, Tuple
 
 # Pre-compiled AST grammar macro templates for high-frequency structural patterns
 AST_MACRO_REGISTRY = [
@@ -23,10 +21,7 @@ AST_MACRO_REGISTRY = [
     },
     {
         "trigger": re.compile(r"(?:CREATE\s+EXTENSION\s+IF\s+NOT\s+EXISTS\s+vector;)", re.IGNORECASE),
-        "expansion": (
-            "\n\n-- Ensure vector extension is available\n"
-            "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";\n"
-        ),
+        "expansion": ('\n\n-- Ensure vector extension is available\nCREATE EXTENSION IF NOT EXISTS "uuid-ossp";\n'),
         "domain": "postgresql",
     },
     {
@@ -41,16 +36,12 @@ AST_MACRO_REGISTRY = [
     },
     {
         "trigger": re.compile(r"(?:class\s+\w+Create\s*\(\s*BaseModel\s*\):)", re.IGNORECASE),
-        "expansion": (
-            "\n    model_config = ConfigDict(from_attributes=True)\n"
-        ),
+        "expansion": ("\n    model_config = ConfigDict(from_attributes=True)\n"),
         "domain": "fastapi",
     },
     {
         "trigger": re.compile(r"(?:async\s+def\s+get_db_connection\s*\(\s*\):)", re.IGNORECASE),
-        "expansion": (
-            "\n    async with app.state.pool.acquire() as connection:\n        yield connection"
-        ),
+        "expansion": ("\n    async with app.state.pool.acquire() as connection:\n        yield connection"),
         "domain": "fastapi",
     },
 ]

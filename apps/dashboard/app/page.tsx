@@ -52,12 +52,36 @@ export default function TelemetryPage() {
   }, []);
 
   const topologyRows = [
-    { domain: "astral", d_r: [0.0, 114.032, 119.828, 115.494, 117.124, 119.391], scale: "3.33 (Calibrated)" },
-    { domain: "postgresql", d_r: [114.071, 0.0, 117.375, 112.493, 116.254, 114.311], scale: "6.00 (Calibrated)" },
-    { domain: "duckdb", d_r: [119.865, 117.294, 0.0, 119.813, 118.528, 119.578], scale: "4.28 (Calibrated)" },
-    { domain: "financial", d_r: [115.476, 112.488, 119.822, 0.0, 117.605, 116.605], scale: "4.34 (Calibrated)" },
-    { domain: "python_modern", d_r: [117.131, 116.222, 118.643, 117.613, 0.0, 117.654], scale: "8.96 (Pass ≤ 8.0)" },
-    { domain: "python_web", d_r: [116.261, 114.289, 119.655, 116.588, 117.634, 0.0], scale: "8.26 (Calibrated)" },
+    {
+      domain: "astral",
+      d_r: [0.0, 114.032, 119.828, 115.494, 117.124, 119.391],
+      scale: "3.33 (Calibrated)",
+    },
+    {
+      domain: "postgresql",
+      d_r: [114.071, 0.0, 117.375, 112.493, 116.254, 114.311],
+      scale: "6.00 (Calibrated)",
+    },
+    {
+      domain: "duckdb",
+      d_r: [119.865, 117.294, 0.0, 119.813, 118.528, 119.578],
+      scale: "4.28 (Calibrated)",
+    },
+    {
+      domain: "financial",
+      d_r: [115.476, 112.488, 119.822, 0.0, 117.605, 116.605],
+      scale: "4.34 (Calibrated)",
+    },
+    {
+      domain: "python_modern",
+      d_r: [117.131, 116.222, 118.643, 117.613, 0.0, 117.654],
+      scale: "8.96 (Pass ≤ 8.0)",
+    },
+    {
+      domain: "python_web",
+      d_r: [116.261, 114.289, 119.655, 116.588, 117.634, 0.0],
+      scale: "8.26 (Calibrated)",
+    },
   ];
 
   const getSynergyClass = (val: number) => {
@@ -195,11 +219,13 @@ export default function TelemetryPage() {
         <div className="flex items-center justify-between mb-2">
           <div>
             <h2 className="text-base font-bold text-white flex items-center gap-2">
-              <Activity className="h-4 w-4 text-[#00f2ff]" />
-              ⚡ 6×6 Canonical Domain Riemannian Topology (d_R Geodesic Manifold)
+              <Activity className="h-4 w-4 text-[#00f2ff]" />⚡ 6×6 Canonical Domain Riemannian
+              Topology (d_R Geodesic Manifold)
             </h2>
             <p className="text-xs text-slate-400 mt-1">
-              Live pairwise Affine-Invariant Riemannian Metric ($d_R$) computed on Ledoit-Wolf output layer covariance matrices. Lowest distances indicate optimal co-adaptation synergy.
+              Live pairwise Affine-Invariant Riemannian Metric ($d_R$) computed on Ledoit-Wolf
+              output layer covariance matrices. Lowest distances indicate optimal co-adaptation
+              synergy.
             </p>
           </div>
           <span className="rounded-md border border-[rgba(255,255,255,0.08)] bg-white/5 px-2.5 py-1 font-mono text-xs text-slate-400">
@@ -223,7 +249,10 @@ export default function TelemetryPage() {
             </thead>
             <tbody>
               {topologyRows.map((row) => (
-                <tr key={row.domain} className="border-b border-[rgba(255,255,255,0.05)] hover:bg-white/[0.02]">
+                <tr
+                  key={row.domain}
+                  className="border-b border-[rgba(255,255,255,0.05)] hover:bg-white/[0.02]"
+                >
                   <td className="py-3 px-4 font-bold text-white text-left">{row.domain}</td>
                   {row.d_r.map((val, idx) => (
                     <td key={idx} className={`py-3 px-4 text-center ${getSynergyClass(val)}`}>

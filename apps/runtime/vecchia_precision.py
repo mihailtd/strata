@@ -82,9 +82,9 @@ class VecchiaFactor:
     """
 
     m: int
-    mean: np.ndarray        # [L]
-    coeffs: np.ndarray      # [L, m]
-    resid_var: np.ndarray   # [L]
+    mean: np.ndarray  # [L]
+    coeffs: np.ndarray  # [L, m]
+    resid_var: np.ndarray  # [L]
     fit_seconds: float = 0.0
 
     @property
@@ -136,7 +136,7 @@ def fit_vecchia(X: np.ndarray, m: int, ridge: float = 1e-6) -> VecchiaFactor:
         if k == 0:
             resid_var[ell] = max(float(y @ y) / n, _VAR_FLOOR)
             continue
-        Z = Xc[:, start:stop]                      # [n, k], oldest .. newest
+        Z = Xc[:, start:stop]  # [n, k], oldest .. newest
         G = (Z.T @ Z) / n
         g = (Z.T @ y) / n
         lam = ridge * max(float(np.trace(G)) / k, _VAR_FLOOR)
@@ -198,8 +198,7 @@ def fit_vecchia_batched(X: np.ndarray, m: int, ridge: float = 1e-6) -> VecchiaFa
 
     if m == 0 or L == 1:
         resid_var[:] = np.maximum(cov_lag[0], _VAR_FLOOR)
-        return VecchiaFactor(m=m, mean=mean, coeffs=coeffs, resid_var=resid_var,
-                             fit_seconds=time.perf_counter() - t0)
+        return VecchiaFactor(m=m, mean=mean, coeffs=coeffs, resid_var=resid_var, fit_seconds=time.perf_counter() - t0)
 
     # short conditioning sets: layers 0..m-1 (a loop of length m, independent of L)
     for ell in range(min(m, L)):
@@ -216,32 +215,30 @@ def fit_vecchia_batched(X: np.ndarray, m: int, ridge: float = 1e-6) -> VecchiaFa
         coeffs[ell, :ell] = b[::-1]
 
     if m >= L:
-        return VecchiaFactor(m=m, mean=mean, coeffs=coeffs, resid_var=resid_var,
-                             fit_seconds=time.perf_counter() - t0)
+        return VecchiaFactor(m=m, mean=mean, coeffs=coeffs, resid_var=resid_var, fit_seconds=time.perf_counter() - t0)
 
     # full conditioning sets: layers m..L-1, solved as one batch
     rows = np.arange(m, L)
     a_idx = np.arange(m)
     # predictor a of layer ell is column (ell - 1 - a); G[a, b] = Cov of those two columns
-    pred_cols = rows[:, None] - 1 - a_idx[None, :]                       # [R, m]
-    lag_ab = np.abs(a_idx[:, None] - a_idx[None, :])                     # [m, m]
-    newer = np.maximum(pred_cols[:, :, None], pred_cols[:, None, :])     # [R, m, m]
-    cov_stack = np.stack(cov_lag, axis=0)                                # [m+1, L]
-    G_batch = cov_stack[lag_ab[None, :, :], newer]                       # [R, m, m]
-    g_batch = cov_stack[a_idx + 1, rows[:, None]]                        # [R, m]
+    pred_cols = rows[:, None] - 1 - a_idx[None, :]  # [R, m]
+    lag_ab = np.abs(a_idx[:, None] - a_idx[None, :])  # [m, m]
+    newer = np.maximum(pred_cols[:, :, None], pred_cols[:, None, :])  # [R, m, m]
+    cov_stack = np.stack(cov_lag, axis=0)  # [m+1, L]
+    G_batch = cov_stack[lag_ab[None, :, :], newer]  # [R, m, m]
+    g_batch = cov_stack[a_idx + 1, rows[:, None]]  # [R, m]
 
     trace = np.einsum("rii->r", G_batch) / m
     lam = ridge * np.maximum(trace, _VAR_FLOOR)
     G_batch = G_batch + lam[:, None, None] * np.eye(m)[None, :, :]
-    b_batch = np.linalg.solve(G_batch, g_batch[..., None])[..., 0]       # [R, m]
+    b_batch = np.linalg.solve(G_batch, g_batch[..., None])[..., 0]  # [R, m]
 
     quad = np.einsum("ra,rab,rb->r", b_batch, G_batch, b_batch)
     resid = cov_lag[0][rows] - 2.0 * np.einsum("ra,ra->r", b_batch, g_batch) + quad
     coeffs[rows] = b_batch
     resid_var[rows] = np.maximum(resid, _VAR_FLOOR)
 
-    return VecchiaFactor(m=m, mean=mean, coeffs=coeffs, resid_var=resid_var,
-                         fit_seconds=time.perf_counter() - t0)
+    return VecchiaFactor(m=m, mean=mean, coeffs=coeffs, resid_var=resid_var, fit_seconds=time.perf_counter() - t0)
 
 
 def _innovations(factor: VecchiaFactor, X: np.ndarray) -> np.ndarray:
@@ -252,7 +249,7 @@ def _innovations(factor: VecchiaFactor, X: np.ndarray) -> np.ndarray:
         lag = k + 1
         if lag >= factor.n_layers:
             break
-        w = factor.coeffs[lag:, k]                 # weight of layer ell-lag in layer ell
+        w = factor.coeffs[lag:, k]  # weight of layer ell-lag in layer ell
         R[:, lag:] -= Xc[:, : factor.n_layers - lag] * w
     return R
 
@@ -343,7 +340,7 @@ def banded_precision_solve(factor: VecchiaFactor, y: np.ndarray) -> np.ndarray:
     for ell in range(L - 1, -1, -1):
         for k in range(min(factor.m, ell)):
             z[ell - 1 - k] -= -factor.coeffs[ell, k] * z[ell]
-    z *= factor.resid_var                                  # D
+    z *= factor.resid_var  # D
     # T x = z  (unit lower triangular): ascending order
     for ell in range(L):
         acc = 0.0

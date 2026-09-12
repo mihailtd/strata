@@ -199,14 +199,14 @@ class POETCompressedStateRingBuffer:
 
         self.gdn_layers = []
         self.attn_plan = []
-        
+
         layers = getattr(cache, "layers", [])
-        
+
         d = None
         device = None
         dtype = None
         conv_shape = None
-        
+
         for layer in layers:
             if hasattr(layer, "recurrent_states") and hasattr(layer, "conv_states"):
                 self.gdn_layers.append(layer)
@@ -223,7 +223,7 @@ class POETCompressedStateRingBuffer:
                 self.attn_plan.append((layer, [initial_len] * max_depth))
 
         self.num_layers = len(self.gdn_layers)
-        
+
         if self.num_layers > 0:
             # Batched Factor loading matrix Lambda [num_layers, d, r]
             self.loadings = torch.randn(self.num_layers, d, rank, dtype=torch.float32, device=device)
@@ -237,17 +237,28 @@ class POETCompressedStateRingBuffer:
 
             # Pre-allocated sparse coordinate buffers (top rho% entries per slot)
             self.k_sparse = max(1, int(d * sparsity_target))
-            self.sparse_vals = torch.zeros(max_depth, self.num_layers, self.k_sparse, dtype=torch.float16, device=device)
-            self.sparse_indices = torch.zeros(max_depth, self.num_layers, self.k_sparse, dtype=torch.int32, device=device)
+            self.sparse_vals = torch.zeros(
+                max_depth, self.num_layers, self.k_sparse, dtype=torch.float16, device=device
+            )
+            self.sparse_indices = torch.zeros(
+                max_depth, self.num_layers, self.k_sparse, dtype=torch.int32, device=device
+            )
 
             # Conv state buffer (small, kept dense)
             self.conv_buf = torch.empty((max_depth, self.num_layers, *conv_shape), dtype=dtype, device=device)
-            
+
             # Workspace for fast gather/scatter
             self.flat_rec_buf = torch.empty((self.num_layers, d), dtype=torch.float32, device=device)
 
-            dense_bytes = self.num_layers * ((max_depth * d * 2) + (self.conv_buf.numel() // self.num_layers * self.conv_buf.element_size()))
-            poet_bytes = self.num_layers * ((d * rank * 2) + (max_depth * rank * 2) + (max_depth * self.k_sparse * 6) + (self.conv_buf.numel() // self.num_layers * self.conv_buf.element_size()))
+            dense_bytes = self.num_layers * (
+                (max_depth * d * 2) + (self.conv_buf.numel() // self.num_layers * self.conv_buf.element_size())
+            )
+            poet_bytes = self.num_layers * (
+                (d * rank * 2)
+                + (max_depth * rank * 2)
+                + (max_depth * self.k_sparse * 6)
+                + (self.conv_buf.numel() // self.num_layers * self.conv_buf.element_size())
+            )
             self.total_dense_bytes = dense_bytes
             self.total_poet_bytes = poet_bytes
             self.compression_ratio = dense_bytes / max(1, poet_bytes)
@@ -259,36 +270,36 @@ class POETCompressedStateRingBuffer:
     def push(self, cache) -> int:
         """Compress and save incoming token state into ring buffer vectorized across layers."""
         slot = self.write_ptr
-        
+
         if self.num_layers > 0:
             # 1. Gather all layer states (fast parallel copy)
             for i, layer in enumerate(self.gdn_layers):
                 self.flat_rec_buf[i].copy_(layer.recurrent_states[0].flatten(), non_blocking=True)
                 self.conv_buf[slot, i].copy_(layer.conv_states[0], non_blocking=True)
-                
+
             # flat_rec_buf is [num_layers, d]
-            x = self.flat_rec_buf.unsqueeze(2) # [num_layers, d, 1]
-            L = self.loadings # [num_layers, d, r]
-            
+            x = self.flat_rec_buf.unsqueeze(2)  # [num_layers, d, 1]
+            L = self.loadings  # [num_layers, d, r]
+
             # 2. Project factor score: f = Lambda^T @ x
             # bmm( [num_layers, r, d], [num_layers, d, 1] ) -> [num_layers, r, 1]
             f = torch.bmm(L.transpose(1, 2), x)
             self.f_scores[slot].copy_(f.squeeze(2), non_blocking=True)
-            
+
             # 3. Reconstruct: recon = Lambda @ f
             # bmm( [num_layers, d, r], [num_layers, r, 1] ) -> [num_layers, d, 1]
             recon = torch.bmm(L, f)
-            
+
             # 4. Residual innovation
-            residual = (x - recon).squeeze(2) # [num_layers, d]
-            
+            residual = (x - recon).squeeze(2)  # [num_layers, d]
+
             # 5. Top-k sparse innovation encoding (1 batched kernel launch)
             topk_vals, topk_idx = torch.topk(torch.abs(residual), k=self.k_sparse, dim=1)
             signed_vals = residual.gather(1, topk_idx)
-            
+
             self.sparse_vals[slot].copy_(signed_vals, non_blocking=True)
             self.sparse_indices[slot].copy_(topk_idx, non_blocking=True)
-            
+
         for layer, seq_lens in self.attn_plan:
             seq_lens[slot] = layer.keys.shape[-2] if hasattr(layer.keys, "shape") else 0
 
@@ -299,21 +310,21 @@ class POETCompressedStateRingBuffer:
         """Decompress and restore verified state checkpoint from POET factor representation."""
         if slot is None:
             slot = (self.commit_ptr + n_accepted) % self.max_depth
-            
+
         if self.num_layers > 0:
-            f = self.f_scores[slot].unsqueeze(2) # [num_layers, r, 1]
-            L = self.loadings # [num_layers, d, r]
-            
+            f = self.f_scores[slot].unsqueeze(2)  # [num_layers, r, 1]
+            L = self.loadings  # [num_layers, d, r]
+
             # Decompress: x_hat = Lambda @ f + S
-            recon = torch.bmm(L, f).squeeze(2) # [num_layers, d]
-            
-            sparse_v = self.sparse_vals[slot].float() # [num_layers, k_sparse]
-            sparse_idx = self.sparse_indices[slot].long() # [num_layers, k_sparse]
-            
+            recon = torch.bmm(L, f).squeeze(2)  # [num_layers, d]
+
+            sparse_v = self.sparse_vals[slot].float()  # [num_layers, k_sparse]
+            sparse_idx = self.sparse_indices[slot].long()  # [num_layers, k_sparse]
+
             recon.scatter_add_(1, sparse_idx, sparse_v)
-            
+
             recon = recon.view(self.num_layers, *self.orig_shape).to(torch.bfloat16)
-            
+
             # Scatter back to layers
             for i, layer in enumerate(self.gdn_layers):
                 layer.recurrent_states[0].copy_(recon[i], non_blocking=True)
@@ -371,7 +382,7 @@ class SelectiveHybridPOETRingBuffer:
         # Sub-buffers:
         # 1. Short-window dense buffer for immediate speculative rollbacks
         self.short_ring = StateRingBuffer(cache, max_depth=short_window_depth)
-        
+
         # 2. Long-horizon POET compressed buffer for SSM recurrent history (L0 -> L29)
         self.long_poet_ring = POETCompressedStateRingBuffer(
             cache, max_depth=max_depth, rank=rank, sparsity_target=sparsity_target
@@ -453,8 +464,6 @@ class RingBufferReplayEngine:
         else:
             self.ring = StateRingBuffer(cache, max_depth=max_depth)
 
-
-
     def checkpoint(self, cache) -> int:
         """Save pre-speculation state checkpoint."""
         if self.mode == "pointer":
@@ -490,4 +499,3 @@ class RingBufferReplayEngine:
         else:
             self.ring.write_ptr = 0
             self.ring.commit_ptr = 0
-

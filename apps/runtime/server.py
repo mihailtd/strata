@@ -10,13 +10,12 @@ Serves local micro-experts via standard OpenAI REST API endpoints (/v1/chat/comp
    tool DAG, so there is no concurrency to schedule -- see docs/DECISIONS.md §6.
 """
 
-import os
-import sys
 import asyncio
 import json
+import os
 import queue
 import re
-import subprocess
+import sys
 import threading
 import time
 import urllib.request
@@ -27,6 +26,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+import torch
+from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel, ConfigDict, Field
+from sse_starlette.sse import EventSourceResponse
+from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenizerBase
+
 from runtime import gpu_preflight, tool_trace, training_db
 from runtime.canon import (
     CANON,
@@ -35,14 +42,6 @@ from runtime.canon import (
     configure_deterministic_attention,
     validate_kv_cache_precision,
 )
-import torch
-from fastapi import Body, FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
-from sse_starlette.sse import EventSourceResponse
-from pydantic import BaseModel, ConfigDict, Field
-from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenizerBase
-
 from runtime.cuda_graph import FoldedCudaGraphDecoder
 from runtime.fused_norm import (
     fold_rmsnorm_into_linear,
@@ -52,7 +51,6 @@ from runtime.fused_norm import (
 from runtime.novel_peft import FoldableExpert, WeightFoldingEngine, set_hard_vram_cap
 from runtime.range_statistic_gate import RangeStatisticGate
 from runtime.router.vram_state_router import VRAMState
-
 
 # How long the dispatch loop will wait for a streaming response to be consumed
 # before moving on. Bounds the damage from a client that disconnects mid-stream.
@@ -105,7 +103,9 @@ def get_27b_tokenizer() -> Any:
     global _tokenizer_27b
     if _tokenizer_27b is None:
         from pathlib import Path
+
         from transformers import AutoTokenizer
+
         snaps = list(Path.home().glob(".cache/huggingface/hub/models--Qwen--Qwen3.5-9B/snapshots/*"))
         if snaps:
             _tokenizer_27b = AutoTokenizer.from_pretrained(str(snaps[0]))
@@ -121,6 +121,7 @@ def unload_triton_27b_engine() -> None:
         print("[IMB Server] Unloading Native 27B Triton engine to free VRAM...")
         native_triton_engine_27b = None
         import gc
+
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -132,6 +133,7 @@ def get_native_triton_27b_engine(num_layers: int = 64) -> Any:
     if native_triton_engine_27b is None:
         unload_ollama_models()
         from runtime.native_27b_engine import Native27BEngine
+
         print(f"[IMB Server] Loading Native 27B Triton Engine ({num_layers} layers) into GPU...")
         engine = Native27BEngine(num_layers=num_layers)
         engine.load_from_cache()
@@ -216,6 +218,8 @@ class CompletionRequest(BaseModel):
 class ChatCompletionChoice(BaseModel):
     index: int
     message: ChatMessage
+
+
 class UsageInfo(BaseModel):
     model_config = ConfigDict(extra="ignore")
     prompt_tokens: int
@@ -333,6 +337,8 @@ def extract_msg_content(content: Any) -> str:
         if "content" in content:
             return str(content["content"])
     return str(content)
+
+
 CURATED_MODELS = [
     {
         "id": "qwen3.5-9b-astral",
@@ -468,39 +474,93 @@ def classify_prompt_intent(prompt: str) -> dict[str, float]:
     p_lower = prompt.lower()
 
     def hit(words: tuple[str, ...]) -> bool:
-        return any(re.search(rf"(?<![a-z0-9]){re.escape(w)}(?![a-z0-9])", p_lower)
-                   for w in words)
+        return any(re.search(rf"(?<![a-z0-9]){re.escape(w)}(?![a-z0-9])", p_lower) for w in words)
 
     # Equal floors. No domain gets a head start it did not earn from the prompt.
-    scores = {d: 0.05 for d in ("astral", "postgresql", "duckdb", "financial",
-                                "python_modern", "python_web")}
+    scores = {d: 0.05 for d in ("astral", "postgresql", "duckdb", "financial", "python_modern", "python_web")}
 
     # python_modern is a STYLE adapter -- it co-activates when Python is being
     # written, not when SQL is. The old table boosted it on the SQL rules too.
-    if hit(("uv", "uvx", "ruff", "ty", "pyproject", "toml", "pip", "poetry",
-            "package", "packaging", "astral", "lint", "linter", "formatter")):
+    if hit(
+        (
+            "uv",
+            "uvx",
+            "ruff",
+            "ty",
+            "pyproject",
+            "toml",
+            "pip",
+            "poetry",
+            "package",
+            "packaging",
+            "astral",
+            "lint",
+            "linter",
+            "formatter",
+        )
+    ):
         scores["astral"] += 0.85
         scores["python_modern"] += 0.25
 
-    if hit(("postgres", "postgresql", "asyncpg", "psycopg", "pgvector", "psql",
-            "<=>", "hnsw", "ivfflat", "index", "schema", "migration")):
+    if hit(
+        (
+            "postgres",
+            "postgresql",
+            "asyncpg",
+            "psycopg",
+            "pgvector",
+            "psql",
+            "<=>",
+            "hnsw",
+            "ivfflat",
+            "index",
+            "schema",
+            "migration",
+        )
+    ):
         scores["postgresql"] += 0.90
 
-    if hit(("duckdb", "parquet", "olap", "read_parquet", "analytics", "analytical",
-            "aggregate", "aggregation", "columnar")):
+    if hit(
+        ("duckdb", "parquet", "olap", "read_parquet", "analytics", "analytical", "aggregate", "aggregation", "columnar")
+    ):
         scores["duckdb"] += 0.92
 
-    if hit(("fastapi", "apirouter", "pydantic", "endpoint", "route", "router",
-            "rest", "http", "asgi", "basemodel", "uvicorn")):
+    if hit(
+        (
+            "fastapi",
+            "apirouter",
+            "pydantic",
+            "endpoint",
+            "route",
+            "router",
+            "rest",
+            "http",
+            "asgi",
+            "basemodel",
+            "uvicorn",
+        )
+    ):
         scores["python_web"] += 0.90
         scores["python_modern"] += 0.25
 
-    if hit(("financial", "macaulay", "annuity", "bond", "coupon", "yield",
-            "portfolio", "amortization", "npv", "irr")):
+    if hit(("financial", "macaulay", "annuity", "bond", "coupon", "yield", "portfolio", "amortization", "npv", "irr")):
         scores["financial"] += 0.90
 
-    if hit(("dataclass", "match", "generic", "protocol", "typing", "iterator",
-            "generator", "pathlib", "enum", "asyncio", "taskgroup")):
+    if hit(
+        (
+            "dataclass",
+            "match",
+            "generic",
+            "protocol",
+            "typing",
+            "iterator",
+            "generator",
+            "pathlib",
+            "enum",
+            "asyncio",
+            "taskgroup",
+        )
+    ):
         scores["python_modern"] += 0.50
 
     return scores
@@ -511,11 +571,22 @@ def resolve_expert(model_name: str) -> FoldableExpert | str | None:
     name_clean = model_name.split("/")[-1].lower().strip()
     registry = model_state.get("expert_registry", {})
 
-    if name_clean in ("dynamic", "auto", "qwen3.5-4b-dynamic", "qwen3.5-4b-auto", "qwen3.5-9b-dynamic", "qwen3.5-9b-auto"):
+    if name_clean in (
+        "dynamic",
+        "auto",
+        "qwen3.5-4b-dynamic",
+        "qwen3.5-4b-auto",
+        "qwen3.5-9b-dynamic",
+        "qwen3.5-9b-auto",
+    ):
         return "dynamic"
 
     # 1. Base / Pristine Model Check (returns None so folding_engine.restore() is called)
-    if any(k in name_clean for k in ["base", "pristine", "default"]) or name_clean in ("qwen3.5", "qwen3.5-4b", "qwen3.5-9b"):
+    if any(k in name_clean for k in ["base", "pristine", "default"]) or name_clean in (
+        "qwen3.5",
+        "qwen3.5-4b",
+        "qwen3.5-9b",
+    ):
         return None
 
     # 2. Direct exact match in registry
@@ -537,7 +608,6 @@ def resolve_expert(model_name: str) -> FoldableExpert | str | None:
         return registry.get("python_modern")
 
     return "dynamic"  # Default to dynamic team routing
-
 
 
 DOMAIN_SYSTEM_DIRECTIVES = {
@@ -589,15 +659,23 @@ def classify_prompt_domain(messages: list[ChatMessage], model_name: str = "") ->
     user_texts = " ".join([extract_msg_content(m.content) for m in messages if m.role in ("user", "system")]).lower()
 
     # Package installation / tooling intent takes highest priority for setup questions
-    if any(k in user_texts for k in ["install", "pip", "venv", "package", "dependency", "pyproject", "setup", "uv", "ruff"]):
+    if any(
+        k in user_texts for k in ["install", "pip", "venv", "package", "dependency", "pyproject", "setup", "uv", "ruff"]
+    ):
         return "astral"
     if any(k in user_texts for k in ["duckdb", "parquet", "qualify", "arrow", "olap", "columnar"]):
         return "duckdb"
-    if any(k in user_texts for k in ["postgres", "postgresql", "pgvector", "hnsw", "vector_cosine_ops", "sql", "migration"]):
+    if any(
+        k in user_texts for k in ["postgres", "postgresql", "pgvector", "hnsw", "vector_cosine_ops", "sql", "migration"]
+    ):
         return "postgresql"
-    if any(k in user_texts for k in ["fastapi", "uvicorn", "endpoint", "sse", "streamingresponse", "lifespan", "pydantic"]):
+    if any(
+        k in user_texts for k in ["fastapi", "uvicorn", "endpoint", "sse", "streamingresponse", "lifespan", "pydantic"]
+    ):
         return "fastapi"
-    if any(k in user_texts for k in ["monte carlo", "wealth", "portfolio", "retirement", "drawdown", "gbm", "covariance"]):
+    if any(
+        k in user_texts for k in ["monte carlo", "wealth", "portfolio", "retirement", "drawdown", "gbm", "covariance"]
+    ):
         return "financial"
 
     return "astral"  # Default developer specialist
@@ -633,6 +711,7 @@ def resolve_27b_adapter_id(model_name: str, messages: list[ChatMessage]) -> tupl
         # If "moa" is requested or "auto" with multi-domain intent, check MoA router
         try:
             from harness.router.dynamic_moa_router import DynamicMoARouter
+
             router = DynamicMoARouter()
             last_msg = messages[-1].content if messages else ""
             route_res = router.route_and_stack(last_msg)
@@ -645,7 +724,6 @@ def resolve_27b_adapter_id(model_name: str, messages: list[ChatMessage]) -> tupl
         if classified in ADAPTER_MAP_27B:
             return classified, ADAPTER_MAP_27B[classified]
     return None, None
-
 
 
 def scrub_thinking_blocks(text: str) -> str:
@@ -663,7 +741,9 @@ def scrub_thinking_blocks(text: str) -> str:
     return scrubbed.strip()
 
 
-def format_prompt(messages: list[ChatMessage], thinking_effort: str | None = "medium", expert_key: str | None = None) -> str:
+def format_prompt(
+    messages: list[ChatMessage], thinking_effort: str | None = "medium", expert_key: str | None = None
+) -> str:
     """Formats ChatMessage array into standard Qwen 3.5 ChatML instruction format with thinking effort directives and domain specialist personas."""
     effort = (thinking_effort or "medium").lower()
 
@@ -727,7 +807,6 @@ def extract_thinking_and_content(text: str) -> tuple[str | None, str]:
     return None, text.strip()
 
 
-
 # --- On-Demand Inference Engine Lifecycle ---
 async def load_inference_engine(model_id: str = "Qwen/Qwen3.5-4B") -> dict[str, Any]:
     """Loads the requested Base Model (4B or 9B), corresponding Experts, and CUDA Graphs into VRAM."""
@@ -786,7 +865,6 @@ async def load_inference_engine(model_id: str = "Qwen/Qwen3.5-4B") -> dict[str, 
             "engine": "Native Triton W4A16 Engine (ROCm Navi 31 + In-Memory LoRA Swapping)",
         }
 
-
     compute_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
     base_model = AutoModelForCausalLM.from_pretrained(
         model_id,
@@ -811,7 +889,9 @@ async def load_inference_engine(model_id: str = "Qwen/Qwen3.5-4B") -> dict[str, 
 
     # FlashNorm-style weight folding (4B optimization; skip on 9B to preserve VRAM headroom)
     fold_norms_enabled = (os.environ.get("FLASH_NORM_FOLD", "1") != "0") and not is_9b
-    folded_norm_count = fold_rmsnorm_into_linear(base_model, fold_weights=fold_norms_enabled) if fold_norms_enabled else 0
+    folded_norm_count = (
+        fold_rmsnorm_into_linear(base_model, fold_weights=fold_norms_enabled) if fold_norms_enabled else 0
+    )
     if folded_norm_count > 0:
         print(f"[IMB Server] FlashNorm: Folded {folded_norm_count} RMSNorm scale weights into downstream Linears.")
 
@@ -825,7 +905,7 @@ async def load_inference_engine(model_id: str = "Qwen/Qwen3.5-4B") -> dict[str, 
             ad_dir = REPO_ROOT / "results" / "adapters" / f"m2_{d}_r8a128_v7_9b"
         else:
             ad_dir = adapter_path(d)
-        
+
         if ad_dir.exists():
             exp = FoldableExpert.from_dir(ad_dir, name=d)
             expert_dict[d] = exp
@@ -842,11 +922,13 @@ async def load_inference_engine(model_id: str = "Qwen/Qwen3.5-4B") -> dict[str, 
 
     # Initialize Riemannian Team Router for prompt-to-prompt dynamic morphing
     from runtime.dynamic_team_router import RiemannianTeamRouter
+
     team_router = RiemannianTeamRouter(experts=expert_dict, domains=list(expert_dict.keys()))
     print(f"[IMB Server] Initialized RiemannianTeamRouter with {len(expert_dict)} domain experts.")
 
     # Initialize NOTEARS Causal Structure Learning & Predictive Pre-Folding Scheduler
     from runtime.notears_causal_scheduler import NotearsCausalScheduler
+
     causal_scheduler = NotearsCausalScheduler(experts=list(expert_dict.keys()))
     model_state["causal_scheduler"] = causal_scheduler
     print("[IMB Server] Initialized NotearsCausalScheduler (Continuous Tool DAG Pre-Folding active).")
@@ -904,8 +986,12 @@ async def load_inference_engine(model_id: str = "Qwen/Qwen3.5-4B") -> dict[str, 
             print("[IMB Server] Matched Draft Head Co-Mutation (§23) registered and active.")
 
             spec_decoder = BucketedSpeculativeDecoder(
-                base_model, tokenizer, draft_head, k=spec_k,
-                max_seq_len=spec_max_len, device=base_model.device,
+                base_model,
+                tokenizer,
+                draft_head,
+                k=spec_k,
+                max_seq_len=spec_max_len,
+                device=base_model.device,
             )
             spec_decoder.capture(dummy_tokens)
             print(f"[IMB Server] Speculative buckets captured: {sorted(spec_decoder.buckets)}")
@@ -948,7 +1034,9 @@ async def load_inference_engine(model_id: str = "Qwen/Qwen3.5-4B") -> dict[str, 
     model_state["range_gate_enabled"] = os.environ.get("SPECULATIVE_RANGE_GATE", "1") != "0"
     model_state["range_gate_threshold"] = float(os.environ.get("SPECULATIVE_RANGE_THRESHOLD", "5.0"))
     model_state["range_gate"] = RangeStatisticGate(top_m=8, threshold=model_state["range_gate_threshold"])
-    print(f"[IMB Server] Single-Pass Range Speculative Gate: {'ON' if model_state['range_gate_enabled'] else 'OFF'} (threshold={model_state['range_gate_threshold']})")
+    print(
+        f"[IMB Server] Single-Pass Range Speculative Gate: {'ON' if model_state['range_gate_enabled'] else 'OFF'} (threshold={model_state['range_gate_threshold']})"
+    )
     # Defaults for the runtime toggles exposed via POST /api/engine/set_*. Setting
     # them here (rather than relying on the .get(..., default) calls at each read
     # site to silently supply one) means /api/engine/status reports a real, present
@@ -981,6 +1069,7 @@ async def unload_inference_engine() -> dict[str, Any]:
 
     model_state.clear()
     import gc
+
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
@@ -1042,6 +1131,7 @@ app.add_middleware(
 
 # --- API Routes ---
 
+
 class LoadEngineRequest(BaseModel):
     model_id: str = "Qwen/Qwen3.5-4B"
 
@@ -1050,6 +1140,7 @@ class EngineStatusModel(BaseModel):
     """Full live state of the inference engine. Same shape whether fetched once via
     GET or streamed continuously via SSE -- built by the same function either way,
     so there is exactly one place that decides what "current status" means."""
+
     loaded: bool = Field(..., description="Whether the base model is resident in VRAM")
     vram_allocated_gb: float = Field(..., description="torch.cuda.memory_allocated(), this process only")
     total_vram_used_gb: float = Field(..., description="Total VRAM in use on the device, all processes")
@@ -1061,29 +1152,46 @@ class EngineStatusModel(BaseModel):
     spec_decode_enabled: bool
     ring_buffer_mode: str = Field(..., description="dense | poet | selective_hybrid | pointer")
     ring_buffer_wired: bool = Field(
-        ..., description="True iff a ring engine is actually consumed by the live decode "
-                         "loop right now. False whenever spec_decode_enabled is False -- "
-                         "with speculative decode off there is no ring engine to wire.")
+        ...,
+        description="True iff a ring engine is actually consumed by the live decode "
+        "loop right now. False whenever spec_decode_enabled is False -- "
+        "with speculative decode off there is no ring engine to wire.",
+    )
     ring_buffer_options: list[str] = ["dense", "poet", "selective_hybrid", "pointer"]
-    spec_k: int | None = Field(None, description="Draft depth the LIVE decoder was captured "
-                                                 "with -- not a re-read of an env var")
+    spec_k: int | None = Field(
+        None, description="Draft depth the LIVE decoder was captured with -- not a re-read of an env var"
+    )
     spec_k_options: list[int] = [2, 4, 8]
     scale_mode: str = Field(..., description="surgical | none, for dynamic-routing multi-expert morphs")
     prefold_enabled: bool
     state_handoff_enabled: bool = Field(True, description="Tensor-Level Recurrent State Handoff ($S_t$) across turns")
     state_handoff_mb: float = Field(54.97, description="Resident size of the recurrent state tensor in MB")
     w4a16_enabled: bool = Field(False, description="Fused W4A16 + Dynamic LoRA Triton WMMA execution on RDNA3")
-    spec_range_gate_enabled: bool = Field(True, description="Single-Pass Range Statistic Speculative Gating (Chapter 8)")
+    spec_range_gate_enabled: bool = Field(
+        True, description="Single-Pass Range Statistic Speculative Gating (Chapter 8)"
+    )
     spec_range_threshold: float = Field(5.0, description="Logit range spread threshold for speculative early exit")
-    cut_set_hedging_enabled: bool = Field(True, description="Chapter 6 Minimal Cut Sets & k-out-of-n Speculative Tool Hedging")
+    cut_set_hedging_enabled: bool = Field(
+        True, description="Chapter 6 Minimal Cut Sets & k-out-of-n Speculative Tool Hedging"
+    )
     cut_set_target_reliability: float = Field(0.95, description="Target reliability cutoff for Order-1 Cut Sets")
-    renko_smoothing_enabled: bool = Field(True, description="Renko Brick Smoothing for Continuous Latent Routing (Chapter 4)")
+    renko_smoothing_enabled: bool = Field(
+        True, description="Renko Brick Smoothing for Continuous Latent Routing (Chapter 4)"
+    )
     renko_epsilon: float = Field(5.0, description="Epsilon box size for Renko Boundary")
     renko_epsilon_options: list[float] = [3.0, 5.0, 8.0]
-    spec_circuit_breaker_enabled: bool = Field(True, description="Dual-EMA / MACD Speculation Circuit-Breaker (Chapters 5 & 8)")
-    macd_disengage_threshold: float = Field(1.8, description="Bearish crossover threshold to disengage speculative drafting")
-    macd_reengage_threshold: float = Field(2.2, description="Bullish crossover threshold to re-engage speculative drafting")
-    thinking_supervisor_enabled: bool = Field(True, description="Runtime Thinking Supervisor with Latent Loop Breaking and Logit Masking")
+    spec_circuit_breaker_enabled: bool = Field(
+        True, description="Dual-EMA / MACD Speculation Circuit-Breaker (Chapters 5 & 8)"
+    )
+    macd_disengage_threshold: float = Field(
+        1.8, description="Bearish crossover threshold to disengage speculative drafting"
+    )
+    macd_reengage_threshold: float = Field(
+        2.2, description="Bullish crossover threshold to re-engage speculative drafting"
+    )
+    thinking_supervisor_enabled: bool = Field(
+        True, description="Runtime Thinking Supervisor with Latent Loop Breaking and Logit Masking"
+    )
 
 
 def _build_engine_status() -> EngineStatusModel:
@@ -1148,6 +1256,7 @@ async def stream_engine_status(request: Request):
     intervals), which is how a state change in one view could lag or momentarily
     disagree with the other -- there was never a single live source of truth.
     """
+
     async def event_gen():
         last_payload = None
         while True:
@@ -1170,6 +1279,7 @@ async def trigger_engine_load(req: LoadEngineRequest = Body(default_factory=Load
         return res
     except Exception as ex:
         import traceback
+
         traceback.print_exc()
         return JSONResponse(status_code=500, content={"error": f"Failed to load engine: {ex}"})
 
@@ -1218,27 +1328,30 @@ async def list_models():
 
 # --- Ollama Native Discovery & Compatibility Routes ---
 
+
 @app.get("/api/tags")
 async def ollama_list_tags():
     """Ollama API compatibility: returns available models for Ollama clients and DeepSeek Harness."""
     models_list = []
     for m in CURATED_MODELS:
         m_id = m["id"]
-        models_list.append({
-            "name": m_id,
-            "model": m_id,
-            "modified_at": "2026-08-26T20:00:00Z",
-            "size": 18049679360 if "27b" in m_id else 4500000000,
-            "digest": f"sha256:{m_id.replace(':', '-').replace('.', '-')}",
-            "details": {
-                "parent_model": "",
-                "format": "gguf",
-                "family": "qwen",
-                "families": ["qwen"],
-                "parameter_size": "27B" if "27b" in m_id else "4B",
-                "quantization_level": "W4A16",
-            },
-        })
+        models_list.append(
+            {
+                "name": m_id,
+                "model": m_id,
+                "modified_at": "2026-08-26T20:00:00Z",
+                "size": 18049679360 if "27b" in m_id else 4500000000,
+                "digest": f"sha256:{m_id.replace(':', '-').replace('.', '-')}",
+                "details": {
+                    "parent_model": "",
+                    "format": "gguf",
+                    "family": "qwen",
+                    "families": ["qwen"],
+                    "parameter_size": "27B" if "27b" in m_id else "4B",
+                    "quantization_level": "W4A16",
+                },
+            }
+        )
     return {"models": models_list}
 
 
@@ -1269,7 +1382,9 @@ async def ollama_ps():
                 "expires_at": "2099-12-31T23:59:59Z",
                 "size_vram": int(get_real_vram_allocated_gb() * 1024**3),
             }
-        ] if is_loaded else []
+        ]
+        if is_loaded
+        else []
     }
 
 
@@ -1288,6 +1403,7 @@ async def ollama_chat(req_raw: Request):
     resp = await chat_completions(chat_req)
 
     if isinstance(resp, StreamingResponse):
+
         async def ollama_stream_adapter():
             async for chunk in resp.body_iterator:
                 if isinstance(chunk, (bytes, memoryview)):
@@ -1372,9 +1488,7 @@ async def _dispatch_loop() -> None:
                 # different expert underneath a stream still in flight.
                 if getattr(qr.req, "stream", False):
                     try:
-                        await asyncio.wait_for(
-                            qr.stream_done.wait(), timeout=STREAM_ORDER_TIMEOUT_S
-                        )
+                        await asyncio.wait_for(qr.stream_done.wait(), timeout=STREAM_ORDER_TIMEOUT_S)
                     except TimeoutError:
                         print(
                             f"[Executor] Stream did not finish within "
@@ -1424,7 +1538,13 @@ async def _execute_single_request(qr: QueuedRequest) -> Any:
             status_code=400,
             detail=f"Model '{req.model}' is not supported. The native custom engine supports Qwen models (27B/9B/3B). External baselines must be run directly on their respective servers.",
         )
-    is_triton_27b = "27b" in req.model.lower() or "27B" in req.model or "qwen" in req.model.lower() or "auto" in req.model.lower() or "default" in req.model.lower()
+    is_triton_27b = (
+        "27b" in req.model.lower()
+        or "27B" in req.model
+        or "qwen" in req.model.lower()
+        or "auto" in req.model.lower()
+        or "default" in req.model.lower()
+    )
 
     if is_triton_27b:
         max_new_tokens = req.max_completion_tokens or req.max_tokens or 4096
@@ -1518,7 +1638,9 @@ async def _execute_single_request(qr: QueuedRequest) -> Any:
             # the effective weight matrix into an uncalibrated regime and causes the
             # speculative draft head to produce degenerate repeated output.
             # When the spec decoder is active, limit dynamic routing to one expert.
-            _spec_active = model_state.get("spec_decoder") is not None and getattr(model_state.get("spec_decoder"), "_locked", False)
+            _spec_active = model_state.get("spec_decoder") is not None and getattr(
+                model_state.get("spec_decoder"), "_locked", False
+            )
             _max_team = 1 if _spec_active else 2
             selected_team, meta = team_router.select_team(scores, max_team_size=_max_team)
             current_team = model_state.get("active_team", [])
@@ -1534,13 +1656,19 @@ async def _execute_single_request(qr: QueuedRequest) -> Any:
                 )
                 model_state["predicted_expert"] = None
 
-            morph_info = team_router.morph_stack(folding_engine, current_team, selected_team, scale_mode=model_state.get("scale_mode", "surgical"))
+            morph_info = team_router.morph_stack(
+                folding_engine, current_team, selected_team, scale_mode=model_state.get("scale_mode", "surgical")
+            )
             model_state["active_team"] = selected_team
             model_state["intra_team_dr"] = meta["intra_team_distance"]
             model_state["last_morph_ms"] = morph_info["elapsed_ms"]
             expert = None  # Weights are already folded in-place into the live base_model!
-            target_state = VRAMState.from_expert(model_state.get("expert_registry", {}).get(selected_team[0]) if selected_team else None)
-            print(f"[Dynamic Router] Prompt Intent -> Selected Team: {selected_team} (d_R={meta['intra_team_distance']:.3f}, {morph_info['elapsed_ms']:.2f}ms)")
+            target_state = VRAMState.from_expert(
+                model_state.get("expert_registry", {}).get(selected_team[0]) if selected_team else None
+            )
+            print(
+                f"[Dynamic Router] Prompt Intent -> Selected Team: {selected_team} (d_R={meta['intra_team_distance']:.3f}, {morph_info['elapsed_ms']:.2f}ms)"
+            )
             # Routing trace, for fitting the tool->expert DAG on OBSERVED behaviour
             # instead of the simulated data §47 used. No-op unless GNN_TOOL_TRACE is
             # set; never raises into the request path. See tool_trace.py.
@@ -1567,13 +1695,10 @@ async def _execute_single_request(qr: QueuedRequest) -> Any:
     # record the transition at the moment it actually occurs; the dispatch loop
     # waits on qr.stream_done before starting the next request.
     if req.stream:
-        return _build_streaming_response(
-            req, expert, prompt_tokens, max_new_tokens, wait_ms, qr.queue_position, qr
-        )
+        return _build_streaming_response(req, expert, prompt_tokens, max_new_tokens, wait_ms, qr.queue_position, qr)
 
     # Non-streaming: execute synchronously under lock
     _record_transition(target_state)
-
 
     async with engine_lock:
         spec_decoder = model_state.get("spec_decoder")
@@ -1677,7 +1802,9 @@ async def _execute_single_request(qr: QueuedRequest) -> Any:
         if pred_next and conf >= 0.70:
             causal_scheduler.async_prefold(folding_engine, pred_next, conf)
             model_state["predicted_expert"] = pred_next
-            print(f"[NOTEARS Pre-Folder] Emitted tools: {tools_emitted} -> Background pre-folding '{pred_next}' ({conf:.1%})")
+            print(
+                f"[NOTEARS Pre-Folder] Emitted tools: {tools_emitted} -> Background pre-folding '{pred_next}' ({conf:.1%})"
+            )
 
     response = ChatCompletionResponse(
         model=req.model,
@@ -1752,6 +1879,7 @@ def _build_streaming_response(
         expert_for_call = None if is_dynamic else (expert if isinstance(expert, FoldableExpert) else None)
 
         from runtime.thinking_supervisor import ThinkingRuntimeSupervisor
+
         effort = (req.thinking_effort or "medium").lower()
         if tokenizer is not None:
             think_end_id = tokenizer.convert_tokens_to_ids("</think>")
@@ -1777,7 +1905,13 @@ def _build_streaming_response(
 
         def _generation_worker():
             try:
-                is_triton_27b = "27b" in req.model.lower() or "27B" in req.model or "qwen" in req.model.lower() or "auto" in req.model.lower() or "default" in req.model.lower()
+                is_triton_27b = (
+                    "27b" in req.model.lower()
+                    or "27B" in req.model
+                    or "qwen" in req.model.lower()
+                    or "auto" in req.model.lower()
+                    or "default" in req.model.lower()
+                )
                 if is_triton_27b:
                     from runtime.jump_streamer import JumpTokenStreamFilter
 
@@ -1792,7 +1926,9 @@ def _build_streaming_response(
                         triton_engine.clear_loras()
                     jump_filter = JumpTokenStreamFilter(enabled=True)
 
-                    use_speculative = (os.environ.get("SPECULATIVE_DECODE", "1") != "0") and ("nospec" not in req.model.lower())
+                    use_speculative = (os.environ.get("SPECULATIVE_DECODE", "1") != "0") and (
+                        "nospec" not in req.model.lower()
+                    )
                     stream_gen = (
                         triton_engine.generate_stream_speculative(
                             prompt_ids,
@@ -1839,10 +1975,11 @@ def _build_streaming_response(
                             break
                 elif graph_decoder is not None and getattr(graph_decoder, "_is_captured", False):
                     from runtime.dynamic_team_router import RenkoBrickSmoother
+
                     renko_enabled = model_state.get("renko_smoothing_enabled", True)
                     renko_eps = model_state.get("renko_epsilon", 5.0)
                     smoother = RenkoBrickSmoother(epsilon_box=renko_eps) if (is_dynamic and renko_enabled) else None
-                    
+
                     for text_tok, h_t in graph_decoder.generate_tokens_stream(
                         prompt_tokens,
                         engine=engine_for_call,
@@ -1852,8 +1989,10 @@ def _build_streaming_response(
                     ):
                         if smoother is not None:
                             if smoother.step(h_t):
-                                print(f"[RenkoRouter] Boundary broken (ΔD ≥ {renko_eps}) on token '{text_tok}'. Triggering latent evaluation...")
-                                
+                                print(
+                                    f"[RenkoRouter] Boundary broken (ΔD ≥ {renko_eps}) on token '{text_tok}'. Triggering latent evaluation..."
+                                )
+
                         token_queue.put((text_tok, 1))
                         if stop_event.is_set():
                             break
@@ -1869,6 +2008,7 @@ def _build_streaming_response(
                         still reading the streamer. HF checks stopping_criteria once
                         per generated token, so this is what actually ends the torch
                         work early instead of just abandoning it to finish unread."""
+
                         def __call__(self, *_a, **_kw) -> bool:
                             return stop_event.is_set()
 
@@ -1922,7 +2062,7 @@ def _build_streaming_response(
         else:  # medium / default
             think_budget = 2048
 
-        in_thinking = (effort != "off")
+        in_thinking = effort != "off"
         thinking_tokens_emitted = 0
         streamed_content: list[str] = []
         streamed_reasoning: list[str] = []
@@ -2050,9 +2190,7 @@ def _build_streaming_response(
                             id=chunk_id,
                             model=req.model,
                             choices=[
-                                ChatCompletionChunkChoice(
-                                    index=0, delta=ChatCompletionChunkDelta(content=text_chunk)
-                                )
+                                ChatCompletionChunkChoice(index=0, delta=ChatCompletionChunkDelta(content=text_chunk))
                             ],
                         )
                         yield f"data: {json.dumps(chunk.model_dump())}\n\n"
@@ -2076,9 +2214,7 @@ def _build_streaming_response(
             chunk = ChatCompletionChunkResponse(
                 id=chunk_id,
                 model=req.model,
-                choices=[
-                    ChatCompletionChunkChoice(index=0, delta=ChatCompletionChunkDelta(content=fallback))
-                ],
+                choices=[ChatCompletionChunkChoice(index=0, delta=ChatCompletionChunkDelta(content=fallback))],
             )
             yield f"data: {json.dumps(chunk.model_dump())}\n\n"
 
@@ -2104,7 +2240,9 @@ def _build_streaming_response(
             if pred_next_expert and pred_confidence >= 0.40:
                 causal_scheduler.async_prefold(folding_engine, pred_next_expert, pred_confidence, threshold=0.40)
                 model_state["predicted_expert"] = pred_next_expert
-                print(f"[NOTEARS Pre-Folder] Streaming Turn Emitted: {tools_emitted} -> Pre-folding '{pred_next_expert}' ({pred_confidence:.1%}) in background")
+                print(
+                    f"[NOTEARS Pre-Folder] Streaming Turn Emitted: {tools_emitted} -> Pre-folding '{pred_next_expert}' ({pred_confidence:.1%}) in background"
+                )
 
         prompt_tok_count = prompt_tokens.shape[1] if prompt_tokens is not None else max(1, len(req.messages) * 15)
         update_telemetry(req.model, prompt_tok_count, token_count, elapsed_s, tok_s, ttft_ms, swap_ms)
@@ -2136,7 +2274,6 @@ def _build_streaming_response(
         yield f"data: {json.dumps(final_chunk.model_dump())}\n\n"
         yield "data: [DONE]\n\n"
 
-
     async def ordered_sse_generator() -> AsyncGenerator[str]:
         """Releases the dispatch loop once the stream is fully consumed or aborted."""
         try:
@@ -2151,9 +2288,7 @@ def _build_streaming_response(
         "X-Router-Wait-Ms": f"{wait_ms:.1f}",
         "X-Router-GPU-State": VRAMState.from_expert(expert).name if expert is not None else "NATIVE_TRITON_27B",
     }
-    return StreamingResponse(
-        ordered_sse_generator(), media_type="text/event-stream", headers=headers
-    )
+    return StreamingResponse(ordered_sse_generator(), media_type="text/event-stream", headers=headers)
 
 
 @app.post("/v1/chat/completions")
@@ -2252,11 +2387,7 @@ async def get_server_stats():
     )
 
     folding_engine = model_state.get("folding_engine")
-    active_expert_name = (
-        folding_engine.active
-        if (folding_engine and folding_engine.active)
-        else "base (pristine W0)"
-    )
+    active_expert_name = folding_engine.active if (folding_engine and folding_engine.active) else "base (pristine W0)"
     active_team = model_state.get("active_team", ["astral", "python_modern"])
 
     return {
@@ -2435,18 +2566,25 @@ async def start_training_job(req: TrainingStartRequest):
     if not gpu_status.get("is_clean", True):
         return JSONResponse(
             status_code=409,
-            content={"error": f"GPU is occupied ({gpu_status.get('used_gb')} GB used by other processes). Terminate conflicting GPU tasks before training."},
+            content={
+                "error": f"GPU is occupied ({gpu_status.get('used_gb')} GB used by other processes). Terminate conflicting GPU tasks before training."
+            },
         )
 
     cmd = [
         sys.executable,
         str(REPO_ROOT / "scripts" / "train" / "train_expert.py"),
         "--v7",
-        "--domain", req.domain,
-        "--rank", str(req.rank),
-        "--alpha", str(req.alpha),
-        "--lr", str(req.lr),
-        "--max-steps", str(req.max_steps),
+        "--domain",
+        req.domain,
+        "--rank",
+        str(req.rank),
+        "--alpha",
+        str(req.alpha),
+        "--lr",
+        str(req.lr),
+        "--max-steps",
+        str(req.max_steps),
     ]
     if req.geometric_stop:
         cmd.extend(["--stop-at-dw-over-w", str(req.target_dw_w)])
@@ -2463,6 +2601,7 @@ async def start_training_job(req: TrainingStartRequest):
 
     async def _run_subprocess():
         import asyncio.subprocess
+
         p = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
@@ -2500,9 +2639,11 @@ async def cancel_training_job():
     return {"status": "idle"}
 
 
-@app.post("/api/engine/set_speculative_k", response_model=SpeculativeKResult,
-         responses={400: {"model": ErrorResponse}, 409: {"model": ErrorResponse},
-                    500: {"model": ErrorResponse}})
+@app.post(
+    "/api/engine/set_speculative_k",
+    response_model=SpeculativeKResult,
+    responses={400: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+)
 async def set_speculative_k(req: SetSpeculativeKRequest) -> SpeculativeKResult | JSONResponse:
     """Rebuilds the speculative decoder at a new draft depth k.
 
@@ -2521,18 +2662,24 @@ async def set_speculative_k(req: SetSpeculativeKRequest) -> SpeculativeKResult |
     refused for a principled reason, just because nothing has measured them yet.
     """
     if req.k not in (2, 4, 8):
-        return JSONResponse(status_code=400, content=ErrorResponse(
-            error=f"k={req.k} not in the measured set (2, 4, 8). "
-                 "Other values may work but have no benchmark backing them.").model_dump())
+        return JSONResponse(
+            status_code=400,
+            content=ErrorResponse(
+                error=f"k={req.k} not in the measured set (2, 4, 8). "
+                "Other values may work but have no benchmark backing them."
+            ).model_dump(),
+        )
 
     if model_state.get("spec_decoder_k") == req.k and model_state.get("spec_decoder") is not None:
-        return SpeculativeKResult(status="unchanged", spec_k=req.k,
-                                  ring_buffer_mode=_current_ring_mode(), elapsed_ms=0.0)
+        return SpeculativeKResult(
+            status="unchanged", spec_k=req.k, ring_buffer_mode=_current_ring_mode(), elapsed_ms=0.0
+        )
 
     result = await _rebuild_spec_decoder(req.k)
     if "error" in result:
-        return JSONResponse(status_code=result.pop("status_code", 500),
-                            content=ErrorResponse(error=result["error"]).model_dump())
+        return JSONResponse(
+            status_code=result.pop("status_code", 500), content=ErrorResponse(error=result["error"]).model_dump()
+        )
     return SpeculativeKResult(**result)
 
 
@@ -2575,8 +2722,12 @@ async def _rebuild_spec_decoder(k: int) -> dict:
 
             spec_max_len = model_state.get("spec_max_len", 4096)
             new_decoder = BucketedSpeculativeDecoder(
-                base_model, tokenizer, draft_head, k=k,
-                max_seq_len=spec_max_len, device=base_model.device,
+                base_model,
+                tokenizer,
+                draft_head,
+                k=k,
+                max_seq_len=spec_max_len,
+                device=base_model.device,
             )
             dummy_tokens = tokenizer(
                 "<|im_start|>user\nWarmup prompt\n<|im_end|>\n<|im_start|>assistant\n",
@@ -2588,14 +2739,17 @@ async def _rebuild_spec_decoder(k: int) -> dict:
             # with whatever mode was actually active before this rebuild.
             if new_decoder.ring_engine is not None and ring_mode != new_decoder.ring_engine.mode:
                 from runtime.state_ring_buffer import RingBufferReplayEngine
-                new_decoder.ring_engine = RingBufferReplayEngine(
-                    new_decoder.cache, max_depth=64, mode=ring_mode)
+
+                new_decoder.ring_engine = RingBufferReplayEngine(new_decoder.cache, max_depth=64, mode=ring_mode)
         except Exception as exc:
             import traceback
+
             traceback.print_exc()
-            return {"error": f"capture failed at k={k}: {type(exc).__name__}: {exc}. "
-                             "Previous decoder is untouched -- swap did not happen.",
-                    "status_code": 500}
+            return {
+                "error": f"capture failed at k={k}: {type(exc).__name__}: {exc}. "
+                "Previous decoder is untouched -- swap did not happen.",
+                "status_code": 500,
+            }
 
         # Only replace the live decoder after the new one captured cleanly, so a
         # failed swap leaves whatever was running before fully serving.
@@ -2604,18 +2758,28 @@ async def _rebuild_spec_decoder(k: int) -> dict:
         model_state["ring_buffer_mode"] = ring_mode
 
     elapsed_ms = (time.time() - t0) * 1000.0
-    print(f"[IMB Server] Speculative decoder rebuilt: k={k}, ring_mode={ring_mode}, "
-          f"buckets={sorted(new_decoder.buckets)}, {elapsed_ms:.0f}ms")
-    return {"status": "swapped", "spec_k": k, "ring_buffer_mode": ring_mode,
-            "buckets": sorted(new_decoder.buckets), "elapsed_ms": round(elapsed_ms, 1)}
+    print(
+        f"[IMB Server] Speculative decoder rebuilt: k={k}, ring_mode={ring_mode}, "
+        f"buckets={sorted(new_decoder.buckets)}, {elapsed_ms:.0f}ms"
+    )
+    return {
+        "status": "swapped",
+        "spec_k": k,
+        "ring_buffer_mode": ring_mode,
+        "buckets": sorted(new_decoder.buckets),
+        "elapsed_ms": round(elapsed_ms, 1),
+    }
 
 
 class SetSpeculativeDecodeRequest(BaseModel):
     enabled: bool
 
 
-@app.post("/api/engine/set_speculative_decode", response_model=SpeculativeDecodeResult,
-         responses={409: {"model": ErrorResponse}, 500: {"model": ErrorResponse}})
+@app.post(
+    "/api/engine/set_speculative_decode",
+    response_model=SpeculativeDecodeResult,
+    responses={409: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+)
 async def set_speculative_decode(req: SetSpeculativeDecodeRequest) -> SpeculativeDecodeResult | JSONResponse:
     """Turns speculative decoding off (instant) or back on (rebuild + capture, seconds).
 
@@ -2636,15 +2800,19 @@ async def set_speculative_decode(req: SetSpeculativeDecodeRequest) -> Speculativ
         return SpeculativeDecodeResult(status="disabled", spec_decode_enabled=False, was_active=was_active)
 
     if model_state.get("spec_decoder") is not None:
-        return SpeculativeDecodeResult(status="unchanged", spec_decode_enabled=True,
-                                       spec_k=model_state.get("spec_decoder_k"),
-                                       ring_buffer_mode=_current_ring_mode())
+        return SpeculativeDecodeResult(
+            status="unchanged",
+            spec_decode_enabled=True,
+            spec_k=model_state.get("spec_decoder_k"),
+            ring_buffer_mode=_current_ring_mode(),
+        )
 
     k = model_state.get("spec_decoder_k") or 2
     result = await _rebuild_spec_decoder(k)
     if "error" in result:
-        return JSONResponse(status_code=result.pop("status_code", 500),
-                            content=ErrorResponse(error=result["error"]).model_dump())
+        return JSONResponse(
+            status_code=result.pop("status_code", 500), content=ErrorResponse(error=result["error"]).model_dump()
+        )
     return SpeculativeDecodeResult(spec_decode_enabled=True, **result)
 
 
@@ -2668,7 +2836,7 @@ async def set_speculative_range_gate(req: SetSpeculativeRangeGateRequest):
     model_state["range_gate_enabled"] = req.enabled
     if req.threshold is not None:
         model_state["range_gate_threshold"] = req.threshold
-    
+
     weibull_on = req.weibull_hazard_enabled if req.weibull_hazard_enabled is not None else True
     beta = req.weibull_beta if req.weibull_beta is not None else 2.2
     gamma_w = req.weibull_gamma if req.weibull_gamma is not None else 0.6
@@ -2687,7 +2855,9 @@ async def set_speculative_range_gate(req: SetSpeculativeRangeGateRequest):
         bollinger_gamma=gamma_b,
     )
 
-    print(f"[IMB Server] Range Speculative Gate set: enabled={req.enabled}, threshold={model_state['range_gate_threshold']}, weibull_hazard={weibull_on}, bollinger_bands={boll_on}")
+    print(
+        f"[IMB Server] Range Speculative Gate set: enabled={req.enabled}, threshold={model_state['range_gate_threshold']}, weibull_hazard={weibull_on}, bollinger_bands={boll_on}"
+    )
     return {
         "status": "updated",
         "spec_range_gate_enabled": model_state["range_gate_enabled"],
@@ -2716,7 +2886,9 @@ async def set_cut_set_hedging(req: SetCutSetHedgingRequest):
     if req.max_workers is not None:
         model_state["cut_set_max_workers"] = req.max_workers
 
-    print(f"[IMB Server] Cut-Set Speculative Hedging set: enabled={req.enabled}, target_reliability={model_state.get('cut_set_target_reliability', 0.95)}")
+    print(
+        f"[IMB Server] Cut-Set Speculative Hedging set: enabled={req.enabled}, target_reliability={model_state.get('cut_set_target_reliability', 0.95)}"
+    )
     return {
         "status": "updated",
         "cut_set_hedging_enabled": model_state["cut_set_hedging_enabled"],
@@ -2763,7 +2935,9 @@ async def set_spec_circuit_breaker(req: SetSpecCircuitBreakerRequest):
             spec_decoder.circuit_breaker.reengage_threshold = req.reengage_threshold
 
     model_state["spec_circuit_breaker_enabled"] = req.enabled
-    print(f"[IMB Server] Speculation Circuit-Breaker set: enabled={req.enabled}, disengage={req.disengage_threshold or 1.8}, reengage={req.reengage_threshold or 2.2}")
+    print(
+        f"[IMB Server] Speculation Circuit-Breaker set: enabled={req.enabled}, disengage={req.disengage_threshold or 1.8}, reengage={req.reengage_threshold or 2.2}"
+    )
     return {
         "status": "updated",
         "spec_circuit_breaker_enabled": req.enabled,
@@ -2791,8 +2965,11 @@ class SetRingBufferModeRequest(BaseModel):
     mode: str
 
 
-@app.post("/api/engine/set_ring_buffer_mode", response_model=RingBufferModeResult,
-         responses={400: {"model": ErrorResponse}, 409: {"model": ErrorResponse}})
+@app.post(
+    "/api/engine/set_ring_buffer_mode",
+    response_model=RingBufferModeResult,
+    responses={400: {"model": ErrorResponse}, 409: {"model": ErrorResponse}},
+)
 async def set_ring_buffer_mode(req: SetRingBufferModeRequest) -> RingBufferModeResult | JSONResponse:
     """Swaps the live speculative decoder's ring buffer mode.
 
@@ -2806,20 +2983,25 @@ async def set_ring_buffer_mode(req: SetRingBufferModeRequest) -> RingBufferModeR
     """
     valid = {"dense", "poet", "selective_hybrid", "pointer"}
     if req.mode not in valid:
-        return JSONResponse(status_code=400,
-                            content=ErrorResponse(error=f"mode must be one of {sorted(valid)}, "
-                                                        f"got {req.mode!r}").model_dump())
+        return JSONResponse(
+            status_code=400,
+            content=ErrorResponse(error=f"mode must be one of {sorted(valid)}, got {req.mode!r}").model_dump(),
+        )
 
     spec_decoder = model_state.get("spec_decoder")
     if spec_decoder is None or getattr(spec_decoder, "cache", None) is None:
-        return JSONResponse(status_code=409, content=ErrorResponse(
-            error="speculative decode is off -- no ring engine is active to reconfigure. "
-                 "POST /api/engine/set_speculative_decode {\"enabled\": true} first.").model_dump())
+        return JSONResponse(
+            status_code=409,
+            content=ErrorResponse(
+                error="speculative decode is off -- no ring engine is active to reconfigure. "
+                'POST /api/engine/set_speculative_decode {"enabled": true} first.'
+            ).model_dump(),
+        )
 
     from runtime.state_ring_buffer import RingBufferReplayEngine
+
     async with engine_lock:
-        spec_decoder.ring_engine = RingBufferReplayEngine(
-            spec_decoder.cache, max_depth=64, mode=req.mode)
+        spec_decoder.ring_engine = RingBufferReplayEngine(spec_decoder.cache, max_depth=64, mode=req.mode)
         model_state["ring_buffer_mode"] = req.mode
     print(f"[IMB Server] Ring buffer mode -> {req.mode}")
     return RingBufferModeResult(status="swapped", ring_buffer_mode=req.mode)
@@ -2829,8 +3011,7 @@ class SetScaleModeRequest(BaseModel):
     mode: str
 
 
-@app.post("/api/engine/set_scale_mode", response_model=ScaleModeResult,
-         responses={400: {"model": ErrorResponse}})
+@app.post("/api/engine/set_scale_mode", response_model=ScaleModeResult, responses={400: {"model": ErrorResponse}})
 async def set_scale_mode(req: SetScaleModeRequest) -> ScaleModeResult | JSONResponse:
     """Surgical POET notch filtering vs plain additive stacking for dynamic-routing
     multi-expert morphs. Checked per-request (dynamic_team_router.py's morph_stack
@@ -2845,9 +3026,10 @@ async def set_scale_mode(req: SetScaleModeRequest) -> ScaleModeResult | JSONResp
     """
     valid = {"surgical", "none"}
     if req.mode not in valid:
-        return JSONResponse(status_code=400,
-                            content=ErrorResponse(error=f"mode must be one of {sorted(valid)}, "
-                                                        f"got {req.mode!r}").model_dump())
+        return JSONResponse(
+            status_code=400,
+            content=ErrorResponse(error=f"mode must be one of {sorted(valid)}, got {req.mode!r}").model_dump(),
+        )
     model_state["scale_mode"] = req.mode
     return ScaleModeResult(status="set", scale_mode=req.mode)
 
@@ -2982,11 +3164,13 @@ async def calibrate_alpha_endpoint(req: AlphaCalibrateRequest):
         return res
     except Exception as ex:
         import traceback
+
         traceback.print_exc()
         return JSONResponse(status_code=500, content={"error": str(ex)})
 
 
 # --- Multi-Agent Recurrent State Handoff Pipeline API ---
+
 
 class PipelineTurn(BaseModel):
     expert: str
@@ -3008,7 +3192,8 @@ async def run_multi_agent_pipeline(req: RunPipelineRequest):
     or standard text re-prefill baseline, providing real-time telemetry for the UI studio.
     """
     if req.model_size == "27b":
-        from runtime.state_handoff_27b import StateHandoffSession, AgentTurn
+        from runtime.state_handoff_27b import AgentTurn, StateHandoffSession
+
         eng = get_native_triton_27b_engine()
 
         def _run_tensor_arm_27b():
@@ -3017,7 +3202,7 @@ async def run_multi_agent_pipeline(req: RunPipelineRequest):
             for idx, turn in enumerate(req.turns):
                 res = session.execute_turn(
                     AgentTurn(
-                        agent_id=f"agent_{idx+1}",
+                        agent_id=f"agent_{idx + 1}",
                         role=turn.expert,
                         instruction=turn.instruction,
                         expert_lora=turn.expert,
@@ -3027,24 +3212,28 @@ async def run_multi_agent_pipeline(req: RunPipelineRequest):
                 )
                 lines = [l.strip() for l in res.output_text.splitlines() if l.strip()]
                 summary = [l for l in lines if not l.startswith("```") and not l.startswith("#") and len(l) > 10]
-                human_summary = summary[0] if summary else f"Generated {res.tokens_generated} tokens of {turn.expert} output."
-                results.append({
-                    "step_index": idx + 1,
-                    "expert": turn.expert,
-                    "instruction": turn.instruction,
-                    "output_text": res.output_text,
-                    "human_summary": human_summary,
-                    "prompt_tokens": res.prefill_tokens,
-                    "generated_tokens": res.tokens_generated,
-                    "tokens_avoided": res.tokens_avoided,
-                    "prefill_ms": round(res.prefill_ms, 2),
-                    "decode_ms": round(res.decode_ms, 2),
-                    "total_ms": round(res.total_ms, 2),
-                    "tok_per_sec": round(res.tok_per_sec, 2),
-                    "state_size_mb": 154.0,
-                    "handoff_ms": round(res.handoff_ms, 2),
-                    "lora_swap_ms": round(res.lora_swap_ms, 2),
-                })
+                human_summary = (
+                    summary[0] if summary else f"Generated {res.tokens_generated} tokens of {turn.expert} output."
+                )
+                results.append(
+                    {
+                        "step_index": idx + 1,
+                        "expert": turn.expert,
+                        "instruction": turn.instruction,
+                        "output_text": res.output_text,
+                        "human_summary": human_summary,
+                        "prompt_tokens": res.prefill_tokens,
+                        "generated_tokens": res.tokens_generated,
+                        "tokens_avoided": res.tokens_avoided,
+                        "prefill_ms": round(res.prefill_ms, 2),
+                        "decode_ms": round(res.decode_ms, 2),
+                        "total_ms": round(res.total_ms, 2),
+                        "tok_per_sec": round(res.tok_per_sec, 2),
+                        "state_size_mb": 154.0,
+                        "handoff_ms": round(res.handoff_ms, 2),
+                        "lora_swap_ms": round(res.lora_swap_ms, 2),
+                    }
+                )
             return results
 
         def _run_text_arm_27b():
@@ -3060,7 +3249,9 @@ async def run_multi_agent_pipeline(req: RunPipelineRequest):
                 if idx == 0:
                     history_prompt = f"<|im_start|>user\n{turn.instruction}<|im_end|>\n<|im_start|>assistant\n"
                 else:
-                    history_prompt += f"<|im_end|>\n<|im_start|>user\n{turn.instruction}<|im_end|>\n<|im_start|>assistant\n"
+                    history_prompt += (
+                        f"<|im_end|>\n<|im_start|>user\n{turn.instruction}<|im_end|>\n<|im_start|>assistant\n"
+                    )
 
                 prompt_tokens = tok.encode(history_prompt)
                 t_pref0 = time.perf_counter()
@@ -3093,26 +3284,30 @@ async def run_multi_agent_pipeline(req: RunPipelineRequest):
 
                 lines = [l.strip() for l in full_text.splitlines() if l.strip()]
                 summary = [l for l in lines if not l.startswith("```") and not l.startswith("#") and len(l) > 10]
-                human_summary = summary[0] if summary else f"Generated {len(gen_tokens)} tokens of {turn.expert} output."
+                human_summary = (
+                    summary[0] if summary else f"Generated {len(gen_tokens)} tokens of {turn.expert} output."
+                )
                 tok_s = round(len(gen_tokens) / (decode_ms / 1000.0), 2) if decode_ms > 0 else 0.0
 
-                results.append({
-                    "step_index": idx + 1,
-                    "expert": turn.expert,
-                    "instruction": turn.instruction,
-                    "output_text": full_text,
-                    "human_summary": human_summary,
-                    "prompt_tokens": len(prompt_tokens),
-                    "generated_tokens": len(gen_tokens),
-                    "tokens_avoided": 0,
-                    "prefill_ms": round(prefill_ms, 2),
-                    "decode_ms": round(decode_ms, 2),
-                    "total_ms": round(total_ms, 2),
-                    "tok_per_sec": tok_s,
-                    "state_size_mb": 0.0,
-                    "handoff_ms": 0.0,
-                    "lora_swap_ms": round(lora_swap_ms, 2),
-                })
+                results.append(
+                    {
+                        "step_index": idx + 1,
+                        "expert": turn.expert,
+                        "instruction": turn.instruction,
+                        "output_text": full_text,
+                        "human_summary": human_summary,
+                        "prompt_tokens": len(prompt_tokens),
+                        "generated_tokens": len(gen_tokens),
+                        "tokens_avoided": 0,
+                        "prefill_ms": round(prefill_ms, 2),
+                        "decode_ms": round(decode_ms, 2),
+                        "total_ms": round(total_ms, 2),
+                        "tok_per_sec": tok_s,
+                        "state_size_mb": 0.0,
+                        "handoff_ms": 0.0,
+                        "lora_swap_ms": round(lora_swap_ms, 2),
+                    }
+                )
             return results
 
         async with engine_lock:
@@ -3125,8 +3320,16 @@ async def run_multi_agent_pipeline(req: RunPipelineRequest):
             else:  # both_side_by_side
                 tensor_results = await asyncio.to_thread(_run_tensor_arm_27b)
                 text_results = await asyncio.to_thread(_run_text_arm_27b)
-                t_pref_total_tensor = sum(s["prefill_ms"] for s in tensor_results[1:]) if len(tensor_results) > 1 else tensor_results[0]["prefill_ms"]
-                t_pref_total_text = sum(s["prefill_ms"] for s in text_results[1:]) if len(text_results) > 1 else text_results[0]["prefill_ms"]
+                t_pref_total_tensor = (
+                    sum(s["prefill_ms"] for s in tensor_results[1:])
+                    if len(tensor_results) > 1
+                    else tensor_results[0]["prefill_ms"]
+                )
+                t_pref_total_text = (
+                    sum(s["prefill_ms"] for s in text_results[1:])
+                    if len(text_results) > 1
+                    else text_results[0]["prefill_ms"]
+                )
                 speedup = round(t_pref_total_text / max(t_pref_total_tensor, 0.01), 2)
                 total_prompt_tok_text = sum(s["prompt_tokens"] for s in text_results)
                 total_prompt_tok_tensor = sum(s["prompt_tokens"] for s in tensor_results)
@@ -3167,12 +3370,15 @@ async def run_multi_agent_pipeline(req: RunPipelineRequest):
             return JSONResponse(status_code=500, content={"error": f"Failed to initialize engine: {e}"})
 
     if base_model is None or tokenizer is None or folding_engine is None:
-        return JSONResponse(status_code=500, content={"error": "Base model, tokenizer, or folding engine not initialized."})
+        return JSONResponse(
+            status_code=500, content={"error": "Base model, tokenizer, or folding engine not initialized."}
+        )
 
     from runtime.state_handoff import AgentHandoffSession
 
     async with engine_lock:
         try:
+
             def _run_tensor_arm():
                 assert base_model is not None and tokenizer is not None and folding_engine is not None
                 session = AgentHandoffSession(base_model, tokenizer, folding_engine, expert_registry)
@@ -3185,22 +3391,28 @@ async def run_multi_agent_pipeline(req: RunPipelineRequest):
                         max_new_tokens=req.max_new_tokens,
                         temperature=req.temperature,
                     )
-                    tok_s = round(res.generated_tokens / (res.decode_latency_ms / 1000.0), 2) if res.decode_latency_ms > 0 else 0.0
-                    results.append({
-                        "step_index": idx + 1,
-                        "expert": turn.expert,
-                        "instruction": turn.instruction,
-                        "output_text": res.full_output_text,
-                        "human_summary": res.human_summary,
-                        "prompt_tokens": res.prompt_tokens,
-                        "generated_tokens": res.generated_tokens,
-                        "prefill_ms": round(res.prefill_latency_ms, 2),
-                        "decode_ms": round(res.decode_latency_ms, 2),
-                        "total_ms": round(res.total_latency_ms, 2),
-                        "tok_per_sec": tok_s,
-                        "state_size_mb": round(res.state_snapshot.total_mb, 2),
-                        "handoff_ms": 0.05 if idx > 0 else 0.0,
-                    })
+                    tok_s = (
+                        round(res.generated_tokens / (res.decode_latency_ms / 1000.0), 2)
+                        if res.decode_latency_ms > 0
+                        else 0.0
+                    )
+                    results.append(
+                        {
+                            "step_index": idx + 1,
+                            "expert": turn.expert,
+                            "instruction": turn.instruction,
+                            "output_text": res.full_output_text,
+                            "human_summary": res.human_summary,
+                            "prompt_tokens": res.prompt_tokens,
+                            "generated_tokens": res.generated_tokens,
+                            "prefill_ms": round(res.prefill_latency_ms, 2),
+                            "decode_ms": round(res.decode_latency_ms, 2),
+                            "total_ms": round(res.total_latency_ms, 2),
+                            "tok_per_sec": tok_s,
+                            "state_size_mb": round(res.state_snapshot.total_mb, 2),
+                            "handoff_ms": 0.05 if idx > 0 else 0.0,
+                        }
+                    )
                 return results
 
             def _run_text_arm():
@@ -3216,7 +3428,9 @@ async def run_multi_agent_pipeline(req: RunPipelineRequest):
                     if idx == 0:
                         history_prompt = f"<|im_start|>user\n{turn.instruction}<|im_end|>\n<|im_start|>assistant\n"
                     else:
-                        history_prompt += f"<|im_end|>\n<|im_start|>user\n{turn.instruction}<|im_end|>\n<|im_start|>assistant\n"
+                        history_prompt += (
+                            f"<|im_end|>\n<|im_start|>user\n{turn.instruction}<|im_end|>\n<|im_start|>assistant\n"
+                        )
 
                     inputs = tokenizer(history_prompt, return_tensors="pt").to(base_model.device)
                     prompt_toks = inputs.input_ids.shape[1]
@@ -3248,24 +3462,28 @@ async def run_multi_agent_pipeline(req: RunPipelineRequest):
 
                     lines = [l.strip() for l in full_text.splitlines() if l.strip()]
                     summary = [l for l in lines if not l.startswith("```") and not l.startswith("#") and len(l) > 10]
-                    human_summary = summary[0] if summary else f"Generated {len(gen_tokens)} tokens of {turn.expert} output."
+                    human_summary = (
+                        summary[0] if summary else f"Generated {len(gen_tokens)} tokens of {turn.expert} output."
+                    )
                     tok_s = round(len(gen_tokens) / (decode_ms / 1000.0), 2) if decode_ms > 0 else 0.0
 
-                    results.append({
-                        "step_index": idx + 1,
-                        "expert": turn.expert,
-                        "instruction": turn.instruction,
-                        "output_text": full_text,
-                        "human_summary": human_summary,
-                        "prompt_tokens": prompt_toks,
-                        "generated_tokens": len(gen_tokens),
-                        "prefill_ms": round(prefill_ms, 2),
-                        "decode_ms": round(decode_ms, 2),
-                        "total_ms": round(total_ms, 2),
-                        "tok_per_sec": tok_s,
-                        "state_size_mb": 0.0,
-                        "handoff_ms": 0.0,
-                    })
+                    results.append(
+                        {
+                            "step_index": idx + 1,
+                            "expert": turn.expert,
+                            "instruction": turn.instruction,
+                            "output_text": full_text,
+                            "human_summary": human_summary,
+                            "prompt_tokens": prompt_toks,
+                            "generated_tokens": len(gen_tokens),
+                            "prefill_ms": round(prefill_ms, 2),
+                            "decode_ms": round(decode_ms, 2),
+                            "total_ms": round(total_ms, 2),
+                            "tok_per_sec": tok_s,
+                            "state_size_mb": 0.0,
+                            "handoff_ms": 0.0,
+                        }
+                    )
                 return results
 
             # Run in worker thread to prevent event-loop blocking
@@ -3286,10 +3504,18 @@ async def run_multi_agent_pipeline(req: RunPipelineRequest):
                 text_results = await asyncio.to_thread(_run_text_arm)
 
                 # Compute comparison metrics
-                t_pref_total_tensor = sum(s["prefill_ms"] for s in tensor_results[1:]) if len(tensor_results) > 1 else tensor_results[0]["prefill_ms"]
-                t_pref_total_text = sum(s["prefill_ms"] for s in text_results[1:]) if len(text_results) > 1 else text_results[0]["prefill_ms"]
+                t_pref_total_tensor = (
+                    sum(s["prefill_ms"] for s in tensor_results[1:])
+                    if len(tensor_results) > 1
+                    else tensor_results[0]["prefill_ms"]
+                )
+                t_pref_total_text = (
+                    sum(s["prefill_ms"] for s in text_results[1:])
+                    if len(text_results) > 1
+                    else text_results[0]["prefill_ms"]
+                )
                 speedup = round(t_pref_total_text / max(t_pref_total_tensor, 0.01), 2)
-                
+
                 total_prompt_tok_text = sum(s["prompt_tokens"] for s in text_results)
                 total_prompt_tok_tensor = sum(s["prompt_tokens"] for s in tensor_results)
                 tokens_saved = total_prompt_tok_text - total_prompt_tok_tensor
@@ -3316,6 +3542,7 @@ async def run_multi_agent_pipeline(req: RunPipelineRequest):
 
         except Exception as exc:
             import traceback
+
             traceback.print_exc()
             return JSONResponse(status_code=500, content={"error": f"Pipeline execution failed: {exc}"})
 
@@ -3342,7 +3569,8 @@ async def execute_state_handoff_api(req: HandoffPipelineRequest):
     eliminating re-prefill penalties across agentic handoffs.
     """
     try:
-        from runtime.state_handoff_27b import StateHandoffSession, AgentTurn
+        from runtime.state_handoff_27b import AgentTurn, StateHandoffSession
+
         eng = get_native_triton_27b_engine(num_layers=64)
 
         def _run():
@@ -3358,21 +3586,23 @@ async def execute_state_handoff_api(req: HandoffPipelineRequest):
                     temperature=t.temperature,
                 )
                 res = session.execute_turn(agent_turn)
-                turn_results.append({
-                    "agent_id": res.agent_id,
-                    "role": res.role,
-                    "expert_lora": res.expert_lora,
-                    "output_text": res.output_text,
-                    "tokens_generated": res.tokens_generated,
-                    "prefill_tokens": res.prefill_tokens,
-                    "tokens_avoided": res.tokens_avoided,
-                    "prefill_ms": round(res.prefill_ms, 2),
-                    "decode_ms": round(res.decode_ms, 2),
-                    "tok_per_sec": round(res.tok_per_sec, 2),
-                    "handoff_overhead_ms": round(res.handoff_ms, 4),
-                    "lora_swap_ms": round(res.lora_swap_ms, 2),
-                    "state_tensor_mb": round(res.state_tensor_mb, 2),
-                })
+                turn_results.append(
+                    {
+                        "agent_id": res.agent_id,
+                        "role": res.role,
+                        "expert_lora": res.expert_lora,
+                        "output_text": res.output_text,
+                        "tokens_generated": res.tokens_generated,
+                        "prefill_tokens": res.prefill_tokens,
+                        "tokens_avoided": res.tokens_avoided,
+                        "prefill_ms": round(res.prefill_ms, 2),
+                        "decode_ms": round(res.decode_ms, 2),
+                        "tok_per_sec": round(res.tok_per_sec, 2),
+                        "handoff_overhead_ms": round(res.handoff_ms, 4),
+                        "lora_swap_ms": round(res.lora_swap_ms, 2),
+                        "state_tensor_mb": round(res.state_tensor_mb, 2),
+                    }
+                )
             return turn_results
 
         results = await asyncio.to_thread(_run)
@@ -3384,6 +3614,7 @@ async def execute_state_handoff_api(req: HandoffPipelineRequest):
         }
     except Exception as exc:
         import traceback
+
         traceback.print_exc()
         return JSONResponse(status_code=500, content={"error": f"State handoff execution failed: {exc}"})
 
@@ -3393,6 +3624,7 @@ if __name__ == "__main__":
 
     host = os.environ.get("HOST", "0.0.0.0")
     port = int(os.environ.get("PORT", "8000"))
-    print(f"[Autonomous Runtime] Starting FastAPI Engine on http://{host}:{port} (Next.js Dashboard: http://localhost:3000)")
+    print(
+        f"[Autonomous Runtime] Starting FastAPI Engine on http://{host}:{port} (Next.js Dashboard: http://localhost:3000)"
+    )
     uvicorn.run(app, host=host, port=port, log_level="info")
-

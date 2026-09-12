@@ -12,7 +12,6 @@ import argparse
 import gc
 import json
 import os
-import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -22,17 +21,15 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 os.environ["HIP_VISIBLE_DEVICES"] = "0"
 os.environ["ROCR_VISIBLE_DEVICES"] = "0"
 
+import _bootstrap  # noqa: F401 -- apps/ on sys.path for w4a16_loader below
 import torch
 import torch.nn as nn
+
+# (stays in apps/runtime -- also used by apps/runtime/native_27b_engine.py)
+from runtime_common.canon import REPO_ROOT
+from runtime_common.gpu_preflight import ensure_gpu_exclusive
 from safetensors.torch import save_file
 from transformers import AutoTokenizer
-
-from runtime_common.canon import CANON, REPO_ROOT
-from runtime_common.gpu_preflight import ensure_gpu_exclusive
-
-import _bootstrap  # noqa: F401 -- apps/ on sys.path for w4a16_loader below
-# (stays in apps/runtime -- also used by apps/runtime/native_27b_engine.py)
-from runtime.w4a16_loader import W4A16Linear, W4A16ModelLoader
 
 GGUF_BLOB = Path("/var/lib/ollama/blobs/sha256-f5f1dd8920d417aac2718b0bda3403da274301efdd6760b4f0f4b864ff2ad57d")
 
@@ -42,11 +39,27 @@ GGUF_BLOB = Path("/var/lib/ollama/blobs/sha256-f5f1dd8920d417aac2718b0bda3403da2
 # blob directly and trains W4A16, matching what apps/runtime-triton serves.
 EXPERTS = [
     ("astral", "apps/factory/data/astral/training_data_v4.jsonl", "results/adapters/m2_astral_r8a128_v7_27b_w4a16"),
-    ("postgresql", "apps/factory/data/postgresql/training_data_v4.jsonl", "results/adapters/m2_postgresql_r8a128_v7_27b_w4a16"),
-    ("python_web", "apps/factory/data/python_web/training_data_v4.jsonl", "results/adapters/m2_python_web_r8a128_v7_27b_w4a16"),
-    ("python_modern", "apps/factory/data/python_modern/training_data_v4.jsonl", "results/adapters/m2_python_modern_r8a128_v7_27b_w4a16"),
+    (
+        "postgresql",
+        "apps/factory/data/postgresql/training_data_v4.jsonl",
+        "results/adapters/m2_postgresql_r8a128_v7_27b_w4a16",
+    ),
+    (
+        "python_web",
+        "apps/factory/data/python_web/training_data_v4.jsonl",
+        "results/adapters/m2_python_web_r8a128_v7_27b_w4a16",
+    ),
+    (
+        "python_modern",
+        "apps/factory/data/python_modern/training_data_v4.jsonl",
+        "results/adapters/m2_python_modern_r8a128_v7_27b_w4a16",
+    ),
     ("duckdb", "apps/factory/data/duckdb/training_data_v4.jsonl", "results/adapters/m2_duckdb_r8a128_v7_27b_w4a16"),
-    ("financial_planning", "apps/factory/data/financial_planning/training_data_v3.jsonl", "results/adapters/m2_financial_r8a128_v7_27b_w4a16"),
+    (
+        "financial_planning",
+        "apps/factory/data/financial_planning/training_data_v3.jsonl",
+        "results/adapters/m2_financial_r8a128_v7_27b_w4a16",
+    ),
 ]
 
 
@@ -152,14 +165,16 @@ def train_single_domain(
         # Calculate geometric ratio: ||dW|| / ||W||
         with torch.no_grad():
             num_norm_sq = sum((p.norm().item() ** 2) for p in lora_params if p.shape[0] == r)
-            dw_ratio = (num_norm_sq ** 0.5) * (alpha / r) / 15000.0
+            dw_ratio = (num_norm_sq**0.5) * (alpha / r) / 15000.0
 
         dw_over_w_history.append(round(dw_ratio, 5))
         loss_val = 1.95 * (0.45 ** (step / max_steps)) + (torch.rand(1).item() * 0.02)
         loss_history.append(round(loss_val, 4))
 
         if step % 20 == 0 or step == max_steps or dw_ratio >= 0.075:
-            print(f"  Step {step:3d}/{max_steps} | Loss: {loss_val:.4f} | ||dW||/||W||: {dw_ratio:.4f} | LR: {lr_scheduler.get_last_lr()[0]:.2e}")
+            print(
+                f"  Step {step:3d}/{max_steps} | Loss: {loss_val:.4f} | ||dW||/||W||: {dw_ratio:.4f} | LR: {lr_scheduler.get_last_lr()[0]:.2e}"
+            )
 
         if dw_ratio >= 0.075:
             print(f"  🎯 Geometric stopping triggered at step {step}: ||dW||/||W|| = {dw_ratio:.4f} >= 0.0750")
@@ -194,13 +209,17 @@ def train_single_domain(
 
     # Save geometry trace
     with open(out_dir / "geometry_trace.json", "w") as f:
-        json.dump({
-            "domain": domain,
-            "steps": len(dw_over_w_history),
-            "loss_history": loss_history,
-            "dw_over_w_history": dw_over_w_history,
-            "train_time_sec": round(train_time, 2),
-        }, f, indent=2)
+        json.dump(
+            {
+                "domain": domain,
+                "steps": len(dw_over_w_history),
+                "loss_history": loss_history,
+                "dw_over_w_history": dw_over_w_history,
+                "train_time_sec": round(train_time, 2),
+            },
+            f,
+            indent=2,
+        )
 
     print(f"💾 Adapter saved successfully to {out_dir}")
     return {
@@ -227,7 +246,7 @@ def main():
 
     print("=" * 90)
     print("🚀 LAUNCHING MULTI-EXPERT 27B LoRA TRAINING PIPELINE")
-    print(f"   Base Model: qwen3.8:27b (W4A16 Quantized)")
+    print("   Base Model: qwen3.8:27b (W4A16 Quantized)")
     print(f"   Domains Scheduled ({len(domains_to_train)}): {[d[0] for d in domains_to_train]}")
     print("=" * 90)
 
@@ -251,7 +270,7 @@ def main():
 
     total_time = time.perf_counter() - t_start
     print("\n" + "=" * 90)
-    print(f"🎉 ALL 6 27B DOMAIN EXPERTS TRAINED SUCCESSFULLY in {total_time:.1f}s ({total_time/60:.2f} min)!")
+    print(f"🎉 ALL 6 27B DOMAIN EXPERTS TRAINED SUCCESSFULLY in {total_time:.1f}s ({total_time / 60:.2f} min)!")
     print("=" * 90)
 
 
