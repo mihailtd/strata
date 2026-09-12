@@ -23,8 +23,8 @@ A routing re-classification event is **only emitted** when the accumulated displ
 
 ## Implementation Details
 
-- **`RenkoBrickSmoother`**: Located in `src/runtime/dynamic_team_router.py`. Tracks the `last_brick` tensor and evaluates incoming hidden states via `smoother.step(h_t)`.
-- **Latent Exposure**: The CUDA graph decoder (`src/runtime/cuda_graph.py`) has been modified to capture and yield `h_t` out of the generation stream alongside the decoded text.
-- **Server Hook**: `src/runtime/server.py` evaluates every token against the Smoother. When a boundary breaks, it triggers a latent evaluation event.
+- **`RenkoBrickSmoother`**: Located in `apps/runtime/dynamic_team_router.py`. Tracks the `last_brick` tensor and evaluates incoming hidden states via `smoother.step(h_t)`.
+- **Latent Exposure**: The CUDA graph decoder (`apps/runtime/cuda_graph.py`) has been modified to capture and yield `h_t` out of the generation stream alongside the decoded text.
+- **Server Hook**: `apps/runtime/server.py` evaluates every token against the Smoother. When a boundary breaks, it triggers a latent evaluation event.
 
 *Note: The current server implementation logs the boundary breaks for telemetry. The final step is to hook these break events into a trained latent clustering model to execute the physical LoRA swaps.*

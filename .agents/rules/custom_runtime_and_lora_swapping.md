@@ -13,7 +13,7 @@ Our mandate is to **BREAK THE SOTA AND INVENT SOMETHING NOVEL AND NEW**—making
 
 ## The Proprietary Moat: What We Are Inventing
 
-Existing commodity engines execute static, quantized models with discrete, isolated LoRAs. Our custom engine (`src/runtime/`) is built to achieve four novel breakthroughs:
+Existing commodity engines execute static, quantized models with discrete, isolated LoRAs. Our custom engine (`apps/runtime/`) is built to achieve four novel breakthroughs:
 
 ### 1. Continuous Riemannian Weight Traversal (Beyond Discrete LoRA Swapping)
 - **The SOTA Limitation**: Engines like `llama.cpp` and `S-LoRA` swap discrete integer adapters ($A \to B$) or apply linear scalar scaling ($s_i \in [0, 1]$) with separate memory operations.
@@ -46,7 +46,7 @@ Existing commodity engines execute static, quantized models with discrete, isola
    - **Role**: Serves as the ground-truth benchmark for output quality, baseline latency, and reference generation.
    - **Constraint**: Using or tuning this engine is NEVER the goal or the deliverable. It is merely the standard of comparison that our proprietary engine must surpass.
 
-2. **Proprietary Custom Engine (`src/runtime/` on port 8000)**:
+2. **Proprietary Custom Engine (`apps/runtime/` on port 8000)**:
    - **Status**: The Core Project & Intellectual Property (Moat).
    - **Role**: Our custom Triton/HIP kernel engine implementing in-register weight morphing, fused DeltaNet associative recurrence, and multi-adapter superposition.
    - **Constraint**: Every engineering milestone must deliver proprietary capabilities that commodity `llama.cpp` cannot perform.
@@ -76,10 +76,10 @@ Existing commodity engines execute static, quantized models with discrete, isola
 
 6. **Single-Engine Isolation & Directory Separation (Single 24 GB GPU Guardrail)**:
    - On 24 GB VRAM (AMD RX 7900 XTX), multiple engines (18.2 GB `llama-server` + 15.4 GB Triton engine) CANNOT be co-resident in VRAM.
-   - **Zero Subprocess Entanglement**: Never invoke, stop, or proxy external engines from inside `src/runtime/server.py`.
+   - **Zero Subprocess Entanglement**: Never invoke, stop, or proxy external engines from inside `apps/runtime/server.py`.
    - Each engine lives in its own dedicated directory with independent startup scripts:
-     - `src/runtime/` — Custom Triton engine (`http://127.0.0.1:8000`)
-     - `src/runtime-llama/` — C++ `llama-server` baseline (`http://127.0.0.1:8001`)
-     - `src/runtime-ollama/` — Ollama baseline harness (`http://127.0.0.1:11434`)
-     - `src/runtime-next/` — Native Compiled Rust engine
+     - `apps/runtime/` — Custom Triton engine (`http://127.0.0.1:8000`)
+     - `apps/runtime-llama/` — C++ `llama-server` baseline (`http://127.0.0.1:8001`)
+     - `apps/runtime-ollama/` — Ollama baseline harness (`http://127.0.0.1:11434`)
+     - `apps/runtime-next/` — Native Compiled Rust engine
    - When evaluating or benchmarking, execute strictly one engine at a time: run workload on engine A, terminate engine A completely, start engine B, run identical workload, and compare saved scorecards.

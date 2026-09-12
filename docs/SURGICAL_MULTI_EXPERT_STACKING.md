@@ -1,6 +1,6 @@
 # ✂️ Surgical Multi-Expert Stacking
 
-> **Status:** Live in [`src/runtime/novel_peft.py`](../src/runtime/novel_peft.py) —
+> **Status:** Live in [`apps/runtime/novel_peft.py`](../apps/runtime/novel_peft.py) —
 > `WeightFoldingEngine.activate_many()`, `compute_surgical_notch_masks()`.
 > **Theoretical Foundation:** Latent Variable Graphical Lasso (Chandrasekaran et al.
 > 2012, Chapter 9 of *Regressions in Covariances, Dependencies and Graphs*) for

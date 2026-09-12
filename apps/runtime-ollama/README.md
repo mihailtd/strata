@@ -7,7 +7,7 @@ A cleanly isolated, standalone baseline harness running upstream **Ollama** (`/u
 ## Architecture & Responsibilities
 
 - **Scope**: External SOTA / Commodity Baseline for comparative A/B evaluation, benchmark comparisons, and dataset generation.
-- **Isolation**: Completely separated from `src/runtime` (Python/Triton), `src/runtime-llama` (C++ llama.cpp), and `src/runtime-next` (Rust).
+- **Isolation**: Completely separated from `apps/runtime` (Python/Triton), `apps/runtime-llama` (C++ llama.cpp), and `apps/runtime-next` (Rust).
 - **Default Port**: `11434` (Ollama native API and OpenAI-compatible `/v1/chat/completions`).
 - **Single-Engine Rule**: When benchmarking or running tasks, **never run Ollama concurrently with other runtimes**. Run one runtime, benchmark it, stop it, and then benchmark the other.
 
@@ -17,13 +17,13 @@ A cleanly isolated, standalone baseline harness running upstream **Ollama** (`/u
 
 ### 1. Verify Setup & Available Baseline Models
 ```bash
-cd src/runtime-ollama
+cd apps/runtime-ollama
 ./setup.sh
 ```
 
 ### 2. Start Standalone Ollama Server
 ```bash
-cd src/runtime-ollama
+cd apps/runtime-ollama
 ./run_server.sh
 ```
 
@@ -35,7 +35,7 @@ This sets optimal AMD ROCm environment flags:
 
 ### 3. Stop Ollama Server (Release All GPU VRAM)
 ```bash
-cd src/runtime-ollama
+cd apps/runtime-ollama
 ./run_server.sh stop
 ```
 
@@ -58,11 +58,11 @@ To benchmark our custom Triton runtime against the Ollama baseline:
 2. **Step 2 (Ollama Benchmark)**:
    ```bash
    # Start Ollama baseline (port 11434)
-   ./src/runtime-ollama/run_server.sh
+   ./apps/runtime-ollama/run_server.sh
    # Connect DSH harness / run identical benchmark
    uv run python benchmarks/eval_end_to_end_real_usecase.py --endpoint http://127.0.0.1:11434/v1 --model ornith-1.5:35b --out results/benchmarks/scorecard_ollama.json
    # Stop Ollama baseline
-   ./src/runtime-ollama/run_server.sh stop
+   ./apps/runtime-ollama/run_server.sh stop
    ```
 
 3. **Step 3 (Compare)**:

@@ -1,6 +1,6 @@
 # 🌐 Ledoit-Wolf Optimal Shrinkage & Riemannian Manifold Routing
 
-> **Status:** Live in [`src/runtime/riemannian_covariance.py`](../src/runtime/riemannian_covariance.py) & [`src/runtime/dynamic_team_router.py`](../src/runtime/dynamic_team_router.py).  
+> **Status:** Live in [`apps/runtime/riemannian_covariance.py`](../apps/runtime/riemannian_covariance.py) & [`apps/runtime/dynamic_team_router.py`](../apps/runtime/dynamic_team_router.py).  
 > **Theoretical Foundation:** Ledoit & Wolf (2004) *A well-conditioned estimator for large-dimensional covariance matrices*, and Pennec et al. (2006) *A Riemannian Framework for Tensor Computing*.  
 > **Telemetry Artifact:** [`results/benchmarks/riemannian_manifold_distances.json`](../results/benchmarks/riemannian_manifold_distances.json)
 

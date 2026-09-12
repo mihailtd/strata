@@ -156,9 +156,12 @@ In a live 10-turn coding workflow (involving schema creation, 200-line grep inje
 * **PCIe Host Memory Spills**: **$0\text{ spills}$** ($0\%$ slowdown).
 
 ### 3. Real OS Tool Execution on Disk
-The agent created a complete microservice in [`projects/real_portfolio_service/`](file:///home/mihai/Projects/gnn-experiment/projects/real_portfolio_service) and ran real tools:
-* `uv run ruff check`: **All checks passed! ✅**
-* `uv run pytest`: **3/3 passed in 0.20s with Exit Code 0 ✅**
+
+> **Retracted.** This section originally claimed the agent built `projects/real_portfolio_service/` and passed `ruff`/`pytest` for real. The script behind that claim (`apps/harness/run_real_agent_task.py`) discarded the model's actual output and wrote hardcoded template files instead, then printed "3/3 passed" without ever checking the real test exit code — the claim below was fabricated, not measured. The script was deleted; see `apps/harness/coordinator/subagent.py`'s docstring and `agent_sandboxes/README.md` for the fix (a real DSH-driven agent, no template fallback, honest pass/fail). This section is kept, struck through, for provenance rather than silently removed.
+
+~~The agent created a complete microservice in `projects/real_portfolio_service/` and ran real tools:~~
+~~* `uv run ruff check`: All checks passed!~~
+~~* `uv run pytest`: 3/3 passed in 0.20s with Exit Code 0~~
 
 ---
 

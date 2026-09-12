@@ -27,7 +27,7 @@ Whenever designing, optimizing, or validating a new feature, kernel, or architec
 * **Strict Gate**: Do NOT integrate code into the production runtime until this empirical test produces a verifiable `>>> PASSED <<<` result.
 
 ### Stage 3: Runtime Integration & Automated Unit Tests
-* Integrate the validated component into the actual runtime (`src/runtime/`).
+* Integrate the validated component into the actual runtime (`apps/runtime/`).
 * Maintain strict backward compatibility (duck-typing, non-breaking function signatures).
 * Add automated unit tests to `tests/test_<module>.py` covering functionality, edge cases, and memory reset.
 * Run `uv run pytest` and verify all tests pass with Exit Code 0.

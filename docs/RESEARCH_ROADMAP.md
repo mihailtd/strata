@@ -2,7 +2,7 @@
 
 This document serves as the long-term conceptual reference and research roadmap for Parameter-Efficient Fine-Tuning (PEFT), Mixture-of-Experts (MoE) adapter routing, dynamic post-hoc steering, and graphics-inspired runtime control.
 
-For active findings, live adapters, and verified benchmarks, see [CURRENT.md](file:///home/mihai/gnn-experiment/CURRENT.md) and [NOVELTY.md](file:///home/mihai/gnn-experiment/NOVELTY.md).
+For active findings, live adapters, and verified benchmarks, see [CURRENT.md](CURRENT.md) and [NOVELTY.md](NOVELTY.md).
 
 ---
 
@@ -26,7 +26,7 @@ Parameter-Efficient Fine-Tuning freezes the base model weights $W_0 \in \mathbb{
 | Method | Mathematical Structure | Trainable Footprint | Core Trade-offs & Properties |
 | :--- | :--- | :---: | :--- |
 | **LoRA** | $W = W_0 + \frac{\alpha}{r} B A$ ($A \in \mathbb{R}^{r \times k}, B \in \mathbb{R}^{d \times r}$) | Medium (~10–20 MB) | Standard industry baseline; merges linearly into base weights with zero inference latency. |
-| **QLoRA** | $W = \text{dequant}(W_{\text{NF4}}) + \frac{\alpha}{r} B A$ | Medium (~10–20 MB) | 4-bit base model cuts VRAM during training; note: folding QLoRA adapters into bf16 base models creates a cross-precision seam (see [CURRENT.md](file:///home/mihai/gnn-experiment/CURRENT.md)). |
+| **QLoRA** | $W = \text{dequant}(W_{\text{NF4}}) + \frac{\alpha}{r} B A$ | Medium (~10–20 MB) | 4-bit base model cuts VRAM during training; note: folding QLoRA adapters into bf16 base models creates a cross-precision seam (see [CURRENT.md](CURRENT.md)). |
 | **DoRA** | $W = m \frac{W_0 + B A}{\|W_0 + B A\|_c}$ | Medium (~11–22 MB) | Decouples magnitude ($m$) and direction. High training overhead (77% slower) for marginal downstream gains on small models. |
 | **PiSSA** | $W = (W_0 - U_r S_r V_r^T) + (U_r \sqrt{S_r} + B) (\sqrt{S_r} V_r^T + A)$ | Medium (~10–20 MB) | Initializes adapter directly on principal singular components of $W_0$. Requires exact SVD (randomized SVD is biased on flat singular spectra). |
 | **VeRA** | $W = W_0 + \Lambda_b (B A) \Lambda_d$ ($A, B$ frozen random) | Very Small (~1–5 KB) | Freezes shared random projection matrices and trains only per-layer scaling vectors. |

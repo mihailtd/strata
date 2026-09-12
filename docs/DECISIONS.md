@@ -10,6 +10,20 @@ Last updated: 2026-08-17.
 **Rule for this file: one row, one cause, one measurement.** If a component died
 for a reason that was never measured, say "predicted, not measured".
 
+> **See also `EXPERIMENT_REAUDIT_2026-09.md`** — a systematic re-audit of every
+> `experiments/` cluster (done after finding and fixing a real fabrication
+> incident in `apps/harness/coordinator/subagent.py`) that found a handful of
+> entries in *this* file resting partly on synthetic-data-as-real substitution,
+> not real measurement — most notably §52's `surgical` mode default (partly
+> justified by `latent_variable_glasso`'s fabricated activations, though
+> independently confirmed by real-weight math elsewhere) and a still-open
+> production gate (`weibull_hazard_gating`, default-on, never in this file at
+> all) whose only benchmark never loaded a model. §63 itself is fine — it's a
+> real experiment cited *approvingly* in the audit as the correct answer to a
+> question a different, fabricated cluster got wrong. Check that document
+> before trusting or extending a `§NN` entry that touches adapter geometry or
+> speculative-decode gating.
+
 ---
 
 ## 1. RETIRED — APSP / Floyd-Warshall VRAM state routing
@@ -305,7 +319,7 @@ score length-matched as well as full** — both are now in the harness.
 
 **Measured 2026-08-17.** Per-step loss curves captured for all three domains
 (`--logging-steps 1`, 150 steps each, `results/loss_curves/*.json`, analysed by
-`scripts/audit/analyze_loss_curves.py`). This settles two proposals — **both are
+`apps/factory/analyze_loss_curves.py`). This settles two proposals — **both are
 rejected by the data, including the one this file previously leaned toward.**
 
 ### The premise was that domains converge at different rates. They do not.
@@ -393,7 +407,7 @@ Run per-question, the adapter **changed 20/20 answers** and the rubric scored
 **0** of those changes. Alive adapter, blind instrument.
 
 The relationship holds across all three domains and is now checkable statically
-by `scripts/audit/audit_eval_rubrics.py`, with no GPU:
+by `audit/audit_eval_rubrics.py`, with no GPU:
 
 | domain | giveaway | adapter effect |
 | :--- | ---: | ---: |
@@ -1978,7 +1992,7 @@ Using `Path(__file__).parent.parent` arithmetic breaks the moment scripts are re
 - Single canonical `REPO_ROOT`
 - Centralized adapter directory paths (`REPO_ROOT / "results" / "adapters"`)
 - Standardized metadata regimes (`regime.json`) and audit hooks.
-Verified by `scripts/audit/check_canon.py`.
+Verified by `audit/check_canon.py`.
 
 ---
 
@@ -2542,7 +2556,7 @@ We integrated the **Riemannian Dynamic Team Router** (`RiemannianTeamRouter`) an
    - Registered `model="dynamic"` and `model="qwen3.5-4b-dynamic"` in `/v1/models`.
    - Full SSE token streaming (`text/event-stream`) verified in integration suite.
 
-- **Artifact**: `scripts/serve/test_openai_api_server.py`
+- **Artifact**: `apps/runtime/integration_check.py`
 - **Dashboard**: `http://localhost:8000/dashboard`
 
 

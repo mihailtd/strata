@@ -7,7 +7,7 @@ A cleanly isolated, standalone serving runtime running upstream `llama.cpp` comp
 ## Architecture & Responsibilities
 
 - **Scope**: Serves GGUF models directly via native C++ `llama-server`.
-- **Isolation**: Completely separated from `src/runtime` (Python/Triton) and `src/runtime-next` (Rust).
+- **Isolation**: Completely separated from `apps/runtime` (Python/Triton) and `apps/runtime-next` (Rust).
 - **Default Port**: `8001` (OpenAI-compatible `/v1/chat/completions`).
 
 ---
@@ -16,13 +16,13 @@ A cleanly isolated, standalone serving runtime running upstream `llama.cpp` comp
 
 ### 1. Build / Compile (One-time)
 ```bash
-cd src/runtime-llama
+cd apps/runtime-llama
 ./setup.sh
 ```
 
 ### 2. Start Server
 ```bash
-cd src/runtime-llama
+cd apps/runtime-llama
 ./run_server.sh
 ```
 

@@ -88,7 +88,7 @@ Never simulate, mock, fake, or disguise functionality:
 ## Runtime Details
 
 - Engine: AMD ROCm RX 7900 XTX, native W4A16 Triton + MTP speculation
-- Models available: see `src/harness/settings.yaml` for full model list
+- Models available: see `apps/harness/settings.yaml` for full model list
 - LoRA adapters live in `results/adapters/` — do not modify them directly
 - Verification tool: `verify_project` (runs ruff + pytest automatically)
 
@@ -100,10 +100,12 @@ Never simulate, mock, fake, or disguise functionality:
    - On single-GPU systems (24 GB VRAM), NEVER run multiple inference runtimes simultaneously.
    - Running two engines concurrently causes VRAM contention, driver context thrashing, and memory spilling to PCIe host memory.
 2. **Complete Separation of Runtimes**:
-   - `src/runtime/`: Custom Python / Triton Engine (Port 8000)
-   - `src/runtime-llama/`: Standalone C++ `llama-server` Baseline (Port 8001)
-   - `src/runtime-ollama/`: Standalone Ollama Baseline Harness (Port 11434)
-   - `src/runtime-next/`: Native Compiled Rust Engine
+   - `apps/runtime/` (+ `apps/runtime-triton/`): Custom Python / Triton Engine (Port 8000)
+   - `apps/runtime-llama/`: Standalone C++ `llama-server` Baseline (Port 8001)
+   - `apps/runtime-ollama/`: Standalone Ollama Baseline (Port 11434)
+   - `apps/runtime-vllm/`: Standalone vLLM Baseline (Port 8004)
+   - `apps/runtime-ipwf/`: In-place weight-folding engine, 3B/9B models (Port 8002)
+   - `apps/runtime-next/`: Native Compiled Rust Engine (skeleton only, not yet functional)
    - Never proxy, embed, or manage one runtime from inside another runtime's process.
 3. **Mandatory Sequential A/B Testing Protocol**:
    To benchmark and compare two runtimes (e.g., custom Triton vs llama.cpp or Ollama):

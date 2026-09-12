@@ -42,7 +42,7 @@ Snapshot updated 2026-08-24. This document serves as the authoritative reference
 ### GPU Preflight Verification
 To verify hardware compute status and run a live 4096×4096 GPU matmul:
 ```bash
-uv run python scripts/audit/check_gpu.py
+uv run python audit/check_gpu.py
 ```
 Expected output:
 - `torch.cuda.is_available(): True`
@@ -61,7 +61,7 @@ Expected output:
 
 ### JavaScript / Web Toolchain
 - **Node.js**: Node v26.7.0 (managed via `fnm`).
-- **Package Managers**: `pnpm 11.22.0` (primary for `src/dashboard`), `npm 11.19.0`.
+- **Package Managers**: `pnpm 11.22.0` (primary for `apps/dashboard`), `npm 11.19.0`.
 
 ### Compilers & Build Tools
 - **C/C++**: Clang 21 (`/usr/bin/clang`, `/usr/bin/clang++`), GCC 15 (`/usr/bin/gcc`, `/usr/bin/g++`), Make.
@@ -100,21 +100,21 @@ The codebase uses cleanly isolated environments for distinct dependency constrai
   cd training && uv sync
   ```
 
-### 3. Serving Engine (`serving/`)
-- **Manifest**: `serving/pyproject.toml`, `serving/uv.lock`
-- **Virtualenv**: `serving/.venv`
-- **Purpose**: Isolated serving environment for OpenAI-compatible endpoints and native llama.cpp HIP builds on `gfx1100`.
+### 3. vLLM Baseline Runtime (`apps/runtime-vllm/`)
+- **Manifest**: `apps/runtime-vllm/pyproject.toml`, `apps/runtime-vllm/uv.lock`
+- **Virtualenv**: `apps/runtime-vllm/.venv`
+- **Purpose**: Isolated vLLM/ROCm serving environment for OpenAI-compatible baseline comparisons on `gfx1100`. See `apps/RUNTIME.md` for how this fits alongside the other runtimes (`apps/runtime-llama` now owns the native llama.cpp HIP build).
 
-### 4. Interactive Web Dashboard (`src/dashboard/`)
-- **Manifest**: `src/dashboard/package.json`, `src/dashboard/pnpm-lock.yaml`
-- **Node Modules**: `src/dashboard/node_modules`
+### 4. Interactive Web Dashboard (`apps/dashboard/`)
+- **Manifest**: `apps/dashboard/package.json`, `apps/dashboard/pnpm-lock.yaml`
+- **Node Modules**: `apps/dashboard/node_modules`
 - **Purpose**: Next.js 16 web application for real-time telemetry, interactive DAG visualization, adapter training goldilocks curves, and chat interface.
 - **Tech Stack**:
   - Next.js 16.3.1 (Turbopack), React 19.2.8, TailwindCSS v4
   - Apache ECharts 6.1.0, `@xyflow/react` 12.11.3, KaTeX math typesetting, MDX documentation loader
 - **Development & Build Commands**:
   ```bash
-  cd src/dashboard
+  cd apps/dashboard
   pnpm dev     # Launch development server on http://localhost:3000
   pnpm build   # Optimized production Turbopack build
   ```

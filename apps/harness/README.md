@@ -14,7 +14,7 @@ uv run --env-file .env python -m runtime.server
 
 ### 2. Launch DeepSeek Harness Web UI
 ```bash
-bash src/harness/start_dsh.sh
+bash apps/harness/start_dsh.sh
 ```
 Or directly via `npx`:
 ```bash

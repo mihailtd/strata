@@ -68,12 +68,12 @@ across methodology, liger, precision, rank (8), alpha (128), completion-only los
 Verify before use:
 
 ```bash
-uv run python scripts/audit/audit_adapters.py          # drift check + current roles
-uv run python scripts/audit/audit_adapters.py --write  # re-record after training
+uv run python audit/audit_adapters.py          # drift check + current roles
+uv run python audit/audit_adapters.py --write  # re-record after training
 ```
 
 **Every quality benchmark imports canonical defaults from `runtime.canon`.**
-Run `uv run python scripts/audit/check_canon.py` to audit compliance.
+Run `uv run python audit/check_canon.py` to audit compliance.
 
 ---
 

@@ -33,16 +33,16 @@ A focused, single-tenant OpenAI-compatible REST server that:
 
 ```bash
 # From repo root — standby mode (engine loads when you POST /api/engine/load)
-./src/runtime-ipwf/run_server.sh
+./apps/runtime-ipwf/run_server.sh
 
 # Pre-load the 4B model on startup
-AUTO_LOAD_MODEL=1 ./src/runtime-ipwf/run_server.sh
+AUTO_LOAD_MODEL=1 ./apps/runtime-ipwf/run_server.sh
 
 # Load the 9B model instead
-DEFAULT_MODEL_ID=Qwen/Qwen3.5-9B AUTO_LOAD_MODEL=1 ./src/runtime-ipwf/run_server.sh
+DEFAULT_MODEL_ID=Qwen/Qwen3.5-9B AUTO_LOAD_MODEL=1 ./apps/runtime-ipwf/run_server.sh
 
 # Disable speculative decoding (e.g. for pure baseline measurement)
-SPECULATIVE_DECODE=0 ./src/runtime-ipwf/run_server.sh
+SPECULATIVE_DECODE=0 ./apps/runtime-ipwf/run_server.sh
 ```
 
 Or directly via Python:
@@ -164,10 +164,10 @@ Sequential A/B procedure:
 
 ```bash
 # Step 1 — Start IPWF engine
-DEFAULT_MODEL_ID=Qwen/Qwen3.5-9B AUTO_LOAD_MODEL=1 ./src/runtime-ipwf/run_server.sh
+DEFAULT_MODEL_ID=Qwen/Qwen3.5-9B AUTO_LOAD_MODEL=1 ./apps/runtime-ipwf/run_server.sh
 
 # Step 2 — Run DSH harness evaluation
-cd src/harness && uv run python eval.py --endpoint http://localhost:8002 \
+cd apps/harness && uv run python eval.py --endpoint http://localhost:8002 \
   --output results/benchmarks/scorecard_ipwf_9b.json
 
 # Step 3 — Stop the engine
@@ -175,7 +175,7 @@ curl -X POST http://localhost:8002/api/engine/unload
 # Wait for VRAM to clear, then Ctrl+C the server process
 
 # Step 4 — Start a different engine (e.g. runtime-triton)
-AUTO_LOAD_MODEL=1 ./src/runtime-triton/run_server.sh
+AUTO_LOAD_MODEL=1 ./apps/runtime-triton/run_server.sh
 
 # Step 5 — Run same harness evaluation against port 8000
 # Step 6 — Compare the two scorecard JSON files
@@ -185,7 +185,7 @@ AUTO_LOAD_MODEL=1 ./src/runtime-triton/run_server.sh
 
 ## Module Dependencies
 
-All engine modules live in `src/runtime/` (the shared package):
+All engine modules live in `apps/runtime/` (the shared package):
 
 - `runtime.novel_peft` — `FoldableExpert`, `WeightFoldingEngine`, `set_hard_vram_cap`
 - `runtime.cuda_graph` — `FoldedCudaGraphDecoder` (pre-captured HIP graph)
