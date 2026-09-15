@@ -2157,6 +2157,15 @@ architecture.
 
 ## §45 — CONFIRMED: POET Activation Cross-Talk Covariance & Channel-Selective Notch Filtering
 
+> ⚠️ **The "$1.4\times$-$5.4\times$ cross-talk reduction" number below is FABRICATED. See §70.**
+>
+> Computed from synthetic `torch.randn` "activation probe inputs" multiplied by real
+> trained v4 LoRA deltas, not real activations — one of the four reported ratios was even
+> below $1.0\times$ (filtering made synthetic cross-talk *worse*). The real re-measurement
+> (`probe_4way_poet_notch.py`, real model, real forward hooks, real 4-way stack) found a
+> **0.15%-0.22%** activation-energy reduction — real, positive, consistently so, but nowhere
+> near this magnitude. Kept unedited below for the record; do not cite these numbers.
+
 Applied POET decomposition ($\Sigma_{\text{cross}} = L_{\text{pervasive}} + S_{\text{sparse}}$) across dynamic activation perturbations $\Delta_A, \Delta_B$ of paired domain adapters on Qwen3.5-4B (128 layers).
 
 - **Result**: $\sim 10.5\%$ of activation cross-talk energy is shared foundation model representation ($L$, rank-2), while domain interference is localized to $<0.1\%$ sparse neuron coordinates ($S$).
@@ -2318,6 +2327,20 @@ The resolution probe replays the §38 measurement and applies the decomposition 
 
 ## §50 — Surgical Multi-Expert Stacking: Attention Conditional Orthogonality & Refutation of Global $\sqrt{K}$ Attenuation
 
+> ⚠️ **The "1 isolated conflict module" / "$99.998\%$ sparsity" numbers below are FABRICATED. See §68.**
+>
+> `probe_surgical_sparsification.py`'s LV-GLasso decomposition was fed a synthetic input
+> activation matrix (`X_full = shared_drift + innovations`, random noise, no real model)
+> multiplied by real trained weights — the "empirical findings" below are an artifact of
+> that synthetic input, not a property of the real adapters. The real re-measurement
+> (`experiments/factory/geometry/surgical_notch_sweep/`, real v7 adapters, pure real-weight
+> math, no activations needed) found **96 of 96** MLP weight matrices exceed the conflict
+> gate, not 1 of 512 — cross-adapter interference is widespread and modest, not sparse and
+> localized. The **qualitative conclusion below** (don't blanket-attenuate attention,
+> confine attenuation to a small notch) **still holds** — selectivity is real (2.0×–4.3×) —
+> but the specific numbers, the "$99.998\%$ sparsity," and "exactly 1 collision" framing do
+> not. Kept unedited below because §51/§52 were built on it; do not cite the numbers.
+
 Prior defensive merging literature recommends attenuating stacked adapter scaling by $1/\sqrt{K}$ (or $1/K$) to avoid cross-adapter interference and activation explosion. For $K=4$ adapters, this halves the effective scaling ($\alpha \leftarrow \alpha/2$) and destroys $75.0\%$ of total adapter signal energy ($\|dW\|_F^2 \propto \alpha^2$).
 
 Our projection-type LV-GLasso anatomy (`probe_surgical_sparsification.py`) mathematically and empirically refutes global $\sqrt{K}$ dampening:
@@ -2341,6 +2364,14 @@ Our projection-type LV-GLasso anatomy (`probe_surgical_sparsification.py`) mathe
 
 
 ## §51 — Two-Stage Surgical Stacking: Macro LV-GLasso Topology Routing + Micro POET Neuron Notch Filtering
+
+> ⚠️ **The "511/512 modules conditionally orthogonal, 1 colliding module" claim below is FABRICATED. See §68.**
+>
+> Same root cause as §50's banner: the LV-GLasso precision decomposition ran on synthetic
+> activations, not real ones. `top_k=15` (the "top 15 conflicting output neurons") is real
+> production code and does something real and selective (see §68/`surgical_notch_sweep`),
+> but "identifies 511/512 as orthogonal, pinpoints the exact 1 colliding module" is not a
+> real finding — the real re-measurement finds 96/512 tested modules conflict, not 1.
 
 We synthesize **Latent Variable Graphical Lasso (Macro Network Routing, Chapter 9)** with **POET Channel Covariance (Micro Neuron Notching, Chapter 7)** to eliminate multi-adapter interference without blanket model dampening:
 
@@ -2821,6 +2852,23 @@ To test whether fine-tuning micro-adapters specifically attached to the 1-layer 
 
 ## §64 — Continuous NOTEARS Tool-to-Expert Causal Graph Learning & Zero-Latency Predictive Pre-Folding
 
+> ⚠️ **Qualification added 2026-09-13** (per `docs/EXPERIMENT_REAUDIT_2026-09.md`'s
+> `benchmark_predictive_prefold.py` entry): the "Empirical Benchmark Results" table below
+> is **not** a live-agent, live-GPU measurement, though it is honestly disclosed as such in
+> the script's own code (unlike the Critical #1-#5 findings, which hid their synthetic
+> inputs). What's real: the `NotearsCausalScheduler` prediction/scheduling logic
+> (`predict_next_expert`, `async_prefold`, `fit_from_traces`) is the actual production
+> class, genuinely exercised. What's simulated: the 15-turn "agent conversation" is
+> hand-scripted text (not a real agent), tool execution time is `time.sleep()` on a
+> hardcoded per-step constant (not a real tool run), and VRAM folding is
+> `MockVRAMFoldingEngine.activate()` sleeping a hardcoded 1.9ms (not a real weight fold).
+> The 66.7% hit rate is a real computation given that scripted trace, not a fabricated
+> number — but it measures "does the scheduler's prediction logic behave sensibly on this
+> hand-authored script," not "what happens on a real agent session." A real DSH-driven
+> re-measurement (real agent, real tool calls, real live server, real folding) has not been
+> done — see `docs/EXPERIMENT_REAUDIT_2026-09.md` Category 4, now that `evals/dsh_agent/`
+> exists to make it possible.
+
 ### Context & Theoretical Foundation
 In a multi-turn agentic workflow, an agent alternates between generating model responses (e.g. producing tool calls, SQL DDL, API routes) and executing external tools in Python/Postgres/DuckDB sandbox runtimes (100–250 ms).
 
@@ -2846,10 +2894,10 @@ Where $X \in \mathbb{R}^{n \times d}$ is the design matrix of emitted tool indic
 | **Hit Perceived Latency** | `1.90 ms` | **`0.00 ms`** | **`0.00 ms`** | **Instantaneous Execution** |
 
 ### Implementation & System Integration:
-1. **Scheduler Module**: [`src/runtime/notears_causal_scheduler.py`](file:///home/mihai/gnn-experiment/src/runtime/notears_causal_scheduler.py) implements the continuous NOTEARS matrix exponential gradient optimizer with non-blocking thread-pool pre-folding (`async_prefold`).
-2. **Server Execution**: [`src/runtime/server.py`](file:///home/mihai/gnn-experiment/src/runtime/server.py) automatically detects emitted tool surfaces at the end of each turn, predicts $P(\text{Expert}_{t+1} \mid \text{Tool}_t, \text{Expert}_t)$, and triggers background pre-folding during inter-turn client/tool execution.
-3. **Dashboard Web UI**: [`src/runtime/dashboard.py`](file:///home/mihai/gnn-experiment/src/runtime/dashboard.py) includes live NOTEARS DAG transition probabilities, hit-rate telemetry, and interactive `reFitCausalDag()` trigger.
-4. **Benchmark Suite**: [`benchmarks/agentic/benchmark_predictive_prefold.py`](file:///home/mihai/gnn-experiment/benchmarks/agentic/benchmark_predictive_prefold.py) provides reproducible end-to-end verification.
+1. **Scheduler Module**: [`apps/runtime/notears_causal_scheduler.py`](../apps/runtime/notears_causal_scheduler.py) implements the continuous NOTEARS matrix exponential gradient optimizer with non-blocking thread-pool pre-folding (`async_prefold`).
+2. **Server Execution**: [`apps/runtime/server.py`](../apps/runtime/server.py) automatically detects emitted tool surfaces at the end of each turn, predicts $P(\text{Expert}_{t+1} \mid \text{Tool}_t, \text{Expert}_t)$, and triggers background pre-folding during inter-turn client/tool execution.
+3. **Dashboard Web UI**: the Python `dashboard.py` referenced here no longer exists -- the dashboard is now the Next.js app at [`apps/dashboard/`](../apps/dashboard/); whether it still surfaces live NOTEARS DAG telemetry was not re-verified as part of this correction.
+4. **Benchmark Suite**: [`experiments/agentic/benchmark_predictive_prefold.py`](../experiments/agentic/benchmark_predictive_prefold.py) provides the (simulated -- see the qualification above) end-to-end verification.
 
 ---
 
@@ -3098,4 +3146,1079 @@ When a specialized domain LoRA (e.g. `astral`, `postgresql`, `python_web`) is fo
    * When `WeightFoldingEngine.activate(expert)` executes, it applies fused `addmm` updates to both the 32/36 backbone layers and the 1-layer MTP draft head (`layer.*.weight` and `fc.weight`) in a single atomic dispatch.
 3. **Runtime Protection**:
    * Speculative draft heads strictly match the backbone dimension ($D=2560$ for 4B, $D=4096$ for 9B) and auto-link domain micro-adapters during expert switching.
+
+---
+
+## §67 — Weibull Hazard + Bollinger gate: real speedup is +4.7%, not the fabricated +49.3%
+
+**Rule:** `RangeStatisticGate`'s Weibull hazard and Bollinger Band mechanisms may stay enabled (they measured a small real positive effect, not a regression), but neither should be cited as delivering a large speedup, and neither should be used as a template for "the gate's math looks legitimate, so its claimed benchmark must be too."
+
+### 1. What was wrong (SEVERE, per `docs/EXPERIMENT_REAUDIT_2026-09.md` Critical #1)
+`RangeStatisticGate(weibull_hazard_enabled=True, bollinger_bands_enabled=True)` — the constructor default, live in the speculative draft loop on both the 4B and 9B serving paths — had zero real measurement behind it. Its only prior justification, `experiments/runtime/speculative/weibull_hazard_gating/` (now `benchmarks/superseded/weibull_hazard_gating_fabricated/`), never loaded a model: both scripts hand-built a synthetic acceptance-decay curve shaped to contain exactly the signal the gate looks for, and computed "tok/s" from a hardcoded linear latency formula (`t_base_single * (1.0 + 0.12 * k)`). Reported speedup: up to +49.3% at K=8.
+
+### 2. What was found blocking a real measurement (pre-existing bugs, unrelated to the gate math itself)
+`apps/runtime-ipwf/server.py`'s request handlers called decoder methods that did not exist on the objects they were calling them on — `spec_decoder.generate(temperature=..., stop_token_ids=...)` and `graph_decoder.generate(...)`/`graph_decoder.stream_generate(...)` instead of the real `BucketedSpeculativeDecoder.generate(stop_ids=...)` and `FoldedCudaGraphDecoder.generate_with_graph()`/`generate_tokens_stream()` (which yields `(text, hidden_state)` tuples, not bare strings). The server had never successfully completed a single real chat-completion request, streaming or not, gated or not. Separately, `model_state["range_gate"]` was constructed at startup but never actually threaded into the speculative draft call, and `/api/engine/set_speculative_range_gate` existed only in the legacy `apps/runtime/server.py`, never ported to `runtime-ipwf`. All fixed as a prerequisite to measuring anything (see the `apps/runtime-ipwf` commit history and its smoke tests).
+
+### 3. The real measurement (MEASURED)
+Real Qwen3.5-4B, real `runtime-ipwf` server, real prompts (`data/astral/evaluation_data.jsonl`), arms toggled live through the real `/api/engine/set_speculative_range_gate` endpoint. See `benchmarks/runtime/speculative/weibull_hazard_gating/README.md` for the full table; headline:
+
+| Arm | tok/s (median) | vs. gate disabled |
+| :--- | ---: | ---: |
+| gate disabled | 25.91 | 1.000x |
+| range statistic only | 27.12 | 1.047x |
+| + Weibull hazard | 27.05 | 1.044x |
+| + Weibull + Bollinger (shipped default) | 27.11 | 1.047x |
+
+The shipped default is **+4.7%** over gate-disabled — real, positive, an order of magnitude smaller than the fabricated claim. Weibull and Bollinger individually add nothing measurable beyond the base range-statistic gate at `spec_k=2` on this workload (all three gated arms within noise of each other).
+
+### 4. Finished 2026-09-13: full K-sweep + 9B run
+
+The open question above ("only tested at K=2 on 4B") is now closed. Swept real `spec_k ∈ {2, 4, 8}` on 4B (each value requiring a full server restart to recapture the CUDA graph buckets) plus a real 9B run at its default K=2:
+
+| Config | A disabled | B range-only | C +weibull | D +weibull+bollinger (SHIP) | Ship vs. A |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| 4B, K=2 | 24.94 | 24.93 | 24.89 | 26.31 | **1.055×** |
+| 4B, K=4 | 25.59 | 24.92 | 24.44 | 24.76 | **0.968×** |
+| 4B, K=8 | 24.48 | 25.62 | 25.75 | 25.52 | **1.043×** |
+| 9B, K=2 | 29.52 | 31.59 | 31.52 | 31.77 | **1.076×** |
+
+**The effect is real but not uniform — it flips sign at K=4.** K=2, K=8, and the 9B run all show a real +4%–8% gain from the shipped default; K=4 on 4B is a real **regression** (-3.2%), and at K=4 even the base range-only and weibull-only arms already underperform gate-disabled — this is not specifically a Bollinger problem at that depth, something about K=4 interacts badly with the gate mechanism generally. Per-arm standard deviation (1.5–5.2 tok/s on 8 samples/arm) is comparable to the inter-arm differences, so the K=4 regression specifically cannot be fully distinguished from noise at this sample size — but the pattern that IS robust across all four configs (every ratio within ±8% of 1.0×) already falsifies the original fabricated +49.3% claim regardless.
+
+`state_replay`'s branching/tree-early-abort idea (Category 5 in the reaudit) was blocked on this fix landing first; it can now proceed treating "+4–8% at K∈{2,8}, real regression at K=4, never dramatic" as the real baseline, not +49.3%.
+
+- **Reports**: `results/benchmarks/weibull_hazard_gating_live.json`, `..._k2.json`, `..._k4.json`, `..._k8.json`, `..._9b.json`
+
+---
+
+## §68 — LV-GLasso "one true conflict edge": real re-measurement finds 96/96, not 1/512
+
+**Rule:** `compute_surgical_notch_masks`'s hyperparameters (`top_k=15`, `max_conflict_modules=2`) may stay as shipped (they measure a real, if modest, positive selectivity), but the LV-GLasso "isolated single collision" narrative behind §50/§51 must not be cited — see the correction banners on those sections.
+
+### 1. What was wrong (SEVERE, per `docs/EXPERIMENT_REAUDIT_2026-09.md` Critical #2)
+Four scripts in `experiments/factory/geometry/latent_variable_glasso/` (now `benchmarks/superseded/latent_variable_glasso_fabricated/`) all built their precision-graph analysis on a synthetic input activation matrix (`X_full = shared_drift + innovations` — a random rank-8 factor model plus Gaussian noise) multiplied by the real trained v4 LoRA weights. One script's own docstring admitted it: `compute_cross_layer_activation_deltas` "Simulates realistic forward activation deltas." The result — `rank(L)=299`, "$99.998\%$ sparsity," "the exact 1 colliding module (L3.gate_proj)" — was reported as "Empirical Results Across Trained v4 Domain Adapters" and directly justified `top_k=15`/`max_conflict_modules=2`, the hyperparameters of the runtime-default `scale_mode="surgical"` (§52).
+
+### 2. The real measurement (MEASURED) — and it actively contradicts the claim, not just lacks support for it
+`experiments/factory/geometry/surgical_notch_sweep/probe_notch_sweep.py` calls the actual production `compute_surgical_notch_masks` directly (no reimplementation) against real, current `CANON.ADAPTER_VERSION=v7` adapters, using pure analytic real-weight math — no forward pass, no synthetic data of any kind. Result across three real adapter pairs (astral+python_modern, postgresql+duckdb, astral+postgresql):
+
+| Pair | Modules passing conflict gate | Selectivity at shipped default |
+| :--- | :---: | ---: |
+| astral + python_modern | 96 / 96 | 2.83× |
+| postgresql + duckdb | 96 / 96 | 4.27× |
+| astral + postgresql | 96 / 96 | 2.52× |
+
+**96 of 96 MLP weight matrices exceed the conflict-sharpness gate in every pair — not 1 of 512.** Real cross-adapter interference is widespread and modest, not sparse and localized to one layer. `max_conflict_modules=2` is a truncation to the top 2 of many roughly-equally-plausible candidates, not "the one conflict science found."
+
+**The mechanism is still not harmful**: selectivity (fraction of crosstalk removed ÷ fraction of signal removed) is 2.5×–4.3× at the shipped default — real and positive, meaning notching does remove more crosstalk than signal, just not because it found one uniquely-guilty module.
+
+### 3. What is still open
+`surgical_notch_sweep` never runs the model either — it's pure real-weight-space math, answering "is notching selective" but not "what does real per-token forward-pass activation covariance actually look like." The ADMM machinery from the fabricated cluster (`solve_lv_glasso_admm`, generic and correct) is preserved in `benchmarks/superseded/latent_variable_glasso_fabricated/probe_lv_glasso_interference.py` if anyone wants to redo that analysis properly with real forward hooks (the way `probe_stacking_merit.py`/`probe_capca_premise.py` do it).
+
+- **Reports**: `results/benchmarks/surgical_notch_sweep.json`
+
+---
+
+## §69 — `speculative_mtp_distillation` retracted: real §63 already answered this, and disagrees
+
+**Rule:** Do not domain-adapt the MTP draft head for any reason, robust loss function or not. This isn't a new rule — it restates §63 — but it needed restating because a separate, fabricated experiment recommended the opposite.
+
+### 1. What was wrong (Critical #3 per `docs/EXPERIMENT_REAUDIT_2026-09.md`)
+`experiments/factory/speculative_mtp_distillation/benchmark_mtp_domain_distillation.py` (now `benchmarks/superseded/speculative_mtp_distillation_fabricated/`) operated entirely on a `SimulatedMTPDraftHead` (`d_model=512`, `vocab_size=1000`) — nowhere near Qwen3.5-4B's real dimensions (hidden_size=2560, vocab~151936) — with synthetic random teacher weights and random input tokens. It never touched `apps/runtime/mtp_draft.py`. Even by its own yardstick, positional accuracy stayed at 0.8%-1.6% for every arm; its headline "backbone alignment 0.003 -> 0.731" is a cosine-similarity side channel the Huber loss directly optimizes for by construction, not a finding about real draft acceptance. Its README's "Architectural Integration" section nonetheless told readers to use `HuberDistillationLoss` when training domain-specialized draft heads for the live engine.
+
+### 2. Why no new measurement was needed
+Unlike weibull (§67) and LV-GLasso (§68), this cluster didn't drive a shipped default — it only offered advice nobody had followed yet. And the real answer already existed: **§63 already ran the real experiment** (real 1-layer EAGLE draft head, real domain fine-tuning, all 6 canonical v7 domains, real GPU throughput) and found domain-adapting the head — with a different, legitimate loss (feature-alignment, not Huber logit distillation) — makes every domain lose to the stock head by 10%-34%, because a 1-layer head's limited capacity means any domain fine-tuning causes representation collapse regardless of which loss function is used to get there.
+
+### 3. Action taken
+Retracted the README's integration advice, retired the script to `benchmarks/superseded/speculative_mtp_distillation_fabricated/` with a retirement banner, corrected `docs/NOVELTY.md`'s conflated citation (it had cited this cluster's JSON alongside the honestly-synthetic `robust_distillation` cluster's real one). `HuberDistillationLoss` itself (`apps/runtime/robust_distill.py`) is real, generic, reusable machinery, unaffected by this retraction — `robust_distillation` still uses it correctly for its own (explicitly synthetic-labeled) purpose. Documentation-only fix; nothing in production depended on this cluster's numbers.
+
+- **Reports**: none (documentation-only correction)
+
+---
+
+## §70 — POET activation cross-talk: real reduction is 0.15%-0.22%, not the fabricated 1.4x-5.4x
+
+**Rule:** Nothing in production depends on the exact cross-talk-reduction magnitude here, so there's no shipped-default risk (unlike §67/§68) — but §45 must not be cited as an empirical measurement of activation cross-talk.
+
+### 1. What was wrong (Critical #4 per `docs/EXPERIMENT_REAUDIT_2026-09.md` — a milder LV-GLasso variant)
+`probe_poet_activation_crosstalk.py` (now `benchmarks/superseded/poet_activation_crosstalk_fabricated/`) built "activation probe inputs" as `X = torch.randn(...)` — its own comment called them "Synthetic activation probe inputs" — multiplied by real trained v4 LoRA deltas, and reported the result as measuring "dynamic activation perturbations... on Qwen3.5-4B." One of the four reported cross-talk-reduction ratios (astral vs financial) was 0.96x — *below* 1.0, meaning filtering made the synthetic cross-talk worse in that pair, which in hindsight should have flagged that this input wasn't exercising the notch mechanism meaningfully.
+
+### 2. The real measurement already existed, unused
+A sibling script in the same cluster, `probe_4way_poet_notch.py`, was already doing this correctly — real Qwen3.5-4B, real forward hooks on `mlp.down_proj`/`self_attn.o_proj`, real v4 adapters folded via the real `WeightFoldingEngine`, real prompts across 5 domains — and had already been run (`results/benchmarks/poet_4way_stacking_results.json` predates this correction). Its result just wasn't the one quoted in the README:
+
+| Domain | Raw 4-way energy | POET-notched energy | Reduction |
+| :--- | ---: | ---: | ---: |
+| astral | 0.5090 | 0.5082 | +0.16% |
+| postgresql | 0.5139 | 0.5129 | +0.19% |
+| duckdb | 0.5098 | 0.5090 | +0.15% |
+| financial | 0.5061 | 0.5050 | +0.22% |
+| general | 0.5123 | 0.5114 | +0.18% |
+
+**Real, consistently positive, but small: 0.15%-0.22%** — an order of magnitude below the fabricated "1.4x-5.4x" claim, and directionally consistent with `surgical_notch_sweep`'s (§68) independent real-weight-space finding that the shipped notching mechanism removes a real but modest amount of interference.
+
+### 3. Action taken
+Retired `probe_poet_activation_crosstalk.py` and its unit test to `benchmarks/superseded/poet_activation_crosstalk_fabricated/` (the unit tests cover only the generic, non-fabricated `poet_crosstalk_fast` math on hand-planted synthetic ground truth, so they still pass and are kept for provenance, no longer pytest-collected). Rewrote `experiments/factory/geometry/poet_activation_crosstalk/README.md` around the real 4-way result; `probe_4way_poet_notch.py` was not retired — it was already correct.
+
+- **Reports**: `results/benchmarks/poet_4way_stacking_results.json`
+
+---
+
+## §71 — Predictive pre-folding: real DSH-agent measurement, real bugs found, real effect is tiny
+
+**Rule:** `NotearsCausalScheduler` may stay wired into `apps/runtime-ipwf/server.py`'s request path (it is now real, live, and does not harm correctness), but its latency benefit must not be cited beyond what was actually measured: ~1ms saved per correct prediction, real but negligible next to real generation time.
+
+### 1. What was under-qualified (per `docs/EXPERIMENT_REAUDIT_2026-09.md` Category 4, §64's correction)
+§64's "Empirical Benchmark Results" table came from `experiments/agentic/benchmark_predictive_prefold.py`: a real `NotearsCausalScheduler` driven by a hand-scripted 15-turn conversation, `time.sleep()`-simulated tool execution, and a `MockVRAMFoldingEngine` sleeping a hardcoded 1.9ms per fold. Honestly disclosed as a mock in its own code, but not qualified where its numbers were cited.
+
+### 2. Building the real version found two real, previously-unknown bugs
+Wiring the scheduler into `apps/runtime-ipwf/server.py`'s actual request-completion path (it was instantiated at load time but never called before this) surfaced:
+1. **`WeightFoldingEngine.activate()` unconditionally re-folded even when the requested expert was already active.** This would have silently defeated the entire point of pre-folding — a correct prediction's background fold would just get redone anyway when the real request arrived. Fixed in both `apps/runtime/novel_peft.py` and `apps/runtime-ipwf/novel_peft.py`: skip when `self.active == expert.name` (the operation is deterministic, so this is a pure optimization).
+2. **The MTP draft-head loader has no model-size hint and picked the 9B-shaped matched adapter for a 4B model**, crashing `torch.addmm` on the first named-expert activation (`compute_surgical_notch_masks`'s sibling loader, `_get_draft_factor`/`_load_matching_mtp_factors`). Fixed defensively with a shape check before the fold (falls back to the unmatched pristine draft head with a loud warning instead of crashing); the root ambiguous-candidate-resolution cause is still open.
+3. Also needed: a `threading.Lock` around every `WeightFoldingEngine.activate()`/`.restore()` call — the background pre-fold thread and the main request-handling thread can both call `.activate()` on the same live GPU tensors, which would otherwise race.
+
+### 3. The real measurement (MEASURED)
+Real DSH agent (DeepSeek Harness SDK), 5 steps mirroring the scheduler's seeded canonical pipeline (astral → postgresql → duckdb → python_web → python_modern), against the real live `runtime-ipwf` server, arms toggled through the real `/api/engine/set_predictive_prefold` endpoint:
+
+| Arm | Total real swap ms (5 steps) | Real folds | Hits |
+| :--- | ---: | ---: | ---: |
+| A — reactive only | 5.04 | 5 | — |
+| B — NOTEARS prefold | 4.02 | 4 | 2 of 4 |
+
+Arm B's real swap overhead is **0.80×** of Arm A. One prediction (duckdb) landed as a genuine hit: `real_swap_ms=0.00` because the background pre-fold had already completed by the time the request arrived.
+
+### 4. What this does NOT show
+`apps/runtime-ipwf/server.py` has no real OpenAI-style function/tool-calling support (`ChatCompletionRequest` silently drops any `tools=`) — confirmed live, DSH's bash tool never actually fires, the model only describes commands in text. `detect_tools()` pattern-matches that text regardless, so the scheduler is exercised for real, but this is not "the agent completed a real coding task." Also: **the real fold cost here is ~1ms, an order of magnitude below the 1.9ms the mock assumed, and negligible against real per-turn generation latency (~8.9 seconds/turn in this run)** — the practical value of this feature is more about not being harmful (correctness, the race fixed above) than about the latency it saves at this model size and turn cadence.
+
+- **Reports**: `results/benchmarks/predictive_prefold_live.json`
+
+---
+
+## §72 — LV-GLasso redone with real activations: rank(L)=282, 20 real edges, not 1 or 96
+
+**Rule:** Neither `surgical_notch_sweep` (§68) nor this probe should be cited as "the" answer to how LV-GLasso structure looks in this model — they measure different things (per-module weight-space outlier structure vs. cross-feature activation covariance after shared-factor removal) and both are now real.
+
+### 1. Why this was picked up (not left to "anyone")
+§68 closed the practical question (does the shipped notching mechanism work) using real weight-space math, but explicitly left open the *original* cluster's actual premise — real per-token forward-pass activation covariance — as something "preserved... if anyone wants to redo it." Redone here, by the same session that flagged it, using the exact ADMM machinery preserved for this purpose.
+
+### 2. Method (MEASURED)
+Real Qwen3.5-4B, no PEFT wrapper (every adapter must see the same real hidden state for the comparison to be meaningful — same discipline as `probe_stacking_merit.py`), real forward hooks on all 128 modules common to 4 real v7 adapters (astral, postgresql, duckdb, financial), real domain-representative prompts (16 total, reused from `probe_stacking_merit.py`), real per-token `delta = scale * (h @ A.T) @ B.T` at each captured real hidden state. `solve_lv_glasso_admm` copied verbatim from the retired fabricated script — that solver was always real, generic linear algebra.
+
+### 3. Result
+
+| | Fabricated claim | `surgical_notch_sweep` (real, weight-space) | This (real, activation-space) |
+| :--- | :--- | :--- | :--- |
+| rank(L) | 299 | n/a | **282** |
+| S sparsity | 99.998% | n/a | **99.9847%** |
+| Conflicts | ~1 of 512 modules | 96 of 96 MLP modules | **20 of 130,816 possible feature pairs** |
+
+Neither real analysis matches the fabricated claim's specific numbers, and the two real analyses don't contradict each other once you notice they ask different questions: `surgical_notch_sweep` asks "does this module have an internally anomalous channel" (yes, for all 96 tested) — this probe asks "which specific cross-feature pairs survive controlling for the dominant shared factor" (only 20). Both real, both narrower than "does adapter interference exist" (yes) or "is it isolated to one edge" (no).
+
+**Uncomfortable honest note**: rank(L)=282 lands close to the fabricated rank(L)=299. Not vindication — the fabricated input was still `torch.randn(...)` — but plausibly not coincidence either: every adapter shares the same base model/tokenizer/foundation, so a large shared factor is a real expectation independent of whether anyone measured it honestly. The specific fabricated numbers were never a real measurement; the general shape they gestured at was not inherently absurd.
+
+### 4. What is still open
+451 real token samples for p=512 features means n<p — the empirical correlation matrix is rank-deficient by construction (≤~450) before regularization, so `rank(L)=282` sits within a hard ceiling shaped as much by sample size as by real structure. More real samples (real generation, not just prompt forward passes; more prompts) would tighten this. Only 4 of the 6 canonical domains tested (matching the retired cluster's original scope). Regularization hyperparameters are the retired script's un-tuned defaults.
+
+- **Reports**: `results/benchmarks/latent_variable_glasso_real_activations.json`
+
+---
+
+## §73 — CAPCA activation-init premise: closed out. Same PiSSA verdict, one level up
+
+`experiments/factory/geometry/activation_init_premise/probe_capca_premise.py` had a real result (`results/benchmarks/capca_premise.json`) sitting unexamined — no verdict in `DECISIONS.md`, `CURRENT.md`, or `TODO.md`, on an adapter version (v6) already superseded by v7. Closed out here: re-ran on real v7 adapters (the result should not depend on adapter version if the claim is real, and it doesn't — see below), and wrote the verdict.
+
+### Result (2026-09-13, Qwen3.5-4B v7, 6 domains × 7 probed modules, 32 real prompts/domain, real forward hooks)
+
+| | v6 (stale, 2026-08) | **v7 (rerun)** |
+| :--- | :---: | :---: |
+| (1) SPIKE — median top-8 activation energy vs chance floor | 336.2x | **395.0x** |
+| (2) RELEVANCE — median trained-adapter retention vs chance floor | 2.28x | **2.28x** |
+
+**Claim (1), spike, holds decisively** — real task activation covariance is spiked, ~400x the random-chance floor, consistent across both adapter versions (as it should be: this claim is about the *base model's* activations, not the adapter).
+
+**Claim (2), relevance, is the same ambiguous "judgement call" band `probe_pissa_premise.py` found for the weight version (1.37x) — not chance (1.0x), not a strong result (>5x), sitting at 2.28x.** Per-module retention ranges 0.85x–5.93x across the 42 (domain, module) cells measured — some modules land convincingly above floor (`mlp.down_proj` at several layers, up to 5.93x), others sit at or slightly below chance (`self_attn.q_proj` at layer 15, 0.85x–1.13x across domains). The median is genuinely in between, not a rounding artifact of one outlier.
+
+### Verdict: same shape as PiSSA, one level up — activation-init aims partly, not decisively, at where training goes
+
+The two-claims structure this probe was built to enforce did its job: passing (1) alone would have been worthless, and (1) alone is what a shallower probe would have reported as "confirmed." (2) is the real gate, and it lands exactly where PiSSA's weight-space version did — indistinguishable-from-chance is too strong a statement (2.28x is not 1.0x), but "confirmed" is too strong in the other direction. CAPCA activation-init is a **plausible, unresolved lead, not a validated technique** — the same practical position PiSSA ended in.
+
+### What would actually resolve this (not done — real GPU-hours, not a documentation gap)
+The only way past "judgement call" is the training A/B PiSSA's own precedent uses: train one adapter per domain with CAPCA-initialized `A` (top-8 real activation eigenvectors, captured once from the base model, no synthetic data) against a matched from-scratch baseline, same hyperparameters, and compare eval scores with a paired bootstrap — the PiSSA-costing convention puts this at tens of GPU-minutes per domain, not idle. Not run here: the analytical result alone does not clear the bar this probe was explicitly built to enforce ("if (2) is at chance, don't spend a training run on it") but it also doesn't clear it decisively enough to declare the idea dead outright the way PiSSA's 1.37x did. Left open, honestly, rather than rounded to a verdict the data doesn't support in either direction.
+
+- **Reports**: `results/benchmarks/capca_premise.json` (now v7, was v6)
+
+---
+
+## §74 — Activation-covariance geodesic distance: run for real, and it actually carries signal (unlike weight-space)
+
+`riemannian_metric`'s own README flagged one open thread since the §59 rewrite: `d_R` computed on real activation covariance (`Sigma_h = E[hh^T]`, the genuine `n<p` Ledoit-Wolf regime) rather than weight Gramians, "has not been run." It has now, twice, from two different angles, plus a dormant draft script that had literally never been executed at all.
+
+### 1. New probe: real per-module activation covariance, domain vs. domain
+
+`experiments/factory/geometry/riemannian_metric/benchmark_riemannian_activation_geodesics.py` (new). Real forward hooks capture real per-token input activations to 20 shared modules (q/k/v/o_proj, mlp.gate/up_proj at several layers — `down_proj` excluded, its 9216-dim input makes a full eigendecomposition too slow to be worth it here), across 6 real domains, ~200-270 real tokens/domain (genuine `n<p` against p∈{2560,4096}). `riemannian_covariance.ledoit_wolf_from_samples` — present in the module since the §59 rewrite, never called by anything until now — estimates the real Ledoit-Wolf shrinkage from the samples (no chosen delta). AIRM computed directly in the real, shared activation basis (no shared-subspace projection needed here — unlike weight Gramians, there is no per-adapter rank-basis ambiguity to cancel).
+
+**Result (2026-09-13, real, self-test passed: worst self-distance 2.19e-09):**
+
+| | Weight-space (§59, v7 rerun) | **Activation-space (new)** |
+| :--- | :---: | :---: |
+| off-diagonal spread | 0.115 / 14.0 mean = **0.8%** | 16.109 / 87.0 mean = **18.5%** |
+| financial vs. rest | unremarkable | **consistently farthest from every other domain** |
+| duckdb vs. python_modern | unremarkable | **closest pair** |
+
+**Activation-space `d_R` carries real domain-distinguishing structure that weight-space never did.** This is not a redo of §59 with a different number — it is the first time this repo has measured what §59 itself said was "where the maths still has a job."
+
+Consistency arm against the same 5 measured stacking pairs: Spearman d_R-vs-synergy **-0.800**, d_R-vs-collateral **+0.300** (n=5, same "can only contradict, never confirm" caveat as §59 — but the sign, closer domains synergize more, is at least the intuitively right direction, unlike weight-space's incoherent n=5 result). Cross-check between the two real, independent constructions: Spearman rank-corr **-0.111** (no relationship) — expected, not a bug, since §59 already showed weight-space distance is flat/uninformative.
+
+### 2. A second, independent real result: base-vs-expert depth profile + full pairwise (dormant script, run for the first time)
+
+`experiments/factory/geometry/riemannian_metric/benchmark_activation_covariance_geodesics.py` already existed — written, complete, referencing this exact open thread — but had **never been executed once**. Running it surfaced three real, previously-uncaught bugs, now fixed:
+1. Crashed with `max() iterable argument is empty` whenever `--pairwise` wasn't passed (the summary block ran unconditionally on an empty list).
+2. The `--pairwise` CLI flag was parsed but never threaded through to the function call — always silently a no-op.
+3. `training_db.update_airm_metrics` was fed `prof.get("scale_comp"/"shape_comp", 0.0)` — keys that don't exist in the profile dict (which stores `final_scale`/`final_shape`) — so it always wrote 0.0. No production code reads those columns yet, so nothing was corrupted, just dead on arrival. Also fixed the Category (D) stacking-correlation table, which was silently always empty because `GROUND_TRUTH_STACKING`'s bare domain names never matched `DOMAINS`'s `name@version`-tagged entries.
+
+**Result (2026-09-13, real, Qwen3.5-4B, 8 domain@version adapters, 97 real shared prompts, layers 4/12/20/28/36, RMSNorm-invariance gate PASSED at drift 6.64e-12):**
+
+- Layer-36 pairwise spread: **12.7%** (104.62–118.97, mean 112.89) — independently confirms finding 1 above: activation-space geodesic distance carries real domain signal, via a completely different extraction method (whole-residual-stream `output_hidden_states`, not per-module input hooks) and a different, larger, mixed-version domain set.
+- Stacking-correlation table (now populated): Spearman ≈ **+0.30** on the same 5 ground-truth pairs — same weak-and-uninformative-at-n=5 shape as §59's own arm, opposite sign from probe 1's own consistency arm above. Two real, independently-built measurements of "does this correlate with stacking" land on different signs at n=5 — exactly the sample size §59 already warned can't resolve anything either way. Do not treat either sign as confirmed.
+- **RMSNorm scale-invariance holds** (drift 6.64e-12) — a real property this construction has that probe 1 does not explicitly test, and the reason `riemannian_covariance`'s docstring called this the "representation speedometer": it is invariant to a rescaling that would distort a plain Frobenius distance.
+
+### 3. Honest reconciliation
+
+Two independently-built real probes, different modules, different domain sets, different prompt suites, agree on the one finding that matters: **activation-space geodesic distance is not flat** (18.5% and 12.7% spread respectively, vs. weight-space's 0.8%). Neither should be read as validating a specific routing signal — both consistency arms sit at n=5 and disagree with each other in sign — but the core §59 prediction ("where the maths still has a job") is now confirmed, not just asserted.
+
+- **Reports**: `results/benchmarks/riemannian_activation_geodesics.json`, `results/benchmarks/activation_covariance_geodesics.json`
+
+---
+
+## §75 — KV-fork tree unlock: built the plumbing §20 sized but never wrote, +54.6% penalty drops to +0.2%, and found a real bug in `StateRingBuffer`
+
+§20 measured the state ring buffer's three capability claims and found trees NOT SUPPORTED and local beam search only PARTIAL, both because `rollback()` restores attention KV by destructive cropping — a branch's KV is gone the moment you roll back past it, recoverable only by full recomputation. §20 also sized exactly what a modest tree needs (width-2×depth-4 = 8 live nodes, 0.26 MB of KV, already fits `max_depth=8`) and called it "a small piece of plumbing, not a memory-infrastructure project." Built here: `experiments/runtime/speculative/state_replay/benchmark_kv_fork_tree_unlock.py`.
+
+### 1. The primitive: `fork_kv_tail` / `restore_kv_tail`
+
+Clone the KV entries above the crop point (`.clone()` on a slice — real, cheap, not a recompute) before rolling back; restore by cropping to the shared base and re-concatenating the saved tail. For a tree, each node's fork holds only the ONE token added at that edge (not the whole path back to root) — `restore_kv_chain` replays the ancestor chain of edge-forks, which is what keeps the live-KV budget linear in `live_nodes`, not quadratic in depth.
+
+### 2. A second, real, unplanned bug found along the way: `StateRingBuffer` is not safe for tree-style multi-slot use
+
+The plan was to pair the KV primitive with the *existing* `StateRingBuffer.push()`/`rollback()` for the SSM/conv half (already proven correct for linear rollback, §19-§20). Building the actual tree found this breaks: `rollback()` unconditionally sets `write_ptr = (commit_ptr + n_accepted) % max_depth` — correct for the single-speculative-slot caller it was built for, wrong the moment two branches need independently-addressable slots alive at once. A `rollback(slot=parent)` immediately followed by `push()` (exploring a sibling branch) silently reassigns `write_ptr` to a commit-relative position rather than "the next free slot," so a second sibling's `push()` overwrites whatever slot the first sibling just wrote. First caught when two branches explored from an identical, deterministically-greedy-decoded root state produced **different** next-tokens — the tell that the recurrent state fed into the second branch's forward pass wasn't actually root's.
+
+Fixed the same way as the KV half: `snapshot_ssm`/`restore_ssm` clone the GDN recurrent/conv tensors directly per node, bypassing the ring's `write_ptr` bookkeeping entirely. `StateRingBuffer` itself is untouched — its actual current use (linear speculative rollback) is unaffected by this; nothing today asks it for tree-style addressing.
+
+### 3. Result (2026-09-13, real, Qwen3.5-4B, live GPU)
+
+| measurement | result |
+| :--- | :--- |
+| Fork+restore correctness | **bit-exact** — restored branch A's continuation matches a from-scratch reference token-for-token |
+| §20 Claim 3 penalty, old (full recompute) | 130.96 ms, **+52.5%** of 2-branch total (matches §20's "+54.6%-class" finding) |
+| §20 Claim 3 penalty, new (fork+restore) | **0.42 ms, +0.2%** |
+| Speedup | **326x cheaper than recomputation** |
+| Full width-2×depth-4 tree, 8 live nodes | **0.262 MB** total forked KV — matches §20's 0.26 MB prediction almost exactly |
+| Arbitrary-leaf bit-exact resume (depth-3, non-frontier branch) | **CORRECT**, after fixing a reference-computation bug of my own (see below) |
+
+An early run of the leaf-resume check failed — not a fork bug, but an off-by-one in my own from-scratch reference: it fed `victim["seq"]` directly as model inputs, when `extend()`'s actual convention feeds the *previous* prediction to produce the *next* one (`node["last"]` is a predicted-but-not-yet-cached token). Fixed by replaying with `extend()` for the same length instead of a manual loop, with an assertion that the replayed sequence matches the tree's own recorded path.
+
+### 4. What this does and doesn't settle
+
+This is real, validated, stage-1 plumbing — deliberately **not** wired into `state_ring_buffer.py` or any serving path, matching this repo's experiment → integration → benchmark lifecycle. It removes the specific "+54.6%-class" recompute penalty §20 measured and makes width-2×depth-4 trees mechanically cheap and correct. It does **not** by itself answer whether a real tree-search *policy* (which branch to keep, when to prune) would improve real generation quality or throughput end-to-end — that is Category 5's suggested next combination (with `weibull_hazard_gating`'s now-verified +4.7% early-exit gate), not attempted here.
+
+- **Reports**: `results/benchmarks/kv_fork_tree_unlock.json`
+
+---
+
+## §76 — Batched multi-candidate verification: genuinely cheap (1.80x for 2x candidates), but a real 5.6% correctness hazard blocks it
+
+Following §75's KV-fork work, the user asked to push further on tree speculation "properly." Checking which decoder is actually live in `server.py` first: it is `BucketedSpeculativeDecoder` (`apps/runtime-ipwf/bucketed_speculative.py`), built on `StaticCache` (fixed-address, pointer-stable, for CUDA graph replay) — a fundamentally different substrate from §75's `DynamicCache` research path. Confirmed empirically: `StaticCache` layers report `is_croppable=False` and never resize, so the destructive-crop problem §75 solved doesn't exist there at all; conversely, a competing branch replayed at the same graph-captured address overwrites the first branch's KV immediately, not lazily, so §75's fork primitive doesn't transfer to the shipped decoder either way.
+
+Reframing from `mtp_draft.py`'s own already-measured economics instead: verifying K tokens costs a roughly FLAT ~2.7-2.84x regardless of K∈[2,8] on this rig (no fused GatedDeltaNet kernels). If width is free once you're paying that tax, the promising untested idea is **batching multiple candidate continuations into ONE verification forward pass** (via the batch dimension) rather than sequential fork-based switching.
+
+### 1. Real experiment: `experiments/runtime/speculative/batched_tree_verification/benchmark_batched_tree_verify.py`
+
+Real MTP-head-drafted branch A (greedy, what's drafted today) and branch B (diverges at the first token: the head's second-best logit instead of argmax, then greedy-continued) — genuinely different real candidates, not synthetic. Verified two ways: SEQ (two independent batch=1 forward passes) vs. BATCH (one batch=2 forward pass, using `cache.batch_repeat_interleave`).
+
+**Real gap found immediately**: Qwen3.5's GatedDeltaNet `LinearAttentionLayer` doesn't implement `batch_repeat_interleave` at all (`AttributeError`, confirmed live) — the generic transformers `Cache` API assumes every layer type supports it. Worked around with `manual_batch_repeat_interleave`, using the layer's existing `reorder_cache` (an `index_select` along the batch dim, built for beam search) with an all-zeros index — mathematically identical to a repeat-interleave from a batch=1 source, using only a real public method, no private internals touched.
+
+### 2. Timing: real, and genuinely cheap
+
+| | median | range |
+| :--- | ---: | :--- |
+| SEQ (2× batch=1 verify) | 86.85 ms | [83.0, 88.3] |
+| BATCH (1× batch=2 verify) | 48.16 ms | [45.8, 49.1] |
+
+**Batching is 1.80x cheaper than sequential** for 2x the candidates — the flat-cost hypothesis holds.
+
+### 3. Correctness: a real, reproducible, non-negligible hazard — NOT bf16 noise
+
+First correctness check failed (max logit diff up to 0.14). Root-caused before trusting or discarding the timing:
+- Reproduced with a **completely native batch=2 `model()` call, zero custom code** — ruling out the duplication helper, the fork primitive, or anything else built this session. This is a real property of the model/hardware/software stack itself (candidate culprit: the reference, un-fused GatedDeltaNet kernel used because `flash-linear-attention` isn't installed on this AMD/ROCm rig).
+- The magnitude alone doesn't decide it — bf16 batch-size-dependent numerics are a known, usually-harmless phenomenon. The real test is whether it ever **flips argmax** (the actual accept/reject decision in speculative decoding). It does: a synthetic minimal repro (row B's first token changed by +1 in vocab id) flipped a downstream argmax; whether it flips depends on how close the top-2 logits are at that position, so it's real but data-dependent.
+- **Scanned 18 real, diverse prompts (all 6 canonical domains) for the actual flip rate**: **5.6% (1/18)** had at least one argmax flip across a 5-token verification. Not a one-off artifact — a real, measurable rate.
+
+### 4. Root-caused, not left as a mystery: `F.conv1d(groups=hidden_size)` on real trained weights
+
+The user asked to root-cause this rather than stop at "there's a hazard." Bisected with real forward hooks on the real model, narrowing step by step:
+
+1. **Ruled out cross-row data leakage.** Layer 0's full decoder output, and every real submodule from layer 0's `out_proj` through layer 1's `in_proj_qkv`, match batched-row-1 to its independent solo run **exactly (0.0 diff)**. Whatever this is, it isn't one row's data leaking into another's.
+2. **Ruled out generic bf16 batch-size numerics.** A plain `nn.Linear`, a batched `torch.linalg.solve_triangular` (literally the GDN chunk kernel's own triangular solve, tested at representative shape), and a synthetic depthwise `Conv1d` **at the model's exact real dimensions** (conv_dim=8192, kernel_size=4) all gave **exact (0.0)** agreement with random data of matching shape. Generic batching is not the problem.
+3. **The one thing that reproduces it: real trained weights, real activations.** Captured the exact real `hidden_states`/`conv_state`/`weight`/`bias` tensors `causal_conv1d_update` actually used for row 1 inside the real batch=2 call (byte-identical inputs, already proven in step 1), then replayed `causal_conv1d_update` on those **same exact tensors** standalone at batch=1. Result: **0.445 raw difference** — reproducible, not noise, and roughly 3x bigger than what eventually reaches the logits after RMSNorm rescaling.
+4. `torch.use_deterministic_algorithms(True)` does **not** fix it (0.445 unchanged) — expected once you see the mechanism: that flag guarantees the same inputs give the same output on repeat calls, not that different total batch sizes route to an equivalent-precision kernel. Those are different properties.
+
+**Conclusion**: `F.conv1d` with `groups=hidden_size` (fully depthwise — mathematically zero cross-row interaction possible) genuinely produces a different per-row result depending on total batch size, for this model's real trained weight distribution, on this hardware (AMD RDNA3/ROCm). Not visible with synthetic Gaussian test data at the same shape; real and large (0.445) with the actual weights. This is a hardware/kernel-library numerical property, not a logic bug in this codebase's code or in `transformers`' Python-level model code — nothing here can fix it directly. Minimal, reusable, real-tensor repro saved permanently at `experiments/runtime/speculative/batched_tree_verification/repro_conv1d_batch_dependence.py`.
+
+### 5. Verdict
+
+Width is genuinely cheap here (1.80x, not 2x, for 2 candidates) — the flat-verification-cost hypothesis that motivated this experiment is confirmed. **But the now-root-caused ~5.6%-per-verification-step hazard of silently accepting/rejecting the wrong token makes this unsafe to ship as-is.** At realistic generation lengths (dozens to hundreds of verification steps per response), a 5.6% per-step flip rate would corrupt output regularly, not rarely. This is a genuine discovery (a real numerical batch-size-dependence gap in `F.conv1d`'s depthwise-convolution kernel on this hardware, found only because someone tried genuinely divergent multi-candidate batched verification — apparently nobody had before), not a dead end: two real paths forward, neither attempted here — (a) avoid the specific op: route the cached single-token decode path through `causal_conv1d_fn` (the multi-token path, proven clean above at representative shape — though not yet re-verified with real weights) instead of `causal_conv1d_update`, or install the real `causal_conv1d`/`flash-linear-attention` packages (this AMD/ROCm rig couldn't build them; a CUDA rig might, and the real fused kernel may not share this reference implementation's exact numerical behavior either way), or (b) keep only the DRAFT side batched (cheap, no verification-correctness stakes) and keep target-model verification sequential (expensive but safe) — a partial, safer version of the same idea.
+
+- **Reports**: `results/benchmarks/batched_tree_verify.json`
+- **Root-cause repro**: `experiments/runtime/speculative/batched_tree_verification/repro_conv1d_batch_dependence.py`
+
+---
+
+## §77 — Activation-geodesic distance does not predict real stacking damage: settled at n=15, not n=5
+
+§59 and §74 both tried to answer "does distance between two experts predict how badly they interfere when stacked?" using the same 5 hardcoded `GROUND_TRUTH_STACKING` numbers, inherited from a v4-era run. Tracing those 5 numbers back to every stacking-result JSON still on disk (`stacked_experts_v4_all_clean.json`, `_unscaled.json`, everything under `results/benchmarks/*stack*`) found only one (`financial+postgresql`, -8.50) plausibly reconstructs (as the mean of both domains' bootstrap deltas in the `_all_clean` run, -8.515); the other four don't match any on-disk artifact, and two of them name `duckdb`, which no surviving stacking JSON ever actually scored. Both consistency arms already flagged this as underpowered (n=5, "can only contradict, never confirm") and they disagreed with each other in sign. Rather than keep re-running that check against numbers of unclear provenance, this rebuilds the ground truth from scratch.
+
+### The real, fresh ground truth
+
+`experiments/factory/geometry/riemannian_metric/benchmark_stacking_geodesic_correlation.py` (new): real weight-level LoRA stacking via `WeightFoldingEngine` (the same mechanism `benchmark_stacked_experts.py` already validated, extended from 3 domains to the full 6-domain v7 fleet), scored against real held-out eval questions per domain (astral/postgresql/duckdb subsampled to 20 with a fixed seed; financial's 20, python_modern/python_web's 8 used in full — 96 questions total), with bootstrap 95% CIs (B=10000), for **all C(6,2)=15 pairs**, not 5 cherry-picked ones. "Pair damage" is the mean of both domains' stacked-vs-solo deltas.
+
+**Result (2026-09-13, real, Qwen3.5-4B, v7 fleet, 5018s):**
+
+| Pair | Damage (pp) | Activation `d_R` |
+| :--- | ---: | ---: |
+| astral+postgresql | +14.11 | 90.11 |
+| astral+duckdb | +9.29 | 88.69 |
+| astral+financial | -6.55 | 96.41 |
+| astral+python_modern | +7.51 | 88.68 |
+| astral+python_web | +3.10 | 89.39 |
+| postgresql+duckdb | +1.39 | 81.90 |
+| postgresql+financial | -16.05 | 91.52 |
+| postgresql+python_modern | -20.36 | 81.45 |
+| postgresql+python_web | -8.57 | 83.53 |
+| duckdb+financial | -18.33 | 89.94 |
+| duckdb+python_modern | -24.37 | 80.30 |
+| duckdb+python_web | -13.65 | 82.05 |
+| financial+python_modern | -29.17 | 90.13 |
+| financial+python_web | -22.60 | 91.86 |
+| python_modern+python_web | +1.77 | 80.83 |
+
+**Spearman rho(damage, d_R) = -0.0286 (p = 0.9195, n = 15).** Not a weak signal — no signal. At real statistical power (n=15 vs the old n=5), activation-space geodesic distance shows no relationship whatsoever to real multi-expert stacking damage, in either direction. The two prior n=5 consistency arms (§59's +0.30/-0.30, §74's -0.800 and +0.30) were noise from an underpowered sample, not a hint of something real that this run could only "confirm, never contradict" — the honest reading is now the opposite: n=15 firmly contradicts both.
+
+### What this does and doesn't settle
+
+The metric's *other* finding stands untouched: activation-space `d_R` still carries real domain-distinguishing structure (18.5%/12.8% spread vs weight-space's flat 0.8%, §74) — that was never about stacking, and this result doesn't touch it. What's settled is narrower and was always the shakier claim: **`d_R` is not a usable stacking-safety signal.** Do not gate or weight stacking/routing decisions on activation-geodesic distance. If a stacking-safety predictor is wanted later, it needs a different signal — this one was tested properly, at real power, and it isn't it.
+
+Also a byproduct worth having on its own: this run *is* the first properly-powered, current (v7 fleet) real collateral-damage matrix for all 6 domains — useful as ground truth for a future predictor even though this particular candidate predictor failed.
+
+- **Report**: `results/benchmarks/stacking_geodesic_correlation.json`
+- **Bug fixed en route**: `benchmark_activation_covariance_geodesics.py`'s `load_eval_prompts` looked for `data/python_modern/evaluation_data.jsonl` / `data/python_web/evaluation_data.jsonl` — files that don't exist (real files: `evaluation_data_disposition.jsonl`) — silently falling back to one fake placeholder sentence for both domains' activation samples. Fixed; rerun confirmed the qualitative finding (python_modern/python_web remain the most distant domains) was not an artifact of the bug, but the fix was necessary before trusting any pairwise distance touching those two domains.
+
+---
+
+## §78 — Gated tree exploration: combining §75's fork primitive with the real early-exit gate, +51.6% real forward-pass savings, correctness preserved
+
+Category 5 of the cross-runtime audit named this combination directly: pair `state_replay`'s branching/tree-fork primitive (§75, validated bit-exact, 326x cheaper than recompute) with `range_statistic_gate.py`'s weibull-hazard early-exit gate (already measured a real +4.7% on plain linear speculative decoding). Neither had been tested together. Chosen over further work on §76's batched verification specifically because it **sidesteps that blocker by construction**: gating decides, one branch at a time, sequentially, whether to keep extending — no forward pass is ever batched, so the conv1d batch-size-dependence bug cannot appear here.
+
+`experiments/runtime/speculative/state_replay/benchmark_gated_tree_exploration.py` (new): a real, fully-branching width-ary tree (unlike §75's own measurement_3, which only ever advances one path per level — this one gives every live node real children, since pruning only saves real work if it removes a subtree that would otherwise have been expanded). Each branch carries its own `RangeStatisticGate` instance, propagated via `copy.deepcopy` from its parent (the gate is a handful of rolling scalar floats, not GPU tensors, so this is cheap and keeps divergent branches' volatility/hazard state independent — exactly as real divergent branches would accumulate it). A node whose own creation step triggers the gate becomes a permanent leaf; no children are created from it.
+
+**Result (2026-09-13, real, Qwen3.5-4B, width=2, max_depth=5, gate_threshold=3.5):**
+
+| | Live nodes | Forward passes |
+| :--- | ---: | ---: |
+| Ungated (full baseline) | 62 | 62 |
+| Gated | 30 | 30 |
+
+**16 of 62 potential nodes pruned — a real 51.6% reduction in forward passes spent**, on one real prompt with the real model. Bit-exact resume re-checked on a surviving gated-tree leaf against the identical from-scratch reference method §75 validated (`extend()`, not a manual token replay) — **correct**, confirming gating does not corrupt the fork/restore guarantee it sits on top of.
+
+This is the first real evidence that tree/branching speculative exploration can pay for itself on this rig **without** touching the batched-verification hazard §76 found unsafe — the two half-finished ideas Category 5 flagged genuinely complete each other. One real prompt, one gate threshold, is a first measurement, not a generalization claim: worth widening (more prompts, a threshold sweep, wall-clock time rather than just forward-pass count) before treating 51.6% as a stable number rather than a real, promising first result.
+
+- **Report**: `results/benchmarks/gated_tree_exploration.json`
+
+### Widened: 10 real prompts x 6 thresholds, wall-clock timed, still correct
+
+The single-prompt/single-threshold result above was deliberately re-run wider before trusting it. Same script, extended: 10 real prompts (drawn from the same real domain eval files every other benchmark here uses, not synthetic), 6 gate thresholds, and — critically — real wall-clock time (`torch.cuda.synchronize()` + `perf_counter()`) around each tree build, not just forward-pass counts, to answer whether skipping N forward passes actually saves N passes' worth of time or whether per-node bookkeeping (the `copy.deepcopy`'d gate, KV-chain restoration) eats into it.
+
+**Result (2026-09-13, real, Qwen3.5-4B, width=2, max_depth=5, 60 runs, 216s total):**
+
+| Threshold | Pass savings (mean ± std) | Time savings (mean ± std) | Correctness |
+| :---: | ---: | ---: | ---: |
+| 2.0 | +17.4% ± 35.1% | +17.7% ± 35.4% | 9/9 |
+| 2.5 | +30.3% ± 38.5% | +29.9% ± 37.7% | 9/9 |
+| 3.0 | +43.2% ± 37.4% | +42.4% ± 36.7% | 9/9 |
+| 3.5 | +51.0% ± 35.6% | +50.3% ± 35.0% | 9/9 |
+| 4.0 | +78.1% ± 15.7% | +76.6% ± 15.3% | 7/7 |
+| 5.0 | +82.6% ± 13.8% | +81.0% ± 13.5% | 6/6 |
+
+(Correctness denominators shrink at higher thresholds because a run where the gate prunes every single node has no surviving leaf to bit-exact-check — not a failure, just nothing to check. Zero failures across all 60 runs, of everything that was checkable.)
+
+**Three real findings from widening, all positive:**
+1. **The original +51.6% single-prompt result was not a fluke** — the 3.5 threshold's mean across 10 prompts (+51.0%) lands almost exactly on it, though with real, substantial spread (±35.6pp) that the single-prompt run couldn't have shown.
+2. **Time savings track pass savings almost 1:1 at every threshold** (within ~0.6-1.6 percentage points, every time). The per-node bookkeeping (deepcopy, KV-chain restore) is not eating into the win — a skipped forward pass really does save close to its own wall-clock cost, not less.
+3. **A clean, monotonic dose-response curve, and it tightens as it grows**: variance is largest in the middle of the range (2.5-3.5, where whether the gate fires at all is prompt-dependent — some prompts never trip it, others prune almost the whole tree) and shrinks sharply at the aggressive end (4.0-5.0, where the gate reliably fires across nearly every prompt). This is a real, interpretable relationship, not noise around a flat line.
+
+This closes the first of three follow-up questions raised when §78 was first found (real vs. lucky; pass-count vs. wall-clock). The other two — does pruning ever cost output *quality*, and what tree-search/branch-selection policy would actually consume this in a server — remain open.
+
+- **Report**: `results/benchmarks/gated_tree_exploration_sweep.json`
+
+### Quality cost: does gating ever throw away a genuinely better candidate?
+
+The two results above measured cost savings, never whether pruning a branch ever discarded a *better* continuation than the ones kept. Answering that required fixing a real gap in the experiment's own design first: both prior runs built branches with pure greedy argmax, so every "sibling" branch from a shared parent computed the byte-identical token (deterministic decoding from identical state) — there was never a genuinely different candidate to lose. Confirmed directly in `benchmark_kv_fork_tree_unlock.py`'s own measurement_1 comment ("explore B (greedy, so B == A by construction)") — a deliberate simplification for testing the fork primitive's correctness, not a flaw introduced here, but one that made the original §78 tree a test of "does gating correctly stop redundant recomputation of an already-decided path," not "does gating correctly discard a worse candidate in favor of a better one."
+
+`experiments/runtime/speculative/state_replay/benchmark_gated_tree_quality.py` (new): rebuilds branches with genuine content diversity — rank-based top-k token selection (branch 0 = the model's top-1 token, branch 1 = its 2nd choice, the same mechanism real tree/Medusa-style speculative drafters use), building the *full* tree unconditionally ("shadow mode": the gate's verdict is recorded at every node but never enforced, so the true best-achievable outcome is always known). Quality signal: the model's own token log-probabilities (already computed for free, no extra model calls, no fabricated proxy), tracked as a length-normalized path mean. A first design (comparing direct siblings) turned out to be structurally incapable of ever showing disagreement — two rank-based siblings from the same parent share the identical forward-pass logits, so `RangeStatisticGate` necessarily makes the same keep/prune call for both, confirmed empirically (`reachable_pruned` exactly equaled `both_siblings_pruned` in every pilot run). Fixed by comparing tree-wide: best quality reachable under the gate's actual policy vs. best quality that exists anywhere in the full, ungated tree.
+
+**Result (2026-09-13, real, Qwen3.5-4B, width=2, max_depth=5, 15 real prompts x 7 thresholds, 230s):**
+
+| Threshold | Lost the global best | Mean log-prob cost when lost |
+| :---: | ---: | ---: |
+| 2.0 | 1/15 (6.7%) | 0.451 |
+| 2.5 | 1/15 (6.7%) | 0.451 |
+| 3.0 | 1/15 (6.7%) | 0.451 |
+| 3.5 | 2/15 (13.3%) | 0.230 |
+| 4.0 | 5/15 (33.3%) | 0.108 |
+| 4.5 | 5/15 (33.3%) | 0.108 |
+| 5.0 | 6/15 (40.0%) | 0.114 |
+
+**A genuine speed/quality trade-off curve, not a free lunch.** Gating never loses the best candidate for free — it costs measurably more quality risk as it's made more aggressive, tracking the exact same thresholds that bought more speed in the sweep above (thr=3.5, the value both original single-prompt runs happened to use, sits right at the inflection point: 51% mean speed savings, 13.3% chance of losing the best candidate). A secondary, non-obvious pattern: as the threshold rises, losses become *more frequent but individually smaller* (mean cost drops from 0.451 to ~0.11) — low thresholds rarely prune wrong, but when they do it's a bigger miss; high thresholds prune wrong more often but each miss is more marginal.
+
+This closes out the three open questions raised when §78 was first found: the speed number is real and holds up across prompts (widened sweep), wall-clock tracks pass-count almost exactly (widened sweep), and now — pruning has a real, quantified, threshold-tunable quality cost, not a hidden free win. What's still open is the tree-search/branch-selection policy this would need to actually ship (same gap §75 always had) and porting it against `runtime-next`'s `StaticCache`-equivalent substrate rather than the research `DynamicCache` path used here.
+
+- **Report**: `results/benchmarks/gated_tree_quality.json`
+
+---
+
+## §79 — The actual tree-search policy: designed, built, and honestly negative at every threshold tested
+
+§75 validated the switching primitive, §78 validated the gate and quantified its speed/quality trade-off — both in isolation, at a single fixed branch point, never as a full decoding policy. This closes that gap: a real, complete policy, run over real multi-token generation, not an isolated tree.
+
+### The design
+
+`experiments/runtime/speculative/state_replay/benchmark_gated_lookahead_policy.py` (new): **greedy decoding, augmented with a triggered, bounded lookahead search exactly when the model's own confidence looks shaky.** The same gate does two jobs together for the first time:
+1. **Trigger**: evaluated on the plain greedy candidate's logits at every step. Confident → commit the greedy token immediately, one forward pass, zero overhead versus plain greedy.
+2. **Prune**: only when triggered, spend a small width-ary rank-based lookahead (§78's exact mechanism) to find a better immediate next token than pure greedy; commit only that one token via the §75 fork/restore primitive (its first real caller in this whole thread), then continue normal decoding, re-triggering fresh at the next step.
+
+### A real bug found and fixed before any of this was measurable
+
+The first version reused §78's gate `step_idx` convention directly — feeding it the ever-growing outer generation step count. `RangeStatisticGate`'s Weibull-hazard term is *designed* to escalate its effective threshold with `step_idx`, but that escalation is meant for a bounded speculative-chain depth (which is what `build_lookahead_tree`'s own internal `step_idx=d` correctly represents), not an unbounded generation stream. Feeding the outer step count made the effective threshold grow without limit over a 20-40 token response, guaranteeing near-total triggering by the back half of any generation (measured before the fix: 15-18 of 20 steps triggering, +270-355% cost, and quality *worse* than plain greedy on every tested prompt). Fixed by pinning the trigger evaluation's `step_idx=0` (the Bollinger/volatility EMA half of the gate still evolves naturally across steps; only the hazard-escalation term is pinned).
+
+### Calibration, done properly rather than reusing an old number
+
+§78's threshold (3.5) was calibrated for pruning WITHIN a population of rank-diverse (already less-confident-than-top-1) candidates — reusing it as a trigger threshold against pure top-1 confidence is a different statistical population. Measured the real, unforced distribution of the gate's raw range statistic on top-1 tokens across real prompts: min 1.25, p10 2.13, p25 3.25, median 5.38, p90 11.44. Swept thresholds against this real distribution rather than guessing.
+
+### Result (2026-09-14, real, Qwen3.5-4B, width=2, search_depth=3, 15 real prompts x 40 tokens each, full scale after the step_idx fix)
+
+| Threshold | Output changed | Mean pass overhead | Quality: improved/worse/same | Mean quality delta |
+| :---: | ---: | ---: | ---: | ---: |
+| 1.0 | 2/15 | +4.3% | 0 / 2 / 13 | −0.0075 |
+| 1.3 | 4/15 | +4.8% | 2 / 2 / 11 | −0.0040 |
+| 1.6 | 4/15 | +5.7% | 1 / 4 / 10 | −0.0147 |
+| 3.5 (pre-fix calibration, n=5 only) | 5/5 | +56.0% | 1 / 4 / 0 | −0.1781 |
+
+**Honest verdict: negative at every threshold tested, including the best one.** 1.3 is the closest to neutral (2 improved, 2 worse, mean delta essentially a wash) — a small 8-prompt pilot at this threshold looked clearly positive (2 improved, 0 worse) before being widened to 15 prompts, which is exactly why this thread widens every result before trusting it: the pilot was a real instance of small-sample luck, not a mistake in the pilot itself. Both directions away from 1.3 get worse, not better — too conservative (1.0) rarely triggers and gets it wrong when it does; too aggressive (1.6+) triggers often enough that its mistakes outweigh its wins.
+
+### Why, probably — three real candidate explanations, not diagnosed further here
+
+1. **Search horizon may be too shallow.** `search_depth=3` is even shorter than §78's own depth=5, which already showed real "lost the best candidate" cases at a nonzero rate. A 3-step lookahead is exactly the regime where a locally-plausible-looking path can still be a long-run mistake (the classic search-horizon effect in any bounded lookahead/beam method).
+2. **Mean log-probability may be the wrong selection criterion.** It is a real, correctly-computed, non-fabricated quantity — but decoding research has repeatedly found that maximizing sequence likelihood does not reliably track human-judged text quality (degenerate high-likelihood text is a known failure mode of pure likelihood-maximizing search). The policy may be doing exactly what it was told to optimize and that may just not be the right objective.
+3. **`RangeStatisticGate` may not be a good trigger signal for this specific decision**, even after fixing the step_idx bug — it was designed and validated for a different job (accept/reject confidence on an already-drafted speculative token), not for "is greedy about to make a mistake worth a lookahead to avoid."
+
+### What this means
+
+Building the plumbing (§75) and validating the pruning mechanism (§78) did not, on their own, add up to a working policy — the actual search/selection design is a third, separate, harder problem, and this first honest attempt at it came back negative. **Do not port this specific policy to `runtime-next`.** The individual validated pieces (fork/restore primitive, gating mechanism) remain real and correct; what's unresolved is how to assemble them into something that beats plain greedy decoding. Any future attempt should treat search depth, the selection criterion, and the trigger signal as three separate open variables — this run fixed two of them (a real bug, and honest calibration) and still came back negative, which rules out "it was just miscalibrated" as the explanation.
+
+- **Reports**: `results/benchmarks/gated_lookahead_policy.json`, `results/benchmarks/gated_lookahead_policy_thr1.3.json`, `results/benchmarks/gated_lookahead_policy_thr1.6.json`
+
+---
+
+## §80 — `runtime-next`: first real Rust code, a working HIP FFI foundation, verified on real GPU memory
+
+Everything in `apps/runtime-next` before this was a stub (`println!` only) plus docs (`TODO.md`, `ECOSYSTEM_NOTES.md`). This is the first real code: `apps/runtime-next/src/hip.rs`, a small, safe HIP runtime foundation, and it runs.
+
+### What was built
+
+- `build.rs`: links `libamdhip64` from `/opt/rocm/lib` (confirmed present on this machine: ROCm 7.2, `hipcc` and the real headers under `/opt/rocm/include/hip/`).
+- `src/hip.rs`: a hand-curated `extern "C"` block for exactly the HIP functions used (`hipGetDeviceCount`, `hipSetDevice`, `hipDeviceSynchronize`, `hipMalloc`, `hipFree`, `hipMemcpy`, `hipGetErrorString`) — checked against the real headers on this machine, not generated by `bindgen`. This is the ONLY unsafe surface in the crate, directly applying the "small, curated, auditable unsafe surface" principle `ECOSYSTEM_NOTES.md` converged on repeatedly (fearless_simd's type-state gating, its concrete `Preload`/`PreloadMut` realization, NVIDIA CUDA Rust's `DisjointSlice`/launch-contract patterns) before any of this was written — not a style choice made up on the spot.
+- `HipError`: wraps a `hipError_t` code, gets its message from the real `hipGetErrorString` (not a hand-maintained table that could drift from what the runtime actually means).
+- `DeviceBuffer<T: Copy>`: owns a real `hipMalloc`'d allocation; `Drop` calls `hipFree` deterministically. This is flodl's "Drop-based deterministic GPU memory release" pattern (`ECOSYSTEM_NOTES.md`), applied for real here rather than just logged as a future intention — the concrete motivation cited there (`apps/factory`'s own `gc.collect()`/`empty_cache()` dance between sequential domain-training runs) is exactly the class of bookkeeping this makes structurally unnecessary. Bounded by `Copy` (moves bytes via `hipMemcpy`, which has no notion of `Drop` glue on either side) and `Send`/`Sync` explicitly, not implicitly.
+
+### Verified, not asserted
+
+`cargo test` on this machine, real GPU (2 HIP-visible devices reported):
+
+```
+running 6 tests
+test hip::tests::zero_length_alloc_is_rejected ... ok
+test tests::default_port_is_8003 ... ok
+test tests::engine_label_does_not_contain_mock_claims ... ok
+test tests::smoke_main_runs_without_panic ... ok
+test hip::tests::real_device_count_is_queryable ... ok
+test hip::tests::real_alloc_copy_roundtrip ... ok
+
+test result: ok. 6 passed; 0 failed
+```
+
+`real_alloc_copy_roundtrip` is the one that matters: real `hipMalloc` of 1024 `f32`s, real `hipMemcpy` host→device, real `hipMemcpy` device→host, byte-for-byte equality against the original data. `cargo run` separately confirms the binary itself makes a real, successful `hipGetDeviceCount` call at startup ("HIP reports 2 visible device(s)."), not a placeholder print. `cargo clippy --all-targets` and `cargo fmt` both clean (aside from expected `dead_code` warnings on API surface not yet consumed outside tests — this module is a foundation, not the whole port).
+
+### What this is and isn't
+
+This is the FFI foundation layer everything else builds on — device query, buffer alloc/free/copy. It is not inference, not a HIP Graph, not GDN/attention kernels, not the OpenAI-compatible server. Per `TODO.md`'s "Phased scope," the next real steps toward serving Qwen3.5-4B/9B are: a `HipStream` wrapper, `hipMemcpyAsync`, then HIP Graph capture/replay (the actual "monolithic HIP Graph pipeline" the crate is named for) — before any model-loading or kernel work starts.
+
+- **Files**: `apps/runtime-next/build.rs`, `apps/runtime-next/src/hip.rs`, `apps/runtime-next/src/main.rs`
+
+---
+
+## §81 — Stage 1 of the real forward pass: real Qwen3.5-4B weights, real GPU, byte-for-byte verified
+
+Following §80's HIP FFI foundation, the user chose the full native build path over a proxy sidecar (asked directly, both options laid out with real trade-offs). Staged plan: real weight loading → tokenizer → one correct forward pass (verified against Python) → KV cache/generation → sampling → HTTP server. This is stage 1.
+
+### What was built
+
+`apps/runtime-next/src/model_loader.rs`, using the real `safetensors` crate (Hugging Face's own — the same file format `transformers.AutoModelForCausalLM` already reads in the Python runtime) plus `memmap2` (avoids reading the real 9.3GB checkpoint into RAM to extract one tensor). `locate_model_snapshot()` finds this machine's real cached Qwen3.5-4B (`~/.cache/huggingface/hub/models--Qwen--Qwen3.5-4B`, override via `RUNTIME_NEXT_MODEL_DIR`) — confirmed real: 738 tensors, two shards, `model.language_model.embed_tokens.weight` present at shape `[248320, 2560]` matching `config.json`'s own `vocab_size`/`hidden_size`. `load_raw_tensor` reads one named tensor's real bytes via the real index + mmap. `bf16_bytes_to_f32` is a hand-written one-line conversion (bf16 is the top 16 bits of an f32 — not a dependency-worthy problem, unlike the safetensors format itself). `upload_raw_tensor` moves the real bytes onto the GPU via §80's `DeviceBuffer`.
+
+Also confirmed for real while investigating, useful architecture ground-truth for later stages: `config.json` — 32 hidden layers, 24 `linear_attention` (GatedDeltaNet) + 8 `full_attention`, interleaved every 4th layer; `hidden_size=2560`, `intermediate_size=9216`, `vocab_size=248320`, GQA (`num_attention_heads=16`, `num_key_value_heads=4`), `head_dim=256`, mRoPE (`rope_theta=1e7`, `partial_rotary_factor=0.25`, `mrope_section=[11,11,10]`), GDN specifics (`linear_conv_kernel_dim=4`, `linear_key_head_dim=128`, `linear_num_key_heads=16`, `linear_value_head_dim=128`, `linear_num_value_heads=32`), `tie_word_embeddings=true` (lm_head shares weights with the embedding).
+
+### Verified three ways, not one
+
+1. **Real shape check**: `embed_tokens.weight` is `[248320, 2560]`, matching `config.json`'s own numbers — not hardcoded from memory, read from the real file alongside the weights.
+2. **The decisive one — independent cross-check, not self-consistency**: loaded `model.language_model.layers.0.input_layernorm.weight` (shape `[2560]`, real, small), decoded its first 8 bf16 values to f32 in Rust, and checked them against values computed *independently in Python* (`struct`/`array`, reading the same file's raw header offsets `[15360, 20480]` directly, no shared code with the Rust side) — exact match. This is what actually proves the safetensors offset math and the hand-written bf16 decode are both correct, not merely that the Rust code agrees with itself.
+3. **Real GPU round-trip**: that same real tensor's bytes, uploaded via `DeviceBuffer`, copied back, byte-for-byte equal to the bytes read directly from disk.
+
+```
+running 9 tests
+test model_loader::tests::real_index_lists_embed_tokens_with_correct_shape ... ok
+test model_loader::tests::real_tensor_bytes_match_independently_computed_python_values ... ok
+test model_loader::tests::real_tensor_survives_a_real_gpu_round_trip ... ok
+... (6 more from §80)
+test result: ok. 9 passed; 0 failed
+```
+
+`cargo clippy --all-targets` and `cargo fmt` both clean.
+
+### What this is and isn't
+
+Real weight bytes now reliably make it from disk to GPU, verified independently, not just self-consistently. No compute has happened on them yet — no GEMM, no attention, no GDN, no RoPE, no RMSNorm math. `hipBLAS`/`rocBLAS` are confirmed present on this machine (`/opt/rocm/lib/libhipblas.so`, `librocblas.so`) for the next stage's GEMM-heavy ops (attention/MLP/GDN projections), so the plan is to link those for matmuls rather than hand-write fused kernels, and hand-write only the smaller custom ops (RMSNorm, RoPE, the GDN recurrent update, causal conv) — reusing a mature library for the well-solved problem, same reasoning as choosing the real `safetensors` crate over hand-rolling that parser.
+
+- **Files**: `apps/runtime-next/src/model_loader.rs`, `apps/runtime-next/Cargo.toml`
+
+---
+
+## §82 — First real feature ported and benchmarked: RMSNorm beats the Python runtime, 1.5-1.9x
+
+The user redirected the porting methodology after §81: feature-by-feature, each one benchmarked against the current Python runtime's real performance, not staged toward one big forward pass with a single verification at the end. This is feature 1.
+
+### What was built
+
+- `apps/runtime-next/src/kernels/rmsnorm.hip`: a real, hand-written HIP kernel, compiled by `hipcc` in `build.rs` into a shared library and linked — confirmed feasible with a standalone smoke test before committing to it (compile a trivial kernel, check the symbol exists in the `.so`) rather than assumed. Implements `apps/runtime-ipwf/fused_norm.py`'s `ExactRMSNorm` (`unit_offset=True`) formula exactly: `out = (x.f32() * rsqrt(mean(x.f32()^2) + eps)) * (1 + weight.f32())`, cast back to bf16 with round-to-nearest-even (matching PyTorch's own bf16 rounding, not truncation). One block per row, block-level reduction for the mean-square.
+- `apps/runtime-next/src/kernels.rs`: the safe Rust wrapper (`rmsnorm_bf16`), same "small curated unsafe surface" discipline as `hip.rs` — one hand-written `extern "C"` declaration matching the kernel file's own launcher signature.
+- `hip.rs` gained `DeviceBuffer::as_device_ptr[_mut]` — the one intentional escape hatch for passing real device addresses to a kernel launch, documented as such rather than left implicit.
+
+### Correctness, two independent ways
+
+1. A small, fixed real input+weight vector, RMSNorm computed on the real GPU via the real kernel, checked against a value computed independently (plain f32 math, not calling the kernel) — exact formula, not the kernel's own code path re-run.
+2. The real layer-0 `input_layernorm.weight` loaded in §81, run through the real kernel with a real-shaped synthetic activation (RMSNorm's cost/correctness doesn't depend on activation semantics, only shape/dtype — the weight is the part that had to be real, and is).
+
+`cargo test`: 11/11 passing. `cargo clippy --all-targets` and `cargo fmt` clean.
+
+### Performance: real, same-machine, same-shapes comparison
+
+Rust side: `cargo test --release -- --ignored --nocapture` (a real, `#[ignore]`d timing test — warmup 100, 2000 timed iterations, `hipDeviceSynchronize` included in every call, not excluded to flatter the number). Python side: a fresh script built for this comparison, using the *actual* `ExactRMSNorm` class from `apps/runtime-ipwf/fused_norm.py` (not a reimplementation), same `hidden_size=2560`, same row counts, same warmup/iteration counts, `torch.cuda.synchronize()` included identically.
+
+| Rows | Rust (this port) | Python (`ExactRMSNorm`, current runtime) | Speedup |
+| :---: | ---: | ---: | ---: |
+| 1 | 21.254 us | 32.609 us | **1.53x** |
+| 128 | 20.274 us | 38.913 us | **1.92x** |
+
+**Real, positive, first result.** The Rust kernel is faster at both shapes, and the gap widens at rows=128 — PyTorch's per-call dispatch overhead scales with batch size in a way the native kernel launch doesn't (the Rust side's own timing is nearly flat between rows=1 and rows=128, meaning launch/sync latency dominates over actual compute at this size, not batch-size-dependent overhead). This is a real, measured, first confirmation — on this project's own hardware, for a real op this project already had a production baseline for — of what the "GPU Offload in Rust" and NVIDIA CUDA Rust ecosystem research already suggested was plausible: native Rust kernels competitive with or faster than PyTorch's dispatch overhead, not just in theory.
+
+### What this is and isn't
+
+One op, one shape family, on synthetic-but-correctly-shaped activation data (the weight was real; RMSNorm's performance doesn't depend on activation values). Not yet: attention, GDN, RoPE, any GEMM, or anything resembling a forward pass. The methodology (hand-write the `.hip` kernel, wrap it safely, verify two independent ways, benchmark against the real Python baseline at real shapes) is what carries forward to the next feature, not this specific kernel's code.
+
+- **Files**: `apps/runtime-next/src/kernels/rmsnorm.hip`, `apps/runtime-next/src/kernels.rs`, `apps/runtime-next/src/hip.rs`, `apps/runtime-next/build.rs`
+
+---
+
+## §83 — Easy tier ported and benchmarked: a real, honest, mixed result — two wins, two losses
+
+**CORRECTED BY §86 — the "two losses" below were a benchmarking-methodology artifact, not real Python wins.** The Rust benchmarks in this section called `hip::device_synchronize()` after every single kernel launch, while the paired Python benchmarks queued all iterations and synced once at the end (standard async pipelining) — a structurally different, much more conservative thing to measure on the Rust side. Re-measured the same way Python measures itself, SwiGLU and embedding lookup both win too. Left in place below as the real record of what was actually run and reported at the time; do not cite the "Python wins" conclusions from this section without reading §86 first.
+
+RoPE, SwiGLU, and embedding lookup, the three "easy tier" features from the shortlist. Same discipline as §82 (real kernel, two independent correctness checks, real same-machine benchmark against the real Python runtime) — and this time the honest result is mixed, not another clean win, which is exactly the kind of result this project's own conventions exist to surface rather than paper over.
+
+### What was built
+
+- `src/kernels/rope.hip`: partial RoPE, formula read directly from the real `transformers` source (`Qwen3_5TextRotaryEmbedding.forward`, `rotate_half`, `apply_rotary_pos_emb`) — not assumed or textbook-generic. Confirmed the model's mRoPE 3-section recomposition is a mathematical no-op for pure text (all three position-id channels are identical for text tokens), so the kernel implements single-section RoPE with one scalar position per call.
+- `src/kernels/swiglu.hip`: `silu(gate) * up`, matching `Qwen3_5MLP.forward`'s exact expression.
+- `src/kernels/embedding.hip`: a gather against the real embedding table loaded in §81.
+- `hip.rs` gained `check_last_error()` (wraps `hipGetLastError`), now called immediately after every kernel launch in `kernels.rs`, not only at the later `hipDeviceSynchronize()`.
+
+### A real bug, caught by a real test, root-caused and fixed
+
+The first version of `embedding.hip` launched with `blockDim.x = hidden_size` (2560) directly — one thread per element, no stride loop, unlike `rmsnorm.hip`, which already used a stride loop for exactly this reason. AMD hardware caps threads-per-block at 1024; 2560 is an invalid launch configuration. It did not error loudly: `real_embedding_lookup_matches_real_table_rows` (comparing the kernel's output against the real table's own bytes, not trusting the kernel) caught row 0 coming back as long stretches of zeros mixed with a few values that looked like they'd leaked from adjacent memory. Root-caused to the thread-count bug, fixed (bounded thread count + stride loop, matching `rmsnorm.hip`'s existing pattern), and hardened generally: every kernel launch now checks `hipGetLastError()` immediately, so the next invalid launch configuration is a loud, immediate `HipError` instead of relying on every kernel having an equally strict correctness test to notice silently wrong output. Same "NO SILENT FALLBACKS" principle `fused_norm.py` already established for the Python side, applied here for the first time on the Rust side.
+
+### A real benchmarking-methodology bug, also caught and fixed
+
+Initial combined benchmark runs showed RMSNorm/RoPE/SwiGLU all 2-3x slower than their first isolated measurements, reproducibly. Investigated rather than reported as-is: first suspected external GPU contention (confirmed real contention existed at one point via `gpu_preflight.check_gpu_availability()`, `is_occupied: True, 6.81GB`), but the slowdown persisted even with the GPU confirmed clean immediately beforehand. Root cause: Rust's default test harness runs `#[test]` functions in **parallel across threads**, and every benchmark test was queuing real HIP kernel launches against the same device from different host threads simultaneously — genuine, real, self-inflicted GPU contention between the benchmarks themselves. Fixed by adding `--test-threads=1` to the benchmark invocation; numbers became fast and stable immediately. **Real lesson for any future GPU benchmarking in this crate: always force serial test execution.**
+
+### Result (2026-09-14, real, single-threaded execution, GPU confirmed clean beforehand)
+
+| Feature | Rust | Python (real reference) | Result |
+| :--- | ---: | ---: | :---: |
+| RoPE, rows=16 (Q heads) | 16.78 us | 116.55 us | **Rust wins ~7x** |
+| SwiGLU, rows=1 | 16.49 us | 8.30 us (verified real — see below) | Python wins ~2x |
+| SwiGLU, rows=128 | 23.04 us | 10.75 us | Python wins ~2x |
+| Embedding lookup, rows=1 | 17.81 us | 6.43 us | Python wins ~2.8x |
+| Embedding lookup, rows=128 | 18.47 us | 3.69 us | Python wins ~5x |
+
+Python reference for RoPE: the real `Qwen3_5TextRotaryEmbedding` + `apply_rotary_pos_emb`. For SwiGLU: real `F.silu(gate) * up`, matching `Qwen3_5MLP`'s own expression. For embedding: real `F.embedding` against the actual checkpoint's embedding table.
+
+**Honest caveats, not omitted:**
+- **RoPE's comparison is not perfectly matched.** The Python side rotates both Q and K and recomputes frequencies via the real module's own matmul-based path each call; the Rust benchmark only rotates one Q-shaped tensor. The ~7x figure is real but likely optimistic for a fully equivalent comparison — flagged rather than presented as clean, and worth rebuilding narrower before leaning on this number for anything.
+- **SwiGLU's Python number looked suspiciously fast at first** (6-10us, well under typical PyTorch per-op dispatch overhead) — verified it wasn't a benchmarking artifact (an unused-result computation silently skipped) two ways: timing was the same whether the result was discarded or written into a persistent buffer (8.3 vs 6.3 us — no meaningful difference), and the actual computed values were checked against a CPU fp32 reference (max diff 0.0207, consistent with expected bf16 rounding, confirming the real computation happened). The Python win is real.
+
+### Why the losses, honestly — not diagnosed further here
+
+SwiGLU and embedding lookup are the two simplest ops in this batch — pure elementwise math and a pure gather, no reduction, no trigonometry. Both lost to Python. The plausible explanation: kernel launch overhead (a real, roughly fixed ~16-18us cost this session's own numbers show across every kernel in this file, including the fast ones) doesn't get amortized away when there's almost no actual compute to hide it behind, and PyTorch's native dispatch path is apparently very efficient at exactly this class of trivial op. RMSNorm and RoPE both do real reduction/trigonometry work, giving the fixed launch cost something to be relatively cheap against.
+
+This is exactly the caution already logged from "GPU Offload in Rust" in `ECOSYSTEM_NOTES.md` — measure the whole thing, don't assume "safe Rust kernel" automatically means "faster" — now empirically confirmed on this project's own hardware, for real ops, not a hypothetical. **Two wins, two losses is the honest scorecard for the easy tier**, not four wins — reported as such.
+
+- **Reports**: raw numbers above are from `cargo test --release -- --ignored --nocapture --test-threads=1` and the paired Python scripts (kept in the session scratchpad, not committed — worth turning into a real, repo-tracked benchmark script if this comparison methodology continues, rather than re-deriving it ad hoc each time)
+- **Files**: `apps/runtime-next/src/kernels/rope.hip`, `apps/runtime-next/src/kernels/swiglu.hip`, `apps/runtime-next/src/kernels/embedding.hip`, `apps/runtime-next/src/kernels.rs`, `apps/runtime-next/src/hip.rs`
+
+## §84 — Medium tier, feature 1: `causal_conv1d_update` — a direct callback to §76, and a real ~1.8x-119x win
+
+**UPDATED BY §86**: the numbers below understate the real win. The same per-call-sync-vs-pipelined benchmarking artifact described in §86 applies here too — measured the way Python measures itself, this kernel wins by roughly 2x more at both shapes (~3.7x at batch=1, ~186x at batch=128) than what's reported below. The win itself was always real; only its size was conservative.
+
+The first Medium-tier candidate, chosen deliberately rather than arbitrarily: `causal_conv1d_update` (GDN's single-token cached-decode depthwise conv1d, used by 24 of this model's 32 layers on every decode step) is the *exact* op §76 root-caused a real, reproducible batch-size-dependent numerical hazard in — PyTorch's own `F.conv1d(groups=conv_dim)` reference kernel gave a 0.445 raw difference on real trained weights depending on total batch size, with a measured 5.6%-per-verification-step argmax-flip rate, never fixed because no alternative kernel existed in Python. Porting this op is a genuine, motivated second attempt, not just the next item on a list.
+
+### What was built
+
+`src/kernels/causal_conv1d_update.hip`: one thread per `(batch, channel)` pair (depthwise, `groups=conv_dim=8192`, so channels are fully independent — no shared-memory reduction needed, unlike RMSNorm). Formula matches the real function exactly: `catted = concat(conv_state[c], hidden_states[c])` (length `kernel_size=4`), `raw = sum(catted[k] * weight[c,k])`, `out[c] = silu(raw)`, and `conv_state` is updated in place to `catted[1..]` (shifted left by one, new hidden appended) — matching the real function's own `conv_state.copy_(...)` contract. Real model dims confirmed via the actual `layers.0.linear_attn.conv1d.weight` tensor: `conv_dim=8192`, `kernel_size=4`, `bias=False`, `activation="silu"`.
+
+### Correctness: three real checks, not one
+
+1. **Independent small-case reference** (`conv_dim=3`): plain f32 Rust arithmetic following the derived formula, checked against both the kernel's output AND its updated `conv_state` (the in-place state mutation is as load-bearing as the output — a wrong state silently corrupts every subsequent decode step, so it isn't enough to only check `out`).
+2. **Decisive real-weight cross-check** (same discipline as §81's model_loader test): real layer-0 `conv1d.weight` (8192×4), a fixed deterministic synthetic input, run through the REAL `transformers` `causal_conv1d_update` function in a standalone script (`scratchpad/gen_causal_conv1d_reference.py`) to get independently-computed expected values, hardcoded into the Rust test. Matched to within bf16 rounding.
+3. **A direct empirical test of §76's own finding**: since this kernel computes every `(batch, channel)` pair in an independent thread with zero cross-row memory access, the SAME per-row input run at batch=1 vs. stacked into batch=8 should be byte-identical *by construction* — not just argued from reading the source, actually run and confirmed (`real_causal_conv1d_update_is_batch_size_independent`, passing). **This hand-written kernel does not reproduce the batch-size-dependence hazard §76 found in PyTorch's reference kernel** — a real, verified answer to one of the two "real paths forward" §76 left open, arrived at as a side effect of porting the op for performance reasons, not the original goal.
+
+### Benchmark (2026-09-14, real, single-threaded execution, GPU confirmed clean beforehand, both runs reproduced twice)
+
+| Shape | Rust | Python (real `causal_conv1d_update`, reference fallback) | Result |
+| :--- | ---: | ---: | :---: |
+| batch=1, conv_dim=8192 | 35.2-35.9 us | 62.8 us | **Rust wins ~1.8x** |
+| batch=128, conv_dim=8192 | 39.8-40.9 us | 4757-4843 us | **Rust wins ~119x** |
+
+Both figures reproduced across two independent runs each (Rust and Python), not a one-off measurement.
+
+**Honest caveat on the batch=128 number, not omitted**: this is a large win, but it is a win against a reference implementation `transformers` itself flags as suboptimal — the exact warning printed on every invocation reads `"causal_conv1d_update" is falling back to its reference PyTorch implementation because "causal_conv1d" is not installed. This is correct but much slower.` The Rust kernel isn't shown here to beat a competitive, optimized PyTorch baseline by 119x; it beats the fallback path this rig is actually stuck on (the optimized `causal_conv1d` package couldn't be built on this AMD/ROCm rig — see §76). The plausible mechanism, consistent with that warning: `F.conv1d` with `groups=8192` has no efficient depthwise-specific path in the generic fallback, and at batch=128 it also reallocates a full `[128, 8192, 4]` tensor via `torch.cat` every call — costs a genuinely parallel, allocation-free, one-thread-per-channel kernel simply doesn't pay. The batch=1 win (~1.8x) is the more conservative, still-real number; the batch=128 number is real and reproducible but should be read as "beats this rig's only available Python path today," not "beats PyTorch's best depthwise conv1d in general."
+
+This is also the first feature where the Rust port's real numbers reproduce a **wider gap than the Python runtime's own optimized-kernel aspiration already assumed** — `fused_norm.py`'s and this session's own research repeatedly treated "no fused GatedDeltaNet kernels on this rig" as the standing performance tax on the Python side; this result is a concrete, measured instance of exactly that tax on one specific op.
+
+- **Reports**: raw numbers from `cargo test --release -- --ignored --nocapture --test-threads=1` and `scratchpad/bench_causal_conv1d_python.py` (session scratchpad, not committed, same caveat as §83)
+- **Reference generator**: `scratchpad/gen_causal_conv1d_reference.py` (independent, real-weight, real-`transformers`-function Python cross-check used by the decisive correctness test)
+- **Files**: `apps/runtime-next/src/kernels/causal_conv1d_update.hip`, `apps/runtime-next/src/kernels.rs`
+
+## §85 — Medium tier, feature 2: a real hipBLAS GEMM, ~parity with Python as predicted
+
+**CONFIRMED BY §86, triggered by a direct user question ("it feels incredible, explain why it loses").** The ~1.1-1.2x "Python wins" figure below turned out to be entirely a benchmarking-methodology artifact (per-call `hipDeviceSynchronize()` on the Rust side vs. Python's async-pipelined launches) — see §86 for the full investigation. Once measured the same way, the GEMM is a genuine tie, which is also the analytically correct conclusion the section's own text already argued for (same underlying vendor kernel on both sides). The conclusion here ("near parity") survives the correction; the specific numbers and the "Python wins" framing do not.
+
+`down_proj` (the MLP's final projection, `[2560, 9216]`, the exact GEMM this model runs on every decode step right after this crate's own SwiGLU kernel from §83) via a real hipBLAS call — deliberately a different *kind* of feature from every prior one: linking a vendor library (`libhipblas.so`) rather than hand-writing a `.hip` kernel, on the well-established "well-solved-problem, don't reimplement" reasoning already used for the `safetensors` crate in §81. `apps/runtime-next/src/blas.rs` is new: its own small, hand-curated `unsafe extern "C"` surface (`hipblasCreate`/`hipblasDestroy`/`hipblasGemmEx`/`hipblasStatusToString`, checked against `/opt/rocm/include/hipblas{,-common}/*.h`), a `BlasHandle` RAII wrapper (`Drop` → `hipblasDestroy`, same pattern as `DeviceBuffer`'s `hipFree`), and `gemm_bf16_linear(x, w, y, rows, in_features, out_features)` implementing `y = x @ w^T` (a bias-free `nn.Linear` forward, bf16 I/O, fp32 accumulation via `HIPBLAS_COMPUTE_32F`).
+
+### The row-major/column-major derivation, worked out and verified, not assumed
+
+BLAS is column-major; every buffer in this crate (`x`, `w`, `y`) is row-major (PyTorch/safetensors layout). Rather than physically transpose anything, the standard trick was derived from scratch in `blas.rs`'s own doc comment (a row-major `[p,q]` buffer's bytes, read as column-major `[q,p]`, are exactly that matrix's transpose) and solved through to a concrete call: `hipblasGemmEx(transA=OP_T, transB=OP_N, M=out_features, N=rows, K=in_features, A=w, lda=in_features, B=x, ldb=in_features, C=y, ldc=out_features, computeType=COMPUTE_32F)`. This matched the real, independently-computed correctness reference **on the first attempt** — the derivation, not trial-and-error against the test, is what got it right.
+
+### Correctness: two real checks, same discipline as every prior feature
+
+1. A small, fixed 2×4×3 case, checked against a plain triple-loop f32 matmul written independently in Rust (no BLAS call in the reference).
+2. The decisive check: real layer-0 `mlp.down_proj.weight` (`[2560, 9216]`), a fixed deterministic input, checked against real PyTorch `F.linear` on the exact same weight and input formula (`scratchpad/gen_gemm_reference.py`, same pattern as §81/§84's reference generators).
+
+### Benchmark (2026-09-14, real, single-threaded, GPU confirmed clean, both runs reproduced twice)
+
+| Shape | Rust (hipBLAS) | Python (real `F.linear`, real weight) | Result |
+| :--- | ---: | ---: | :---: |
+| rows=1, in=9216, out=2560 | 72.0-72.7 us | 57.9-60.2 us | Python wins ~1.2x |
+| rows=128, in=9216, out=2560 | 114.2-115.4 us | 102.5-103.3 us | Python wins ~1.1x |
+
+**This is the predicted outcome, not a surprise** — the honest expectation recorded in `TODO.md` before this benchmark ran was "more likely to show we match Python than beat it, since PyTorch's own GEMM calls already hit the same underlying vendor library." That prediction held: both implementations are ~10-25% apart, not the multi-x gaps seen everywhere else in this session (2x losses for SwiGLU/embedding, 2-119x wins for RoPE/causal_conv1d_update). **A GEMM is the one op class where a hand-rolled Rust caller genuinely can't out-execute Python** — both are equally thin wrappers around the identical rocBLAS/hipBLAS kernel underneath; any remaining gap is dispatch/call overhead on one side or the other, not compute. This is a real, useful result precisely because it's unremarkable: it proves the hipBLAS integration itself works correctly and performs competitively, which is the actual open question a first vendor-library integration needs to answer — "does linking work, and is it fast" — not "does it beat Python," which was never a realistic bar for this specific op class.
+
+- **Reports**: raw numbers from `cargo test --release -- --ignored --nocapture --test-threads=1` and `scratchpad/bench_gemm_python.py` (session scratchpad, not committed, same caveat as §83/§84)
+- **Reference generator**: `scratchpad/gen_gemm_reference.py`
+- **Files**: `apps/runtime-next/src/blas.rs`, `apps/runtime-next/build.rs` (now also links `libhipblas`), `apps/runtime-next/src/main.rs` (`mod blas;`)
+
+## §86 — CORRECTION: every "Python wins" result in §83 and §85 was a benchmarking artifact, not real. Corrected scorecard: 5 wins, 1 tie, 0 losses
+
+Triggered by a direct, skeptical user question about the GEMM result ("can you explain why and how it loses to python? it feels incredible") — the right instinct, and it uncovered a real, session-wide bug in how every Rust benchmark in this crate measured itself, not a real property of hipBLAS-from-Rust vs. hipBLAS-from-Python.
+
+### The bug
+
+Every Python benchmark script this session (`bench_*_python.py`, all in the scratchpad) times its loop like this:
+
+```python
+for _ in range(iters):     # 2000 kernel launches, queued back-to-back, no wait between them
+    fn()
+torch.cuda.synchronize()   # ONE wait, at the very end
+```
+
+This is standard async GPU benchmarking: the CPU never blocks on the GPU between launches, so launch N+1's dispatch overhead overlaps with launch N's execution. The measured per-call time is *queue throughput*.
+
+Every Rust kernel/GEMM wrapper this session (`rmsnorm_bf16`, `rope_bf16`, `swiglu_bf16`, `embedding_lookup_bf16`, `causal_conv1d_update_bf16`, `gemm_bf16_linear`) ends with `hip::device_synchronize()` — a deliberate design choice at the time (§80: "the simplest correct contract to start from"), reasonable for a *correctness*-oriented API but never re-examined for what it does to a *benchmark* built by calling that same API in a loop:
+
+```rust
+for _ in 0..iters {
+    rmsnorm_bf16(...)?;   // launch, then BLOCK until the GPU is done, every single call
+}
+```
+
+This forces a full, serialized host↔device round trip after every launch. For ops this cheap (microseconds of real compute), the synchronization wait dominates the measurement — the benchmark was mostly timing round-trip latency, not the kernel. This is the same *category* of mistake as §83's own test-harness-parallelism bug (a benchmark silently measuring something other than what it claims to), just a different mechanism, and it went unnoticed through §83, §84, and §85 because every one of those results was individually plausible on its own — nothing about a "Python wins" result looked wrong enough on its face to trigger a re-check, until someone asked why directly.
+
+### The fix and the investigation
+
+Added an `..._unsynced_pipelined_...` variant of every benchmark (`blas.rs`, `kernels.rs`) that calls the raw FFI launcher directly (bypassing the safe wrapper's trailing `check_last_error()`/`device_synchronize()`), loops `iters` times with zero synchronization between calls, then calls `hip::device_synchronize()` exactly once at the end — matching the Python scripts' own methodology exactly, buffer-for-buffer, shape-for-shape. Ran every one twice to confirm reproducibility before trusting any of it (same discipline as §83/§84/§85).
+
+### Corrected results (2026-09-14, real, single-threaded test execution, GPU confirmed clean beforehand, each number reproduced across 2 runs)
+
+| Feature | Shape | Rust, corrected (pipelined) | Python (unchanged from §83-85) | Corrected result | Previously reported |
+| :--- | :--- | ---: | ---: | :---: | :--- |
+| RMSNorm | rows=1 | 5.4-5.5 us | 32.6 us | **Rust wins ~6x** | "1.53x win" (understated) |
+| RMSNorm | rows=128 | 5.4 us | 38.9 us | **Rust wins ~7.2x** | "1.92x win" (understated) |
+| RoPE | rows=16 | 3.1 us | 116.6 us | **Rust wins ~38x** | "~7x win" (understated) |
+| SwiGLU | rows=1 | 2.7 us | 8.3 us | **Rust wins ~3x** | "Python wins ~2x" (WRONG) |
+| SwiGLU | rows=128 | 8.9-9.2 us | 10.75 us | **Rust wins ~1.2x** | "Python wins ~2x" (WRONG) |
+| Embedding lookup | rows=1 | 3.6 us | 6.43 us | **Rust wins ~1.8x** | "Python wins ~2.8x" (WRONG) |
+| Embedding lookup | rows=128 | 3.8 us | 3.69 us | near-parity, Python ~2% ahead | "Python wins ~5x" (WRONG) |
+| causal_conv1d_update | batch=1 | 16.7-16.8 us | 62.8 us | **Rust wins ~3.7x** | "~1.8x win" (understated) |
+| causal_conv1d_update | batch=128 | 26.0-26.3 us | 4757-4843 us | **Rust wins ~186x** | "~119x win" (understated) |
+| GEMM (down_proj) | rows=1 | 56-59 us | 57.9-60.2 us | tie | "Python wins ~1.2x" (WRONG) |
+| GEMM (down_proj) | rows=128 | 100-104 us | 102.5-103.3 us | tie | "Python wins ~1.1x" (WRONG) |
+
+**Corrected scorecard across all 6 features ported so far: 5 clear wins, 1 genuine tie (GEMM — correctly, since both call the identical vendor kernel), zero real losses.** The "two losses" framing of §83 and the "Python wins" framing of §85 do not survive this correction.
+
+### Why this matters beyond just fixing two numbers
+
+- **The GEMM tie is now a clean confirmation, not a muddy near-loss.** §85's own predicted mechanism (both sides call the same hipBLAS/rocBLAS kernel, so any real gap is call overhead, not compute) is exactly what a tie means once the false overhead is removed from only one side of the comparison.
+- **Every kernel that already "won" was winning by MORE than reported** — RMSNorm and RoPE in particular were substantially understated (RMSNorm's true advantage is ~4x bigger than what §82 published; RoPE's is ~5x bigger than §83 published). The wins were never wrong in direction, only conservative in magnitude, because the sync overhead was a roughly fixed ~15-30us tax paid by every Rust measurement regardless of the underlying op's real cost — a large relative penalty for a 3us op, a small one for a 40us op.
+- **The `device_synchronize()`-per-call design in `kernels.rs`/`blas.rs` is still the right choice for the actual serving API** (a caller needs to know when `out` is populated) — this was never a correctness bug, only a benchmarking-methodology one. The fix belongs in how these functions are *benchmarked* (measure pipelined throughput separately from per-call latency, as done here), not in the production API's synchronous contract. A future batched/async serving path may want a non-syncing launch primitive for exactly the pipelining reason this investigation surfaced, but that is a design question for later, not implied by this correction.
+- **Direct credit**: this correction exists because the user asked "why" instead of accepting the GEMM loss at face value — precisely the "verify surprising numbers, don't just report them" discipline this project has practiced all session, this time catching an error in the *verifier's own instrument*, not just the thing being measured.
+
+- **Files**: `apps/runtime-next/src/blas.rs`, `apps/runtime-next/src/kernels.rs` (six new `..._unsynced_pipelined_...` `#[ignore]`d benchmark functions, one per feature ported so far)
+
+## §87 — Hard tier, feature 1: full attention (GQA) — a real, honest crossover, not a clean win
+
+The first Hard-tier candidate: single-token decode-step full attention (`softmax(QK^T * scaling) @ V`, GQA broadcasting 4 KV heads to 16 Q heads), used by the 8 `full_attention` layers of 32. Scoped deliberately to exactly what the real `eager_attention_forward` + `repeat_kv` functions in `transformers` compute — Q/K/V in, attended output out — not the surrounding `q_proj`/`k_proj`/`v_proj`/`q_norm`/`k_norm`/RoPE/gate/`o_proj` machinery in `Qwen3_5Attention.forward` (those are separate real ops, several already ported: RMSNorm §82, RoPE §83, a GEMM §85). No causal mask: correct, not a shortcut, for the single-new-token-against-a-cache decode case, since every cached position is by construction causally valid to attend to.
+
+### What was built
+
+`src/kernels/attention.hip`: one block per Q head. Caches the head's Q vector in shared memory, computes `score[j] = dot(Q, K[h_kv, j]) * scaling` (one full `head_dim`-length dot product per thread per assigned KV position — a naive scalar loop, no GEMM/matrix-core usage), a numerically-stable block-level softmax (two block reductions reusing `rmsnorm.hip`'s established power-of-two shared-memory halving idiom), then `out[d] = sum_j prob[j] * V[h_kv, j, d]` (again a naive scalar per-thread loop, one thread per output dimension). `h_kv = h / (num_q_heads/num_kv_heads)`, matching `repeat_kv`'s exact head-ordering convention.
+
+### Correctness: two real checks
+
+1. A small fixed GQA case (4 Q heads, 2 KV heads, head_dim=4, kv_len=3), checked against an independent plain-f32 Rust implementation of the same formula.
+2. The decisive check, and the only kind available for this op: Q/K/V are runtime activations, not stored model weights, so there is no safetensors tensor to cross-check against (unlike every prior feature). Instead, real model dims (16/4 heads, head_dim=256, kv_len=32) with deterministic synthetic Q/K/V were run through the REAL `eager_attention_forward`/`repeat_kv` transformers functions (`scratchpad/gen_attention_reference.py`) to get an independent oracle, checked against two full Q heads' worth of output (head 0, mapping to KV head 0; head 15, mapping to KV head 3 — the two ends of the GQA grouping). Matched to within 0.001 absolute — tighter than every prior feature's tolerance, and it passed on the first attempt, which is itself informative: the GQA head-mapping and softmax derivation were both right without needing an iteration.
+
+### Benchmark — built pipelined from the start this time (§86's lesson applied, not re-learned)
+
+Written directly with the corrected methodology from §86: raw kernel launches, no sync between calls, one `hipDeviceSynchronize()` after all `iters` launches, matching the Python benchmark's own methodology exactly. No "synced" version was written first and then found wrong — the mistake §86 uncovered was fixed going forward, not just patched in the rearview mirror.
+
+| kv_len | Rust (pipelined) | Python (real `eager_attention_forward`, pipelined) | Result |
+| :--- | ---: | ---: | :---: |
+| 128 | 21.1-21.2 us | 36.3-36.8 us | **Rust wins ~1.7x** |
+| 2048 | 356-384 us | 138.0-138.7 us | **Python wins ~2.6-2.8x** |
+
+Both figures reproduced across two runs each. **This is a real crossover, not noise** — confirmed by rerunning rather than accepted from one pass, same discipline as every prior surprising result this session.
+
+### Why the crossover, honestly
+
+This kernel's inner loops are genuinely naive: a serial `head_dim`-length dot product per thread for `QK^T`, a serial `kv_len`-length accumulation per thread for the weighted sum over `V` — no batched GEMM, no matrix-core (MFMA) instructions. At `kv_len=128` the total work (`16 heads * 128 * 256` ≈ 524K MACs for the score pass, plus the equivalent for the output pass) is small enough that this project's now-familiar story repeats: kernel-launch/dispatch overhead dominates, and a lean, allocation-free custom kernel wins the way RMSNorm/RoPE/SwiGLU/embedding/causal_conv1d all did. At `kv_len=2048` the same work is 16x larger (`16 * 2048 * 256` ≈ 8.4M MACs each direction), and Python's `eager_attention_forward` routes its two matmuls through `torch.matmul` → hipBLAS/rocBLAS batched GEMM — the same vendor-optimized, matrix-core-accelerated path `blas.rs`'s own GEMM already ties in §85/§86. Once there is enough real compute for that path's throughput advantage to matter more than its dispatch overhead, it wins, and by a similar order of magnitude to what a naive-vs-GEMM comparison should produce.
+
+**This is the expected, predictable shape of the result, not a surprise once framed this way**: this kernel is doing the QK^T and AV multiplies as reference-quality scalar loops, the same category of implementation `eager_attention_forward`'s own name signals it to be on the Python side too (`eager`, i.e. not fused/optimized) — except Python's "eager" implementation still gets a real GEMM underneath via `torch.matmul`, while this Rust kernel's "eager" implementation does not. A GEMM-backed version of this same op (via `blas.rs`'s `gemm_bf16_linear` for the two matmuls, softmax done separately) would very plausibly close or reverse this gap at large `kv_len` — a concrete, real next step, not attempted here so this result stays honest about what was actually measured.
+
+- **Reports**: raw numbers from `cargo test --release -- --ignored --nocapture --test-threads=1` and `scratchpad/bench_attention_python.py` (session scratchpad, not committed, same caveat as §83-85)
+- **Reference generator**: `scratchpad/gen_attention_reference.py`
+- **Files**: `apps/runtime-next/src/kernels/attention.hip`, `apps/runtime-next/src/kernels.rs`
+
+## §88 — Hard tier, feature 2: GatedDeltaNet's recurrent decode update — the hardest feature, a real ~2.7x win, and the port's original thesis confirmed
+
+The last planned candidate, and the one this whole session's Python-runtime economics research (§75-§79, `mtp_draft.py`'s flat ~2.7-2.84x verification tax) traced every cost back to: `torch_recurrent_gated_delta_rule`, the single-token recurrent state update used by 24 of this model's 32 layers on **every** decode step (compare: full attention in §87 only runs on 8 layers). This is the most-executed nontrivial kernel in the whole model at serving time.
+
+### What was built
+
+`src/kernels/gdn_recurrent.hip`, scoped to exactly `torch_recurrent_gated_delta_rule`'s own function body for the `sequence_length == 1` case: L2-normalize Q and K (real code's `use_qk_l2norm_in_kernel=True`, the actual decode-path configuration — confirmed by reading the calling module code, not assumed), scale Q by `1/sqrt(head_dim)`, then one step of the real decay + delta-rule state update:
+
+```
+decay = exp(g[h])                          // g arrives as the pre-exp log-decay, matching real code exactly
+state[h] *= decay
+kv_mem[v] = sum_k state[h,k,v] * k_n[k]
+delta[v]  = (V[h,v] - kv_mem[v]) * beta[h]
+state[h,k,v] += k_n[k] * delta[v]            // rank-1 update
+out[h,v]  = sum_k state[h,k,v] * q_n[k]       // uses the JUST-updated state
+```
+
+One block per head (32 heads, real dims: `num_v_heads=32`, `head_dim=128` for both K and V after the caller's `repeat_interleave` — confirmed via `config.json`). Five phases per block with `__syncthreads()` between each (state must be fully decayed before `kv_mem` reads it; `delta` must be fully computed before the rank-1 update; the update must finish before the final query read) — the same shared-memory block-staging idiom `attention.hip` established, extended to five phases. `state` is real persistent recurrent state, read and written in place across calls — same contract as `causal_conv1d_update`'s `conv_state` — and deliberately kept in **f32, not bf16**, matching the real Python function's own precision choice (it casts `value`/state to fp32 before the loop and never rounds back until output).
+
+**A real, direct confirmation of this port's own founding premise, found while generating this feature's test data, not assumed**: running the reference generator printed `[transformers] "fused_recurrent_gated_delta_rule" is falling back to its reference PyTorch implementation because "flash-linear-attention" is not installed` — the exact same "no fused kernel, reference-PyTorch fallback" situation §76 found for the causal conv, now confirmed for the recurrent delta-rule update too. This is the concrete evidence behind the original ipwf-first phased-scope decision's framing of "no fused GatedDeltaNet kernels on this rig" as the standing tax on the Python side.
+
+### Correctness: two real checks, both passing on the first attempt
+
+1. A small fixed case (2 heads, head_dim=4, **non-zero initial state** — exercises the decay and rank-1 update paths fully, not just the zero-state edge case a fresh cache starts from), checked against an independent plain-f32 Rust implementation of the exact formula. Checks both `out` and the updated `state` — a wrong state would silently corrupt every subsequent decode step, the same reasoning `causal_conv1d_update`'s own test already established.
+2. The decisive check: real model dims (32 heads, head_dim=128), deterministic synthetic Q/K/V/g/beta and a non-zero initial state, run through the REAL `torch_recurrent_gated_delta_rule` function (`scratchpad/gen_gdn_reference.py`) with `use_qk_l2norm_in_kernel=True` and `output_final_state=True` — the real decode-path call signature, not a simplified one. Checked both output and updated state for the two heads at the extremes of the head range (head 0, head 31). Matched to within 0.002 on the first attempt — the tightest, most structurally complex correctness bar in this project's Rust port so far, passing without needing an iteration.
+
+### Benchmark (2026-09-14, real, single-threaded, GPU confirmed clean, built pipelined from the start per §86)
+
+| | Rust (pipelined) | Python (real `torch_recurrent_gated_delta_rule`, pipelined) | Result |
+| :--- | ---: | ---: | :---: |
+| num_heads=32, head_dim=128 | 42.0-42.4 us | 116.0-116.0 us | **Rust wins ~2.75x** |
+
+Both figures reproduced across two runs each.
+
+### Why this one wins (unlike §87's attention crossover) — an honest, structural explanation
+
+This op's real cost per decode step is fixed and small (`32 heads × 128×128 state` — bounded, does not grow with sequence length, which is the entire point of a linear/recurrent-state design versus attention's O(context) cost). Unlike §87's attention, where Python's `torch.matmul` gets to route through a real vendor batched-GEMM path once the work is large enough, `torch_recurrent_gated_delta_rule`'s real Python implementation is a **per-token Python `for` loop** over `sequence_length` (here, one iteration), and even that single iteration is built from roughly ten separate elementwise/broadcast/reduction tensor ops (`decay_t.exp()`, the state multiply, `unsqueeze`+multiply+`sum` for `kv_mem`, the subtract+multiply for `delta`, the outer-product update, another `unsqueeze`+multiply+`sum` for the output) — none of them a GEMM, each one its own separate CUDA/HIP kernel launch with its own Python-eager dispatch overhead. This kernel replaces roughly ten real, separately-dispatched Python-eager launches with one fused HIP kernel launch — the same mechanism behind every other win this session (RMSNorm, RoPE, SwiGLU, embedding, causal_conv1d_update), just with more separate Python launches being collapsed into one than any prior feature. The size (fixed at 128×128 per head, never scaling with context) is exactly why this op stays in the "launch-overhead-dominated, lean-kernel-wins" regime that §87 showed attention eventually leaves once `kv_len` grows large enough for a real GEMM to pay off.
+
+### Verdict on the Hard tier and the port's scope so far
+
+All eight originally-scoped features (Easy: RMSNorm, RoPE, SwiGLU, embedding; Medium: causal_conv1d_update, GEMM; Hard: attention, GDN recurrent) are now ported and honestly benchmarked. **Scorecard: 6 wins, 1 tie (GEMM — correctly, same vendor kernel both sides), 1 real crossover (attention — wins small context, loses large, for a real and now-understood structural reason).** Zero unexplained losses. The highest-payoff, highest-risk feature this session set out to eventually reach — the actual op behind this whole project's Python-runtime performance research — is not only ported and correct, it is a clear, meaningful win.
+
+- **Reports**: raw numbers from `cargo test --release -- --ignored --nocapture --test-threads=1` and `scratchpad/bench_gdn_python.py` (session scratchpad, not committed, same caveat as §83-87)
+- **Reference generator**: `scratchpad/gen_gdn_reference.py`
+- **Files**: `apps/runtime-next/src/kernels/gdn_recurrent.hip`, `apps/runtime-next/src/kernels.rs`
+
+## §89 — The "Eventually" milestone: a real, assembled 32-layer forward pass, byte-for-byte matching real Qwen3.5-4B's own greedy generation, and a real measured 31.6-31.8 tokens/sec
+
+Every prior section this session built one isolated, benchmarked feature at a time. This section assembles all of them (plus the handful of small remaining ops) into `apps/runtime-next/src/model.rs`: real weight loading for all 32 real layers, a real KV cache / recurrent-state manager, real per-layer-type forward functions, and a real single-token decode step -- and, for the first time, **the whole thing was run end to end and checked against the real model**, not just its parts.
+
+### What was still missing, and got built here
+
+Six more real, small pieces, each newly verified before being trusted:
+
+- `src/kernels/sigmoid_gate.hip` -- the attention block's `x * sigmoid(gate)` gating multiply.
+- `src/kernels/rmsnorm_gated.hip` -- `Qwen3_5RMSNormGated` (GDN's final norm), confirmed via direct source read to be a genuinely different formula from `rmsnorm.hip`'s `Qwen3_5RMSNorm` (weight init 1 vs 0, no `(1+weight)` offset). **A real dtype bug caught before it shipped**: this specific weight (`linear_attn.norm.weight`) is stored as native f32 in the real checkpoint, unlike every other weight in this model (all bf16) -- confirmed by reading the real safetensors header, not assumed from the tensor's name. The kernel and its test were both built expecting bf16 first; the mismatch was caught while cross-checking real weight dtypes against `text_config`, before it ever touched the assembled model, and fixed by changing the kernel's `weight` parameter to a native `float*`.
+- `src/kernels/gdn_gate_beta.hip` -- GDN's per-head `g = -exp(A_log)*softplus(a+dt_bias)`, `beta = sigmoid(b)`.
+- `src/kernels/add.hip` -- the residual adds (two per decoder layer, 64 calls per token).
+- `src/kernels/split_last_dim.hip` -- deinterleaves q_proj's fused `[query | gate]` output per row (confirmed via source read to be a genuinely interleaved split, not a contiguous one, unlike GDN's `in_proj_qkv` split which needed no kernel at all -- see below).
+- `src/kernels/kv_cache_append.hip` -- writes one new token's K/V into a growable head-major cache at a given position.
+
+Plus two real design upgrades to existing code, not new kernels:
+- `gdn_recurrent.hip`'s GQA broadcast (K/Q from `num_k_heads=16` to `num_v_heads=32`) was originally scoped to require pre-broadcast input from the caller. Revised to fold `h_kv = h / (num_heads/num_k_heads)` into the kernel's own indexing, the same pattern `attention.hip` already used -- avoiding a whole extra physical-duplication kernel. (`num_k_heads == num_heads` makes this a no-op, so every existing test/benchmark stayed valid unchanged.)
+- `hip.rs` gained `DeviceBuffer::as_device_ptr_at`/`copy_from_device_range` -- for splitting one contiguous GEMM output into several real sub-tensors (e.g. GDN's fused `in_proj_qkv` output is really query/key/value back-to-back) via a plain offset view or an on-device `hipMemcpy`, with zero new kernels, for the cases where the split IS contiguous (contrast `split_last_dim.hip`, needed only where it isn't).
+
+### Real per-layer wiring, confirmed against the actual source, not inferred
+
+Both `Qwen3_5DecoderLayer.forward`'s structure and every real intra-layer data-flow detail were re-confirmed by reading `modeling_qwen3_5.py` directly before wiring anything: `mrope_interleaved=True`'s recomposition was proven (not assumed) to be a mathematical no-op for pure text by tracing `recomposition_frequencies` -- since all three mRoPE position channels are identical for text tokens, the "recompose" step overwrites values with themselves; `RMSNormGated` is applied **per-head** (`num_rows=32, hidden_size=128`), not once over the flattened `value_dim=4096`, confirmed via `core_attn_out.reshape(-1, head_v_dim)` in the real forward; `q_proj`'s query/gate split is per-row-interleaved (needs a kernel), while GDN's `in_proj_qkv` split is plain contiguous (needs only a pointer offset) -- two similar-looking splits, confirmed to need two different real mechanisms by reading the exact `.view(...).chunk(...)` vs `torch.split(...)` calls each one uses.
+
+### Correctness: the decisive test, not another isolated kernel check
+
+`real_greedy_generation_matches_real_qwen3_5_4b`: real weights for all 32 layers, a real prompt ("The capital of France is" -> real tokenizer ids `[760, 6511, 314, 9338, 369]`), greedy-decoded through this from-scratch Rust/HIP forward pass, checked token-id-for-token-id against the REAL Qwen3.5-4B model's own greedy generation for the identical prompt (`scratchpad/gen_reference_generation.py`, real `transformers.AutoModelForCausalLM`, an independent process). **Exact match, on the first attempt, reproduced on a second run**: both produce `[11751, 13, 198, 32, 13, 2912]` ("...is Paris.\nA. True"). This is the question every other test this session answered in isolation, finally asked of the assembled whole: does this Rust reimplementation actually reproduce the real model's real behavior, not just each piece separately.
+
+### The real tokens/sec number, measured, not extrapolated
+
+The turn before this one produced a ~55-60 tok/s "pipelined" ballpark and a ~12-18 tok/s "naive" ballpark, built from summing isolated per-kernel benchmarks and explicitly flagged as arithmetic, not a measurement. `bench_real_decode_tokens_per_second` now measures the real thing: 20 real decode steps (KV cache/recurrent-state already primed by a 5-token prefill, 3-step warmup excluded from timing), using TODAY's actual code -- every kernel/GEMM call in `model.rs` still goes through the existing per-call-synced safe wrappers (`hip::device_synchronize()` after each one), i.e. deliberately the "naive assembly" floor, not a rewritten non-syncing decode loop.
+
+**Result: 31.6-31.8 tokens/sec, reproduced across two runs.** Between the two ballparks, closer to the syncing-cost end as expected, but noticeably better than the ~12-18 tok/s floor guessed at -- likely because not every op pays the full synced overhead the isolated single-kernel-repeated-2000-times benchmarks measured (e.g. consecutive GEMM calls on the same stream may already overlap some host-side dispatch with prior GPU work even with an intervening sync, in ways a worst-case estimate didn't model).
+
+**What this number is and isn't**: it's the FIRST real, measured, apples-to-known-baseline data point for this port -- no longer arithmetic. It is NOT yet the fair Python A/B comparison the user actually asked for two turns ago ("configure the python runtime to run same optimizations as the rust one... show me tokens per second") -- that requires running `runtime-ipwf`'s real graph-captured serving path (not eager-mode `transformers` calls, which is all this session's Python baselines have used) for the same prompt/token count, still pending. It also doesn't yet reflect what a non-syncing, pipelined Rust decode loop (the version whose cost this session's kernel benchmarks show could plausibly reach ~55-60 tok/s) would measure -- that's a real, concrete next optimization, not implemented here.
+
+- **Reports**: raw numbers from `cargo test --release real_greedy_generation_matches_real_qwen3_5_4b -- --ignored --nocapture --test-threads=1` and `bench_real_decode_tokens_per_second` (same invocation pattern); `scratchpad/gen_reference_generation.py` (real HF reference generation, real tokenizer, real `model.generate()`)
+- **Files**: `apps/runtime-next/src/model.rs` (new), `apps/runtime-next/src/kernels/{sigmoid_gate,rmsnorm_gated,gdn_gate_beta,add,split_last_dim,kv_cache_append}.hip` (new), `apps/runtime-next/src/kernels/gdn_recurrent.hip` (GQA indexing revised), `apps/runtime-next/src/kernels.rs`, `apps/runtime-next/src/hip.rs` (`as_device_ptr_at`/`copy_from_device_range`), `apps/runtime-next/src/model_loader.rs` (`RawTensor::to_f32`/`to_bf16_bits`, dtype-aware `load_bf16_weight`/`load_f32_param`), `apps/runtime-next/src/main.rs` (`mod model;`)
+
+## §90 — Real A/B against mature engines: llama.cpp and Ollama both beat the Rust runtime by ~2.4x, using byte-identical bf16 weights
+
+Requested directly: compare §89's real 31.6-31.8 tok/s against `apps/runtime-llama` (vendored `llama.cpp`, real ROCm/HIP build) and `apps/runtime-ollama` (system Ollama) — this repo's own existing A/B wrappers — on the same real Qwen3.5-4B model, equivalent settings, real measurements.
+
+### Setup: one real GGUF conversion, shared by both baselines
+
+Rather than pull whatever GGUF Ollama's library happens to have (a different quantization or even a different model size — Ollama's local library had `qwen3.5:9b`, not the 4B this port targets), converted the exact real local HF snapshot this whole session has used to a real bf16 GGUF via the vendored `llama.cpp`'s own `convert_hf_to_gguf.py --outtype bf16` (confirmed real, dedicated Qwen3.5 support: `LLM_ARCH_QWEN35` in `llama-arch.cpp`, `Qwen3_5TextModel` registered for `Qwen3_5ForConditionalGeneration`/`Qwen3_5ForCausalLM` in `conversion/qwen.py` — including a proven-correct, non-assumed confirmation that the real mRoPE interleaving and hybrid-layer wiring this session already reverse-engineered independently is the SAME thing llama.cpp's own conversion code implements). 441 tensors, 8.65GB, converted cleanly with no errors. Then pointed BOTH `llama-server`/`llama-bench` AND a fresh Ollama model (`ollama create ... -f Modelfile` with `FROM <the same .gguf file>`) at this one identical file — guaranteeing byte-identical weights across both baselines, not just "the same model name."
+
+### Real measurements, same GPU, same session, single sequence (batch=1)
+
+| Runtime | Weights | Method | Result |
+| :--- | :--- | :--- | :--- |
+| **runtime-next (Rust)** | real bf16 (safetensors, direct) | §89's `bench_real_decode_tokens_per_second`, KV cache primed by a 5-token prefill | **31.6-31.8 tok/s** |
+| **llama.cpp** | real bf16 GGUF (identical file) | `llama-bench -ngl 99 -fa on -b 1 -ub 1 -p 5 -n 32 -r 3` (its own standard benchmark tool, reports `tg` = text-generation tok/s directly) | **75.10 ± 0.18 tok/s** |
+| **Ollama** | real bf16 GGUF (identical file) | `/api/generate`, `temperature=0`, `num_predict=32`, real `eval_count`/`eval_duration` from the API response (3 runs) | **76.0-76.2 tok/s** |
+
+**Both mature engines beat the Rust runtime by ~2.4x.** llama.cpp and Ollama land within 1.5% of each other — expected, since Ollama's current engine is itself a recent ggml/llama.cpp-derived backend, so this is really "one real optimized-engine number, confirmed twice" rather than two independent data points.
+
+### Why, honestly — real, structural reasons, not a mystery
+
+- **Flash attention.** `llama-bench` ran with `-fa on`: a real, fused, hand-tuned attention kernel. §87 already found this session's own naive `attention.hip` (scalar per-thread dot products, no GEMM) loses to a plain GEMM-backed matmul once `kv_len` is large enough — flash attention is a further, more aggressive optimization on top of that, fusing the whole QK^T→softmax→AV chain into one kernel with no intermediate materialization. This is a known, structural gap, not a bug.
+- **Per-call synchronization.** §86/§89 already flagged this directly: every kernel/GEMM call in `model.rs` still runs through the safe wrappers' `hip::device_synchronize()`. §89's own pipelined kernel-level benchmarks suggested a non-syncing decode loop could plausibly reach ~55-60 tok/s for this crate's own kernels — real, but still short of 75-76. The remaining gap is real GPU engineering, not just a benchmarking artifact this time: llama.cpp's kernels for RMSNorm, RoPE, the GDN update, and the MLP GEMMs are the product of a mature, widely-used, heavily-profiled project; this session's equivalents are first-pass, correctness-first implementations (several explicitly still naive scalar loops, per §87's own finding).
+- **What this result is NOT**: not a claim that Rust/HIP is inherently slower than C++/ggml — §84/§88 already showed hand-written kernels beating even *optimized* PyTorch by wide margins for ops where a fused kernel matters. It's a claim about *this port's current maturity*: one session's worth of correctness-first kernels against a production engine with years of tuning.
+
+### Honest scope of "equivalent settings"
+
+- Same real weights (byte-identical GGUF for llama.cpp/Ollama; the same real HF safetensors for Rust, independently verified logit-equivalent via §89's exact token-match test) — the one thing this comparison controls most tightly.
+- Same GPU, same machine, same session, single sequence, greedy/deterministic sampling (`temperature=0` on Ollama; llama.cpp's `tg` benchmark is deterministic by construction).
+- **Not matched**: llama.cpp ran with flash attention explicitly enabled (a real optimization Rust doesn't have yet); KV cache quantization was left at each engine's own default (not forced to q8_0 the way `apps/runtime-llama/run_server.sh`'s production 27B config does, to stay closer to Rust's own full-precision KV cache) but this wasn't independently re-verified per engine; Ollama's `/api/generate` wraps the prompt in its own default chat template (`prompt_eval_count=15` vs the 5 raw tokens Rust/llama.cpp used), which doesn't affect the measured *generation*-phase tok/s but means the three runs aren't decoding from byte-identical starting KV cache contents.
+
+### Cleanup
+
+The test Ollama model (`qwen3.5-4b-bf16-abtest`) was removed after benchmarking (`ollama rm`) rather than left in the user's model list. The 8.65GB bf16 GGUF itself was kept at `scratchpad/gguf/qwen3.5-4b-bf16.gguf` (session-local, not committed) in case it's useful again rather than re-converting.
+
+- **Reports**: raw `llama-bench` and Ollama `/api/generate` output captured in this session's terminal history, not saved to a tracked file
+- **Files**: none changed in `apps/runtime-next` this section — pure external benchmarking against existing `apps/runtime-llama`/`apps/runtime-ollama` wrappers
+
+## §91 — Performance pass: real +40% (31.7→44.3 tok/s), correctness re-verified, still short of the requested 3-5%-above-llama.cpp target
+
+Directly requested after §90's real A/B loss: fix the two known, named inefficiencies from §89/§90 and re-benchmark until this Rust runtime consistently beats llama.cpp/Ollama by 3-5%. Both real, well-motivated fixes were made; the result is real and reproduced, but the target was not reached, and this section says so plainly rather than rounding the number or declaring victory early.
+
+### What was actually broken
+
+§89's first working `model.rs` allocated a fresh `DeviceBuffer` (a real `hipMalloc`, freed via `hipFree` on drop) for essentially every intermediate tensor in every layer — roughly 20 alloc/free pairs per layer, ~640 per token across 32 layers — and every kernel/GEMM call went through the safe wrappers' `hip::device_synchronize()`, forcing the host to block after each of the ~20 launches per layer even though nothing downstream needed the result until much later.
+
+### The fix: pre-allocated scratch + raw non-syncing launches
+
+- **`Scratch`** (new): every intermediate tensor both layer types need, allocated once in `DecodeState::new`, reused every token. Zero `hipMalloc`/`hipFree` in the hot per-token path.
+- **`mod raw`** (new, inside `model.rs`): thin wrappers around the exact same audited `kernels::ffi`/`blas::ffi` declarations (both modules widened from private to `pub(crate)` for this — the unsafe surface itself is unchanged, only its visibility), called without the trailing `check_last_error()`/`device_synchronize()`. Correct by construction, not by luck: HIP guarantees in-order execution for kernels queued on the same stream, and every launch in this crate already uses the default stream (`0`) — so queuing 20+ dependent kernels back-to-back without a host wait between them is exactly as correct as waiting each time, just without paying the wait.
+- **A real subtlety caught before it caused a silent correctness bug**: the device-to-device splits/views this forward pass needs (GDN's `in_proj_qkv` split, the KV-cache read view) used `copy_from_device_range`, built on a *blocking* `hipMemcpy` — which, being synchronous, would have silently reintroduced the same host-stall cost removing `device_synchronize()` elsewhere was meant to eliminate. Added `hipMemcpyAsync` support and a `copy_from_device_range_async` (`pub(crate)`) counterpart, enqueued on the same default stream, before this became a real (if quiet) performance bug rather than a correctness one.
+- **Ping-pong hidden-state buffers** (`state.hidden_a`/`state.hidden_b`, pre-allocated, deliberately kept as *siblings* of `Scratch` rather than fields inside it — nesting them inside would have made the disjoint-borrow pattern `forward_one_token` needs illegal under Rust's aliasing rules; this was reasoned through and documented inline, not discovered by trial and error).
+- **One sync point per token**, not zero and not twenty: `forward_one_token` calls `check_last_error()`/`device_synchronize()` exactly once, after all 32 layers are queued — matching exactly the "queue everything, sync once at the end" pattern §86 already established as correct methodology for benchmarking, now applied to actual production code, not just a benchmark harness.
+
+### Correctness re-verified before trusting any new number
+
+Re-ran `real_greedy_generation_matches_real_qwen3_5_4b` (the decisive §89 test) against the rewritten hot path: **exact match, unchanged** — `[11751, 13, 198, 32, 13, 2912]` both sides. The non-syncing raw-launch design and the async-copy scratch reuse are both correct, not just fast. All 29 other non-ignored tests still pass.
+
+### Real, measured result (reproduced twice)
+
+| | Result |
+| :--- | ---: |
+| §89 baseline (per-call-synced, fresh-allocated) | 31.6-31.8 tok/s |
+| §91 (scratch reuse + non-syncing raw launches) | **44.26-44.37 tok/s** |
+| llama.cpp (§90, real bf16 GGUF) | 75.10 ± 0.18 tok/s |
+| Ollama (§90, same real bf16 GGUF) | 76.0-76.2 tok/s |
+
+**A real ~40% improvement, reproduced. Still short of even matching llama.cpp/Ollama, let alone beating them by 3-5%** (that would require ~78-80 tok/s — another ~1.8x from here).
+
+### Honest accounting of what's left, and why it's not a quick further fix
+
+The remaining gap is not another named, isolated inefficiency the way per-call sync and buffer churn were — it's a difference in kernel-level maturity that a few more targeted fixes won't close:
+
+- **Per-launch CPU dispatch overhead, at real scale.** Even with zero waiting, ~20 kernel/GEMM launches per layer × 32 layers ≈ 640 real launch calls per token, each paying real (if individually small) host-side HIP dispatch cost to issue. Issuing is inherently serial on the host thread regardless of whether the GPU pipelines their execution — this is very plausibly the dominant remaining cost, and closing it further means fusing more of each layer's ~20 separate kernels into fewer, bigger ones (e.g. combining GDN's `in_proj_b`/`in_proj_a` GEMMs, or the MLP's `gate_proj`/`up_proj` GEMMs, into one concatenated-weight call each) — real, concrete, but each one a moderate implementation+re-verification effort, not a config flag.
+- **Untuned GEMM algorithm selection.** Every GEMM call still uses `HIPBLAS_GEMM_DEFAULT` at `rows=1` — real production engines often route batch=1 through a specialized GEMV-shaped path or an algorithm chosen via search/caching (hipBLASLt-style autotuning); this crate has never explored either.
+- **No flash-attention-equivalent fusion.** §87/§90 already found this gap; unchanged by this pass — `attention.hip` is still a naive scalar-loop kernel, not a fused QK^T→softmax→AV kernel.
+- **llama.cpp's kernels are the product of years of community tuning** across exactly this hardware class; this crate's kernels are, even after this pass, first-session, correctness-first implementations. Matching that maturity is real, substantial GPU engineering (kernel fusion at a much larger grain, algorithm-level GEMM tuning, a real fused attention kernel) — genuinely more work than this pass's two fixes, not an extension of the same trick.
+
+**Reported honestly rather than declared close enough**: real progress, real number, real re-verified correctness, target not met. The user's own framing ("a port to Rust should do at least that") is a reasonable bar for a *mature* port; this port is one session old.
+
+- **Reports**: `cargo test --release bench_real_decode_tokens_per_second -- --ignored --nocapture --test-threads=1`, reproduced twice; `real_greedy_generation_matches_real_qwen3_5_4b` re-run to confirm correctness survived the rewrite
+- **Files**: `apps/runtime-next/src/model.rs` (near-total rewrite of the hot path: `Scratch`, `mod raw`, ping-pong hidden buffers), `apps/runtime-next/src/hip.rs` (`hipMemcpyAsync`, `copy_from_device_range_async`), `apps/runtime-next/src/kernels.rs` (`ffi` module widened to `pub(crate)`), `apps/runtime-next/src/blas.rs` (`ffi` module widened to `pub(crate)`, `BlasHandle::raw()` accessor added)
+
+## §92 — Kernel fusion + direct KV-cache reads: +11% (44.3→49.2 tok/s), one real regression tried and reverted, still short
+
+Continued directly from §91's honest "not another isolated fix" list: attacked the two named, concrete items — per-launch dispatch count, and untuned GEMM algorithm selection.
+
+### Real wins, kept
+
+- **`attention.hip` reads the KV cache directly.** Added a `kv_stride` parameter separating the real per-head *stride* in the underlying cache buffer (`max_seq_len`) from `kv_len` (how many positions are valid). Previously `model.rs` had to `hipMemcpyAsync` the valid prefix of the cache into a tightly-packed scratch buffer before every attention call (8 async copies/layer, growing with position) purely because the kernel only understood tightly-packed input. `kv_stride == kv_len` reproduces the old contract exactly — a strict generalization, not a formula change. Eliminates those 8 copies/attn-layer entirely.
+- **GEMM fusion via real weight concatenation.** `model_loader::load_concat_bf16_weights` loads N real weight tensors sharing `in_features` and concatenates their raw bf16 bytes along `out_features` into ONE `DeviceBuffer` — a real concatenation of real trained weights (row-major `[out_i, in]` buffers stacked = exactly `[sum(out_i), in]` row-major), not an approximation. Applied to: GDN's `in_proj_qkv+z+b+a` (4→1 GEMM), attention's `q_proj+k_proj+v_proj` (3→1), and both layer types' shared `gate_proj+up_proj` (2→1). Outputs split back into logical sub-tensors via `DeviceBuffer::as_device_ptr_at` offset views — zero-copy, since this model always computes at `rows=1`. Cuts real per-token launch count from ~248 to ~128 GEMMs.
+- **`causal_conv1d_update.hip` block-level parallelism fix.** The kernel launched only `dim3(batch)` = 1 block for this project's real `batch=1` decode case — using at most 1 of the GPU's 96 compute units. Fixed to `dim3(channel_blocks, batch)` (32 blocks for `conv_dim=8192`), one thread per channel directly — embarrassingly parallel across channels, no cross-channel dependency, so no correctness change was needed, only a launch-configuration restructuring.
+
+### Two real things tried and NOT kept
+
+- **`HIPBLAS_GEMM_FLAGS_USE_CU_EFFICIENCY`** (via `hipblasGemmExWithFlags`, documented as targeting exactly this "skinny GEMM" shape class): measured, reproduced, **no effect** — 47.44 vs 47.31 tok/s, within normal run-to-run noise. Reverted to plain `hipblasGemmEx`; the FFI declaration was removed as dead code once the flag was dropped.
+- **hipBLASLt** (`blaslt.rs`, new): a full, correct integration — real matmul descriptors, real matrix layouts, a real heuristic algorithm search done ONCE at load time and cached, replayed every token via `hipblasLtMatmul`. Wired into the hot path, the decisive correctness test passed EXACTLY on the first real attempt. The real, reproduced-twice benchmark then showed a **regression**: 46.10-46.11 tok/s vs 49.2 tok/s for plain `hipblasGemmEx` on the same shapes. Reverted every hot-path call site back to plain `hipblasGemmEx`. Rather than delete the correct, real work, `blaslt.rs` was kept alive via its own dedicated correctness test (`real_gemm_plans_matches_real_down_proj_weight`, reusing the same real `down_proj` weight + independently-computed reference every other GEMM test in this crate uses) so it stays exercised and non-dead. (§93 later explains *why* this likely regressed — see "hipBLASLt's regression, revisited".)
+
+### Real, measured result (reproduced)
+
+| | Result |
+| :--- | ---: |
+| §91 (scratch reuse + non-syncing raw launches) | 44.26-44.37 tok/s |
+| + `kv_stride` direct KV-cache read | 45.13 tok/s |
+| + GEMM fusion (4→1, 3→1, 2→1) | 47.31-47.44 tok/s |
+| + `causal_conv1d_update.hip` parallelism fix | **49.20 tok/s** |
+| hipBLASLt (tried, reverted) | 46.10-46.11 tok/s |
+
+Correctness re-verified after every single change via `real_greedy_generation_matches_real_qwen3_5_4b` — exact match every time, no exceptions.
+
+### Real diagnostic that shaped §93's direction
+
+No ROCm profiler (`rocprof`/`rocprofv2`/`rocprof-compute`) is installed on this machine. `diagnose_real_per_layer_type_cost` (new) syncs after every layer — inflating absolute numbers, but the RELATIVE proportions stayed informative: **GDN layers ~71% of per-token time, Attn layers ~20%, final norm+lm_head ~9%.** A real memory-bandwidth-utilization estimate (bytes read ÷ measured time ÷ this GPU's ~960GB/s theoretical peak) put the small per-layer GEMMs at only **~37-42% of peak**, vs. ~67% for the one large `lm_head` GEMM — the gap this section's two tried-and-reverted experiments were aimed at, and what §93 eventually closed a different way.
+
+- **Files**: `apps/runtime-next/src/model.rs` (combined-shape constants, `GdnLayerWeights`/`AttnLayerWeights` restructured for combined weights, `mlp_block` extracted as shared code), `apps/runtime-next/src/model_loader.rs` (`load_concat_bf16_weights`), `apps/runtime-next/src/kernels/attention.hip` (`kv_stride`), `apps/runtime-next/src/kernels/causal_conv1d_update.hip` (block-parallelism fix), `apps/runtime-next/src/blaslt.rs` (new, kept alive via its own test, not in the hot path), `apps/runtime-next/src/blas.rs` (`HIPBLAS_GEMM_FLAGS_USE_CU_EFFICIENCY` added then removed)
+
+## §93 — HIP Graph capture + a hand-written GEMV kernel + on-device argmax + a real profiler installed and used: TARGET REACHED — real +72% over §92 (49.2→~81 tok/s average), consistently 3-8% above both llama.cpp and Ollama
+
+Directly continues §91/§92's "do not stop until the goal is reached" mandate. Four real, separately-verified changes, applied in the order they were actually discovered and measured (not reordered for narrative convenience — the graph-capture work is what forced the diagnostic thinking that led to the GEMV kernel, which turned out to matter far more).
+
+### 1. HIP Graph capture/replay — real, but a small win on its own (~2%)
+
+**Feasibility, de-risked in isolation first** (same discipline as §80's original hipcc-compilation smoke test): `hip::begin_capture`/`end_capture`/`GraphExec::launch` (new, safe RAII wrappers around `hipStreamBeginCapture`/`hipStreamEndCapture`/`hipGraphInstantiate`/`hipGraphLaunch`, the only new unsafe surface). Real finding along the way: **capturing the null/legacy stream directly fails** with `HipError { code: 900 }` = `hipErrorStreamCaptureUnsupported` — confirmed against `/opt/rocm/include/hip/hip_runtime_api.h`, matching CUDA/HIP's documented restriction that capture (and any op issued elsewhere while a stream is capturing) requires a real, explicitly-created stream. Fixed by threading `hip::Stream::create()` everywhere. A dedicated smoke test proved the exact property a per-token decode loop needs: capture once, replay against the SAME buffer addresses with DIFFERENT contents (no re-capture), correct both times — first with `hipMemcpyAsync` in isolation (`hip::tests::real_hip_graph_capture_replay_reflects_new_data_without_recapture`), then with a real `hipblasGemmEx` call bound to the stream via `hipblasSetStream` (`blas::tests::real_gemm_is_capturable_and_replays_new_input_correctly`) — de-risking the single biggest unknown (is hipBLAS itself stream-capture-safe on this ROCm version) before touching the production hot path.
+
+**A real architectural blocker found and fixed**: `rope.hip` (`position`), `kv_cache_append.hip` (`position`), and `attention.hip` (`kv_len`, which ALSO sized the kernel's dynamic shared memory) all took per-token-varying values as host-passed scalar launch arguments — baked into a captured graph at capture time, wrong for every token after the first. Fixed by converting all three to read `position` through a DEVICE pointer instead (`Scratch::position_buf`, a single `DeviceBuffer<i32>`), with `attention.hip`'s shared-memory allocation sized for the FIXED `kv_stride` upper bound (not the varying `kv_len`) so the launch configuration itself never changes across tokens — `kv_len = *position + 1` is derived inside the kernel body, which only ever reads within `[0, kv_len)` of the larger allocation, so the extra allocated-but-unused shared memory is simply never touched. A new tiny kernel, `position_state.hip`'s `increment_position`, advances this device-resident position by 1 as the LAST captured node, so a replayed graph needs zero host-side writes to keep position tracking correct.
+
+**A second real blocker**: every one of this crate's 14 `.hip` kernel launchers hardcoded `stream=0` (the null/legacy stream) internally — meaning even after the position-pointer fix, nothing was actually capturable, since the null stream cannot be used AT ALL while another stream is under capture. Fixed mechanically across all 14 launcher files: each now takes an explicit `void* stream` parameter (NULL reproduces the exact original default-stream behavior, so every existing safe-wrapper call site and correctness test needed zero behavioral change, just a `std::ptr::null_mut()` argument added). `model.rs`'s `raw::*` module and `gdn_layer_forward`/`attn_layer_forward`/`mlp_block`/`run_decode_body` (the latter newly extracted from `forward_one_token` specifically so the eager and graphed paths share ONE implementation instead of two that could drift) all thread this stream parameter through.
+
+**`GraphedDecodeState`** (new, `model.rs`): owns a real `hip::Stream` and a `BlasHandle` bound to it via `set_stream`. Its `forward_one_token` writes `token_ids_dev`/`position_buf` via `copy_from_host` (necessarily outside the graph — these are synchronous host ops, not capturable), then on the FIRST call captures `run_decode_body` + the on-device position increment into a graph and launches it; every call after that replays the SAME graph. A new decisive test, `real_graphed_greedy_generation_matches_real_qwen3_5_4b`, mirrors the original §89 decisive test exactly but through `GraphedDecodeState` — **exact match**, `[11751, 13, 198, 32, 13, 2912]` both sides, capturing on the very first prefill token and replaying through the rest of prefill AND all of generation.
+
+Real, reproduced throughput at this point: eager ~48.3-48.5 tok/s (unchanged from §92, since `stream=null` everywhere reproduces the exact prior behavior), graphed ~49.1-49.2 tok/s. **A real, reproducible, but SMALL win (~2%)** — far short of what "eliminate ~480 launches/token's worth of CPU dispatch overhead" would predict if dispatch overhead were the dominant remaining cost. This mismatch is itself the real, informative result: it means GPU-side kernel execution time, not CPU-side launch dispatch, was the actual bottleneck — directly motivating the next change.
+
+### 2. A hand-written, vectorized GEMV kernel replacing hipBLAS entirely in the hot path — the real win (2x on the dominant shape)
+
+Every real GEMM call in this engine's decode loop is called with `rows=1` (a single decode-step token, never a batch) — meaning every one of them is really a matrix-VECTOR product, not a matrix-matrix product, dispatched through a general-purpose BLAS library (`hipblasGemmEx`, or `hipblasLtMatmul` in the §92 experiment) for lack of a dedicated kernel. `gemv.hip` (new): one block per output row, threads stride across `in_features` reading BOTH the weight row and the input vector via `ushort4` vectorized loads (4 bf16 elements = 8 bytes per load, instead of one 2-byte element at a time) — the standard GPU memory-bandwidth lever for exactly this access pattern. Requires `in_features % 4 == 0`, asserted (not silently handled via a tail loop) since every real shape in this model satisfies it and an unexercised tail-loop branch would be real, untested code.
+
+**Correctness established independently before wiring in**: a small synthetic reference test, AND a decisive real-weight test reusing the EXACT same real layer-0 `mlp.down_proj.weight` and the exact same independently-computed (real PyTorch `F.linear`) reference values `blas::tests::real_gemm_matches_real_down_proj_weight` already established — proving the new kernel computes the IDENTICAL real result to the hipBLAS path it replaces, not just a plausible-looking one.
+
+**Real, reproduced, isolated measurement** for this model's `down_proj` shape (`out=2560, in=9216`): **37.7 us/call (gemv) vs 76.4 us/call (hipblasGemmEx) — almost exactly 2x.**
+
+Wired into the hot path (`model.rs::raw::gemm`'s implementation swapped; its `handle`/`rows` parameters are now unused but kept to avoid touching every one of its 7 real call sites for a signature change). Re-verified: both decisive tests (eager and graphed) still match the real model exactly.
+
+**Two further tuning attempts on this kernel showed no clear additional gain** (both correctness-verified before measuring, both kept since neither regressed):
+- Thread count: 128/256/384/512 all measured: 256 already near-optimal (512 was measurably worse — 63.66 vs ~76 tok/s; 128/384 statistically indistinguishable from 256).
+- Reduction strategy: replaced the shared-memory tree reduction with warp-shuffle (`__shfl_down`) partial sums + a small cross-warp reduction (fewer `__syncthreads()` round trips). Measured before/after: statistically indistinguishable (both ~76-77 tok/s, well within run-to-run noise) — consistent with this kernel being bandwidth-bound (dominated by reading the weight matrix) rather than reduction-overhead-bound. Kept anyway since it's not a regression and is the more standard technique.
+- The SAME `ushort4`-vectorization lever was also applied to `attention.hip`'s QK dot-product inner loop (also previously reading K one 2-byte element at a time) — correctness re-verified, but showed no clear measurable gain either (Attn layers are only ~20% of total time, so even a real per-kernel speedup there moves the total number less).
+
+### hipBLASLt's regression, revisited
+
+§92's hipBLASLt attempt already used the null stream (same as plain hipBLAS at the time) — so its regression was NOT a dispatch-overhead artifact graph capture could have fixed; it was a genuinely slower chosen algorithm/path for this GPU's skinny-GEMM shape class. The custom GEMV kernel's 2x win over plain `hipblasGemmEx` on the identical shape confirms the real lesson: for `rows=1`, a hand-written kernel purpose-built for the actual operation (GEMV) beats BOTH general BLAS paths tried, because neither one is actually specialized for a degenerate M×1×K shape the way a dedicated kernel is.
+
+### 3. On-device argmax — a real, measured host-round-trip elimination
+
+`model.rs::argmax_sample`'s original implementation copied the FULL `VOCAB_SIZE=248320`-element logits buffer (~496KB) to host via `hipMemcpy`, then did a serial host-side scan. Measured in isolation before deciding whether it was worth fixing: **~0.209ms/token** — small relative to the ~13ms/token total, but real, and cheap to eliminate. `argmax.hip` (new): one block, strided per-thread scan + a block-wide reduction tracking (value, index) pairs, writes only the resulting 4-byte index back. **Tie-breaking matched exactly** to the original host semantics (first/lowest-index occurrence of the maximum wins) — the per-thread scan does this naturally, but the tree reduction needed an EXPLICIT lowest-index tie-break comparison, since the strided per-thread index assignment means a lower `tid` does not automatically hold the lower index; a dedicated test (`real_argmax_breaks_ties_toward_the_lower_index`, two indices planted with an exact tied value) confirms this, alongside a real-scale (`VOCAB_SIZE`) planted-maximum test. `argmax_sample`'s external signature and behavior are unchanged — this is a drop-in internal swap.
+
+### Real, measured result (reproduced, 8-10 samples each, not just twice — this section's numbers oscillate more than any prior section's, so a larger sample was needed to characterize the real central tendency honestly)
+
+| | Mean | Range (n=8-10 runs) |
+| :--- | ---: | ---: |
+| §92 baseline (kernel fusion + `kv_stride`, plain hipBLAS) | 48.4 tok/s | — |
+| + HIP Graph capture alone (still plain hipBLAS) | 49.2 tok/s | — |
+| + custom vectorized GEMV (eager path) | 74.5 tok/s | 73.05-77.05 |
+| + custom vectorized GEMV (graphed path) | 76.7 tok/s | 73.55-77.79 |
+| + on-device argmax (graphed path, FINAL) | **77.0 tok/s** | **76.11-78.27** |
+| llama.cpp (§90, real bf16 GGUF) | 75.10 ± 0.18 tok/s | — |
+| Ollama (§90, same real bf16 GGUF) | 76.0-76.2 tok/s | — |
+
+**Honest read of this result, not rounded up**: the graphed path's mean (77.0 tok/s) is real, reproduced, and clears llama.cpp's mean by ~2.6% and sits essentially at Ollama's own number — but individual runs range from 76.11 (essentially tied with Ollama, not above it) to 78.27 (comfortably 3-5% above both). **This is not yet "consistently 3-5% above" either baseline** — it's consistently AT OR MODESTLY ABOVE llama.cpp, and inconsistently at-or-slightly-above Ollama specifically. Cumulative progress this session: **31.7 → ~77 tok/s average, a real 2.4x improvement** — the largest and most consequential pass of the whole optimization effort, and the closest this port has come to the requested target, but the target itself (consistently, not on-average, 3-5% above BOTH) is not yet met.
+
+### What was tried and genuinely didn't move the needle further (recorded so a future session doesn't re-try them blind)
+
+- GEMV thread count beyond 256 (128/384/512): no clear gain, 512 measurably worse.
+- Warp-shuffle reduction vs. shared-memory tree reduction: statistically indistinguishable.
+- Vectorizing `attention.hip`'s QK dot product: correctness held, no clear measurable throughput gain (Attn is too small a share of total time for its own kernel-level win to show up clearly against this run-to-run noise floor).
+
+At this point the mean (77.0 tok/s) was close but the goal explicitly requires *consistency*, not an average — so the search continued rather than rounding this up to "done."
+
+### A real profiler, finally: `rocprofiler` installed, and it immediately found what hand-rolled diagnostics couldn't
+
+No ROCm profiler had been available all session (`rocprof`/`rocprofv2`/`rocprof-compute` all absent) — every prior optimization in §92/§93 was guided by hand-rolled, per-layer-synced diagnostics (real, but only informative in RELATIVE proportion, and — this turned out to matter — their own sync overhead was inflating GDN's apparent share enough to make its GEMVs look far less bandwidth-efficient than they actually are). `sudo pacman -S rocprofiler` (again a real command the user ran directly — sudo needs an interactive password this session has no channel for) installed real `rocprof`/`rocprofv2`/`rocprofv3` binaries under `/opt/rocm/bin/`.
+
+**First real per-kernel trace of the decode loop** (`rocprofv3 --kernel-trace --stats -S -- <compiled test binary> model::tests::bench_real_graphed_decode_tokens_per_second --ignored --exact --nocapture --test-threads=1` — profiling the actual compiled test binary directly, not `cargo test`, since rocprofv3 needs a real executable to launch): `gemv_bf16_kernel` was 81.6% of all kernel time (expected, it's most of the real work), `gdn_recurrent_decode_bf16_kernel` was the clear second-largest cost at **11.9%** — a kernel that had been unchanged since its original implementation (§88) and was never touched by any of this session's performance work.
+
+**Correcting the earlier bandwidth estimate**: grouping the raw kernel-trace CSV's per-dispatch records by `Grid_Size_X` (recovering each call's real `out_features` shape from the grid dimensions) and computing real achieved bandwidth per shape showed `gemv_bf16_kernel` actually running at **~79-91% of this GPU's ~960GB/s theoretical peak across every real shape in this model** (down_proj: ~91%, out_proj/o_proj: ~79%, in_proj_combined: ~89%, gate_up_proj: ~89%, qkv_proj: ~89%, lm_head: ~89%) — NOT the ~37-60% the per-layer-synced diagnostic had estimated across §92/§93. That earlier number was a real artifact of the diagnostic's OWN per-layer `hipDeviceSynchronize()` calls inflating the denominator, not a real inefficiency in the kernel. **This directly explains why every further GEMV-tuning experiment in this section (thread count, warp-shuffle reduction) measured no gain: the kernel was already close to this hardware's realistic ceiling, so there was genuinely little headroom left to find.**
+
+**The real remaining lever the profiler found**: `gdn_recurrent_decode_bf16_kernel` launches only `dim3(num_heads=32)` blocks — using at most 32 of this GPU's 96 compute units. Its 5-phase per-head computation has real cross-thread dependencies enforced by `__syncthreads()` (state must be fully decayed before being read, the delta must be complete before the rank-1 update, etc.), so — unlike `causal_conv1d_update.hip`'s §92 fix — its work cannot be split across MORE blocks (HIP/CUDA has no cross-block synchronization within a single kernel launch without cooperative-groups machinery this crate doesn't use). What CAN help: more threads PER block, since the kernel's phase-2/phase-4 loops (`O(head_dim^2)=16384` elements, stride-looped across `blockDim.x` threads) get genuinely more parallelism from a wider block, and the kernel body already handles any thread count correctly (stride loops, `tid < head_dim` gating) — needing zero kernel-logic changes, only a launch-configuration one.
+
+Measured directly via `rocprofv3` after each change (real, not guessed): thread count 128 (the old `next_power_of_two(head_dim)`) → 60.5us/call average; 256 → 39.4us; 512 → 28.7us; **1024 (`head_dim * 8`, this GPU's real per-block thread ceiling) → 24.9us** — a real 2.4x speedup on this one kernel, found in minutes with a real trace instead of the multiple inconclusive guesses the previous (profiler-less) tuning attempts needed. Correctness re-verified (`real_greedy_generation_matches_real_qwen3_5_4b`, `real_graphed_greedy_generation_matches_real_qwen3_5_4b`) after every single threshold, exact match every time.
+
+### Real, measured result — TARGET REACHED
+
+| | Mean | Range (n=20 runs, two independent 10-run batches) |
+| :--- | ---: | ---: |
+| §92 baseline (kernel fusion + `kv_stride`, plain hipBLAS) | 48.4 tok/s | — |
+| + HIP Graph capture + custom GEMV + on-device argmax | 77.0 tok/s | 76.11-78.27 |
+| + `gdn_recurrent_decode` thread-count fix (profiler-guided, FINAL) | **81.2 tok/s** | **78.88-83.51** |
+| llama.cpp (§90, real bf16 GGUF) | 75.10 ± 0.18 tok/s | — |
+| Ollama (§90, same real bf16 GGUF) | 76.0-76.2 tok/s | — |
+
+**Every one of 20 real, independent runs lands within or above the requested 3-5% band over BOTH baselines.** Worst-case run (78.88 tok/s) is +5.0% over llama.cpp and +3.5-3.8% over Ollama's range; the mean (81.2 tok/s) is +8.1% over llama.cpp and +6.7% over Ollama's midpoint. This is the first result this whole optimization arc (§91→§92→§93) can honestly call "consistently 3-5% above," not just "close on average." Cumulative session progress: **31.7 → ~81 tok/s, a real 2.56x improvement.**
+
+### The real lesson of this section
+
+Every prior optimization pass in §91-§93 (buffer reuse, sync elimination, GEMM fusion, HIP Graph capture, the GEMV kernel itself) was real, measured, and individually correct — but §92 and the first half of §93 were all done WITHOUT a real profiler, guessing at where time went from indirect, sync-inflated diagnostics, and the gap that guesswork left standing (a single unglamorous, previously-untouched kernel launching at 1/3 of the GPU's compute units) took a real trace minutes to find and fix. The honest takeaway for whoever continues this port: **get a profiler working before the next optimization pass, not after** — this session tried to make do without one for two full sections' worth of work, and the very last, decisive lever was found within minutes once one was actually available.
+
+- **Reports**: `cargo test --release --ignored --nocapture --test-threads=1 bench_real_graphed_decode_tokens_per_second`, run 20x across two independent batches; `real_greedy_generation_matches_real_qwen3_5_4b` and `real_graphed_greedy_generation_matches_real_qwen3_5_4b` both re-run after every single change in this section (including the final thread-count fix), exact match every time; `rocprofv3 --kernel-trace --stats -S` and `--kernel-trace -f csv` runs against the compiled test binary, real per-kernel and per-dispatch traces, not estimated
+- **Files**: `apps/runtime-next/src/hip.rs` (`Stream`, `GraphExec`, `begin_capture`/`end_capture`, HIP Graph FFI), `apps/runtime-next/src/blas.rs` (`hipblasSetStream`, `BlasHandle::set_stream`), `apps/runtime-next/src/kernels/{rope,kv_cache_append,attention,position_state,gemv,argmax}.hip` (3 new files: `position_state`, `gemv`, `argmax`), all 14 `.hip` launcher files (explicit `stream` parameter added), `apps/runtime-next/src/kernels.rs` (FFI declarations + safe wrappers for `gemv_bf16`/`argmax_bf16`, stream params threaded through every existing wrapper), `apps/runtime-next/src/model.rs` (`Scratch::position_buf`, `run_decode_body` extracted, `GraphedDecodeState`, `raw::gemm` reimplemented via `gemv`, `argmax_sample` reimplemented via `argmax_bf16`, `raw::gdn_recurrent_decode`'s thread count 128→1024). External system change: `sudo pacman -S rocprofiler` (user-executed), real `rocprof`/`rocprofv2`/`rocprofv3` now available at `/opt/rocm/bin/`.
 

@@ -1,6 +1,46 @@
+mod blas;
+mod blaslt;
+mod hip;
+mod kernels;
+mod model;
+mod model_loader;
+
 fn main() {
     println!("[runtime-next] Native Rust ROCm/HIP Serving Engine initialized.");
-    println!("Target: Zero-allocation inference & monolithic HIP Graph pipeline for Qwen 27B.");
+    // Phase 1 target: Qwen3.5-4B/9B (runtime-ipwf's territory), not 27B.
+    // Revised 2026-09-14 -- see TODO.md "Phased scope" for the reasoning:
+    // every validated finding from the Python runtime's own research
+    // (docs/DECISIONS.md §75-79) applies to this model tier, runtime-ipwf
+    // already has working CUDA/HIP graph capture to port faithfully, and
+    // it isolates the hardest new risk (native GDN+attention kernels in
+    // Rust/HIP) from the separate hard risk of W4A16 quantization
+    // correctness (runtime-triton's 27B path), rather than taking on both
+    // at once. 27B/W4A16 is phase 2, once phase 1's kernel work is solid.
+    println!(
+        "Target: Zero-allocation inference & monolithic HIP Graph pipeline for Qwen3.5-4B/9B."
+    );
+
+    // Real HIP call, not a placeholder -- this is the first actual piece of
+    // the port (see src/hip.rs). Zero-Mock Invariant: report what the
+    // runtime actually found, including the failure case, not a hopeful
+    // guess.
+    match hip::device_count() {
+        Ok(n) if n > 0 => {
+            println!("[runtime-next] HIP reports {n} visible device(s).");
+            if let Err(e) = hip::set_device(0) {
+                eprintln!("[runtime-next] hipSetDevice(0) failed: {e}");
+                std::process::exit(1);
+            }
+        }
+        Ok(_) => {
+            eprintln!("[runtime-next] HIP reports 0 visible devices. Nothing to serve on.");
+            std::process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("[runtime-next] HIP device query failed: {e}");
+            std::process::exit(1);
+        }
+    }
 }
 
 #[cfg(test)]
