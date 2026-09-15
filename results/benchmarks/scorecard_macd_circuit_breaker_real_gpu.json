@@ -1,0 +1,126 @@
+{
+  "metadata": {
+    "model_id": "Qwen/Qwen3.5-4B",
+    "spec_k": 2,
+    "max_tokens": 64,
+    "device": "AMD Radeon Graphics",
+    "vram_allocated_gb": 8.06,
+    "timestamp": 1789454235
+  },
+  "scenarios": {
+    "high_alignment": {
+      "arm_1_raw_graph": {
+        "tokens": 64,
+        "elapsed_s": 2.032,
+        "tok_s": 31.0
+      },
+      "arm_2_unprotected_spec": {
+        "tokens": 64,
+        "elapsed_s": 1.959,
+        "tok_s": 32.67,
+        "avg_tau": 1.62,
+        "speedup_vs_raw": 1.054
+      },
+      "arm_3_protected_spec": {
+        "tokens": 64,
+        "elapsed_s": 1.553,
+        "tok_s": 41.21,
+        "avg_tau": 1.52,
+        "trips_count": 1,
+        "reengages_count": 0,
+        "disengaged_pct": 8.0,
+        "speedup_vs_raw": 1.329,
+        "speedup_vs_unprotected": 1.261,
+        "circuit_breaker_telemetry": {
+          "enabled": true,
+          "is_currently_engaged": false,
+          "ema_fast": 1.704,
+          "ema_slow": 2.317,
+          "macd": -0.613,
+          "trips_count": 1,
+          "reengages_count": 0,
+          "speculative_steps": 23,
+          "disengaged_steps": 2,
+          "disengaged_pct": 8.0,
+          "avg_tau": 2.52
+        }
+      }
+    },
+    "low_alignment": {
+      "arm_1_raw_graph": {
+        "tokens": 55,
+        "elapsed_s": 1.775,
+        "tok_s": 30.43
+      },
+      "arm_2_unprotected_spec": {
+        "tokens": 56,
+        "elapsed_s": 1.559,
+        "tok_s": 35.92,
+        "avg_tau": 1.5,
+        "speedup_vs_raw": 1.18
+      },
+      "arm_3_protected_spec": {
+        "tokens": 56,
+        "elapsed_s": 1.744,
+        "tok_s": 32.1,
+        "avg_tau": 0.34,
+        "trips_count": 1,
+        "reengages_count": 0,
+        "disengaged_pct": 82.9,
+        "speedup_vs_raw": 1.055,
+        "speedup_vs_unprotected": 0.894,
+        "circuit_breaker_telemetry": {
+          "enabled": true,
+          "is_currently_engaged": false,
+          "ema_fast": 1.128,
+          "ema_slow": 1.227,
+          "macd": -0.098,
+          "trips_count": 1,
+          "reengages_count": 0,
+          "speculative_steps": 7,
+          "disengaged_steps": 34,
+          "disengaged_pct": 82.9,
+          "avg_tau": 1.34
+        }
+      }
+    },
+    "mixed_regime": {
+      "arm_1_raw_graph": {
+        "tokens": 35,
+        "elapsed_s": 1.128,
+        "tok_s": 30.14
+      },
+      "arm_2_unprotected_spec": {
+        "tokens": 36,
+        "elapsed_s": 1.105,
+        "tok_s": 32.59,
+        "avg_tau": 1.4,
+        "speedup_vs_raw": 1.081
+      },
+      "arm_3_protected_spec": {
+        "tokens": 36,
+        "elapsed_s": 1.191,
+        "tok_s": 30.23,
+        "avg_tau": 0.25,
+        "trips_count": 1,
+        "reengages_count": 0,
+        "disengaged_pct": 85.7,
+        "speedup_vs_raw": 1.003,
+        "speedup_vs_unprotected": 0.927,
+        "circuit_breaker_telemetry": {
+          "enabled": true,
+          "is_currently_engaged": false,
+          "ema_fast": 1.073,
+          "ema_slow": 1.286,
+          "macd": -0.213,
+          "trips_count": 1,
+          "reengages_count": 0,
+          "speculative_steps": 4,
+          "disengaged_steps": 24,
+          "disengaged_pct": 85.7,
+          "avg_tau": 1.25
+        }
+      }
+    }
+  }
+}

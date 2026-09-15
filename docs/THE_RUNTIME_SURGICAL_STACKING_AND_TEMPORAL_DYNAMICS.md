@@ -47,6 +47,18 @@ To solve these systemic bottlenecks, we developed the **High-Performance Runtime
 
 ---
 
+> ⚠️ **CORRECTION (2026-09-12) — Chapter 1 only:** The LV-GLasso precision-graph numbers in
+> the chapter below (`rank(L)=299`, "one true conflict edge," the "🚀 Genuine Discovery"
+> tag on "Latent Space Separation" in the taxonomy above) were computed from a
+> **fabricated synthetic activation matrix**, not real model activations — see
+> `docs/EXPERIMENT_REAUDIT_2026-09.md` Critical #2 and `docs/DECISIONS.md` §68. A real
+> re-measurement (`experiments/factory/geometry/surgical_notch_sweep/`, real weights, no
+> activations needed) found **96 of 96** MLP weight matrices conflict, not 1 of 512. The
+> shipped Two-Stage Surgical Stacking mechanism is still real and selective (2.5×–4.3×),
+> just not for the "isolated single collision" reason this chapter describes. The other
+> chapters (state ring buffer, POET compression, NOTEARS) are unaffected by this
+> correction.
+
 ## Chapter 1: The Multi-Adapter Interference Illusion & The Latent Variable GLasso Resolution
 
 ### The "Everything Collides" Crisis

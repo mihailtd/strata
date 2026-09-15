@@ -6,7 +6,8 @@ Exploits AMD RDNA3 (gfx1100 / RX 7900 XTX) hardware tensor cores:
 - Fused dynamic LoRA branch accumulation: Out = X @ dequant(W) + alpha * (X @ L_A) @ L_B.
 - Single global VRAM write for both base GEMM and active domain adapter branch.
 
-Vendored into runtime-triton for self-sufficiency -- see native_27b_engine.py's docstring in this same directory for why. Do not re-link to apps/runtime.
+Vendored into runtime-triton for self-sufficiency -- see native_27b_engine.py's docstring
+in this same directory for why. Do not re-link to apps/runtime.
 """
 
 from __future__ import annotations
@@ -16,6 +17,11 @@ from typing import Any
 import torch
 import triton
 import triton.language as tl
+
+
+def _cdiv(x: int, y: int) -> int:
+    return (x + y - 1) // y
+
 
 # -----------------------------------------------------------------------------
 # Vectorized Quantization and Packing Helpers (PyTorch GPU)
@@ -145,8 +151,8 @@ def _w4a16_gemm_kernel_raw(
 ):
     """RDNA3 WMMA-accelerated W4A16 GEMM kernel with register-level dequantization."""
     pid = tl.program_id(axis=0)
-    num_pid_m = tl.cdiv(M, BLOCK_M)
-    num_pid_n = tl.cdiv(N, BLOCK_N)
+    num_pid_m = tl.cdiv(M, BLOCK_M)  # ty: ignore[invalid-argument-type]
+    num_pid_n = tl.cdiv(N, BLOCK_N)  # ty: ignore[invalid-argument-type]
     num_pid_in_group = GROUP_M * num_pid_n
     group_id = pid // num_pid_in_group
     first_pid_m = group_id * GROUP_M
@@ -163,9 +169,9 @@ def _w4a16_gemm_kernel_raw(
     a_ptrs = a_ptr + (offs_m[:, None] * stride_am + offs_k[None, :] * stride_ak)
     q_ptrs = q_ptr + (offs_kw[:, None, None] * stride_qk + offs_n[None, None, :] * stride_qn)
 
-    accumulator = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
+    accumulator = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)  # ty: ignore[invalid-argument-type]
 
-    for k in range(0, tl.cdiv(K, BLOCK_K)):
+    for k in range(0, tl.cdiv(K, BLOCK_K)):  # ty: ignore[invalid-argument-type]
         a = tl.load(a_ptrs, mask=offs_k[None, :] < K - k * BLOCK_K, other=0.0)
 
         # Load packed int32 tile: (BLOCK_K // 8, 1, BLOCK_N)
@@ -229,13 +235,13 @@ def _w4a16_gemv_kernel(
     offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
     shifts = (tl.arange(0, 8) * 4)[:, None]  # (8, 1)
 
-    accumulator = tl.zeros((BLOCK_N,), dtype=tl.float32)
+    accumulator = tl.zeros((BLOCK_N,), dtype=tl.float32)  # ty: ignore[invalid-argument-type]
 
     offs_kw = tl.arange(0, BLOCK_K // 8)
     q_ptrs = q_ptr + (offs_kw[:, None] * stride_qk + offs_n[None, :] * stride_qn)
     a_ptrs = a_ptr + pid_m * stride_am + (tl.arange(0, BLOCK_K) * stride_ak)
 
-    n_groups_k = tl.cdiv(K, BLOCK_K)
+    n_groups_k = tl.cdiv(K, BLOCK_K)  # ty: ignore[invalid-argument-type]
 
     for k_iter in range(0, n_groups_k):
         # 1. Vector load activation slice: (BLOCK_K,)
@@ -257,7 +263,7 @@ def _w4a16_gemv_kernel(
         b_tile = (b_tile_raw.to(tl.float32) - 8.0) * scale.to(tl.float32)
 
         # 5. Dot Product along K
-        accumulator += tl.sum(a_tile[:, None] * b_tile, axis=0)
+        accumulator += tl.sum(a_tile[:, None] * b_tile, axis=0)  # ty: ignore[invalid-argument-type]
 
         a_ptrs += BLOCK_K * stride_ak
         q_ptrs += (BLOCK_K // 8) * stride_qk
@@ -274,7 +280,7 @@ def w4a16_matmul(
     x: torch.Tensor,
     qweight: torch.Tensor,
     scales: torch.Tensor,
-    out: Optional[torch.Tensor] = None,
+    out: torch.Tensor | None = None,
     group_size: int = 128,
 ) -> torch.Tensor:
     """Executes W4A16 GEMM on RDNA3 with on-the-fly register dequantization.
@@ -289,7 +295,6 @@ def w4a16_matmul(
     Returns:
         (M, N) or (B, M, N) output tensor in bfloat16.
     """
-    orig_shape = x.shape
     if x.dim() == 3:
         B, M_orig, K_orig = x.shape
         x_2d = x.reshape(B * M_orig, K_orig)
@@ -318,7 +323,7 @@ def w4a16_matmul(
     if M <= 4:
         BLOCK_N = 64
         BLOCK_K = 128
-        grid_m = (triton.cdiv(N, BLOCK_N), M)
+        grid_m = (_cdiv(N, BLOCK_N), M)
         _w4a16_gemv_kernel[grid_m](
             x_2d,
             qweight,
@@ -334,15 +339,18 @@ def w4a16_matmul(
             scales.stride(0),
             c_2d.stride(0) if M > 1 else 0,
             c_2d.stride(1),
-            BLOCK_N=BLOCK_N,
-            BLOCK_K=BLOCK_K,
-            GROUP_SIZE=group_size,
-            num_warps=4,
-            num_stages=2,
+            BLOCK_N=BLOCK_N,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
+            BLOCK_K=BLOCK_K,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
+            GROUP_SIZE=group_size,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
+            num_warps=4,  # type: ignore[unknown-argument]  # ty: ignore[unknown-argument]
+            num_stages=2,  # type: ignore[unknown-argument]  # ty: ignore[unknown-argument]
         )
     else:
-        grid = lambda META: (triton.cdiv(M, META["BLOCK_M"]) * triton.cdiv(N, META["BLOCK_N"]),)
-        _w4a16_gemm_kernel[grid](
+
+        def grid_gemm(meta: dict[str, Any]) -> tuple[int]:
+            return (_cdiv(M, meta["BLOCK_M"]) * _cdiv(N, meta["BLOCK_N"]),)
+
+        _w4a16_gemm_kernel[grid_gemm](
             x_2d,
             qweight,
             scales,
@@ -361,7 +369,7 @@ def w4a16_matmul(
         )
 
     if x.dim() == 3 and out is None:
-        return c_2d.reshape(B, M_orig, N)
+        return c_2d.reshape(x.shape[0], x.shape[1], N)
     return c_2d
 
 
@@ -402,8 +410,8 @@ def _fused_w4a16_lora_kernel_raw(
 ):
     """Fused W4A16 Base GEMM + LoRA Accumulation in registers before global write."""
     pid = tl.program_id(axis=0)
-    num_pid_m = tl.cdiv(M, BLOCK_M)
-    num_pid_n = tl.cdiv(N, BLOCK_N)
+    num_pid_m = tl.cdiv(M, BLOCK_M)  # ty: ignore[invalid-argument-type]
+    num_pid_n = tl.cdiv(N, BLOCK_N)  # ty: ignore[invalid-argument-type]
     num_pid_in_group = GROUP_M * num_pid_n
     group_id = pid // num_pid_in_group
     first_pid_m = group_id * GROUP_M
@@ -420,10 +428,10 @@ def _fused_w4a16_lora_kernel_raw(
     a_ptrs = a_ptr + (offs_m[:, None] * stride_am + offs_k[None, :] * stride_ak)
     q_ptrs = q_ptr + (offs_kw[:, None, None] * stride_qk + offs_n[None, None, :] * stride_qn)
 
-    accumulator = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
+    accumulator = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)  # ty: ignore[invalid-argument-type]
 
     # 1. Base W4A16 GEMM accumulation: acc = X @ dequant(W)
-    for k in range(0, tl.cdiv(K, BLOCK_K)):
+    for k in range(0, tl.cdiv(K, BLOCK_K)):  # ty: ignore[invalid-argument-type]
         a = tl.load(a_ptrs, mask=offs_k[None, :] < K - k * BLOCK_K, other=0.0)
 
         q_mask = (offs_kw[:, None, None] < (K - k * BLOCK_K) // 8) & (offs_n[None, None, :] < N)
@@ -446,7 +454,7 @@ def _fused_w4a16_lora_kernel_raw(
     # 2. Dynamic LoRA accumulation in registers: acc += alpha * (lora_mid @ lora_b)
     # Evaluated in chunks of 16 along rank dimension R
     offs_r_chunk = tl.arange(0, 16)
-    for r_start in range(0, tl.cdiv(R, 16)):
+    for r_start in range(0, tl.cdiv(R, 16)):  # ty: ignore[invalid-argument-type]
         offs_r = r_start * 16 + offs_r_chunk
         lm_ptrs = lora_mid_ptr + offs_m[:, None] * stride_lmm + offs_r[None, :] * stride_lmr
         lb_ptrs = lora_b_ptr + offs_r[:, None] * stride_lbr + offs_n[None, :] * stride_lbn
@@ -478,9 +486,9 @@ def fused_w4a16_lora_matmul(
     x: torch.Tensor,
     qweight: torch.Tensor,
     scales: torch.Tensor,
-    lora_a: Optional[torch.Tensor],
-    lora_b: Optional[torch.Tensor],
-    out: Optional[torch.Tensor] = None,
+    lora_a: torch.Tensor | None,
+    lora_b: torch.Tensor | None,
+    out: torch.Tensor | None = None,
     alpha: float = 1.0,
     group_size: int = 128,
 ) -> torch.Tensor:
@@ -491,7 +499,6 @@ def fused_w4a16_lora_matmul(
     if lora_a is None or lora_b is None:
         return w4a16_matmul(x, qweight, scales, out=out, group_size=group_size)
 
-    orig_shape = x.shape
     if x.dim() == 3:
         B, M_orig, K_orig = x.shape
         x_2d = x.reshape(B * M_orig, K_orig)
@@ -518,9 +525,10 @@ def fused_w4a16_lora_matmul(
     else:
         c_2d = torch.empty((M, N), device=x.device, dtype=torch.bfloat16)
 
-    grid = lambda META: (triton.cdiv(M, META["BLOCK_M"]) * triton.cdiv(N, META["BLOCK_N"]),)
+    def grid_lora(meta: dict[str, Any]) -> tuple[int]:
+        return (_cdiv(M, meta["BLOCK_M"]) * _cdiv(N, meta["BLOCK_N"]),)
 
-    _fused_w4a16_lora_kernel[grid](
+    _fused_w4a16_lora_kernel[grid_lora](
         x_2d,
         qweight,
         scales,
@@ -547,7 +555,7 @@ def fused_w4a16_lora_matmul(
     )
 
     if x.dim() == 3 and out is None:
-        return c_2d.reshape(B, M_orig, N)
+        return c_2d.reshape(x.shape[0], x.shape[1], N)
     return c_2d
 
 
@@ -571,8 +579,10 @@ def inspect_kernel_w4a16_isa(
     scales = torch.ones((k // 128, n), device=device, dtype=torch.bfloat16)
     c = torch.empty((m, n), device=device, dtype=torch.bfloat16)
 
-    grid = lambda META: (triton.cdiv(m, META["BLOCK_M"]) * triton.cdiv(n, META["BLOCK_N"]),)
-    compiled = _w4a16_gemm_kernel_raw[grid](
+    def grid_isa(meta: dict[str, Any]) -> tuple[int]:
+        return (_cdiv(m, meta["BLOCK_M"]) * _cdiv(n, meta["BLOCK_N"]),)
+
+    compiled = _w4a16_gemm_kernel_raw[grid_isa](
         a,
         q,
         scales,
@@ -587,13 +597,13 @@ def inspect_kernel_w4a16_isa(
         scales.stride(0),
         c.stride(0),
         c.stride(1),
-        BLOCK_M=64,
-        BLOCK_N=64,
-        BLOCK_K=32,
-        GROUP_M=8,
-        GROUP_SIZE=128,
-        num_warps=4,
-        num_stages=2,
+        BLOCK_M=64,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
+        BLOCK_N=64,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
+        BLOCK_K=32,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
+        GROUP_M=8,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
+        GROUP_SIZE=128,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
+        num_warps=4,  # type: ignore[unknown-argument]  # ty: ignore[unknown-argument]
+        num_stages=2,  # type: ignore[unknown-argument]  # ty: ignore[unknown-argument]
     )
 
     amdgcn_code = ""

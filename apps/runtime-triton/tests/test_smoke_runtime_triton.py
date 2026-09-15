@@ -78,20 +78,35 @@ def test_no_hardcoded_performance_numbers() -> None:
 
 def test_server_does_not_import_monolithic_runtime_engine() -> None:
     """Self-sufficiency invariant: runtime-triton must vendor its own engine,
-    not reach back into apps/runtime for it."""
-    source = SERVER.read_text()
-    assert "from runtime.native_27b_engine" not in source
-    assert "from runtime import" not in source
-    assert "from runtime.canon" not in source
-    assert "runtime_common" in source, "gpu_preflight/canon must still come from runtime-common"
+    not reach back into apps/runtime for it. Checks every vendored .py file,
+    not just server.py -- a lazy `from runtime.X import Y` inside a method
+    body (e.g. native_27b_engine.py's init_syntax_drafter) previously slipped
+    past a server.py-only check undetected."""
+    for py_file in list(SERVER.parent.glob("*.py")) + list((SERVER.parent / "tests").glob("*.py")):
+        if py_file.name == "test_smoke_runtime_triton.py":
+            continue
+        source = py_file.read_text()
+        assert "from runtime.native_27b_engine" not in source, py_file.name
+        assert "from runtime import" not in source, py_file.name
+        assert "from runtime.canon" not in source, py_file.name
+        assert "from runtime." not in source, py_file.name
+    assert "runtime_common" in SERVER.read_text(), "gpu_preflight/canon must still come from runtime-common"
 
 
 def test_engine_deps_are_vendored_locally() -> None:
-    """The 4-file dependency closure of Native27BEngine must be copied into
+    """The dependency closure of Native27BEngine and StateHandoff must be copied into
     this project, not imported from apps/runtime -- that's the whole point of
     self-sufficiency."""
     parent = SERVER.parent
-    for f in ("native_27b_engine.py", "w4a16_loader.py", "triton_w4a16.py", "gguf_unpacker.py"):
+    for f in (
+        "native_27b_engine.py",
+        "w4a16_loader.py",
+        "triton_w4a16.py",
+        "gguf_unpacker.py",
+        "syntax_drafter.py",
+        "adapter_stacker.py",
+        "state_handoff_27b.py",
+    ):
         assert (parent / f).exists(), f"{f} must be vendored locally in runtime-triton"
 
 

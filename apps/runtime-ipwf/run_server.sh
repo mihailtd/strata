@@ -26,10 +26,14 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 export PYTHONUNBUFFERED=1
-export PYTHONPATH="$REPO_ROOT/apps:$REPO_ROOT"
+# No PYTHONPATH hack needed: this is now a fully independent uv project with
+# its own venv (own pyproject.toml, the weight-folding/routing/speculation
+# library vendored locally, only runtime-common pulled in as a path
+# dependency). Running `python server.py` puts the script's own directory on
+# sys.path[0], which is all the flat sibling imports (novel_peft, cuda_graph,
+# etc.) need.
 
 # Defaults
 export PORT="${PORT:-8002}"
@@ -55,5 +59,5 @@ else
 fi
 echo ""
 
-cd "$REPO_ROOT"
-uv run python "$SCRIPT_DIR/server.py"
+cd "$SCRIPT_DIR"
+uv run python server.py

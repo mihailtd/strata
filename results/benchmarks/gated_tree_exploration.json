@@ -1,0 +1,36 @@
+{
+  "device": "AMD Radeon Graphics",
+  "width": 2,
+  "max_depth": 5,
+  "gate_threshold": 3.5,
+  "ungated": {
+    "live_nodes": 62,
+    "forward_passes": 62
+  },
+  "gated": {
+    "live_nodes": 30,
+    "forward_passes": 30,
+    "nodes_pruned": 16
+  },
+  "savings_pct": 51.61290322580645,
+  "correctness": {
+    "skipped": false,
+    "victim_depth": 2,
+    "victim_branch": 0,
+    "victim_seq": [
+      3427,
+      198,
+      4703
+    ],
+    "resumed": [
+      5813,
+      816
+    ],
+    "reference": [
+      5813,
+      816
+    ],
+    "correct": true
+  },
+  "elapsed_seconds": 4.319464921951294
+}

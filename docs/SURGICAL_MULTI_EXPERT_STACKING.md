@@ -14,6 +14,20 @@
 
 ---
 
+> ⚠️ **CORRECTION (2026-09-12):** The LV-GLasso precision-graph numbers throughout this
+> document (`rank(L)=299`, "$99.998\%$ sparsity," "the exact 1 colliding module") were
+> computed from a **fabricated synthetic activation matrix**, not real model activations —
+> see `docs/EXPERIMENT_REAUDIT_2026-09.md` Critical #2 and `docs/DECISIONS.md` §68. A real
+> re-measurement (`experiments/factory/geometry/surgical_notch_sweep/`, real weights, no
+> activations needed) found **96 of 96** MLP weight matrices conflict, not 1 of 512 — real
+> cross-adapter interference is widespread and modest, not sparse and localized. The
+> shipped mechanism (`compute_surgical_notch_masks`, `top_k=15`/`max_conflict_modules=2`)
+> is still real and selective (2.5×–4.3×), just not for the "one true conflict" reason this
+> document describes below. Read the rest of this document as historical narrative, not a
+> current empirical claim.
+
+---
+
 ## 🧭 Executive Summary & Core Discovery
 
 Folding K domain experts into one live weight tensor means computing

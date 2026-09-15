@@ -1,4 +1,19 @@
-"""End-to-End Benchmark: Reactive Morphing vs NOTEARS Predictive Pre-Folding.
+"""Scheduler-logic benchmark: Reactive Morphing vs NOTEARS Predictive Pre-Folding.
+
+Qualification (added 2026-09-13, see docs/EXPERIMENT_REAUDIT_2026-09.md and
+docs/DECISIONS.md §64): what's REAL here is the production
+`NotearsCausalScheduler` (predict_next_expert/async_prefold/fit_from_traces),
+genuinely exercised. What's SIMULATED: the "agent conversation" below
+(`BENCHMARK_PIPELINES`) is hand-scripted text, not a real agent; tool
+execution is `time.sleep(simulated_tool_runtime_ms)`, not a real tool run;
+and VRAM folding is `MockVRAMFoldingEngine.activate()` sleeping a hardcoded
+1.9ms, not a real weight fold (the class name says so honestly, but the
+resulting numbers were previously cited elsewhere as unqualified "Empirical
+Benchmark Results"). This validates the scheduler's prediction/scheduling
+DECISIONS against a plausible scripted trace -- it does not measure real
+agent-session latency. A real DSH-driven re-measurement (real agent, real
+tool calls, real live server, real folding) has not been done; see
+docs/EXPERIMENT_REAUDIT_2026-09.md Category 4.
 
 Theoretical Reference:
 - Regressions in Covariances, Dependencies and Graphs (Pourahmadi & Arabpour), Chapter 10 (§10.1 & §10.3).
@@ -11,7 +26,7 @@ Compares:
    in the background during inter-turn tool execution, achieving 0.0 ms perceived latency on hits.
 
 Usage:
-    uv run --env-file .env python benchmarks/agentic/benchmark_predictive_prefold.py
+    uv run --env-file .env python experiments/agentic/benchmark_predictive_prefold.py
 """
 
 from __future__ import annotations

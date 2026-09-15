@@ -75,7 +75,7 @@ ADAPTERS = {
     "duck": str(adapter_path("duckdb").relative_to(REPO_ROOT)),
     "fin": str(adapter_path("financial").relative_to(REPO_ROOT)),
     # The L_inert adapters (v5 / v5b / v5c) were DELETED. All three failed and the
-    # findings are recorded in CHANGELOG.md and DECISIONS.md §46 -- v5 produced a
+    # findings are recorded in CHANGELOG.md and DECISIONS.md §39 -- v5 produced a
     # uniform 0.843x energy shrink with ASR unchanged at 0.96, v5b learned to
     # silence <pad>, v5c was lost to a host crash. The measurements survive; the
     # weights had no further use. The loader below skips missing paths, so adding

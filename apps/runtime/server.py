@@ -1,4 +1,17 @@
-"""OpenAI-compatible FastAPI server for the in-place weight-folding engine.
+"""LEGACY -- superseded as a server by runtime-triton (27B W4A16, quantized)
+and runtime-ipwf (3B/9B, unquantized). Do not start this as a new server;
+start one of those two instead (see apps/RUNTIME.md).
+
+Kept alive only because a number of not-yet-migrated benchmarks/evals/tests
+still import individual symbols (request/response models, ADAPTER_MAP_27B,
+get_27b_tokenizer, get_native_triton_27b_engine, etc.) directly from this
+module -- migrating those ~20 call sites onto the two independent runtimes is
+tracked as separate follow-up work, not done in this pass. New code should
+depend on runtime-triton or runtime-ipwf, never add a new import of this file.
+
+Original docstring, still accurate for what the code below actually does:
+
+OpenAI-compatible FastAPI server for the in-place weight-folding engine.
 
 Serves local micro-experts via standard OpenAI REST API endpoints (/v1/chat/completions, /v1/models):
 1. Intercepts requested model parameter ("financial_planning", "postgresql", "astral").

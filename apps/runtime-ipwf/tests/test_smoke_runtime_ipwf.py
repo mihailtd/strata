@@ -88,3 +88,62 @@ def test_no_hardcoded_performance_numbers() -> None:
     source = SERVER.read_text()
     suspicious = re.findall(r'["\']\s*\d+\.\d+\s*(tok/s|GB/s)\s*["\']', source)
     assert not suspicious, f"Hardcoded metric strings found: {suspicious} (Zero-Mock invariant)"
+
+
+def test_engine_deps_are_vendored_locally() -> None:
+    """Invariant: all 13 engine and routing modules are vendored locally in apps/runtime-ipwf."""
+    expected_modules = [
+        "bucketed_speculative.py",
+        "cuda_graph.py",
+        "cut_set_router.py",
+        "dynamic_team_router.py",
+        "fused_norm.py",
+        "macd_speculation_circuit_breaker.py",
+        "mtp_draft.py",
+        "notears_causal_scheduler.py",
+        "novel_peft.py",
+        "range_statistic_gate.py",
+        "riemannian_covariance.py",
+        "state_handoff.py",
+        "state_ring_buffer.py",
+        "syntax_drafter.py",
+        "tool_trace.py",
+    ]
+    for mod_name in expected_modules:
+        mod_path = SERVER.parent / mod_name
+        assert mod_path.exists(), f"Expected vendored module {mod_name} is missing from runtime-ipwf"
+
+
+def test_does_not_import_monolithic_runtime_engine() -> None:
+    """Self-sufficiency invariant: runtime-ipwf must vendor its own weight-folding/
+    routing/speculation library, not reach back into apps/runtime for it. Checks
+    every vendored .py file and test file, not just server.py, since a lazy
+    `from runtime.X import Y` inside a method body would otherwise slip past
+    a server.py-only check undetected."""
+    # Check top-level files
+    for py_file in SERVER.parent.glob("*.py"):
+        source = py_file.read_text()
+        assert "from runtime import" not in source, f"Found legacy import in {py_file.name}"
+        assert "from runtime." not in source, f"Found legacy import in {py_file.name}"
+        assert "import runtime." not in source, f"Found legacy import in {py_file.name}"
+
+    # Check test files
+    for py_file in (SERVER.parent / "tests").glob("*.py"):
+        if py_file.name == "test_smoke_runtime_ipwf.py":
+            continue
+        source = py_file.read_text()
+        assert "from runtime import" not in source, f"Found legacy import in {py_file.name}"
+        assert "from runtime." not in source, f"Found legacy import in {py_file.name}"
+        assert "import runtime." not in source, f"Found legacy import in {py_file.name}"
+
+    assert "runtime_common" in SERVER.read_text(), "gpu_preflight/canon must still come from runtime-common"
+
+
+def test_has_own_pyproject() -> None:
+    """runtime-ipwf must be an independently-installable uv project, not
+    reliant on the root pyproject.toml's shared venv."""
+    pyproject = SERVER.parent / "pyproject.toml"
+    assert pyproject.exists(), "runtime-ipwf must have its own pyproject.toml"
+    text = pyproject.read_text()
+    assert 'name = "runtime-ipwf"' in text
+    assert "runtime-common" in text, "must depend on runtime-common for gpu_preflight/canon"

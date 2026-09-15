@@ -1269,13 +1269,22 @@ def compute_surgical_notch_masks(
     top_k: int = 15,
     max_conflict_modules: int = 2,
 ) -> dict[str, torch.Tensor]:
-    """Computes surgical POET channel notch masks for identified multi-expert conflict modules.
+    """Computes surgical POET channel notch masks for the top conflicting multi-expert modules.
 
-    Theoretical Reference: DECISIONS.md §50, §51 & LV-GLasso/POET Chapter 7/9.
+    Theoretical Reference: POET Chapter 7 (channel notching). DECISIONS.md §50/§51 describe
+    an LV-GLasso activation-covariance analysis that was found to be fabricated (see
+    EXPERIMENT_REAUDIT_2026-09.md Critical #2, DECISIONS.md §68) -- do not cite those
+    sections for how this function's hyperparameters were chosen.
 
-    Attention heads and clean MLP modules have S = 0 (100% conditionally orthogonal) and
-    are never masked. For identified or detected conflict modules (e.g. Layer 3 gate_proj),
-    zeros out the top-k conflicting output neurons to suppress localized cross-talk.
+    top_k=15/max_conflict_modules=2 are instead validated by
+    experiments/factory/geometry/surgical_notch_sweep/ (real, current adapters, pure
+    real-weight math): notching at these defaults removes 2.5x-4.3x more cross-adapter
+    crosstalk than in-domain signal (real, positive, but modest). That same probe found
+    conflict scores above the sharpness gate on effectively ALL MLP modules tested (96/96),
+    not a small isolated set -- "attention/clean MLP have S=0" below is the retracted
+    LV-GLasso framing, not what this function actually observes. What ships is a truncation
+    to the `max_conflict_modules` highest-sharpness candidates, not a detector of a small
+    number of genuinely conflict-free modules.
     """
     if len(experts) < 2:
         return {}
@@ -1455,11 +1464,20 @@ class WeightFoldingEngine:
 
     @torch.no_grad()
     def activate(self, expert: FoldableExpert | str) -> None:
-        """W_live = W0 + scaling * (U @ V), one fused addmm per module on backbone and draft head."""
+        """W_live = W0 + scaling * (U @ V), one fused addmm per module on backbone and draft head.
+
+        No-op when `expert` is already active: activate() is deterministic
+        (same expert -> bit-identical W_live), so re-running it wastes a full
+        real fold for zero effect. This is what makes predictive pre-folding
+        (notears_causal_scheduler.async_prefold) actually save time on a hit
+        instead of being silently redone when the turn arrives.
+        """
         if not self.keep_pristine:
             raise RuntimeError("activate() requires keep_pristine=True; use activate_delta() otherwise")
         if isinstance(expert, str):
             expert = self.expert_map[expert]
+        if self.active == expert.name:
+            return
         for key, w in self.slots.items():
             f = expert.factors.get(key)
             w0 = self.pristine[key]

@@ -62,15 +62,28 @@ The activation-space probe explains the exact mechanism behind the 3-way financi
 
 ---
 
-## 4. The Future Target: Realistic Activation Inertia ($\mathcal{L}_{\text{inert}}$)
+## 4. `L_inert`: ALREADY TRIED THREE TIMES — all three failed or were lost
 
-Driving out-of-domain activations to absolute zero ($0.08 \rightarrow 0.00$) is neither possible nor desirable, as adapters must share fundamental English grammar, token semantics, and formatting structures.
+> **Correction (2026-09-13):** this section used to present `L_inert` as unattempted
+> future work ("The Future Target"). It was actually tried three times
+> (adapters `v5`, `v5b`, `v5c`), and none of the three produced a validated ASR gain.
+> See `docs/CHANGELOG.md`'s `v5`/`v5b`/`v5c` entries (the full, authoritative record)
+> and `docs/DECISIONS.md` §39 (the mechanics diagnosis) — flagged as a
+> documentation-staleness item in `docs/EXPERIMENT_REAUDIT_2026-09.md`, not a
+> fabrication: the attempts and their failures were always recorded elsewhere, just
+> never reflected back into this README.
 
-### The Realistic Objective:
-By adding an **Activation Inertia Loss** on general replay tokens:
+Driving out-of-domain activations to absolute zero ($0.08 \rightarrow 0.00$) is neither possible nor desirable, as adapters must share fundamental English grammar, token semantics, and formatting structures. The original objective, for the record:
+
 $$\mathcal{L}_{\text{total}} = \mathcal{L}_{\text{SFT}} + \lambda \sum_{l=1}^L \left\| \left(\frac{\alpha}{r}\right) B_l \cdot A_l \cdot h_l \right\|_2^2$$
 
-We target raising **$\text{ASR}$ from $1.1\times \rightarrow 3.5\times\text{–}5.0\times$**, cutting out-of-domain background energy by **$>75\%$** and locking multi-adapter stability in large composite stacks.
+targeting **ASR $1.1\times \rightarrow 3.5\times$–$5.0\times$**. What actually happened:
+
+1. **`v5`** ($\lambda=0.05$, penalty on in-domain prompt tokens) — **FAILED**. With `completion_only_loss=True` on a single-domain corpus, the penalized tokens were all in-domain, so the adapter had no out-of-domain signal to learn "when to be quiet" from. Result: a uniform **0.843× energy scaling** across every domain (1.4% spread) with **ASR unchanged at 0.96×** — indistinguishable from just lowering $\alpha$, which the stacking benchmark had already shown is dilution, not selectivity.
+2. **`v5b`** ($\lambda=0.05$, penalty on out-of-domain replay) — **FAILED**. Training's own in-loop metric reported ASR 1.073 and rising; the real probe measured 0.965 — unchanged from the pre-`L_inert` baseline. Cause: `padding="max_length"` to 512 tokens meant ~70% of every replay batch was `<pad>`, and the adapter learned to be quiet on padding — free under the loss, useless in practice. Lesson: when a cheap in-loop metric and the real instrument disagree, trust the real instrument.
+3. **`v5c`** ($\lambda=0.5$, pad-masked replay, the padding bug fixed) — **LOST, not disproven**. Killed by a host crash (two concurrent GPU jobs) at ~step 120/300; the log lived in `/tmp` and did not survive the reboot, and `results/adapters/m2_astral_r8a128_v5c/` only has an empty `checkpoints/`. Last reading before loss (flat across 40 steps, never validated by the real probe): `ASR ≈ 1.064`.
+
+All three adapters were deleted. **`L_inert` is not in v6.** The mechanism itself was never shown to be wrong — v5's own math checked out (15.7% movement at 1.4% spread is a penalty doing exactly what it was told), it just wasn't given the chance to learn selectivity. Retrying is legitimate future work, but only with v5c's padding fix carried forward and on a machine not sharing the GPU with another job.
 
 ---
 

@@ -1,8 +1,6 @@
 # Frontier ideas: live validation
 
-Unlike `experiments/frontier/` (pure simulation, no model, no live module — see its own README), this script hits a **live, running** engine server over real HTTP and manages real server processes, to check whether "frontier" ideas actually hold up in a real request/response loop before anyone considers building them for real. Measures real GPU tok/s, TTFT, and Pass@1 accuracy across 3 real engineering challenge prompts, head-to-head against raw Ollama.
-
-Kept as its own subfolder rather than merged into `experiments/frontier/` because it's categorically different — that folder is explicitly "no model in the loop," this one requires a live server.
+Unlike the four "Frontier Inventions" scripts that used to live in `experiments/frontier/` — pure simulation, no model loaded, no torch import, every number a hand-authored literal; retired to [`benchmarks/superseded/frontier_fabricated/`](../../benchmarks/superseded/frontier_fabricated/) as Critical #5 in [`docs/EXPERIMENT_REAUDIT_2026-09.md`](../../docs/EXPERIMENT_REAUDIT_2026-09.md) — this script hits a **live, running** engine server over real HTTP and manages real server processes, to check whether "frontier" ideas actually hold up in a real request/response loop before anyone considers building them for real. Measures real GPU tok/s, TTFT, and Pass@1 accuracy across 3 real engineering challenge prompts, head-to-head against raw Ollama.
 
 ## Run
 

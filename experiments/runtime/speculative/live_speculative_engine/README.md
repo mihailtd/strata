@@ -20,33 +20,30 @@ and `SelectiveHybridPOETRingBuffer` (`apps/runtime/state_ring_buffer.py`), using
 GatedDeltaNet-shaped bf16 tensors (`[1,4,128,128]` × 24 SSM layers) that were never run
 through the actual model.
 
-## ⚠️ Part B is not measuring the live server, and right now it can't be
+## ✅ CORRECTED (2026-09-13): Part B's ring buffer IS wired into the live decoder
 
-`BucketedSpeculativeDecoder` (`apps/runtime/bucketed_speculative.py`) is what
-actually runs the live decode loop, and its `_snapshot_ssm()` / `_restore_ssm()` are
-hardcoded in-place `copy_()` calls inside the captured CUDA graph region:
+This section used to say the ring buffer was not wired into `BucketedSpeculativeDecoder`
+and that `/api/engine/status` reported `ring_buffer_wired: false`. That was accurate
+when written, but the wiring landed the same day and this doc never caught up — a
+stale-documentation bug, not a fabrication (see `docs/EXPERIMENT_REAUDIT_2026-09.md`'s
+"Documentation staleness" note).
 
-```
-grep -n "_snapshot_ssm\|_restore_ssm\|RingBufferReplayEngine\|SelectiveHybridPOET" \
-    apps/runtime/bucketed_speculative.py
-```
+Direct code check today: `apps/runtime/bucketed_speculative.py` imports
+`RingBufferReplayEngine` and instantiates it unconditionally in `capture()`
+(`self.ring_engine = RingBufferReplayEngine(self.cache, max_depth=64, mode=ring_mode)`,
+`ring_mode` from `RING_BUFFER_MODE`), and it is genuinely exercised on the real decode
+path — `reset()`, `checkpoint()`, `commit_on_acceptance()`, and
+`rollback_on_rejection()` are all called at real accept/reject decision points during
+speculative verification, not just constructed and left idle. `server.py` reports
+`ring_buffer_wired=ring_engine is not None` via `/api/engine/status`, which is `True`
+whenever speculative decoding is active.
 
-returns the two `copy_()` sites and nothing else — no reference to
-`RingBufferReplayEngine` or `SelectiveHybridPOETRingBuffer` anywhere in that file.
-`model_state["ring_buffer_mode"]` (`server.py`, set from the `RING_BUFFER_MODE` env
-var) is stored and returned by `GET /api/engine/status`, but **nothing reads it** to
-route the live rollback through the compressed buffer. Selecting a mode currently
-changes a label, not behavior — confirmed 2026-08-20, `/api/engine/status` now
-reports this explicitly as `ring_buffer_wired: false` rather than implying otherwise.
-
-So Part B's **2.4× VRAM / 264µs rollback** numbers are real measurements of the
-`SelectiveHybridPOETRingBuffer` class in isolation (also covered by
-`tests/test_state_ring_buffer.py`), not of what the live server does when a request
-gets rejected mid-draft. Wiring the two together — replacing the graph-capture-region
-`copy_()` calls with calls into the ring buffer without breaking capture, which the
-file's own comments flag as delicate ("any host sync inside capture is illegal") — is
-open work, not done. Do not read this README as claiming the live engine gets the
-2.4× VRAM saving; it does not, yet.
+So Part B's **2.4× VRAM / 264µs rollback** numbers, measured on `SelectiveHybridPOETRingBuffer`
+in isolation, now describe (to first order) what the live decode loop's real rollback
+mechanism actually is — though this README has not re-measured the *live* engine's
+rollback latency end-to-end to confirm the isolated micro-benchmark numbers transfer
+unchanged once real CUDA-graph replay and real speculative traffic are in the loop.
+That end-to-end re-measurement is open work; the wiring itself is not.
 
 ## What IS live: speculative draft depth (K) is now a runtime control, not a restart
 

@@ -9,7 +9,8 @@ Features:
   - Persistent disk cache in `models/qwen3.8-27b-triton/` for instant (<3s) subsequent reloads.
   - Auto-transposition from GGUF (N, K) to Triton GEMV (K, N) where K % 128 == 0.
 
-Vendored into runtime-triton for self-sufficiency -- see native_27b_engine.py's docstring in this same directory for why. Do not re-link to apps/runtime.
+Vendored into runtime-triton for self-sufficiency -- see native_27b_engine.py's docstring
+in this same directory for why. Do not re-link to apps/runtime.
 """
 
 from __future__ import annotations
@@ -179,10 +180,7 @@ class GGUFStreamingUnpacker:
             return False
         if not (self.cache_dir / "globals.pt").exists():
             return False
-        for i in range(num_layers):
-            if not (self.cache_dir / f"layer_{i}.pt").exists():
-                return False
-        return True
+        return all((self.cache_dir / f"layer_{i}.pt").exists() for i in range(num_layers))
 
     def convert_and_cache_all(
         self,
@@ -227,7 +225,8 @@ class GGUFStreamingUnpacker:
 
         total_elapsed = time.perf_counter() - t0
         print(
-            f"[GGUF Unpacker] Finished converting {num_layers} layers in {total_elapsed:.1f}s ({total_elapsed / 60:.2f} min)."
+            f"[GGUF Unpacker] Finished converting {num_layers} layers in "
+            f"{total_elapsed:.1f}s ({total_elapsed / 60:.2f} min)."
         )
 
     def load_layer(self, layer_idx: int, device: str = "cuda:0") -> dict[str, Any]:

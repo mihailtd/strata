@@ -14,14 +14,34 @@
   ],
   "extraPaths": [
     ".",
-    "apps"
+    "apps",
+    "apps/runtime-ipwf",
+    "apps/runtime-triton",
+    "apps/runtime-common/src"
   ],
   "executionEnvironments": [
+    {
+      "root": "apps/runtime-ipwf",
+      "extraPaths": [
+        "apps/runtime-ipwf",
+        "apps/runtime-common/src"
+      ]
+    },
+    {
+      "root": "apps/runtime-triton",
+      "extraPaths": [
+        "apps/runtime-triton",
+        "apps/runtime-common/src"
+      ]
+    },
     {
       "root": ".",
       "extraPaths": [
         ".",
-        "apps"
+        "apps",
+        "apps/runtime-ipwf",
+        "apps/runtime-triton",
+        "apps/runtime-common/src"
       ]
     }
   ]

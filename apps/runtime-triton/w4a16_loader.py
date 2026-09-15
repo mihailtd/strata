@@ -5,7 +5,8 @@ Replaces standard nn.Linear layers with W4A16Linear modules that execute:
   2. Fused Dynamic LoRA: in-register low-rank accumulation (Out = X @ dequant(W) + alpha * (X @ A) @ B).
   3. Layer-by-layer streamed loading & quantization to prevent host/GPU memory spikes.
 
-Vendored into runtime-triton for self-sufficiency -- see native_27b_engine.py's docstring in this same directory for why. Do not re-link to apps/runtime.
+Vendored into runtime-triton for self-sufficiency -- see native_27b_engine.py's
+docstring in this same directory for why. Do not re-link to apps/runtime.
 """
 
 from __future__ import annotations
@@ -50,7 +51,7 @@ class W4A16Linear(nn.Module):
         out_features: int,
         bias: bool = False,
         group_size: int = 128,
-        device: torch.device | None = None,
+        device: torch.device | str | None = None,
     ):
         super().__init__()
         self.in_features = in_features
@@ -62,23 +63,25 @@ class W4A16Linear(nn.Module):
             f"in_features ({in_features}) must be divisible by group_size ({group_size})"
         )
 
+        dev = torch.device(device) if isinstance(device, str) else device
+
         # Packed INT4 weights: (K // 8, N) in int32
         k_words = in_features // 8
         n_groups = in_features // group_size
 
         self.register_buffer(
             "qweight",
-            torch.zeros((k_words, out_features), dtype=torch.int32, device=device),
+            torch.zeros((k_words, out_features), dtype=torch.int32, device=dev),
         )
         self.register_buffer(
             "scales",
-            torch.ones((n_groups, out_features), dtype=torch.bfloat16, device=device),
+            torch.ones((n_groups, out_features), dtype=torch.bfloat16, device=dev),
         )
 
         if bias:
             self.register_buffer(
                 "bias",
-                torch.zeros((out_features,), dtype=torch.bfloat16, device=device),
+                torch.zeros((out_features,), dtype=torch.bfloat16, device=dev),
             )
         else:
             self.bias = None
@@ -93,12 +96,13 @@ class W4A16Linear(nn.Module):
         cls,
         linear: nn.Linear,
         group_size: int = 128,
-        device: torch.device | None = None,
+        device: torch.device | str | None = None,
     ) -> W4A16Linear:
         """Quantizes an existing unquantized nn.Linear into a W4A16Linear module."""
+        dev = torch.device(device) if isinstance(device, str) else device
         w = linear.weight.detach().to(dtype=torch.bfloat16)
-        if device is not None:
-            w = w.to(device)
+        if dev is not None:
+            w = w.to(dev)
 
         # Transpose to (K, N) where K=in_features, N=out_features
         w_kn = w.t().contiguous()
@@ -109,12 +113,12 @@ class W4A16Linear(nn.Module):
             out_features=linear.out_features,
             bias=linear.bias is not None,
             group_size=group_size,
-            device=device or w.device,
+            device=dev or w.device,
         )
         mod.qweight.copy_(qw)
         mod.scales.copy_(scales)
         if linear.bias is not None and mod.bias is not None:
-            mod.bias.copy_(linear.bias.detach().to(dtype=torch.bfloat16, device=device or w.device))
+            mod.bias.copy_(linear.bias.detach().to(dtype=torch.bfloat16, device=dev or w.device))
 
         return mod
 
@@ -125,12 +129,13 @@ class W4A16Linear(nn.Module):
         scales: torch.Tensor,
         bias: torch.Tensor | None = None,
         group_size: int = 128,
-        device: torch.device | None = None,
+        device: torch.device | str | None = None,
     ) -> W4A16Linear:
         """Instantiates W4A16Linear directly from pre-quantized qweight and scales."""
         k_words, out_features = qweight.shape
         in_features = k_words * 8
-        target_device = device or (torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu"))
+        dev = torch.device(device) if isinstance(device, str) else device
+        target_device = dev or (torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu"))
         mod = cls(
             in_features=in_features,
             out_features=out_features,

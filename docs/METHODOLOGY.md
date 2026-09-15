@@ -39,7 +39,7 @@ The dividing line between a **benchmark** and an **eval** (the blurriest one in 
 `tests/` no longer holds a monolithic flat suite. Every test lives next to what it tests:
 
 - Tests exercising one specific `apps/<project>` module live in `apps/<project>/tests/`.
-- Tests pinning a benchmark or experiment probe's correctness live right next to that probe (e.g. `experiments/factory/geometry/latent_variable_glasso/test_latent_variable_glasso.py`), not in a separate tree.
+- Tests pinning a benchmark or experiment probe's correctness live right next to that probe (e.g. `experiments/factory/geometry/poet_decomposition/test_poet_decomposition.py`), not in a separate tree.
 - Repo-wide tooling that isn't owned by one app (e.g. the audit scripts in `audit/`) gets its own `tests/` alongside that tooling.
 
 If you're writing a test and asking "does this go in root `tests/`?" — the answer is no; find what the test actually exercises and put it there instead. See `tests/README.md`.

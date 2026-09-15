@@ -18,10 +18,10 @@ This is a Moon-orchestrated monorepo: `apps/*` are independently-managed project
 
 | Project | Role | Port | README |
 | :--- | :--- | :--- | :--- |
-| [`apps/runtime`](apps/runtime/) | Original engine + shared 4B/9B module library | 8000 | [README](apps/runtime/README.md) |
+| [`apps/runtime`](apps/runtime/) | **LEGACY** — original dual-purpose engine, now a shared module library only | 8000 | [README](apps/runtime/README.md) |
 | [`apps/runtime-common`](apps/runtime-common/) | Shared canon + GPU-exclusivity guard, no server | n/a | [README](apps/runtime-common/README.md) |
-| [`apps/runtime-triton`](apps/runtime-triton/) | Self-sufficient rewrite of the 27B W4A16 engine | 8000 | [README](apps/runtime-triton/README.md) |
-| [`apps/runtime-ipwf`](apps/runtime-ipwf/) | In-place weight-folding engine, 3B/9B models | 8002 | [README](apps/runtime-ipwf/README.md) |
+| [`apps/runtime-triton`](apps/runtime-triton/) | Self-sufficient 27B W4A16 engine (quantized) | 8000 | [README](apps/runtime-triton/README.md) |
+| [`apps/runtime-ipwf`](apps/runtime-ipwf/) | Self-sufficient in-place weight-folding engine, 3B/9B models (unquantized) | 8002 | [README](apps/runtime-ipwf/README.md) |
 | [`apps/runtime-llama`](apps/runtime-llama/) | Upstream `llama.cpp` baseline (HIP build) | 8001 | [README](apps/runtime-llama/README.md) |
 | [`apps/runtime-ollama`](apps/runtime-ollama/) | Upstream `ollama` baseline | 11434 | [README](apps/runtime-ollama/README.md) |
 | [`apps/runtime-vllm`](apps/runtime-vllm/) | Upstream `vllm` baseline (ROCm) | 8004 | [README](apps/runtime-vllm/README.md) |
@@ -68,12 +68,13 @@ Never run two of these against the GPU at once — see [apps/RUNTIME.md](apps/RU
 
 ```bash
 uv sync   # from repo root
-uv run --env-file .env python apps/runtime/run_server.py --host 127.0.0.1 --port 8000
 ```
 
-- **API docs**: `http://localhost:8000/docs`
-- **Health check**: `http://localhost:8000/health`
-- **Chat endpoint**: `http://localhost:8000/v1/chat/completions`
+To actually serve a model, use one of the two independent runtimes below
+(`runtime-triton` for 27B W4A16, `runtime-ipwf` for 3B/9B) — `apps/runtime`
+itself is legacy and its `server.py` should not be started for new work; it's
+kept only as a shared module library some benchmarks/evals/tests still import
+from directly. See [`apps/RUNTIME.md`](apps/RUNTIME.md).
 
 ### 2. The dashboard
 
@@ -93,7 +94,8 @@ pnpm dev --port 3000
 
 ```bash
 cd apps/factory && uv sync          # training pipeline (unsloth, older torch pin)
-cd apps/runtime-triton && uv sync   # self-sufficient 27B engine
+cd apps/runtime-triton && uv sync   # self-sufficient 27B engine (quantized)
+cd apps/runtime-ipwf && uv sync     # self-sufficient 3B/9B engine (unquantized)
 cd apps/runtime-vllm && uv sync     # vLLM baseline (different ROCm wheel set)
 cd apps/runtime-common && uv sync   # shared canon lib (no torch at all)
 ```
@@ -197,7 +199,7 @@ Full detail, methodology, and every retraction in [`docs/MEASURED_FINDINGS.md`](
 | [`docs/CHANGELOG.md`](docs/CHANGELOG.md) | What changed between adapter versions, and what the measurement said afterward |
 | [`docs/SYSTEM.md`](docs/SYSTEM.md) | Host/ROCm/toolchain environment snapshot |
 | [`docs/AMD_SPECIFFIC.md`](docs/AMD_SPECIFFIC.md) | RDNA3 hardware characteristics mainstream frameworks miss |
-| [`docs/TODO.md`](docs/TODO.md) | Active engineering backlog |
+| [`TODO.md`](TODO.md) | Active engineering backlog |
 | [`docs/HARNESS_COORDINATOR_AND_LORA_SUBAGENTS.md`](docs/HARNESS_COORDINATOR_AND_LORA_SUBAGENTS.md) | The multi-subagent coordinator design (`apps/harness/coordinator/`) |
 | [`docs/WHITE_PAPER_THE_CHICKEN_AND_EGG_RUNTIME_PARADOX.md`](docs/WHITE_PAPER_THE_CHICKEN_AND_EGG_RUNTIME_PARADOX.md) | Whitepaper |
 | [`docs/WHITE_PAPER_WEIGHT_ADAPTATION_VS_PROMPT_ENGINEERING.md`](docs/WHITE_PAPER_WEIGHT_ADAPTATION_VS_PROMPT_ENGINEERING.md) | Whitepaper (includes a retraction — see its §3) |

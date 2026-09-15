@@ -1,0 +1,122 @@
+{
+  "model": "Qwen/Qwen3.5-4B",
+  "domains": [
+    "astral",
+    "postgresql",
+    "duckdb",
+    "financial"
+  ],
+  "n_common_modules": 128,
+  "n_features_p": 512,
+  "n_real_token_samples": 451,
+  "admm_info": {
+    "iterations": 78,
+    "converged": true,
+    "final_residual": 9.754419096032686e-05,
+    "rank_L": 282,
+    "sparsity_S": 0.999847412109375
+  },
+  "n_nonzero_edges": 20,
+  "top_edges": [
+    {
+      "a": "astral::model.layers.27.self_attn.o_proj",
+      "b": "financial::model.layers.27.self_attn.o_proj",
+      "S": -1.9923795967083888
+    },
+    {
+      "a": "astral::model.layers.26.mlp.down_proj",
+      "b": "postgresql::model.layers.26.mlp.down_proj",
+      "S": -1.8426453263488598
+    },
+    {
+      "a": "astral::model.layers.3.self_attn.k_proj",
+      "b": "astral::model.layers.5.mlp.down_proj",
+      "S": -1.5147471133372592
+    },
+    {
+      "a": "astral::model.layers.7.mlp.down_proj",
+      "b": "astral::model.layers.8.mlp.down_proj",
+      "S": -0.8648963876383704
+    },
+    {
+      "a": "postgresql::model.layers.7.self_attn.o_proj",
+      "b": "duckdb::model.layers.7.self_attn.o_proj",
+      "S": -0.853885701772778
+    },
+    {
+      "a": "duckdb::model.layers.19.self_attn.o_proj",
+      "b": "financial::model.layers.19.self_attn.o_proj",
+      "S": -0.7511878624097177
+    },
+    {
+      "a": "postgresql::model.layers.11.self_attn.o_proj",
+      "b": "duckdb::model.layers.11.self_attn.o_proj",
+      "S": -0.7505350935065123
+    },
+    {
+      "a": "postgresql::model.layers.3.self_attn.o_proj",
+      "b": "financial::model.layers.3.self_attn.o_proj",
+      "S": -0.7390566524607378
+    },
+    {
+      "a": "financial::model.layers.28.mlp.gate_proj",
+      "b": "financial::model.layers.31.mlp.gate_proj",
+      "S": -0.6823458877801795
+    },
+    {
+      "a": "duckdb::model.layers.3.self_attn.o_proj",
+      "b": "financial::model.layers.3.self_attn.o_proj",
+      "S": -0.5672084068286544
+    },
+    {
+      "a": "postgresql::model.layers.2.mlp.down_proj",
+      "b": "postgresql::model.layers.5.mlp.down_proj",
+      "S": -0.5068715805671727
+    },
+    {
+      "a": "duckdb::model.layers.15.mlp.gate_proj",
+      "b": "financial::model.layers.21.mlp.up_proj",
+      "S": 0.3377095435819289
+    },
+    {
+      "a": "astral::model.layers.19.self_attn.o_proj",
+      "b": "financial::model.layers.19.self_attn.o_proj",
+      "S": -0.3234561706888976
+    },
+    {
+      "a": "financial::model.layers.12.mlp.gate_proj",
+      "b": "financial::model.layers.16.mlp.up_proj",
+      "S": -0.22433238658894078
+    },
+    {
+      "a": "duckdb::model.layers.3.mlp.gate_proj",
+      "b": "astral::model.layers.4.mlp.gate_proj",
+      "S": -0.10815493997758752
+    },
+    {
+      "a": "financial::model.layers.25.mlp.down_proj",
+      "b": "financial::model.layers.28.mlp.gate_proj",
+      "S": -0.047346243257289054
+    },
+    {
+      "a": "astral::model.layers.3.self_attn.o_proj",
+      "b": "duckdb::model.layers.4.mlp.down_proj",
+      "S": -0.030854754426262693
+    },
+    {
+      "a": "astral::model.layers.6.mlp.down_proj",
+      "b": "duckdb::model.layers.6.mlp.down_proj",
+      "S": -0.023130557022882924
+    },
+    {
+      "a": "financial::model.layers.8.mlp.down_proj",
+      "b": "financial::model.layers.9.mlp.down_proj",
+      "S": -0.011667973128312732
+    },
+    {
+      "a": "postgresql::model.layers.16.mlp.gate_proj",
+      "b": "financial::model.layers.18.mlp.up_proj",
+      "S": -0.009021102354271544
+    }
+  ]
+}

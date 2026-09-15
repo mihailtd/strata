@@ -2,23 +2,38 @@ $schema: 'https://moonrepo.dev/schemas/project.json'
 language: 'python'
 layer: 'application'
 stack: 'backend'
-tags: ['python', 'runtime-engine', 'shared-root-venv']
+tags: ['python', 'runtime-engine', 'independent-venv']
 
-# Stage 1 state: no manifest of its own yet -- relies on the root
-# pyproject.toml/.venv (it imports apps/runtime's cuda_graph, fused_norm,
-# novel_peft, range_statistic_gate, none of which are self-sufficiency
-# targets right now). Gets its own pyproject.toml in Stage 3.
+# Self-sufficient as of Stage 2: own pyproject.toml/uv.lock/.venv, vendors its
+# own copy of the weight-folding/routing/speculation library (novel_peft,
+# cuda_graph, fused_norm, range_statistic_gate, dynamic_team_router,
+# notears_causal_scheduler, riemannian_covariance, bucketed_speculative,
+# mtp_draft, state_ring_buffer, macd_speculation_circuit_breaker, tool_trace),
+# and depends only on runtime-common (path dependency) for gpu_preflight/canon.
+# Does NOT import from apps/runtime.
 dependsOn:
-  - 'runtime'
   - 'runtime-common'
 
 tasks:
+  sync:
+    command: 'uv sync'
+    inputs: ['pyproject.toml']
+    outputs: ['.venv']
   test:
-    command: 'uv run pytest tests -q'
+    command: 'uv run pytest tests -v'
+    deps: ['sync']
+    inputs: ['*.py', 'tests/**/*']
   lint:
     command: 'uv run ruff check .'
+    deps: ['sync']
   format:
     command: 'uv run ruff format .'
+    deps: ['sync']
+  update-deps:
+    command: 'uv lock --upgrade'
+    inputs: ['pyproject.toml']
+    outputs: ['uv.lock']
   serve:
     command: './run_server.sh'
+    deps: ['sync']
     preset: 'server'

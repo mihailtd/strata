@@ -69,8 +69,8 @@ def test_w4a16_27b_geometry_forward():
 
     # Attention forward
     q = q_proj(x)
-    k = k_proj(x)
-    v = v_proj(x)
+    _ = k_proj(x)
+    _ = v_proj(x)
     attn_out = o_proj(q)
     assert attn_out.shape == (1, D)
 

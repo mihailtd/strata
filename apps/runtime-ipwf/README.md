@@ -45,11 +45,13 @@ DEFAULT_MODEL_ID=Qwen/Qwen3.5-9B AUTO_LOAD_MODEL=1 ./apps/runtime-ipwf/run_serve
 SPECULATIVE_DECODE=0 ./apps/runtime-ipwf/run_server.sh
 ```
 
-Or directly via Python:
+Or directly via Python (this is a self-sufficient, independently-installable
+uv project — no repo-wide PYTHONPATH needed):
 
 ```bash
-cd /path/to/gnn-experiment
-PYTHONPATH=src uv run python -m src.runtime_ipwf.server
+cd apps/runtime-ipwf
+uv sync
+uv run python server.py
 ```
 
 ### Engine Load / Unload
@@ -185,16 +187,27 @@ AUTO_LOAD_MODEL=1 ./apps/runtime-triton/run_server.sh
 
 ## Module Dependencies
 
-All engine modules live in `apps/runtime/` (the shared package):
+Self-sufficient: this project vendors its own copy of every module it needs,
+alongside `server.py` in this directory — it does **not** import from
+`apps/runtime` (see the `test_does_not_import_monolithic_runtime_engine`
+invariant test). Only `gpu_preflight`/`canon` come from `runtime-common`,
+pulled in as a `uv` path dependency (see `pyproject.toml`).
 
-- `runtime.novel_peft` — `FoldableExpert`, `WeightFoldingEngine`, `set_hard_vram_cap`
-- `runtime.cuda_graph` — `FoldedCudaGraphDecoder` (pre-captured HIP graph)
-- `runtime.fused_norm` — FlashNorm: `inject_exact_rmsnorm`, `fold_rmsnorm_into_linear`, `scale_expert_factors_for_folded_norms`
-- `runtime.dynamic_team_router` — `RiemannianTeamRouter` (geodesic multi-expert activation)
-- `runtime.notears_causal_scheduler` — `NotearsCausalScheduler` (NOTEARS-DAG predictive pre-folding)
-- `runtime.bucketed_speculative` — `BucketedSpeculativeDecoder` (optional)
-- `runtime.mtp_draft` — `Qwen35MTPDraftHead` (MTP speculative draft head)
-- `runtime.range_statistic_gate` — `RangeStatisticGate` (speculative early-exit)
-- `runtime.adapter_stacker` — Multi-adapter stacking utilities
-- `runtime.gpu_preflight` — VRAM exclusivity + sysfs telemetry
-- `runtime.canon` — Canonical paths, KV-cache validation, attention config
+- `novel_peft` — `FoldableExpert`, `WeightFoldingEngine`, `set_hard_vram_cap`
+- `cuda_graph` — `FoldedCudaGraphDecoder` (pre-captured HIP graph)
+- `fused_norm` — FlashNorm: `inject_exact_rmsnorm`, `fold_rmsnorm_into_linear`, `scale_expert_factors_for_folded_norms`
+- `dynamic_team_router` — `RiemannianTeamRouter` (geodesic multi-expert activation)
+- `notears_causal_scheduler` — `NotearsCausalScheduler` (NOTEARS-DAG predictive pre-folding)
+- `riemannian_covariance` — subspace geometry primitives used by both routers above
+- `bucketed_speculative` — `BucketedSpeculativeDecoder` (optional)
+- `mtp_draft` — `Qwen35MTPDraftHead` (MTP speculative draft head)
+- `state_ring_buffer` — `RingBufferReplayEngine` used by the speculative decoder
+- `macd_speculation_circuit_breaker` — trips speculative decode off/on based on acceptance rate
+- `tool_trace` — tool-call pattern table consumed by the causal scheduler
+- `range_statistic_gate` — `RangeStatisticGate` (speculative early-exit)
+- `runtime_common.gpu_preflight` — VRAM exclusivity + sysfs telemetry
+- `runtime_common.canon` — Canonical paths, KV-cache validation, attention config
+
+Note: multi-adapter *stacking* utilities (`adapter_stacker`) are not used by
+this engine's request path — that lives in `runtime-triton` instead, which
+vendors its own copy.

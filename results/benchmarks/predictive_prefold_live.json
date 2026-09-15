@@ -1,0 +1,222 @@
+{
+  "run_id": "20260913T172819",
+  "base_url": "http://127.0.0.1:8002",
+  "arms": {
+    "A": {
+      "arm": "A_reactive_only",
+      "prefold_enabled": false,
+      "steps": [
+        {
+          "step": 0,
+          "domain": "astral",
+          "wall_s": 8.96,
+          "response_chars": 776,
+          "real_swap_ms": 1.0,
+          "real_swap_count": 1,
+          "scheduler_telemetry_after": {
+            "prefold_triggers": 0,
+            "prefold_hits": 0,
+            "prefold_misses": 0,
+            "prefold_saved_ms": 0.0,
+            "wasted_morph_ms": 0.0,
+            "last_prediction": null,
+            "last_confidence": 0.0,
+            "last_prefold_elapsed_ms": null
+          }
+        },
+        {
+          "step": 1,
+          "domain": "postgresql",
+          "wall_s": 8.91,
+          "response_chars": 701,
+          "real_swap_ms": 1.002,
+          "real_swap_count": 1,
+          "scheduler_telemetry_after": {
+            "prefold_triggers": 0,
+            "prefold_hits": 0,
+            "prefold_misses": 0,
+            "prefold_saved_ms": 0.0,
+            "wasted_morph_ms": 0.0,
+            "last_prediction": null,
+            "last_confidence": 0.0,
+            "last_prefold_elapsed_ms": null
+          }
+        },
+        {
+          "step": 2,
+          "domain": "duckdb",
+          "wall_s": 8.91,
+          "response_chars": 888,
+          "real_swap_ms": 1.017,
+          "real_swap_count": 1,
+          "scheduler_telemetry_after": {
+            "prefold_triggers": 0,
+            "prefold_hits": 0,
+            "prefold_misses": 0,
+            "prefold_saved_ms": 0.0,
+            "wasted_morph_ms": 0.0,
+            "last_prediction": null,
+            "last_confidence": 0.0,
+            "last_prefold_elapsed_ms": null
+          }
+        },
+        {
+          "step": 3,
+          "domain": "python_web",
+          "wall_s": 8.89,
+          "response_chars": 800,
+          "real_swap_ms": 1.004,
+          "real_swap_count": 1,
+          "scheduler_telemetry_after": {
+            "prefold_triggers": 0,
+            "prefold_hits": 0,
+            "prefold_misses": 0,
+            "prefold_saved_ms": 0.0,
+            "wasted_morph_ms": 0.0,
+            "last_prediction": null,
+            "last_confidence": 0.0,
+            "last_prefold_elapsed_ms": null
+          }
+        },
+        {
+          "step": 4,
+          "domain": "python_modern",
+          "wall_s": 8.91,
+          "response_chars": 818,
+          "real_swap_ms": 1.015,
+          "real_swap_count": 1,
+          "scheduler_telemetry_after": {
+            "prefold_triggers": 0,
+            "prefold_hits": 0,
+            "prefold_misses": 0,
+            "prefold_saved_ms": 0.0,
+            "wasted_morph_ms": 0.0,
+            "last_prediction": null,
+            "last_confidence": 0.0,
+            "last_prefold_elapsed_ms": null
+          }
+        }
+      ],
+      "total_real_swap_ms": 5.038,
+      "total_real_swap_count": 5,
+      "final_scheduler_telemetry": {
+        "prefold_triggers": 0,
+        "prefold_hits": 0,
+        "prefold_misses": 0,
+        "prefold_saved_ms": 0.0,
+        "wasted_morph_ms": 0.0,
+        "last_prediction": null,
+        "last_confidence": 0.0,
+        "last_prefold_elapsed_ms": null
+      }
+    },
+    "B": {
+      "arm": "B_notears_prefold",
+      "prefold_enabled": true,
+      "steps": [
+        {
+          "step": 0,
+          "domain": "astral",
+          "wall_s": 8.92,
+          "response_chars": 776,
+          "real_swap_ms": 0.997,
+          "real_swap_count": 1,
+          "scheduler_telemetry_after": {
+            "prefold_triggers": 0,
+            "prefold_hits": 0,
+            "prefold_misses": 0,
+            "prefold_saved_ms": 0.0,
+            "wasted_morph_ms": 0.0,
+            "last_prediction": "astral",
+            "last_confidence": 0.348,
+            "last_prefold_elapsed_ms": null
+          }
+        },
+        {
+          "step": 1,
+          "domain": "postgresql",
+          "wall_s": 8.91,
+          "response_chars": 701,
+          "real_swap_ms": 1.0,
+          "real_swap_count": 1,
+          "scheduler_telemetry_after": {
+            "prefold_triggers": 1,
+            "prefold_hits": 0,
+            "prefold_misses": 1,
+            "prefold_saved_ms": 0.0,
+            "wasted_morph_ms": 1.0003300003518234,
+            "last_prediction": "duckdb",
+            "last_confidence": 0.795,
+            "last_prefold_elapsed_ms": 1.64
+          }
+        },
+        {
+          "step": 2,
+          "domain": "duckdb",
+          "wall_s": 8.89,
+          "response_chars": 888,
+          "real_swap_ms": 0.0,
+          "real_swap_count": 0,
+          "scheduler_telemetry_after": {
+            "prefold_triggers": 1,
+            "prefold_hits": 1,
+            "prefold_misses": 1,
+            "prefold_saved_ms": 0.0,
+            "wasted_morph_ms": 1.0003300003518234,
+            "last_prediction": "postgresql",
+            "last_confidence": 0.5,
+            "last_prefold_elapsed_ms": 1.64
+          }
+        },
+        {
+          "step": 3,
+          "domain": "python_web",
+          "wall_s": 8.89,
+          "response_chars": 800,
+          "real_swap_ms": 1.009,
+          "real_swap_count": 1,
+          "scheduler_telemetry_after": {
+            "prefold_triggers": 1,
+            "prefold_hits": 1,
+            "prefold_misses": 2,
+            "prefold_saved_ms": 0.0,
+            "wasted_morph_ms": 2.009255000302801,
+            "last_prediction": "python_modern",
+            "last_confidence": 0.652,
+            "last_prefold_elapsed_ms": 1.64
+          }
+        },
+        {
+          "step": 4,
+          "domain": "python_modern",
+          "wall_s": 8.91,
+          "response_chars": 818,
+          "real_swap_ms": 1.012,
+          "real_swap_count": 1,
+          "scheduler_telemetry_after": {
+            "prefold_triggers": 1,
+            "prefold_hits": 2,
+            "prefold_misses": 2,
+            "prefold_saved_ms": 1.012341000205197,
+            "wasted_morph_ms": 2.009255000302801,
+            "last_prediction": "python_modern",
+            "last_confidence": 0.696,
+            "last_prefold_elapsed_ms": 1.64
+          }
+        }
+      ],
+      "total_real_swap_ms": 4.018,
+      "total_real_swap_count": 4,
+      "final_scheduler_telemetry": {
+        "prefold_triggers": 1,
+        "prefold_hits": 2,
+        "prefold_misses": 2,
+        "prefold_saved_ms": 1.012341000205197,
+        "wasted_morph_ms": 2.009255000302801,
+        "last_prediction": "python_modern",
+        "last_confidence": 0.696,
+        "last_prefold_elapsed_ms": 1.64
+      }
+    }
+  }
+}

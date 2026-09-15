@@ -8,10 +8,10 @@ switch.
 
 | Project | Role | Port | Own venv? |
 | :--- | :--- | :--- | :--- |
-| [`runtime`](runtime/) | Original/current 27B + 3B/9B engine and shared module library | 8000 | No — root `pyproject.toml` |
+| [`runtime`](runtime/) | **LEGACY** — original dual-purpose 27B + 3B/9B server, superseded as a server; still a shared module library some benchmarks/evals import | 8000 | No — root `pyproject.toml` |
 | [`runtime-common`](runtime-common/) | Shared canon + GPU-exclusivity library, no server of its own | n/a | Yes (no torch dep) |
-| [`runtime-triton`](runtime-triton/) | Self-sufficient rewrite of the 27B W4A16 engine | 8000 | Yes |
-| [`runtime-ipwf`](runtime-ipwf/) | In-place weight-folding engine for 3B/9B models | 8002 | No — shares root venv (Stage 3 pending) |
+| [`runtime-triton`](runtime-triton/) | Self-sufficient 27B W4A16 engine (quantized) — successor to `runtime`'s 27B path | 8000 | Yes |
+| [`runtime-ipwf`](runtime-ipwf/) | Self-sufficient in-place weight-folding engine for 3B/9B models (unquantized) — successor to `runtime`'s 4B/9B path | 8002 | Yes |
 | [`runtime-llama`](runtime-llama/) | Upstream `llama.cpp` baseline (HIP build) | 8001 | No — shell wrapper only |
 | [`runtime-ollama`](runtime-ollama/) | Upstream `ollama` baseline | 11434 | No — shell wrapper only |
 | [`runtime-vllm`](runtime-vllm/) | Upstream `vllm` baseline (ROCm) | 8004 | Yes |
@@ -27,40 +27,49 @@ telemetry/chat UI).
 
 ## The engines we built (this repo's own code)
 
-### `runtime` — the original engine and shared library
+### `runtime` — LEGACY: the original dual-purpose server, now a shared library only
 This is the root Python project (`name = "runtime"` in the root
 `pyproject.toml`, `module-root = "apps"`) — it predates the Moon
-restructuring and hasn't been split into its own independent project yet
-(tracked as "Stage 3/4" work). It plays two roles at once:
+restructuring. Both engines it used to be the only implementation of now have
+self-sufficient successors: `runtime-triton` (27B W4A16, quantized) and
+`runtime-ipwf` (3B/9B, unquantized). **Do not start `apps/runtime/server.py`
+for new work** — start one of those two instead. `apps/runtime/server.py`
+carries a deprecation banner to this effect.
 
-1. **A FastAPI server** (`apps/runtime/server.py`, port 8000) implementing
-   in-place weight folding (`W_live = W0 + s·U@V`), CUDA/HIP Graph decode, and
-   the domain-expert LoRA/MoA machinery — originally the only engine in the
-   repo.
-2. **A shared module library** (`novel_peft.py`, `mtp_draft.py`,
-   `w4a16_loader.py`, `training_db.py`, `micro_probe/`, `eval/eval_suite.py`,
-   `utils/logger.py`, `datagen/`, …) that `runtime-ipwf` and `apps/factory`
-   still import directly (via `sys.path` bootstrap for `factory`, since it
-   can't take a package dependency without dragging in the root project's
-   `torch>=2.13.0`/`vllm` graph).
+It still plays one real role:
 
-As the other engines below absorb its serving responsibilities into
-self-sufficient projects, `apps/runtime`'s job should shrink toward just (2).
+**A shared module library** (`novel_peft.py`, `mtp_draft.py`,
+`w4a16_loader.py`, `training_db.py`, `micro_probe/`, `eval/eval_suite.py`,
+`utils/logger.py`, `datagen/`, …) that `apps/factory` still imports directly
+(via a `sys.path` bootstrap, since it can't take a package dependency without
+dragging in the root project's `torch>=2.13.0`/`vllm` graph), and that ~20
+not-yet-migrated benchmarks/evals/tests still import symbols from directly
+(request/response models, `ADAPTER_MAP_27B`, `get_27b_tokenizer`,
+`get_native_triton_27b_engine`, etc.) — migrating those call sites onto
+`runtime-triton`/`runtime-ipwf` is tracked as separate follow-up work, not
+done as part of the runtime split. `runtime-ipwf` no longer imports from this
+library at all: it vendors its own copy of everything it needs (see below).
 
 ### `runtime-triton` — the 27B engine's self-sufficient replacement
 Vendors its own copy of `native_27b_engine.py` and every module it needs
-(`w4a16_loader`, `triton_w4a16`, `gguf_unpacker`) into its own
-`pyproject.toml`/`.venv`. Depends on `runtime-common` only (`canon` +
-`gpu_preflight`) — explicitly does **not** import from `apps/runtime`. Same
-port (8000) as `runtime`'s 27B path because they're two implementations of
-the same job, never run together.
+(`w4a16_loader`, `triton_w4a16`, `gguf_unpacker`, plus `syntax_drafter` and
+`adapter_stacker`) into its own `pyproject.toml`/`.venv`. Depends on
+`runtime-common` only (`canon` + `gpu_preflight`) — explicitly does **not**
+import from `apps/runtime`. Same port (8000) as `runtime`'s 27B path because
+they're two implementations of the same job, never run together.
 
 ### `runtime-ipwf` — 3B/9B in-place weight folding
 Serves unquantized Qwen3.5-4B/9B with the same in-place-mutation +
 HIP-Graph approach as `runtime`'s FlashNorm path, plus a Riemannian
 multi-expert team router and NOTEARS causal scheduler for co-activating
-adapters. Still on the shared root venv (`dependsOn: [runtime, runtime-common]`)
-— hasn't been given its own manifest yet.
+adapters. Self-sufficient as of the runtime split: its own
+`pyproject.toml`/`.venv`, vendoring its own copy of the weight-folding/
+routing/speculation library (`novel_peft`, `cuda_graph`, `fused_norm`,
+`range_statistic_gate`, `dynamic_team_router`, `notears_causal_scheduler`,
+`riemannian_covariance`, `bucketed_speculative`, `mtp_draft`,
+`state_ring_buffer`, `macd_speculation_circuit_breaker`, `tool_trace`).
+Depends on `runtime-common` only, same as `runtime-triton` — does **not**
+import from `apps/runtime`.
 
 ### `runtime-next` — experimental Rust rewrite
 A Cargo project, currently just a startup print statement and a handful of

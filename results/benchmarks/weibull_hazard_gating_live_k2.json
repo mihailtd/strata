@@ -1,0 +1,178 @@
+{
+  "device": "AMD RX 7900 XTX (ROCm)",
+  "model_id": "Qwen/Qwen3.5-4B",
+  "spec_k": 2,
+  "n_prompts": 4,
+  "max_tokens": 48,
+  "repeats": 2,
+  "arms": {
+    "A_gate_disabled": {
+      "arm": "A_gate_disabled",
+      "gate_config": {
+        "enabled": false
+      },
+      "n_requests": 8,
+      "tok_s_median": 24.94,
+      "tok_s_mean": 24.5075,
+      "tok_s_stdev": 2.0252812855784477,
+      "tok_s_samples": [
+        21.08,
+        27.02,
+        23.15,
+        25.21,
+        24.87,
+        26.82,
+        22.9,
+        25.01
+      ],
+      "completion_tokens_samples": [
+        48,
+        48,
+        48,
+        48,
+        48,
+        48,
+        48,
+        48
+      ],
+      "client_wall_s_samples": [
+        2.4098957510004766,
+        1.7779294059992026,
+        2.074625821999689,
+        1.905180701000063,
+        1.931735266999567,
+        1.7914086050004698,
+        2.0974405699998897,
+        1.920120271000087
+      ]
+    },
+    "B_range_only": {
+      "arm": "B_range_only",
+      "gate_config": {
+        "enabled": true,
+        "weibull_hazard_enabled": false,
+        "bollinger_bands_enabled": false
+      },
+      "n_requests": 8,
+      "tok_s_median": 24.93,
+      "tok_s_mean": 24.905,
+      "tok_s_stdev": 1.5199436079764843,
+      "tok_s_samples": [
+        24.6,
+        26.93,
+        23.0,
+        25.13,
+        24.77,
+        26.89,
+        22.83,
+        25.09
+      ],
+      "completion_tokens_samples": [
+        48,
+        48,
+        48,
+        48,
+        48,
+        48,
+        48,
+        48
+      ],
+      "client_wall_s_samples": [
+        1.9521482210002432,
+        1.7838710570003968,
+        2.087951159000113,
+        1.9114259429998128,
+        1.9392622340001253,
+        1.786565626999618,
+        2.1041327020002427,
+        1.914570275999722
+      ]
+    },
+    "C_weibull": {
+      "arm": "C_weibull",
+      "gate_config": {
+        "enabled": true,
+        "weibull_hazard_enabled": true,
+        "bollinger_bands_enabled": false
+      },
+      "n_requests": 8,
+      "tok_s_median": 24.89,
+      "tok_s_mean": 25.555,
+      "tok_s_stdev": 2.4031764693540807,
+      "tok_s_samples": [
+        24.73,
+        29.02,
+        22.86,
+        25.05,
+        24.7,
+        28.96,
+        22.84,
+        26.28
+      ],
+      "completion_tokens_samples": [
+        48,
+        48,
+        48,
+        48,
+        48,
+        48,
+        48,
+        48
+      ],
+      "client_wall_s_samples": [
+        1.9418768329996965,
+        1.655566276999707,
+        2.1009943979997843,
+        1.9175107789997128,
+        1.944823594000809,
+        1.6586353889997554,
+        2.103203241999836,
+        1.827715974000057
+      ]
+    },
+    "D_weibull_bollinger_SHIP": {
+      "arm": "D_weibull_bollinger_SHIP",
+      "gate_config": {
+        "enabled": true,
+        "weibull_hazard_enabled": true,
+        "bollinger_bands_enabled": true
+      },
+      "n_requests": 8,
+      "tok_s_median": 26.31,
+      "tok_s_mean": 26.826249999999998,
+      "tok_s_stdev": 2.51982390257732,
+      "tok_s_samples": [
+        26.03,
+        30.56,
+        24.14,
+        26.49,
+        26.13,
+        30.65,
+        24.12,
+        26.49
+      ],
+      "completion_tokens_samples": [
+        48,
+        48,
+        48,
+        48,
+        48,
+        48,
+        48,
+        48
+      ],
+      "client_wall_s_samples": [
+        1.8452458189995014,
+        1.5720646800000395,
+        1.989913735999835,
+        1.81312361000073,
+        1.838121400000091,
+        1.5671787319997748,
+        1.9911980850001783,
+        1.8134591039997758
+      ]
+    }
+  },
+  "baseline_tok_s_median": 24.94,
+  "ship_vs_baseline_ratio": 1.0549318364073776
+}

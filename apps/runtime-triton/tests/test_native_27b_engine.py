@@ -153,8 +153,8 @@ def test_ssm_chunk_graph():
 
     unpacker = GGUFStreamingUnpacker(DEFAULT_GGUF_PATH)
     layers = [Qwen35SSMBlock(i, device=dev) for i in range(3)]
-    for i, l in enumerate(layers):
-        l.load_weights(unpacker.unpack_layer(i, group_size=128, device="cuda:0"))
+    for i, layer in enumerate(layers):
+        layer.load_weights(unpacker.unpack_layer(i, group_size=128, device="cuda:0"))
 
     chunk = SSMChunkGraph(layers, dev)
     x = torch.randn(1, 5120, dtype=torch.bfloat16, device=dev)
@@ -165,7 +165,7 @@ def test_ssm_chunk_graph():
 
     # Reset test
     chunk.reset_states()
-    for ssm, conv in zip(chunk.ssm_states, chunk.conv_states):
+    for ssm, conv in zip(chunk.ssm_states, chunk.conv_states, strict=True):
         assert (ssm == 0).all()
         assert (conv == 0).all()
 

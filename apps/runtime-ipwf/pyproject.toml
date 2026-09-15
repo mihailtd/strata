@@ -1,0 +1,40 @@
+[project]
+name = "runtime-ipwf"
+version = "0.1.0"
+description = "Self-sufficient in-place weight folding serving engine for unquantized Qwen3.5 4B/9B -- vendors its own copy of the weight-folding/routing/speculation library; only gpu_preflight/canon come from runtime-common."
+authors = [
+    { name = "Mihai Farcas", email = "farcasmihai91@gmail.com" }
+]
+requires-python = ">=3.14,<3.15"
+dependencies = [
+    "fastapi>=0.121.0",
+    "uvicorn>=0.39.0",
+    "pydantic>=2.12.5",
+    "torch>=2.14.0",
+    "triton-rocm>=3.8.0",
+    "transformers>=5.14.1",
+    "peft>=0.20.0",
+    "numpy>=2.4.0",
+    "scipy>=1.16.0",
+    "safetensors>=0.4.0",
+    "runtime-common",
+]
+
+[tool.uv]
+package = false
+environments = ["sys_platform == 'linux'"]
+prerelease = "allow"
+
+[[tool.uv.index]]
+name = "pytorch-rocm"
+url = "https://download.pytorch.org/whl/rocm7.2"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-rocm" }
+triton-rocm = [{ index = "pytorch-rocm" }]
+pytorch-triton-rocm = [{ index = "pytorch-rocm" }]
+runtime-common = { path = "../runtime-common", editable = true }
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.16.2"]

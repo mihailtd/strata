@@ -31,6 +31,22 @@ import torch.nn.functional as F
 from gguf_unpacker import DEFAULT_CACHE_DIR, DEFAULT_GGUF_PATH, GGUFStreamingUnpacker
 from w4a16_loader import W4A16Linear
 
+_tokenizer_27b: Any = None
+
+
+def get_27b_tokenizer() -> Any:
+    """Returns cached tokenizer for the 27B native engine."""
+    global _tokenizer_27b
+    if _tokenizer_27b is None:
+        from transformers import AutoTokenizer
+
+        snaps = list(Path.home().glob(".cache/huggingface/hub/models--Qwen--Qwen3.5-9B/snapshots/*"))
+        if snaps:
+            _tokenizer_27b = AutoTokenizer.from_pretrained(str(snaps[0]))
+        else:
+            _tokenizer_27b = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-Coder-7B-Instruct")
+    return _tokenizer_27b
+
 
 class RMSNorm(nn.Module):
     """Root Mean Square Layer Normalization."""
@@ -847,8 +863,8 @@ class SSMChunkGraph:
 
         def forward_chunk():
             curr = self.static_in
-            for i, l in enumerate(self.layers):
-                out, new_ssm, new_conv = l(curr, ssm_state=self.ssm_states[i], conv_state=self.conv_states[i])
+            for i, layer in enumerate(self.layers):
+                out, new_ssm, new_conv = layer(curr, ssm_state=self.ssm_states[i], conv_state=self.conv_states[i])
                 self.ssm_states[i].copy_(new_ssm)
                 self.conv_states[i].copy_(new_conv)
                 curr = out
@@ -867,7 +883,7 @@ class SSMChunkGraph:
 
     def reset_states(self) -> None:
         """Resets recurrent and convolution buffers in O(1) time."""
-        for ssm, conv in zip(self.ssm_states, self.conv_states):
+        for ssm, conv in zip(self.ssm_states, self.conv_states, strict=True):
             ssm.zero_()
             conv.zero_()
 
@@ -978,7 +994,9 @@ class SSMChunkVerifyGraph:
 
     def reset_states(self) -> None:
         """Resets initial and intermediate state buffers."""
-        for ssm, conv, s_hist, c_hist in zip(self.init_ssm, self.init_conv, self.ssm_history, self.conv_history):
+        for ssm, conv, s_hist, c_hist in zip(
+            self.init_ssm, self.init_conv, self.ssm_history, self.conv_history, strict=True
+        ):
             ssm.zero_()
             conv.zero_()
             s_hist.zero_()
@@ -1074,10 +1092,8 @@ class Native27BEngine(nn.Module):
     def init_syntax_drafter(self, tokenizer: Any = None) -> None:
         """Initializes the Deterministic AST & Syntax Fast-Forwarding Drafter."""
         if tokenizer is None:
-            from runtime.server import get_27b_tokenizer
-
             tokenizer = get_27b_tokenizer()
-        from runtime.syntax_drafter import SyntaxTrieDrafter
+        from syntax_drafter import SyntaxTrieDrafter
 
         self.syntax_drafter = SyntaxTrieDrafter(tokenizer)
 
@@ -1144,7 +1160,8 @@ class Native27BEngine(nn.Module):
 
         vram_gb = torch.cuda.memory_allocated(self.device) / (1024**3) if torch.cuda.is_available() else 0.0
         print(
-            f"[Native 27B Triton] All {self.num_layers} layers loaded successfully in {time.perf_counter() - t0:.2f}s! Active VRAM: {vram_gb:.2f} GB"
+            f"[Native 27B Triton] All {self.num_layers} layers loaded successfully "
+            f"in {time.perf_counter() - t0:.2f}s! Active VRAM: {vram_gb:.2f} GB"
         )
 
         # Auto-capture HIP Graphs for SSM chunks if enabled
@@ -1196,7 +1213,9 @@ class Native27BEngine(nn.Module):
 
         self.hip_graph_captured = True
         print(
-            f"[Native 27B Triton] Captured {len(self.ssm_graphs)} SSM Graphs & {len(self.verify_graphs_k2)} K=2 / {len(self.verify_graphs_k4)} K=4 Verify Graphs in {(time.perf_counter() - t0) * 1000:.1f}ms"
+            f"[Native 27B Triton] Captured {len(self.ssm_graphs)} SSM Graphs & "
+            f"{len(self.verify_graphs_k2)} K=2 / {len(self.verify_graphs_k4)} K=4 Verify Graphs "
+            f"in {(time.perf_counter() - t0) * 1000:.1f}ms"
         )
         return True
 
@@ -1323,7 +1342,7 @@ class Native27BEngine(nn.Module):
         if getattr(self, "active_lora_domain", None) in (target_name, domain_label):
             return True
 
-        from runtime.adapter_stacker import DynamicAdapterStacker
+        from adapter_stacker import DynamicAdapterStacker
 
         stacker = DynamicAdapterStacker()
         fused_dict, fused_cfg = stacker.stack_adapters(expert_weights, normalize_weights=False)
@@ -1383,7 +1402,8 @@ class Native27BEngine(nn.Module):
         self.active_lora_domain = domain_name
 
         print(
-            f"[Native 27B Triton] Bound LoRA [{domain_name}] ({applied_count} modules, alpha={alpha:.1f}) in {(time.perf_counter() - t0) * 1000:.1f}ms"
+            f"[Native 27B Triton] Bound LoRA [{domain_name}] ({applied_count} modules, "
+            f"alpha={alpha:.1f}) in {(time.perf_counter() - t0) * 1000:.1f}ms"
         )
         return True
 
@@ -1555,10 +1575,7 @@ class Native27BEngine(nn.Module):
 
         # 3. LM Head projection for the last prompt token (to initiate autoregressive decode)
         x_last = self.output_norm(x[:, -1, :])  # (1, 5120)
-        if self.lm_head is not None:
-            logits = self.lm_head(x_last)
-        else:
-            logits = torch.matmul(x_last.float(), x_last.float().t())
+        logits = self.lm_head(x_last) if self.lm_head is not None else torch.matmul(x_last.float(), x_last.float().t())
 
         return logits, new_states
 
@@ -1610,7 +1627,7 @@ class Native27BEngine(nn.Module):
         """Clones all SSM, Conv, and KV cache tensors in GPU VRAM in sub-millisecond time (<1.0 ms)."""
         new_state = {}
         for k, v in state_dict.items():
-            if isinstance(v, torch.Tensor) or isinstance(v, PreallocatedKVCache):
+            if isinstance(v, (torch.Tensor, PreallocatedKVCache)):
                 new_state[k] = v.clone()
             else:
                 new_state[k] = v

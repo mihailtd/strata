@@ -198,6 +198,20 @@ than an optimisation.
 
    Restore integrity confirmed as a side effect: `max_drift = 0.00e+00` on both
    domains, i.e. the pristine-buffer `copy_` is bit-exact in situ.
+
+   **CLOSED 2026-09-13 — cannot be extended to duckdb or financial, and that is
+   a fact about the adapter fleet, not an oversight.** Checked
+   `results/adapters/` directly rather than assuming: `financial`'s m1
+   (`ctl_lora_fin_a128`) was overwritten by a bf16 retrain, already noted above.
+   **`duckdb` never had an m1 adapter at all** — there is no `ctl_lora_duckdb_*`
+   anywhere in `results/adapters/`, and `docs/CHANGELOG.md` confirms duckdb was
+   introduced as a fourth domain at **v4**, by which point `m2_duckdb_r8a128_v4`
+   is already its earliest checkpoint. Duckdb's entire training history is under
+   the m2 (bf16 + Liger) regime; there is no 4-bit counterpart to compare it
+   against, so `benchmark_m1_vs_m2_regime.py` cannot be run on it no matter how
+   much GPU time is spent. **0 of 2 remaining domains are extendable.** The
+   verdict stays at n=2 (astral, postgresql), 0 of 2 resolved, and the practical
+   call above stands unchanged.
 3. **Liger speedup, unverified.** ~130 s/run is plausible but has no measured
    non-Liger baseline. `--no-liger` exists for the A/B.
 

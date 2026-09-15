@@ -21,4 +21,4 @@ experiments/
 
 When a live `apps/runtime*` or `apps/factory` module actually implements what a script here explores, that script (and its README, and any test pinning it) moves to [`benchmarks/`](../benchmarks/) — it's no longer measuring a hypothesis, it's measuring a shipped feature. If an idea instead turns out not to work, it moves to [`benchmarks/superseded/`](../benchmarks/superseded/) with a retirement rationale, same as anything else in this repo — see `docs/METHODOLOGY.md`.
 
-Tests pinning a probe's correctness live right next to it (e.g. `factory/geometry/latent_variable_glasso/test_latent_variable_glasso.py`), not in a separate tree — see the root `tests/README.md`.
+Tests pinning a probe's correctness live right next to it (e.g. `factory/geometry/poet_decomposition/test_poet_decomposition.py`), not in a separate tree — see the root `tests/README.md`.

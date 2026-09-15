@@ -1,65 +1,39 @@
-# 📡 POET Activation Cross-Talk & Interference Covariance Probe
+# POET activation cross-talk: real 4-way stacking, real notch filtering
 
-> **Tier Classification**: **🚀 Genuine Discovery & Physical Telemetry**  
-> **Theoretical Reference**: *Regressions in Covariances, Dependencies and Graphs* (Mohsen Pourahmadi & Reza Arabpour), Chapter 7.3 (§7.3.1 Low-Rank Plus Sparse Covariance) & Chapter 9.4 (§9.4.2 Latent Variable Graphical Lasso).  
-> **Empirical Target**: Multi-Adapter Activation Covariance Matrices $\Sigma_{\text{cross}} = \frac{1}{N} \Delta_A^T \Delta_B \in \mathbb{R}^{d_{\text{out}} \times d_{\text{out}}}$ across $v4$ Domain Adapters.
+> **Theoretical Reference**: *Regressions in Covariances, Dependencies and Graphs* (Mohsen Pourahmadi & Reza Arabpour), Chapter 7.3 (§7.3.1 Low-Rank Plus Sparse Covariance).
+> **Real result artifact**: [`results/benchmarks/poet_4way_stacking_results.json`](../../../../results/benchmarks/poet_4way_stacking_results.json).
 
----
+## Correction (2026-09-12)
 
-### Classification Breakdown: What is Standard vs. What is Innovative
-* **⭐ Literature Standard**: Literature evaluates multi-adapter interference via weight Frobenius norm or black-box evaluation loss after merging, lacking channel-level spatial resolution.
-* **🚀 Our Genuine Applied Discovery**: **Activation Covariance POET Decomposition**. We apply POET ($\Sigma_{\text{cross}} = L_{\text{pervasive}} + S_{\text{sparse}}$) to the cross-talk covariance matrix of dynamic activations. We prove that $\sim 10.5\%$ of cross-talk energy is driven by a rank-2 common foundation factor ($L$), while specific destructive interference is localized in $<0.1\%$ sparse channel coordinates ($S$). Applying a notch filter on top conflicting output channels reduces activation cross-talk by **$1.4\times$ to $5.4\times$** while preserving $>99.8\%$ in-domain activation energy.
+This README used to headline a "1.4×–5.4× cross-talk reduction" claim, computed by `probe_poet_activation_crosstalk.py` from **synthetic `torch.randn` activation inputs** multiplied by real trained v4 LoRA deltas — flagged as Critical #4 in [`docs/EXPERIMENT_REAUDIT_2026-09.md`](../../../../docs/EXPERIMENT_REAUDIT_2026-09.md). That script is retired to [`benchmarks/superseded/poet_activation_crosstalk_fabricated/`](../../../../benchmarks/superseded/poet_activation_crosstalk_fabricated/). One of its four reported ratios (astral vs financial, 0.96×) was even below 1.0 — filtering made the synthetic cross-talk slightly *worse*, a sign this input wasn't exercising anything real.
 
----
+The cluster's other script, `probe_4way_poet_notch.py`, was **already doing this correctly** — real Qwen3.5-4B, real forward hooks, real v4 adapters — and had already been run, its real result just wasn't the one quoted here. This README now reports that real result instead.
 
-## 💡 In Plain English: Noise-Canceling for Stacked Experts
+## What this measures
 
-### The Problem in Your Architecture:
-When you stack 2 or 3 domain experts together (e.g. `astral` for Python tools + `postgresql` for SQL queries + `financial` for spreadsheets), they occasionally step on each other's toes. Out of **9,216 neurons** in a layer, there are typically **10 to 20 specific neurons** where two experts try to shout conflicting signals simultaneously.
+Loads the real Qwen3.5-4B base model and folds all 4 canonical v4 domain experts (astral, postgresql, duckdb, financial) simultaneously via the real `WeightFoldingEngine`. Registers real forward hooks on every `mlp.down_proj`/`self_attn.o_proj` module to capture real hidden-state norms and real per-layer output perturbation, across 5 domains of real prompts (4 domain-specific + 1 general-knowledge control, 4 prompts each). Compares:
 
-### How POET Solves It:
-Think of POET like an audio engineer designing **active noise-canceling headphones**:
-1. **Identifies the Room Sound ($L$):** Separates the general language background that both experts agree on (the base model's shared foundation).
-2. **Spots the High-Pitched Feedback ($S$):** Isolates the exact $10\text{--}20$ specific neuron coordinates where the two experts clash.
-3. **Applies a Notch Filter:** Places a tiny "mute button" on just those few conflicting channels.
+- **Raw 4-way stack**: all 4 experts folded unscaled (`scale_mode="none"`), no notch filtering.
+- **POET-notched 4-way stack**: same 4 experts, but with the top-15 conflicting output channels per module (computed from real trained factors via `compute_poet_notch_mask_per_layer`, the same real-weight row-correlation math as production's `compute_surgical_notch_masks`) zeroed out.
 
-```
-                   THE NOISE-CANCELING NOTCH FILTER
-                   
-   All 9,216 Neurons:   [■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■]
-   
-   POET Identifies:                                      ▼    ▼          ▼
-   15 Conflicting Neurons:                              [x]  [x]        [x]
-   
-   Result:  Cross-talk drops by 1.4x to 5.4x, while 99.8% of useful power remains!
-```
+Metric: relative activation perturbation energy `‖δ‖ / ‖h‖` (output perturbation norm over base hidden-state norm), averaged per domain.
 
----
+## Real result
 
-## 1. Empirical Results Across $v4$ Expert Pairs
+| Prompt domain | Raw 4-way energy | POET-notched energy | Reduction |
+| :--- | ---: | ---: | ---: |
+| astral | 0.5090 | 0.5082 | +0.16% |
+| postgresql | 0.5139 | 0.5129 | +0.19% |
+| duckdb | 0.5098 | 0.5090 | +0.15% |
+| financial | 0.5061 | 0.5050 | +0.22% |
+| general | 0.5123 | 0.5114 | +0.18% |
 
-Evaluated on Qwen3.5-4B projections across 128 layers:
+**The real effect is small: 0.15%–0.22% activation-energy reduction from notching**, consistently positive (never negative, unlike the retired script's 0.96× outlier) but nowhere near the fabricated "1.4×–5.4× cross-talk reduction" claim. This is directionally consistent with — and roughly the same order of magnitude as — [`experiments/factory/geometry/surgical_notch_sweep/`](../surgical_notch_sweep/)'s independent real-weight-space finding that the shipped notching mechanism removes a real but modest amount of interference (that probe measures crosstalk/signal *selectivity*, a different quantity from this one's raw energy reduction, but both agree: real, positive, small).
 
-| Adapter Pair | Raw Activation Cosine $\cos(\delta_A, \delta_B)$ | Filtered Cosine (Notch Filter) | Cross-Talk Reduction | Pervasive Factor Share ($L$) | Sparse Residual ($S$) |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| **`astral` vs `postgresql`** | **-0.00027** | **-0.00019** | **1.42×** | 10.7% | 0.1% |
-| **`postgresql` vs `duckdb`** | **-0.00078** | **-0.00075** | **1.04×** | 10.8% | 0.1% |
-| **`financial` vs `postgresql`** | **+0.00007** | **+0.00001** | **5.41×** | 10.4% | 0.1% |
-| **`astral` vs `financial`** | **-0.00074** | **-0.00077** | **0.96×** | 10.4% | 0.1% |
-
----
-
-## 2. Mathematical Insights
-
-1. **Near-Zero Ambient Cross-Talk**:
-   Empirical cross-talk cosine $\cos(\delta_A, \delta_B) \approx \pm 0.0005$ is statistically near-orthogonal, confirming that Goldilocks low-rank updates ($r=8$) operate in largely decoupled subspaces.
-2. **Channel-Selective Interference Isolation**:
-   For conflicting domain pairs (e.g. `financial` vs `postgresql`), POET successfully identifies the exact $\le 20$ neurons driving the positive co-activation spike. Zeroing these coordinates in the router cuts interference by **$5.4\times$**.
-
----
-
-## 3. Usage
+## Run
 
 ```bash
-uv run python benchmarks/factory/geometry/poet_activation_crosstalk/probe_poet_activation_crosstalk.py
+uv run --env-file .env python experiments/factory/geometry/poet_activation_crosstalk/probe_4way_poet_notch.py
 ```
+
+Requires a GPU (loads the real 4B model + 4 real adapters). Saves to `results/benchmarks/poet_4way_stacking_results.json`.

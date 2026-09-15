@@ -36,31 +36,32 @@ import threading
 import time
 import uuid
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, nullcontext, suppress
 from dataclasses import dataclass, field
 from typing import Any
 
 import torch
-from fastapi import Body, FastAPI, Request
+from cuda_graph import FoldedCudaGraphDecoder
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from fused_norm import (
+    fold_rmsnorm_into_linear,
+    inject_exact_rmsnorm,
+    scale_expert_factors_for_folded_norms,
+)
+from novel_peft import FoldableExpert, WeightFoldingEngine, set_hard_vram_cap
 from pydantic import BaseModel, ConfigDict, Field
-from runtime import gpu_preflight
-from runtime.canon import (
+from range_statistic_gate import RangeStatisticGate
+from runtime_common import gpu_preflight
+from runtime_common.canon import (
     CANON,
     REPO_ROOT,
     adapter_path,
     configure_deterministic_attention,
     validate_kv_cache_precision,
 )
-from runtime.cuda_graph import FoldedCudaGraphDecoder
-from runtime.fused_norm import (
-    fold_rmsnorm_into_linear,
-    inject_exact_rmsnorm,
-    scale_expert_factors_for_folded_norms,
-)
-from runtime.novel_peft import FoldableExpert, WeightFoldingEngine, set_hard_vram_cap
-from runtime.range_statistic_gate import RangeStatisticGate
+from tool_trace import detect_tools
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenizerBase
 
 # ---------------------------------------------------------------------------
@@ -132,18 +133,14 @@ server_telemetry: dict[str, Any] = {
 
 
 def get_real_vram_allocated_gb() -> float:
-    try:
+    with suppress(Exception):
         sysfs = gpu_preflight.get_sysfs_vram_info()
         if sysfs and sysfs.get("sysfs_available") and "used_gb" in sysfs:
             return float(sysfs["used_gb"])
-    except Exception:
-        pass
-    try:
+    with suppress(Exception):
         if torch.cuda.is_available():
             free_bytes, total_bytes = torch.cuda.mem_get_info()
             return round((total_bytes - free_bytes) / (1024**3), 2)
-    except Exception:
-        pass
     return 0.0
 
 
@@ -191,12 +188,12 @@ async def load_inference_engine(model_id: str = DEFAULT_MODEL_ID) -> dict[str, A
 
     tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
     if getattr(tokenizer, "pad_token", None) is None:
-        tokenizer.pad_token = getattr(tokenizer, "eos_token", None) or "<|endoftext|>"
+        setattr(tokenizer, "pad_token", getattr(tokenizer, "eos_token", None) or "<|endoftext|>")  # noqa: B010
 
     injected_count = inject_exact_rmsnorm(base_model)
     print(f"[IPWF] Injected {injected_count} ExactRMSNorm modules.")
 
-    fold_norms_enabled = (os.environ.get("FLASH_NORM_FOLD", "1") != "0") and not is_9b
+    fold_norms_enabled = os.environ.get("FLASH_NORM_FOLD", "1") != "0"
     folded_norm_count = (
         fold_rmsnorm_into_linear(base_model, fold_weights=fold_norms_enabled) if fold_norms_enabled else 0
     )
@@ -218,18 +215,18 @@ async def load_inference_engine(model_id: str = DEFAULT_MODEL_ID) -> dict[str, A
         else:
             print(f"[IPWF] Warning: adapter path {ad_dir} not found for [{d}]")
 
-    if folded_norm_count > 0 and not is_9b:
+    if folded_norm_count > 0:
         scaled = scale_expert_factors_for_folded_norms(base_model, all_experts)
         print(f"[IPWF] FlashNorm: Scaled {scaled} adapter factors by (1+γ).")
 
     folding_engine = WeightFoldingEngine(base_model, all_experts, keep_pristine=True)
 
-    from runtime.dynamic_team_router import RiemannianTeamRouter
+    from dynamic_team_router import RiemannianTeamRouter
 
     team_router = RiemannianTeamRouter(experts=expert_dict, domains=list(expert_dict.keys()))
     print(f"[IPWF] RiemannianTeamRouter initialized with {len(expert_dict)} experts.")
 
-    from runtime.notears_causal_scheduler import NotearsCausalScheduler
+    from notears_causal_scheduler import NotearsCausalScheduler
 
     causal_scheduler = NotearsCausalScheduler(experts=list(expert_dict.keys()))
     model_state["causal_scheduler"] = causal_scheduler
@@ -274,8 +271,8 @@ async def load_inference_engine(model_id: str = DEFAULT_MODEL_ID) -> dict[str, A
         spec_max_len = int(os.environ.get("SPECULATIVE_MAX_SEQ_LEN", "4096"))
         spec_k = int(os.environ.get("SPECULATIVE_K", "2"))
         try:
-            from runtime.bucketed_speculative import BucketedSpeculativeDecoder
-            from runtime.mtp_draft import Qwen35MTPDraftHead
+            from bucketed_speculative import BucketedSpeculativeDecoder
+            from mtp_draft import Qwen35MTPDraftHead
 
             draft_head = Qwen35MTPDraftHead(base_model, model_id)
             folding_engine.register_draft_head(draft_head)
@@ -321,7 +318,13 @@ async def load_inference_engine(model_id: str = DEFAULT_MODEL_ID) -> dict[str, A
         range_gate=RangeStatisticGate(top_m=8, threshold=float(os.environ.get("SPECULATIVE_RANGE_THRESHOLD", "5.0"))),
         ring_buffer_mode=os.environ.get("RING_BUFFER_MODE", "selective_hybrid"),
         scale_mode="surgical",
-        prefold_enabled=True,
+        prefold_enabled=os.environ.get("PREDICTIVE_PREFOLD_ENABLED", "1") != "0",
+        last_predicted_expert=None,
+        last_swap_ms=0.0,
+        cut_set_hedging_enabled=os.environ.get("CUT_SET_HEDGING", "1") != "0",
+        cut_set_target_reliability=float(os.environ.get("CUT_SET_TARGET_RELIABILITY", "0.95")),
+        cut_set_max_workers=int(os.environ.get("CUT_SET_MAX_WORKERS", "4")),
+        fold_lock=threading.Lock(),
         stop_event=threading.Event(),
     )
 
@@ -337,10 +340,8 @@ async def load_inference_engine(model_id: str = DEFAULT_MODEL_ID) -> dict[str, A
 
 async def unload_inference_engine() -> dict[str, Any]:
     if model_state.get("folding_engine"):
-        try:
+        with suppress(Exception):
             model_state["folding_engine"].restore()
-        except Exception:
-            pass
     model_state.clear()
     import gc
 
@@ -586,29 +587,90 @@ async def _dispatch_loop() -> None:
 
 
 def _apply_expert(expert: FoldableExpert | str | None) -> str | None:
-    """Activates the given expert in the folding engine; returns the expert key."""
+    """Activates the given expert in the folding engine; returns the expert key.
+
+    Tracks the REAL swap latency in model_state["last_swap_ms"] -- 0.0 when
+    the folding engine already had this expert active (a real pre-fold hit,
+    or a real no-op skip inside WeightFoldingEngine.activate() itself), the
+    real measured torch.addmm fold time otherwise. This is what lets
+    predictive pre-folding (see _maybe_predict_and_prefold below) report a
+    real, not simulated, latency saved.
+    """
     folding_engine: WeightFoldingEngine | None = model_state.get("folding_engine")
-    router = model_state.get("router")
 
     if folding_engine is None:
         return None
 
+    fold_lock = model_state.get("fold_lock")
+    lock_ctx = fold_lock if fold_lock is not None else nullcontext()
+
     if expert is None:
-        folding_engine.restore()
+        with lock_ctx:
+            folding_engine.restore()
+        model_state["last_swap_ms"] = 0.0
         return None
 
     if expert == "dynamic":
         # Let the Riemannian router decide the current team (no explicit morph here;
         # the router was initialized with the initial team and adapts per request via
         # classify_prompt_intent in the full server — simplified here to current active_team)
+        model_state["last_swap_ms"] = 0.0
         return "dynamic"
 
     if isinstance(expert, FoldableExpert):
+        already_active = getattr(folding_engine, "active", None) == expert.name
         swap_t0 = time.perf_counter()
-        folding_engine.activate(expert)
+        with lock_ctx:
+            folding_engine.activate(expert)
         swap_ms = (time.perf_counter() - swap_t0) * 1000
+        swap_ms = 0.0 if already_active else swap_ms
+        model_state["last_swap_ms"] = swap_ms
+        # Cumulative, monotonic counter -- a multi-turn client (e.g. one DSH
+        # .run() call can trigger several real completions per "turn") should
+        # diff this before/after a step rather than trust "last", since
+        # "last" can be overwritten by a second call within the same step.
+        model_state["cumulative_swap_ms"] = model_state.get("cumulative_swap_ms", 0.0) + swap_ms
+        model_state["cumulative_swap_count"] = model_state.get("cumulative_swap_count", 0) + (
+            0 if already_active else 1
+        )
         return expert.name
     return None
+
+
+def _maybe_record_prefold_outcome(actual_expert: str | None) -> None:
+    """If a prediction was pending from the previous turn, score it as a real
+    hit/miss now that this turn's real swap latency (0.0 if the folding
+    engine already had `actual_expert` active) is known."""
+    scheduler = model_state.get("causal_scheduler")
+    predicted = model_state.get("last_predicted_expert")
+    if scheduler is None or predicted is None:
+        return
+    scheduler.record_turn_outcome(
+        actual_expert=actual_expert or "",
+        predicted_expert=predicted,
+        morph_latency_ms=model_state.get("last_swap_ms", 1.9),
+    )
+    model_state["last_predicted_expert"] = None
+
+
+def _maybe_predict_and_prefold(current_expert: str | None, emitted_text: str) -> None:
+    """After a real response is generated, detect real tool markers in it and
+    ask the real NotearsCausalScheduler what expert is likely needed next.
+    If confident, triggers a REAL background fold (WeightFoldingEngine.activate
+    in a thread pool) so it can complete before the next request arrives --
+    gated by model_state["prefold_enabled"] so this can be A/B toggled live
+    via POST /api/engine/set_predictive_prefold without a restart."""
+    if not model_state.get("prefold_enabled", True):
+        return
+    scheduler = model_state.get("causal_scheduler")
+    folding_engine = model_state.get("folding_engine")
+    if scheduler is None or folding_engine is None or current_expert in (None, "dynamic"):
+        return
+    detected = detect_tools(emitted_text)
+    predicted, conf = scheduler.predict_next_expert(tools=detected, current_expert=current_expert)
+    model_state["last_predicted_expert"] = predicted
+    if predicted and predicted != current_expert:
+        scheduler.async_prefold(folding_engine, predicted, conf, lock=model_state.get("fold_lock"))
 
 
 async def _run_inference(req: ChatCompletionRequest) -> dict[str, Any]:
@@ -617,14 +679,17 @@ async def _run_inference(req: ChatCompletionRequest) -> dict[str, Any]:
 
     expert = _resolve_expert(req.model)
     expert_key = _apply_expert(expert)
+    _maybe_record_prefold_outcome(expert_key)
     prompt = _build_prompt(req.messages, req.thinking_effort, expert_key)
 
     tokenizer = model_state["tokenizer"]
     graph_decoder: FoldedCudaGraphDecoder = model_state["graph_decoder"]
     stop_ids: set[int] = model_state.get("stop_token_ids", set())
 
+    # Decode is unconditionally greedy (argmax) end to end -- no sampling path
+    # exists in either decoder below -- so req.temperature is accepted for
+    # OpenAI-API-shape compatibility but has no effect.
     max_new = req.max_completion_tokens or req.max_tokens or 4096
-    temperature = req.temperature if req.temperature is not None else 0.7
 
     input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(model_state["base_model"].device)
     prompt_tokens = input_ids.shape[-1]
@@ -633,32 +698,33 @@ async def _run_inference(req: ChatCompletionRequest) -> dict[str, Any]:
     ttft_ms = 0.0
 
     spec_decoder = model_state.get("spec_decoder")
+    range_gate = model_state.get("range_gate") if model_state.get("range_gate_enabled", True) else None
     if spec_decoder is not None:
-        raw_ids = await asyncio.get_event_loop().run_in_executor(
+        generated, _elapsed, _stats = await asyncio.get_event_loop().run_in_executor(
             None,
             lambda: spec_decoder.generate(
                 input_ids,
                 max_new_tokens=max_new,
-                temperature=temperature,
-                stop_token_ids=stop_ids,
+                stop_ids=stop_ids,
+                gate=range_gate,
             ),
         )
     else:
-        raw_ids = await asyncio.get_event_loop().run_in_executor(
+        generated, _elapsed, _tok_s, _swap_ms = await asyncio.get_event_loop().run_in_executor(
             None,
-            lambda: graph_decoder.generate(
+            lambda: graph_decoder.generate_with_graph(
                 input_ids,
                 max_new_tokens=max_new,
-                temperature=temperature,
-                stop_token_ids=stop_ids,
             ),
         )
 
     elapsed = time.perf_counter() - t0
-    raw_text = tokenizer.decode(raw_ids[0, prompt_tokens:], skip_special_tokens=True)
+    raw_text = tokenizer.decode(generated, skip_special_tokens=True)
     reasoning, content = _extract_thinking_and_content(raw_text)
-    completion_tokens = raw_ids.shape[-1] - prompt_tokens
+    completion_tokens = len(generated)
     tok_s = completion_tokens / elapsed if elapsed > 0 else 0.0
+
+    _maybe_predict_and_prefold(expert_key, raw_text)
 
     server_telemetry["total_requests"] += 1
     server_telemetry["total_prompt_tokens"] += prompt_tokens
@@ -706,14 +772,15 @@ async def _run_streaming_inference(req: ChatCompletionRequest) -> AsyncGenerator
 
     expert = _resolve_expert(req.model)
     expert_key = _apply_expert(expert)
+    _maybe_record_prefold_outcome(expert_key)
     prompt = _build_prompt(req.messages, req.thinking_effort, expert_key)
 
     tokenizer = model_state["tokenizer"]
     graph_decoder: FoldedCudaGraphDecoder = model_state["graph_decoder"]
-    stop_ids: set[int] = model_state.get("stop_token_ids", set())
 
+    # Decode is unconditionally greedy (argmax); req.temperature is accepted
+    # for OpenAI-API-shape compatibility but has no effect.
     max_new = req.max_completion_tokens or req.max_tokens or 4096
-    temperature = req.temperature if req.temperature is not None else 0.7
 
     input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(model_state["base_model"].device)
 
@@ -721,15 +788,21 @@ async def _run_streaming_inference(req: ChatCompletionRequest) -> AsyncGenerator
     created_ts = int(time.time())
     t0 = time.perf_counter()
     token_count = 0
+    emitted_chunks: list[str] = []
 
     try:
-        for token_text in graph_decoder.stream_generate(
+        # NOTE: streaming only ever uses the plain graph-replay path -- there is
+        # no token-by-token text-streaming generator for the speculative decoder
+        # (its stream_generate yields raw token-id chunks, not detokenized text).
+        # SPECULATIVE_DECODE=1 therefore only takes effect on non-streaming
+        # requests (_run_inference); this is a known gap, not a new one.
+        for token_text, _hidden_state in graph_decoder.generate_tokens_stream(
             input_ids,
             max_new_tokens=max_new,
-            temperature=temperature,
-            stop_token_ids=stop_ids,
         ):
+            token_str = " ".join(token_text) if isinstance(token_text, list) else str(token_text)
             token_count += 1
+            emitted_chunks.append(token_str)
             chunk = ChatCompletionChunkResponse(
                 id=request_id,
                 created=created_ts,
@@ -737,7 +810,7 @@ async def _run_streaming_inference(req: ChatCompletionRequest) -> AsyncGenerator
                 choices=[
                     ChatCompletionChunkChoice(
                         index=0,
-                        delta=ChatCompletionChunkDelta(content=token_text),
+                        delta=ChatCompletionChunkDelta(content=token_str),
                     )
                 ],
             )
@@ -745,6 +818,7 @@ async def _run_streaming_inference(req: ChatCompletionRequest) -> AsyncGenerator
     finally:
         elapsed = time.perf_counter() - t0
         tok_s = token_count / elapsed if elapsed > 0 else 0.0
+        _maybe_predict_and_prefold(expert_key, "".join(emitted_chunks))
         server_telemetry["total_requests"] += 1
         server_telemetry["total_generated_tokens"] += token_count
         server_telemetry["total_generation_time_s"] += elapsed
@@ -780,10 +854,8 @@ async def lifespan(app: FastAPI):
     yield
 
     dispatch_task.cancel()
-    try:
+    with suppress(asyncio.CancelledError):
         await dispatch_task
-    except asyncio.CancelledError:
-        pass
     await unload_inference_engine()
 
 
@@ -874,8 +946,271 @@ async def engine_status():
         "prefold_enabled": model_state.get("prefold_enabled", True),
         "range_gate_enabled": model_state.get("range_gate_enabled", True),
         "range_gate_threshold": model_state.get("range_gate_threshold", 5.0),
+        "cut_set_hedging_enabled": model_state.get("cut_set_hedging_enabled", True),
+        "cut_set_target_reliability": model_state.get("cut_set_target_reliability", 0.95),
+        "causal_scheduler_telemetry": getattr(model_state.get("causal_scheduler"), "telemetry", None),
+        "last_swap_ms": model_state.get("last_swap_ms"),
+        "cumulative_swap_ms": model_state.get("cumulative_swap_ms", 0.0),
+        "cumulative_swap_count": model_state.get("cumulative_swap_count", 0),
         "telemetry": server_telemetry,
     }
+
+
+class SetPredictivePrefoldRequest(BaseModel):
+    enabled: bool
+
+
+@app.post("/api/engine/set_predictive_prefold")
+async def set_predictive_prefold(req: SetPredictivePrefoldRequest):
+    """Toggles NOTEARS predictive pre-folding live, no restart needed -- for A/B
+    measurement (see benchmarks/agentic/benchmark_predictive_prefold_live.py)."""
+    model_state["prefold_enabled"] = req.enabled
+    model_state["last_predicted_expert"] = None
+    model_state["cumulative_swap_ms"] = 0.0
+    model_state["cumulative_swap_count"] = 0
+    scheduler = model_state.get("causal_scheduler")
+    if scheduler is not None:
+        scheduler.telemetry.update(
+            prefold_triggers=0,
+            prefold_hits=0,
+            prefold_misses=0,
+            prefold_saved_ms=0.0,
+            wasted_morph_ms=0.0,
+            last_prediction=None,
+            last_confidence=0.0,
+            last_prefold_elapsed_ms=None,
+        )
+    print(f"[IPWF] Predictive pre-folding set: enabled={req.enabled} (telemetry reset)")
+    return {"status": "updated", "prefold_enabled": req.enabled}
+
+
+class SetSpeculativeRangeGateRequest(BaseModel):
+    enabled: bool
+    threshold: float | None = 3.5
+    weibull_hazard_enabled: bool | None = True
+    weibull_beta: float | None = 2.2
+    weibull_gamma: float | None = 0.6
+    bollinger_bands_enabled: bool | None = True
+    bollinger_k: float | None = 2.0
+    bollinger_gamma: float | None = 0.5
+
+
+@app.post("/api/engine/set_speculative_range_gate")
+async def set_speculative_range_gate(req: SetSpeculativeRangeGateRequest):
+    """Toggles Single-Pass Range Statistic, Weibull Hazard & Bollinger Volatility Gating.
+
+    Instantaneous O(1) swap: no CUDA Graph recapture required.
+    """
+    model_state["range_gate_enabled"] = req.enabled
+    if req.threshold is not None:
+        model_state["range_gate_threshold"] = req.threshold
+
+    weibull_on = req.weibull_hazard_enabled if req.weibull_hazard_enabled is not None else True
+    beta = req.weibull_beta if req.weibull_beta is not None else 2.2
+    gamma_w = req.weibull_gamma if req.weibull_gamma is not None else 0.6
+    boll_on = req.bollinger_bands_enabled if req.bollinger_bands_enabled is not None else True
+    boll_k = req.bollinger_k if req.bollinger_k is not None else 2.0
+    gamma_b = req.bollinger_gamma if req.bollinger_gamma is not None else 0.5
+
+    model_state["range_gate"] = RangeStatisticGate(
+        top_m=8,
+        threshold=model_state["range_gate_threshold"],
+        weibull_hazard_enabled=weibull_on,
+        weibull_beta=beta,
+        weibull_gamma=gamma_w,
+        bollinger_bands_enabled=boll_on,
+        bollinger_k=boll_k,
+        bollinger_gamma=gamma_b,
+    )
+
+    print(
+        f"[IPWF] Range Speculative Gate set: enabled={req.enabled}, "
+        f"threshold={model_state['range_gate_threshold']}, weibull_hazard={weibull_on}, bollinger_bands={boll_on}"
+    )
+    return {
+        "status": "updated",
+        "spec_range_gate_enabled": model_state["range_gate_enabled"],
+        "spec_range_threshold": model_state["range_gate_threshold"],
+        "weibull_hazard_enabled": weibull_on,
+        "weibull_beta": beta,
+        "weibull_gamma": gamma_w,
+        "bollinger_bands_enabled": boll_on,
+        "bollinger_k": boll_k,
+        "bollinger_gamma": gamma_b,
+    }
+
+
+@app.get("/api/causal_dag")
+async def get_causal_dag():
+    """Returns NOTEARS continuous causal tool-to-expert graph and telemetry."""
+    scheduler = model_state.get("causal_scheduler")
+    if scheduler is None:
+        return {"fitted": False, "nodes": [], "edges": [], "hit_rate": 0.0, "telemetry": {}}
+    return scheduler.get_dag_structure()
+
+
+@app.post("/api/causal_dag/fit")
+async def fit_causal_dag():
+    """Re-fits NOTEARS continuous causal structure on recorded session traces."""
+    scheduler = model_state.get("causal_scheduler")
+    if scheduler is None:
+        return {"fitted": False, "error": "Scheduler not initialized"}
+    import json
+
+    import tool_trace
+
+    trace_file = tool_trace.trace_path()
+    records = []
+    if trace_file and trace_file.exists():
+        with suppress(Exception):
+            records = [json.loads(line) for line in trace_file.read_text().splitlines() if line.strip()]
+    return scheduler.fit_from_traces(records)
+
+
+class SetSpeculativeDecodeRequest(BaseModel):
+    enabled: bool
+
+
+@app.post("/api/engine/set_speculative_decode")
+async def set_speculative_decode(req: SetSpeculativeDecodeRequest):
+    """Turns speculative decoding off (instant) or on."""
+    if not req.enabled:
+        was_active = model_state.get("spec_decoder") is not None
+        model_state["spec_decoder"] = None
+        return {"status": "disabled", "spec_decode_enabled": False, "was_active": was_active}
+
+    return {"status": "enabled", "spec_decode_enabled": True, "spec_k": model_state.get("spec_decoder_k", 2)}
+
+
+class SetSpecCircuitBreakerRequest(BaseModel):
+    enabled: bool
+    disengage_threshold: float | None = 1.8
+    reengage_threshold: float | None = 2.2
+
+
+@app.post("/api/engine/set_spec_circuit_breaker")
+async def set_spec_circuit_breaker(req: SetSpecCircuitBreakerRequest):
+    """Toggles Dual-EMA / MACD Speculation Circuit-Breaker."""
+    spec_decoder = model_state.get("spec_decoder")
+    if spec_decoder and hasattr(spec_decoder, "circuit_breaker"):
+        spec_decoder.circuit_breaker.enabled = req.enabled
+        if req.disengage_threshold is not None:
+            spec_decoder.circuit_breaker.disengage_threshold = req.disengage_threshold
+        if req.reengage_threshold is not None:
+            spec_decoder.circuit_breaker.reengage_threshold = req.reengage_threshold
+
+    model_state["spec_circuit_breaker_enabled"] = req.enabled
+    disengage = req.disengage_threshold or 1.8
+    reengage = req.reengage_threshold or 2.2
+    print(f"[IPWF] Speculation Circuit-Breaker set: enabled={req.enabled}, disengage={disengage}, reengage={reengage}")
+    return {
+        "status": "updated",
+        "spec_circuit_breaker_enabled": req.enabled,
+        "disengage_threshold": disengage,
+        "reengage_threshold": reengage,
+    }
+
+
+class SetCutSetHedgingRequest(BaseModel):
+    enabled: bool
+    target_reliability: float | None = 0.95
+    max_workers: int | None = 4
+
+
+@app.post("/api/engine/set_cut_set_hedging")
+async def set_cut_set_hedging(req: SetCutSetHedgingRequest):
+    """Configures Chapter 6 Minimal Cut Set & k-out-of-n Speculative Tool Hedging middleware."""
+    model_state["cut_set_hedging_enabled"] = req.enabled
+    if req.target_reliability is not None:
+        model_state["cut_set_target_reliability"] = req.target_reliability
+    if req.max_workers is not None:
+        model_state["cut_set_max_workers"] = req.max_workers
+
+    print(
+        f"[IPWF] Cut-Set Speculative Hedging set: enabled={req.enabled}, "
+        f"target_reliability={model_state.get('cut_set_target_reliability', 0.95)}"
+    )
+    return {
+        "status": "updated",
+        "cut_set_hedging_enabled": model_state["cut_set_hedging_enabled"],
+        "cut_set_target_reliability": model_state.get("cut_set_target_reliability", 0.95),
+        "cut_set_max_workers": model_state.get("cut_set_max_workers", 4),
+    }
+
+
+class CutSetNodeModel(BaseModel):
+    node_id: str
+    name: str
+    reliability: float = 0.90
+
+
+class CutSetDecomposeRequest(BaseModel):
+    source: str
+    sink: str
+    nodes: list[CutSetNodeModel]
+    edges: list[list[str]]
+    target_reliability: float = 0.95
+
+
+@app.post("/api/reliability/cut_set/decompose")
+async def cut_set_decompose(req: CutSetDecomposeRequest):
+    """Decomposes an agent reasoning DAG into Minimal Cut Sets, identifies order-1 SPOFs,
+    and calculates analytical system reliability under optional k=1-of-n=2 hedging."""
+    from cut_set_router import ReliabilityGraph, ReliabilityNode
+
+    g = ReliabilityGraph(source=req.source, sink=req.sink)
+    for n in req.nodes:
+        g.add_node(ReliabilityNode(node_id=n.node_id, name=n.name, reliability=n.reliability))
+    for edge in req.edges:
+        if len(edge) == 2:
+            g.add_edge(edge[0], edge[1])
+
+    paths = g.find_all_paths()
+    minimal_cuts = [sorted(list(c)) for c in g.find_minimal_cut_sets()]
+    order_1 = g.get_order_1_cut_sets()
+    bottlenecks = g.get_critical_bottlenecks(target_reliability=req.target_reliability)
+    r_unhedged = g.compute_system_reliability()
+    r_hedged = g.compute_system_reliability(active_hedges=set(bottlenecks))
+
+    return {
+        "status": "success",
+        "paths": paths,
+        "minimal_cut_sets": minimal_cuts,
+        "order_1_cut_sets": order_1,
+        "critical_bottlenecks": bottlenecks,
+        "unhedged_system_reliability": round(r_unhedged, 4),
+        "hedged_system_reliability": round(r_hedged, 4),
+        "reliability_gain": round(r_hedged - r_unhedged, 4),
+    }
+
+
+class SetRingBufferModeRequest(BaseModel):
+    mode: str
+
+
+@app.post("/api/engine/set_ring_buffer_mode")
+async def set_ring_buffer_mode(req: SetRingBufferModeRequest):
+    """Swaps the live speculative decoder's ring buffer mode."""
+    valid = {"dense", "poet", "selective_hybrid", "pointer"}
+    if req.mode not in valid:
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"mode must be one of {sorted(valid)}, got {req.mode!r}"},
+        )
+
+    spec_decoder = model_state.get("spec_decoder")
+    if spec_decoder is None or getattr(spec_decoder, "cache", None) is None:
+        return JSONResponse(
+            status_code=409,
+            content={"error": "speculative decode is off or has no cache configured."},
+        )
+
+    from state_ring_buffer import RingBufferReplayEngine
+
+    spec_decoder.ring_engine = RingBufferReplayEngine(spec_decoder.cache, max_depth=64, mode=req.mode)
+    model_state["ring_buffer_mode"] = req.mode
+    print(f"[IPWF] Ring buffer mode -> {req.mode}")
+    return {"status": "swapped", "ring_buffer_mode": req.mode}
 
 
 class LoadEngineRequest(BaseModel):
@@ -883,7 +1218,8 @@ class LoadEngineRequest(BaseModel):
 
 
 @app.post("/api/engine/load")
-async def load_engine_endpoint(req: LoadEngineRequest = Body(default_factory=LoadEngineRequest)):
+async def load_engine_endpoint(req: LoadEngineRequest | None = None):
+    req = req or LoadEngineRequest()
     try:
         res = await load_inference_engine(model_id=req.model_id)
         return res

@@ -76,13 +76,18 @@ def load_eval_prompts(max_prompts_per_domain: int = 25) -> tuple[list[str], dict
     domain_prompts: dict[str, list[str]] = {}
     shared_suite: list[str] = []
 
+    # python_modern/python_web have no evaluation_data.jsonl on disk -- only
+    # evaluation_data_disposition.jsonl exists for those two domains. This map
+    # silently fell back to a single fake placeholder sentence for both (the
+    # `if not prompts` branch below) for as long as this script went unexecuted;
+    # confirmed via `ls data/python_modern/ data/python_web/`.
     domain_file_map = {
         "astral": "data/astral/evaluation_data.jsonl",
         "postgresql": "data/postgresql/evaluation_data.jsonl",
         "duckdb": "data/duckdb/evaluation_data.jsonl",
         "financial": "data/financial_planning/evaluation_data.jsonl",
-        "python_modern": "data/python_modern/evaluation_data.jsonl",
-        "python_web": "data/python_web/evaluation_data.jsonl",
+        "python_modern": "data/python_modern/evaluation_data_disposition.jsonl",
+        "python_web": "data/python_web/evaluation_data_disposition.jsonl",
     }
 
     for d, rel_path in domain_file_map.items():
@@ -163,7 +168,7 @@ def run_activation_covariance_benchmark(
     tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
     model = AutoModelForCausalLM.from_pretrained(
         model_id,
-        torch_dtype=torch.bfloat16,
+        dtype=torch.bfloat16,
         device_map={"": device} if device.type == "cuda" else None,
         trust_remote_code=True,
     )
@@ -304,14 +309,20 @@ def run_activation_covariance_benchmark(
     else:
         print("  SKIPPED (see §59; pass --pairwise to compute it anyway)")
 
-    mean_dist = float(np.mean(off_diagonal_dists))
-    std_dist = float(np.std(off_diagonal_dists))
-    spread_pct = (max(off_diagonal_dists) - min(off_diagonal_dists)) / mean_dist * 100.0
-
-    print(f"\nMatrix Summary:")
-    print(f"  Mean off-diagonal d_R : {mean_dist:.4f}")
-    print(f"  Std deviation         : {std_dist:.4f}")
-    print(f"  Dynamic Range (Spread): {min(off_diagonal_dists):.4f} .. {max(off_diagonal_dists):.4f} ({spread_pct:.1f}% spread)")
+    if off_diagonal_dists:
+        # This whole block used to run unconditionally and crash with
+        # `max() iterable argument is empty` whenever --pairwise was not
+        # passed -- confirmed live the first time this script was ever run.
+        # Never caught before because nothing had ever run it.
+        mean_dist = float(np.mean(off_diagonal_dists))
+        std_dist = float(np.std(off_diagonal_dists))
+        spread_pct = (max(off_diagonal_dists) - min(off_diagonal_dists)) / mean_dist * 100.0
+        print(f"\nMatrix Summary:")
+        print(f"  Mean off-diagonal d_R : {mean_dist:.4f}")
+        print(f"  Std deviation         : {std_dist:.4f}")
+        print(f"  Dynamic Range (Spread): {min(off_diagonal_dists):.4f} .. {max(off_diagonal_dists):.4f} ({spread_pct:.1f}% spread)")
+    else:
+        mean_dist = std_dist = spread_pct = float("nan")
 
     # (C) Scale Invariance Verification (RMSNorm diagonal invariance in float64)
     print("\n--- Invariance Test: RMSNorm Diagonal Rescaling (Float64 Ground Truth) ---")
@@ -335,12 +346,23 @@ def run_activation_covariance_benchmark(
         raise RuntimeError(f"ABORT: Invariance gate failed with drift {scale_diff:.2e} >= 1e-4! Aborting execution.")
 
     # (D) Correlation against Ground Truth Stacking Damage
+    # GROUND_TRUTH_STACKING keys are bare domain names ("astral") but DOMAINS
+    # and pairwise_results keys carry "@version" ("astral@v7") -- `d1 in
+    # DOMAINS` was therefore always False and this table was always empty.
+    # Confirmed live: never caught because this script had never been run.
+    # Resolve each bare name to its v7 entry (the current canonical version).
+    bare_to_tagged = {}
+    for spec in DOMAINS:
+        bare, _, ver = spec.partition("@")
+        if bare not in bare_to_tagged or ver == "v7":
+            bare_to_tagged[bare] = spec
     print("\n--- Stacking Collateral Damage Correlation ---")
     gt_pairs = []
     act_dists = []
     for (d1, d2), damage in GROUND_TRUTH_STACKING.items():
-        if d1 in DOMAINS and d2 in DOMAINS:
-            dist = pairwise_results.get(f"{d1}__{d2}", pairwise_results.get(f"{d2}__{d1}", 0.0))
+        t1, t2 = bare_to_tagged.get(d1), bare_to_tagged.get(d2)
+        if t1 and t2:
+            dist = pairwise_results.get(f"{t1}__{t2}", pairwise_results.get(f"{t2}__{t1}", 0.0))
             gt_pairs.append((d1, d2, damage, dist))
             act_dists.append(dist)
 
@@ -386,8 +408,14 @@ def run_activation_covariance_benchmark(
     try:
         from runtime import training_db
         for d, prof in base_to_expert_profiles.items():
-            sc = float(prof.get("scale_comp", 0.0))
-            sh = float(prof.get("shape_comp", 0.0))
+            # Was "scale_comp"/"shape_comp" -- keys that don't exist in
+            # base_to_expert_profiles (which stores "final_scale"/"final_shape"),
+            # so this silently wrote 0.0 for every domain every time, swallowed
+            # by the broad except below. Confirmed live: never caught because
+            # this script had never been run. No production code reads these
+            # columns yet, so nothing was corrupted -- just dead on arrival.
+            sc = float(prof.get("final_scale", 0.0))
+            sh = float(prof.get("final_shape", 0.0))
             training_db.update_airm_metrics(
                 domain=d,
                 airm_scale=sc,
@@ -411,4 +439,8 @@ if __name__ == "__main__":
                              "pairs.")
     args = parser.parse_args()
 
-    run_activation_covariance_benchmark(max_prompts=args.max_prompts, device_str=args.device)
+    # The --pairwise flag was parsed but never threaded through to the function
+    # call -- confirmed live, `--pairwise` silently did nothing. Never caught
+    # because this script had never been run before.
+    run_activation_covariance_benchmark(
+        run_pairwise=args.pairwise, max_prompts=args.max_prompts, device_str=args.device)

@@ -1,0 +1,38 @@
+{
+  "device": "AMD Radeon Graphics",
+  "horizon": 4,
+  "measurement_1_correctness": {
+    "branch_a": [
+      3427,
+      198,
+      4703,
+      5813
+    ],
+    "branch_b": [
+      3427,
+      198,
+      4703,
+      5813
+    ],
+    "tokens_ok": true,
+    "kv_length_ok": true,
+    "fork_bytes_one_branch": 131072
+  },
+  "measurement_2_beam_search_cost": {
+    "explore_ms": 131.20517599963932,
+    "old_regen_ms": 137.7908030008257,
+    "new_restore_ms": 0.42216420006297994,
+    "old_penalty_pct": 52.509667378215504,
+    "new_penalty_pct": 0.16087940008713544,
+    "speedup_vs_recompute": 326.39149169983995
+  },
+  "measurement_3_full_tree": {
+    "width": 2,
+    "depth": 4,
+    "live_nodes": 8,
+    "total_kv_bytes": 262144,
+    "predicted_kv_mb_from_decisions_md": 0.26,
+    "arbitrary_leaf_resume_correct": true
+  },
+  "elapsed_seconds": 2.4403207302093506
+}

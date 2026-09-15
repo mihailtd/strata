@@ -155,12 +155,12 @@ fail and carries no information.
 
 **Every cross-task pair sits at chance.** Shared-basis compression cannot work
 across these tasks — corroborating the 0.00% cross-task retention recorded
-independently in [`TODO.md`](TODO.md). The same-task pair at 7.15× shows the probe *can*
+independently in [`TODO.md`](../TODO.md). The same-task pair at 7.15× shows the probe *can*
 detect real structure, so the null is informative rather than a broken metric.
 
 ### 5. Speculative decoding — UNBLOCKED by `fla` on gfx1100 🟢
 
-This was recorded in [`TODO.md`](TODO.md) as **architecturally blocked**. That was wrong,
+This was recorded in [`TODO.md`](../TODO.md) as **architecturally blocked**. That was wrong,
 and the error is worth naming precisely because it cost real speedup.
 
 **The mistake:** treating `fla`/`causal_conv1d` as one dependency. They are two,

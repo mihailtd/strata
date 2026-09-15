@@ -1,0 +1,20 @@
+project-includes = [
+    "apps",
+    "benchmarks",
+    "tests",
+]
+project-excludes = [
+    "apps/runtime-llama/llama.cpp",
+    "apps/runtime-common",
+    "apps/factory",
+    "apps/runtime-next",
+    "apps/dashboard",
+]
+search-path = [
+    ".",
+    "apps",
+    "apps/runtime-triton",
+    "apps/runtime-ipwf",
+    "apps/runtime-common/src",
+]
+infer-with-first-use = false

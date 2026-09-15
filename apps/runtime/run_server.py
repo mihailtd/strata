@@ -1,3 +1,11 @@
+"""LEGACY entrypoint -- starts the superseded dual-purpose server.py.
+
+For new work, start apps/runtime-triton/run_server.sh (27B W4A16, quantized)
+or apps/runtime-ipwf/run_server.sh (3B/9B, unquantized) instead -- see
+apps/RUNTIME.md. Kept only because server.py's library exports are still
+imported directly by not-yet-migrated benchmarks/evals/tests.
+"""
+
 import argparse
 import os
 import sys

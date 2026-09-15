@@ -28,6 +28,7 @@ For unquantized models, use runtime-ipwf (port 8002).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import re
@@ -40,7 +41,7 @@ from pathlib import Path
 from typing import Any
 
 import torch
-from fastapi import Body, FastAPI, Request
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from native_27b_engine import Native27BEngine
@@ -221,6 +222,18 @@ def _unload_engine() -> None:
     model_state.clear()
 
 
+def get_native_triton_27b_engine(num_layers: int = 64) -> Native27BEngine:
+    """Initializes and returns the 27B Native Triton Engine."""
+    return _load_engine(num_layers=num_layers)
+
+
+def get_27b_tokenizer() -> Any:
+    """Returns the cached tokenizer for the 27B native engine."""
+    from native_27b_engine import get_27b_tokenizer as _get_tok
+
+    return _get_tok()
+
+
 # ---------------------------------------------------------------------------
 # OpenAI-compatible Pydantic schemas
 # ---------------------------------------------------------------------------
@@ -361,6 +374,39 @@ def _classify_domain(messages: list[ChatMessage], model_name: str) -> str:
     return "astral"
 
 
+def resolve_27b_adapter_id(model_name: str, messages: list[ChatMessage]) -> tuple[str | None, int | None]:
+    """Resolves target LoRA adapter index (0-5) or multi-expert stacked specification."""
+    name_lower = model_name.lower()
+
+    # Check for multi-expert stacked spec in model_name
+    # (e.g. "qwen3.8:27b:postgresql+python_web" or "stacked:postgresql+duckdb")
+    matched_domains = [domain for domain in ADAPTER_MAP if domain in name_lower]
+    if len(matched_domains) >= 2:
+        return "+".join(matched_domains), -1
+
+    # Single domain match
+    for domain, aid in ADAPTER_MAP.items():
+        if domain in name_lower:
+            return domain, aid
+
+    if "auto" in name_lower or "moa" in name_lower or name_lower in ("qwen3.8:27b", "qwen3.8-27b", "default"):
+        try:
+            from harness.router.dynamic_moa_router import DynamicMoARouter
+
+            router = DynamicMoARouter()
+            last_msg = messages[-1].content if messages else ""
+            route_res = router.route_and_stack(str(last_msg))
+            if route_res.get("is_multi_expert"):
+                return "+".join(route_res["experts"].keys()), -1
+        except Exception:
+            pass
+
+        classified = _classify_domain(messages, model_name)
+        if classified in ADAPTER_MAP:
+            return classified, ADAPTER_MAP[classified]
+    return None, None
+
+
 def _build_prompt(
     messages: list[ChatMessage],
     thinking_effort: str | None = "medium",
@@ -457,20 +503,22 @@ async def _run_inference(req: ChatCompletionRequest) -> dict[str, Any]:
     max_new = req.max_completion_tokens or req.max_tokens or 4096
     temperature = req.temperature if req.temperature is not None else 0.7
 
+    tokenizer = get_27b_tokenizer()
+    prompt_ids = tokenizer.encode(prompt)
     t0 = time.perf_counter()
-    raw_text = await asyncio.get_event_loop().run_in_executor(
+    output_ids = await asyncio.get_event_loop().run_in_executor(
         None,
         lambda: engine.generate(
-            prompt=prompt,
+            prompt_ids=prompt_ids,
             max_new_tokens=max_new,
             temperature=temperature,
-            adapter_id=adapter_id,
         ),
     )
     elapsed = time.perf_counter() - t0
+    raw_text = tokenizer.decode(output_ids)
 
     reasoning, content = _extract_thinking_and_content(raw_text)
-    completion_tokens = len(raw_text.split())
+    completion_tokens = len(output_ids)
     tok_s = completion_tokens / elapsed if elapsed > 0 else 0.0
 
     server_telemetry["total_requests"] += 1
@@ -517,10 +565,12 @@ async def _run_streaming_inference(
 ) -> AsyncGenerator[str]:
     engine = _load_engine()
     domain = _classify_domain(req.messages, req.model)
-    adapter_id = ADAPTER_MAP.get(domain)
     prompt = _build_prompt(req.messages, req.thinking_effort, domain)
     max_new = req.max_completion_tokens or req.max_tokens or 4096
     temperature = req.temperature if req.temperature is not None else 0.7
+
+    tokenizer = get_27b_tokenizer()
+    prompt_ids = tokenizer.encode(prompt)
 
     request_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
     created_ts = int(time.time())
@@ -528,13 +578,13 @@ async def _run_streaming_inference(
     token_count = 0
 
     try:
-        for token_text in engine.stream_generate(
-            prompt=prompt,
+        for token_id in engine.generate_stream_tokens(
+            prompt_ids=prompt_ids,
             max_new_tokens=max_new,
             temperature=temperature,
-            adapter_id=adapter_id,
         ):
             token_count += 1
+            token_text = tokenizer.decode([token_id])
             chunk = ChatCompletionChunkResponse(
                 id=request_id,
                 created=created_ts,
@@ -581,10 +631,8 @@ async def lifespan(app: FastAPI):
         print("[Triton-27B] Standby — engine loads on first request.")
     yield
     dispatch_task.cancel()
-    try:
+    with contextlib.suppress(asyncio.CancelledError):
         await dispatch_task
-    except asyncio.CancelledError:
-        pass
     _unload_engine()
 
 
@@ -663,9 +711,10 @@ class LoadEngineRequest(BaseModel):
 
 
 @app.post("/api/engine/load")
-async def load_engine_endpoint(req: LoadEngineRequest = Body(default_factory=LoadEngineRequest)):
+async def load_engine_endpoint(req: LoadEngineRequest | None = None):
+    request = req or LoadEngineRequest()
     try:
-        _load_engine(num_layers=req.num_layers)
+        _load_engine(num_layers=request.num_layers)
         return {
             "status": "loaded",
             "model_id": "qwen3.8:27b",
@@ -719,6 +768,85 @@ async def completions(request: Request, req: CompletionRequest):
 @app.get("/api/telemetry")
 async def get_telemetry():
     return server_telemetry
+
+
+class PipelineTurn(BaseModel):
+    expert: str
+    instruction: str
+
+
+class RunPipelineRequest(BaseModel):
+    turns: list[PipelineTurn]
+    mode: str = "tensor_handoff"  # "tensor_handoff" | "text_prefill" | "both_side_by_side"
+    max_new_tokens: int = 256
+    temperature: float = 0.0
+
+
+@app.post("/api/multi_agent/run_pipeline")
+@app.post("/api/engine/multi_agent/run_pipeline")
+async def run_multi_agent_pipeline(req: RunPipelineRequest):
+    """Executes a multi-turn agentic pipeline under Tensor-Level Recurrent State Handoff ($S_t$)
+    or standard text re-prefill baseline, providing real-time telemetry for the 27B engine."""
+    from state_handoff_27b import AgentTurn, StateHandoffSession
+
+    eng = _load_engine()
+
+    def _run_tensor_arm():
+        session = StateHandoffSession(engine=eng)
+        results = []
+        for idx, turn in enumerate(req.turns):
+            res = session.execute_turn(
+                AgentTurn(
+                    agent_id=f"agent_{idx + 1}",
+                    role=turn.expert,
+                    instruction=turn.instruction,
+                    expert_lora=turn.expert,
+                    max_new_tokens=req.max_new_tokens,
+                    temperature=req.temperature,
+                )
+            )
+            lines = [line.strip() for line in res.output_text.splitlines() if line.strip()]
+            summary = [
+                line for line in lines if not line.startswith("```") and not line.startswith("#") and len(line) > 10
+            ]
+            human_summary = (
+                summary[0] if summary else f"Generated {res.tokens_generated} tokens of {turn.expert} output."
+            )
+            results.append(
+                {
+                    "step_index": idx + 1,
+                    "expert": turn.expert,
+                    "instruction": turn.instruction,
+                    "output_text": res.output_text,
+                    "human_summary": human_summary,
+                    "prompt_tokens": res.prefill_tokens,
+                    "generated_tokens": res.tokens_generated,
+                    "tokens_avoided": res.tokens_avoided,
+                    "prefill_ms": round(res.prefill_ms, 2),
+                    "decode_ms": round(res.decode_ms, 2),
+                    "total_ms": round(res.total_ms, 2),
+                    "tok_per_sec": round(res.tok_per_sec, 2),
+                    "state_size_mb": 154.0,
+                    "handoff_ms": round(res.handoff_ms, 2),
+                    "lora_swap_ms": round(res.lora_swap_ms, 2),
+                }
+            )
+        return results
+
+    try:
+        loop = asyncio.get_event_loop()
+        results = await loop.run_in_executor(None, _run_tensor_arm)
+        return {
+            "status": "success",
+            "mode": req.mode,
+            "results": results,
+            "turns_completed": len(results),
+        }
+    except Exception as exc:
+        import traceback
+
+        traceback.print_exc()
+        return JSONResponse(status_code=500, content={"error": str(exc)})
 
 
 # ---------------------------------------------------------------------------

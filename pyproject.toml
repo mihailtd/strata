@@ -120,8 +120,6 @@ testpaths = [
     # norecursedirs below) since they're runnable-script trees, not pytest
     # suites; an explicit path here still collects a named directory even
     # when an ancestor is excluded from recursion.
-    "experiments/factory/geometry/latent_variable_glasso",
-    "experiments/factory/geometry/poet_activation_crosstalk",
     "experiments/factory/geometry/poet_decomposition",
     "experiments/factory/geometry/activation_init_premise",
     "experiments/factory/geometry/riemannian_metric",

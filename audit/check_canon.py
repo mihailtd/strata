@@ -42,7 +42,6 @@ EXEMPT_DIRS = (
     # Stage-1 pre-integration work (see docs/METHODOLOGY.md) -- same latency/gating
     # nature as their benchmarks/ siblings above, just not integrated yet.
     "experiments/runtime/speculative/",
-    "experiments/frontier/",
     "experiments/kernel/",
 )
 EXEMPT_FILES = (

@@ -1,0 +1,114 @@
+{
+  "metadata": {
+    "model_id": "Qwen/Qwen3.5-4B",
+    "draft_k": 4,
+    "max_tokens": 48,
+    "threshold": 3.5,
+    "device": "AMD Radeon Graphics",
+    "timestamp": 1789454294
+  },
+  "prompts": {
+    "code_generation": {
+      "arm_1_ungated": {
+        "tokens": 48,
+        "elapsed_s": 2.06,
+        "tok_s": 23.3,
+        "avg_tau": 0.68,
+        "steps": 28,
+        "total_drafted": 50,
+        "total_accepted": 19,
+        "avg_draft_depth": 1.79
+      },
+      "arm_2_range_statistic_only": {
+        "tokens": 48,
+        "elapsed_s": 1.668,
+        "tok_s": 28.78,
+        "avg_tau": 0.68,
+        "steps": 28,
+        "total_drafted": 37,
+        "total_accepted": 19,
+        "avg_draft_depth": 1.32,
+        "speedup_vs_ungated": 1.235
+      },
+      "arm_3_tri_modal_composite": {
+        "tokens": 48,
+        "elapsed_s": 1.275,
+        "tok_s": 37.63,
+        "avg_tau": 1.76,
+        "steps": 17,
+        "total_drafted": 40,
+        "total_accepted": 30,
+        "avg_draft_depth": 2.35,
+        "speedup_vs_ungated": 1.615
+      }
+    },
+    "sql_schema": {
+      "arm_1_ungated": {
+        "tokens": 48,
+        "elapsed_s": 1.575,
+        "tok_s": 30.48,
+        "avg_tau": 1.82,
+        "steps": 17,
+        "total_drafted": 68,
+        "total_accepted": 31,
+        "avg_draft_depth": 4.0
+      },
+      "arm_2_range_statistic_only": {
+        "tokens": 48,
+        "elapsed_s": 1.372,
+        "tok_s": 34.98,
+        "avg_tau": 1.82,
+        "steps": 17,
+        "total_drafted": 48,
+        "total_accepted": 31,
+        "avg_draft_depth": 2.82,
+        "speedup_vs_ungated": 1.148
+      },
+      "arm_3_tri_modal_composite": {
+        "tokens": 48,
+        "elapsed_s": 1.215,
+        "tok_s": 39.52,
+        "avg_tau": 1.82,
+        "steps": 17,
+        "total_drafted": 40,
+        "total_accepted": 31,
+        "avg_draft_depth": 2.35,
+        "speedup_vs_ungated": 1.297
+      }
+    },
+    "adversarial_cipher": {
+      "arm_1_ungated": {
+        "tokens": 48,
+        "elapsed_s": 1.397,
+        "tok_s": 34.35,
+        "avg_tau": 2.27,
+        "steps": 15,
+        "total_drafted": 60,
+        "total_accepted": 34,
+        "avg_draft_depth": 4.0
+      },
+      "arm_2_range_statistic_only": {
+        "tokens": 48,
+        "elapsed_s": 1.145,
+        "tok_s": 41.93,
+        "avg_tau": 1.88,
+        "steps": 17,
+        "total_drafted": 38,
+        "total_accepted": 32,
+        "avg_draft_depth": 2.24,
+        "speedup_vs_ungated": 1.221
+      },
+      "arm_3_tri_modal_composite": {
+        "tokens": 48,
+        "elapsed_s": 1.531,
+        "tok_s": 31.35,
+        "avg_tau": 0.27,
+        "steps": 37,
+        "total_drafted": 12,
+        "total_accepted": 10,
+        "avg_draft_depth": 0.32,
+        "speedup_vs_ungated": 0.913
+      }
+    }
+  }
+}

@@ -115,18 +115,24 @@ whether two experts hurt each other, this is not it.
    `python_modern`/`postgresql`/`duckdb` — corrected, the closest pair is
    `python_modern`/`python_web`, and by 0.8%.
 
-## Where this maths still has a real job
+## Where this maths still has a real job — RESOLVED 2026-09-13, run twice
 
-Not on weight Gramians — on **activation covariance** `Σ_h = E[h hᵀ]`, where
-`n` tokens against `p = 2560` channels is the genuine `n < p` regime Ledoit-Wolf
-was built for, and where `d_R(Σ_base, Σ_current)` is scale-invariant under the
-RMSNorm rescalings that distort a Frobenius meter. `ledoit_wolf_from_samples()`
-is implemented and tested for exactly that. It costs a forward pass, so it is a
-GPU item and it is not run here.
+This section used to say activation-covariance `d_R` "costs a forward pass ... and it is not run here." It has now been run, twice, from two independent angles, plus a third dormant script that had never once been executed before this — see `docs/DECISIONS.md` §74 for full detail. Headline: **unlike the weight-space result above, activation-space `d_R` is not flat.**
+
+| | Weight-space (this file, above) | Activation-space, per-module (`benchmark_riemannian_activation_geodesics.py`) | Activation-space, whole-residual-stream (`benchmark_activation_covariance_geodesics.py`) |
+| :--- | :---: | :---: | :---: |
+| off-diagonal spread | **0.8%** | **18.5%** | **12.7%** |
+| method | Weight Gramians, shared-subspace AIRM | Real forward hooks, 20 modules, real Ledoit-Wolf from real samples (`n<p`: ~200-270 tokens vs p∈{2560,4096}) | Real `output_hidden_states`, 5 layers, 8 domain@version adapters, 97 real prompts |
+
+Both real activation-space measurements agree the metric now carries real domain signal (financial is consistently farthest from everything; duckdb/python_modern are consistently closest), and the whole-residual-stream version confirms the RMSNorm scale-invariance property that motivated using this construction in the first place (drift 6.64e-12 under a random diagonal rescaling). Running the second, previously-dormant script also surfaced and fixed three real, previously-uncaught bugs in it (a crash on the default `--pairwise`-off path, a dead `--pairwise` CLI flag, and a wrong-key silent-zero bug in its `training_db` write) — all fixed in place.
+
+Both consistency arms against real measured stacking outcomes stay at n=5 and disagree with each other in sign (−0.80 vs +0.30) — do not treat either as a validated predictor; the sample size cannot support one either way, same caveat §59 always carried.
 
 ## Files
 
-- `benchmark_riemannian_domain_distance.py` — this benchmark, with the abort gate
-- `apps/runtime/riemannian_covariance.py` — primitives, shrinkage, shared-subspace construction
+- `benchmark_riemannian_domain_distance.py` — the weight-space benchmark, with the abort gate
+- `benchmark_riemannian_activation_geodesics.py` — real per-module activation-covariance geodesics (new, 2026-09-13)
+- `benchmark_activation_covariance_geodesics.py` — real whole-residual-stream base-vs-expert profile + pairwise (existed dormant, run for the first time 2026-09-13)
+- `apps/runtime/riemannian_covariance.py` — primitives, shrinkage, shared-subspace construction, `ledoit_wolf_from_samples`
 - `tests/test_riemannian_covariance.py` — 19 tests; `test_airm_invariant_to_rank_basis` is the regression guard
-- `results/benchmarks/riemannian_domain_geodesics.json` — artifact
+- `results/benchmarks/riemannian_domain_geodesics.json`, `riemannian_activation_geodesics.json`, `activation_covariance_geodesics.json` — artifacts

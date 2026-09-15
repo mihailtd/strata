@@ -34,10 +34,10 @@ def test_ssm_chunk_verify_graph():
         pytest.skip("Layer cache not available")
 
     layers = [Qwen35SSMBlock(layer_idx=i, device=device) for i in range(3)]
-    for i, l in enumerate(layers):
+    for i, layer in enumerate(layers):
         l_data = torch.load(cache_dir / f"layer_{i}.pt", map_location=str(device), weights_only=False)
-        l.load_weights(l_data)
-        l.eval()
+        layer.load_weights(l_data)
+        layer.eval()
 
     verify_graph = SSMChunkVerifyGraph(layers, k=2, device=device)
     x = torch.randn(1, 2, 5120, dtype=torch.bfloat16, device=device)

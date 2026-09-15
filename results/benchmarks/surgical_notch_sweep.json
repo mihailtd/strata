@@ -8,6 +8,8 @@
     "GREEDY": true,
     "LORA_RANK": 8,
     "LORA_ALPHA": 128,
+    "KV_CACHE_DTYPE": "bfloat16",
+    "ATTENTION_BACKEND": "sdpa",
     "pairs": [
       [
         "astral",
@@ -769,5 +771,5 @@
       ]
     }
   },
-  "elapsed_seconds": 44.975111961364746
+  "elapsed_seconds": 2.7147812843322754
 }

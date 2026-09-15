@@ -1,0 +1,386 @@
+{
+  "config": {
+    "ADAPTER_VERSION": "v7",
+    "MAX_NEW_TOKENS": 2048,
+    "BASE_MODEL": "Qwen/Qwen3.5-4B",
+    "VRAM_CAP_GB": 22.0,
+    "GPU_SAFETY_THRESHOLD_GB": 6.0,
+    "GREEDY": true,
+    "LORA_RANK": 8,
+    "LORA_ALPHA": 128,
+    "KV_CACHE_DTYPE": "bfloat16",
+    "ATTENTION_BACKEND": "sdpa",
+    "k": 4,
+    "width": 5,
+    "repeats": 15,
+    "n_prompts": 18
+  },
+  "flip_rate_scan": [
+    {
+      "branch_a": [
+        628,
+        914,
+        2098,
+        635
+      ],
+      "branch_b": [
+        1220,
+        4507,
+        958,
+        25
+      ],
+      "max_diff_a": 0.125,
+      "max_diff_b": 0.125,
+      "flip_a": false,
+      "flip_b": false
+    },
+    {
+      "branch_a": [
+        628,
+        914,
+        2098,
+        635
+      ],
+      "branch_b": [
+        599,
+        264,
+        6093,
+        13
+      ],
+      "max_diff_a": 0.03125,
+      "max_diff_b": 0.125,
+      "flip_a": false,
+      "flip_b": false
+    },
+    {
+      "branch_a": [
+        628,
+        914,
+        1066,
+        958
+      ],
+      "branch_b": [
+        599,
+        264,
+        1510,
+        35
+      ],
+      "max_diff_a": 0.0,
+      "max_diff_b": 0.0,
+      "flip_a": false,
+      "flip_b": false
+    },
+    {
+      "branch_a": [
+        4087,
+        369,
+        25,
+        2972
+      ],
+      "branch_b": [
+        14855,
+        369,
+        25,
+        198
+      ],
+      "max_diff_a": 0.125,
+      "max_diff_b": 0.125,
+      "flip_a": false,
+      "flip_b": false
+    },
+    {
+      "branch_a": [
+        628,
+        635,
+        411,
+        303
+      ],
+      "branch_b": [
+        599,
+        264,
+        2972,
+        1246
+      ],
+      "max_diff_a": 0.125,
+      "max_diff_b": 0.15625,
+      "flip_a": false,
+      "flip_b": false
+    },
+    {
+      "branch_a": [
+        369,
+        264,
+        4047,
+        4125
+      ],
+      "branch_b": [
+        628,
+        3420,
+        1521,
+        279
+      ],
+      "max_diff_a": 0.125,
+      "max_diff_b": 0.125,
+      "flip_a": false,
+      "flip_b": false
+    },
+    {
+      "branch_a": [
+        628,
+        635,
+        411,
+        539
+      ],
+      "branch_b": [
+        599,
+        264,
+        1898,
+        314
+      ],
+      "max_diff_a": 0.0,
+      "max_diff_b": 0.125,
+      "flip_a": false,
+      "flip_b": false
+    },
+    {
+      "branch_a": [
+        3377,
+        369,
+        421,
+        279
+      ],
+      "branch_b": [
+        4125,
+        369,
+        421,
+        279
+      ],
+      "max_diff_a": 0.125,
+      "max_diff_b": 0.125,
+      "flip_a": false,
+      "flip_b": false
+    },
+    {
+      "branch_a": [
+        628,
+        635,
+        411,
+        539
+      ],
+      "branch_b": [
+        599,
+        264,
+        6093,
+        13
+      ],
+      "max_diff_a": 0.125,
+      "max_diff_b": 0.125,
+      "flip_a": false,
+      "flip_b": false
+    },
+    {
+      "branch_a": [
+        4087,
+        369,
+        2972,
+        2083
+      ],
+      "branch_b": [
+        1379,
+        4047,
+        6093,
+        369
+      ],
+      "max_diff_a": 0.125,
+      "max_diff_b": 0.125,
+      "flip_a": false,
+      "flip_b": false
+    },
+    {
+      "branch_a": [
+        628,
+        635,
+        411,
+        539
+      ],
+      "branch_b": [
+        599,
+        264,
+        1546,
+        4145
+      ],
+      "max_diff_a": 0.125,
+      "max_diff_b": 0.0625,
+      "flip_a": false,
+      "flip_b": false
+    },
+    {
+      "branch_a": [
+        17695,
+        369,
+        264,
+        2972
+      ],
+      "branch_b": [
+        795,
+        369,
+        4808,
+        13
+      ],
+      "max_diff_a": 0.078125,
+      "max_diff_b": 0.125,
+      "flip_a": false,
+      "flip_b": false
+    },
+    {
+      "branch_a": [
+        4087,
+        369,
+        2972,
+        3
+      ],
+      "branch_b": [
+        1786,
+        4087,
+        369,
+        310
+      ],
+      "max_diff_a": 0.125,
+      "max_diff_b": 0.125,
+      "flip_a": false,
+      "flip_b": false
+    },
+    {
+      "branch_a": [
+        2688,
+        14169,
+        11,
+        694
+      ],
+      "branch_b": [
+        599,
+        264,
+        2342,
+        2519
+      ],
+      "max_diff_a": 0.15625,
+      "max_diff_b": 0.0,
+      "flip_a": false,
+      "flip_b": false
+    },
+    {
+      "branch_a": [
+        2716,
+        4087,
+        369,
+        25
+      ],
+      "branch_b": [
+        1248,
+        4496,
+        369,
+        2972
+      ],
+      "max_diff_a": 0.125,
+      "max_diff_b": 0.1328125,
+      "flip_a": false,
+      "flip_b": false
+    },
+    {
+      "branch_a": [
+        2972,
+        94064,
+        332,
+        7857
+      ],
+      "branch_b": [
+        14884,
+        7857,
+        4687,
+        369
+      ],
+      "max_diff_a": 0.15625,
+      "max_diff_b": 0.140625,
+      "flip_a": false,
+      "flip_b": false
+    },
+    {
+      "branch_a": [
+        1510,
+        5799,
+        63,
+        709
+      ],
+      "branch_b": [
+        1970,
+        41643,
+        3294,
+        4774
+      ],
+      "max_diff_a": 0.140625,
+      "max_diff_b": 0.0,
+      "flip_a": true,
+      "flip_b": false
+    },
+    {
+      "branch_a": [
+        1379,
+        4047,
+        16036,
+        369
+      ],
+      "branch_b": [
+        6093,
+        369,
+        310,
+        958
+      ],
+      "max_diff_a": 0.125,
+      "max_diff_b": 0.125,
+      "flip_a": false,
+      "flip_b": false
+    }
+  ],
+  "n_flips": 1,
+  "n_prompts": 18,
+  "flip_rate": 0.05555555555555555,
+  "timing": {
+    "seq_ms_median": 86.84603099936794,
+    "batch_ms_median": 48.16136500085122,
+    "seq_ms_all": [
+      87.7866200007702,
+      87.95696599918301,
+      86.887540999669,
+      88.30739699988044,
+      87.64520099975925,
+      86.84603099936794,
+      87.05680499951995,
+      85.29070599979605,
+      85.79516200006765,
+      86.41899500071304,
+      85.55347899891785,
+      86.96432800024922,
+      85.17272000062803,
+      83.67293100127426,
+      83.0099729992071
+    ],
+    "batch_ms_all": [
+      48.16136500085122,
+      48.34642999958305,
+      48.79701199934061,
+      49.0636419999646,
+      48.80454600061057,
+      48.76280600001337,
+      48.81465499965998,
+      47.075186999791185,
+      47.376273998452234,
+      46.95051899943792,
+      48.43431700101064,
+      47.63756300053501,
+      47.74912599896197,
+      45.8431710012519,
+      47.4255280005309
+    ],
+    "batch_vs_seq_ratio": 0.5545603460128389
+  }
+}
