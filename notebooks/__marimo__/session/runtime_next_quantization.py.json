@@ -1,0 +1,412 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.24.2",
+    "script_metadata_hash": null
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "a679d51231022b37347e62d855018a96",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "MJUe",
+      "code_hash": "68e5e5090f992f4154ca35a1ac5b96b5",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h1 id=\"from-a-22-loss-to-a-real-win-at-every-size-quantizing-runtime-next\">From a 22% Loss to a Real Win at Every Size: Quantizing runtime-next</h1>\n<h3 id=\"real-w4a16-int4-quantization-benchmarked-3-way-against-llamacpp-and-ollama-both-real-q4_k_m-across-the-full-qwen35-dense-family-08b-27b-on-an-amd-radeon-rx-7900-xtx\">Real W4A16 INT4 quantization, benchmarked 3-way against <code>llama.cpp</code> and <code>Ollama</code> (both real <code>Q4_K_M</code>), across the full Qwen3.5 dense family (0.8B-27B) on an AMD Radeon RX 7900 XTX</h3></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "vblA",
+      "code_hash": "b38ed07bf171c97e7bc8eee61b9f8b13",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-callout-output data-html='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003e&#92;u003cstrong&#92;u003eThis notebook is a sequel to &#92;u003ca href=&#92;&quot;runtime_next_breakthrough.py&#92;&quot;&#92;u003e&#92;u003ccode&#92;u003eruntime_next_breakthrough.py&#92;u003c/code&#92;u003e&#92;u003c/a&#92;u003e, and it does not open with a win.&#92;u003c/strong&#92;u003e&#92;u003c/span&#92;u003e&#92;n&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eThat first notebook showed &#92;u003ccode&#92;u003eruntime-next&#92;u003c/code&#92;u003e -- a from-scratch Rust/HIP engine -- beating &#92;u003ccode&#92;u003ellama.cpp&#92;u003c/code&#92;u003e and &#92;u003ccode&#92;u003eOllama&#92;u003c/code&#92;u003e at every size&#92;nfrom 0.8B to 9B, entirely in &#92;u003cstrong&#92;u003eunquantized bf16&#92;u003c/strong&#92;u003e. The obvious next question: bf16 caps out at 9B on a 24GB card (27B needs&#92;n~54GB), and quantized inference is a completely different performance regime. Does the same engine still win once everyone&#92;nis running 4-bit weights instead of bf16?&#92;u003c/span&#92;u003e&#92;n&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003e&#92;u003cstrong&#92;u003eThe honest first answer was no.&#92;u003c/strong&#92;u003e The first real, working W4A16 kernel -- correct, but a naive first pass -- lost to both&#92;n&#92;u003ccode&#92;u003ellama.cpp&#92;u003c/code&#92;u003e and &#92;u003ccode&#92;u003eOllama&#92;u003c/code&#92;u003e at every size, by as much as 22% at 27B. This notebook documents that real loss, the real profiling&#92;nthat explained it, and the real (lossless -- every optimization below was verified to produce byte-identical token output&#92;nbefore and after) engineering that closed it: &#92;u003cstrong&#92;u003eevery one of the five real sizes now beats both &#92;u003ccode&#92;u003ellama.cpp&#92;u003c/code&#92;u003e and &#92;u003ccode&#92;u003eOllama&#92;u003c/code&#92;u003e on&#92;ndecode throughput&#92;u003c/strong&#92;u003e, from +1% at 27B to +34% at 0.8B. TTFT (prompt-processing latency) is the one metric that&#x27;s still behind,&#92;nand this notebook says exactly why, with a real profiling number, not a guess.&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-kind='&quot;info&quot;'></marimo-callout-output>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "bkHC",
+      "code_hash": "4890e013cde01905c215fb9174bf5e41",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 1rem'><marimo-stat data-value='&quot;RX 7900 XTX&quot;' data-label='&quot;Hardware Target&quot;' data-caption='&quot;24 GB GDDR6 | 960 GB/s Bandwidth | gfx1100&quot;' data-bordered='true' data-target_direction='&quot;increase&quot;'></marimo-stat><marimo-stat data-value='&quot;W4A16&quot;' data-label='&quot;Quantization Built&quot;' data-caption='&quot;Symmetric INT4, group=128, bf16 scales -- 4.125 bits/weight&quot;' data-bordered='true' data-target_direction='&quot;increase&quot;'></marimo-stat><marimo-stat data-value='&quot;5 Sizes&quot;' data-label='&quot;Real Dense Models&quot;' data-caption='&quot;0.8B / 2B / 4B / 9B / 27B, all real Qwen3.5/3.8 checkpoints&quot;' data-bordered='true' data-target_direction='&quot;increase&quot;'></marimo-stat><marimo-stat data-value='&quot;Win at Every Size&quot;' data-label='&quot;Final Decode Throughput&quot;' data-caption='&quot;+1% (27B) to +34% (0.8B) vs. llama.cpp Q4_K_M&quot;' data-bordered='true' data-target_direction='&quot;increase&quot;'></marimo-stat><marimo-stat data-value='&quot;Still Behind&quot;' data-label='&quot;TTFT (Prompt Latency)&quot;' data-caption='&quot;1.6x-3x slower than llama.cpp -- disclosed, diagnosed, not fixed yet&quot;' data-bordered='true' data-target_direction='&quot;increase&quot;'></marimo-stat></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "lEQa",
+      "code_hash": "68dfe0b01a42d559dab474816c5ccf3c",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"1-why-quantize-at-all-the-real-vram-math\">1. Why Quantize at All? The Real VRAM Math</h2>\n<span class=\"paragraph\"><code>runtime_next_breakthrough.py</code> already covered 0.8B-9B in bf16. The reason to quantize isn't speed in the abstract --\nit's that <strong>27B simply does not fit in 24GB of VRAM at 16 bits per weight</strong>. Quantizing to ~4 bits is the only way this\nengine can run a model that size on this hardware at all, before asking whether it's also fast.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "PKri",
+      "code_hash": "69a6b78c5da3f9d50b819280773d0932",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Xref",
+      "code_hash": "a1c19bb66f44259c354bd4b7ae2c06b8",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-ui-element object-id='Xref-0' random-id='2d813997-4fdd-63e1-a639-e73b4b6e5d84'><marimo-vega data-initial-value='{}' data-label='null' data-spec='{&quot;config&quot;:{&quot;view&quot;:{&quot;continuousWidth&quot;:300,&quot;continuousHeight&quot;:300}},&quot;layer&quot;:[{&quot;data&quot;:{&quot;url&quot;:&quot;data:application/vnd.apache.arrow.file;base64,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&quot;,&quot;format&quot;:{&quot;type&quot;:&quot;arrow&quot;}},&quot;mark&quot;:{&quot;type&quot;:&quot;bar&quot;,&quot;cornerRadiusTopLeft&quot;:4,&quot;cornerRadiusTopRight&quot;:4},&quot;encoding&quot;:{&quot;color&quot;:{&quot;field&quot;:&quot;precision&quot;,&quot;legend&quot;:{&quot;labelExpr&quot;:&quot;datum.value == &#x27;bf16_weight_gb&#x27; ? &#x27;bf16 (16 bpw)&#x27; : &#x27;W4A16 (4.125 bpw)&#x27;&quot;,&quot;orient&quot;:&quot;bottom&quot;},&quot;scale&quot;:{&quot;domain&quot;:[&quot;bf16_weight_gb&quot;,&quot;w4a16_weight_gb&quot;],&quot;range&quot;:[&quot;#94a3b8&quot;,&quot;#10b981&quot;]},&quot;title&quot;:null,&quot;type&quot;:&quot;nominal&quot;},&quot;tooltip&quot;:[{&quot;field&quot;:&quot;model&quot;,&quot;title&quot;:&quot;Model&quot;,&quot;type&quot;:&quot;nominal&quot;},{&quot;field&quot;:&quot;weight_gb&quot;,&quot;format&quot;:&quot;.2f&quot;,&quot;title&quot;:&quot;Weight Size (GB)&quot;,&quot;type&quot;:&quot;quantitative&quot;}],&quot;x&quot;:{&quot;axis&quot;:{&quot;labelAngle&quot;:0},&quot;field&quot;:&quot;model&quot;,&quot;sort&quot;:[&quot;0.8B&quot;,&quot;2B&quot;,&quot;4B&quot;,&quot;9B&quot;,&quot;27B&quot;],&quot;title&quot;:null,&quot;type&quot;:&quot;nominal&quot;},&quot;xOffset&quot;:{&quot;field&quot;:&quot;precision&quot;,&quot;type&quot;:&quot;nominal&quot;},&quot;y&quot;:{&quot;field&quot;:&quot;weight_gb&quot;,&quot;scale&quot;:{&quot;domain&quot;:[0,58],&quot;nice&quot;:false,&quot;zero&quot;:true},&quot;title&quot;:&quot;Real Weight Size in VRAM (GB)&quot;,&quot;type&quot;:&quot;quantitative&quot;}},&quot;transform&quot;:[{&quot;fold&quot;:[&quot;bf16_weight_gb&quot;,&quot;w4a16_weight_gb&quot;],&quot;as&quot;:[&quot;precision&quot;,&quot;weight_gb&quot;]}]},{&quot;data&quot;:{&quot;url&quot;:&quot;data:application/vnd.apache.arrow.file;base64,QVJST1cxAAAEAAAA8v///xQAAAAEAAEAAAAKAAsACAAKAAQA+P///wwAAAAIAAgAAAAEAAEAAAAEAAAA7P///zAAAAAgAAAAGAAAAAEDAAAQABIABAAQABEACAAAAAwAAAAAAPr///8CAAYABgAEAAUAAABsaW1pdAAAAAAAAAD/////gAAAAAQAAADs////QAAAAAAAAAAUAAAABAADAAwAEwAQABIADAAEAOr///8BAAAAAAAAADwAAAAQAAAAAAAKABQABAAMABAAAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAEAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAOEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP////8AAAAABAAAAOz///9AAAAAOAAAABQAAAAEAAAADAASABAABAAIAAwAAQAAAIAAAAAAAAAAiAAAAAAAAABAAAAAAAAAAAAAAAAAAAAA+P///wwAAAAIAAgAAAAEAAEAAAAEAAAA7P///zAAAAAgAAAAGAAAAAEDAAAQABIABAAQABEACAAAAAwAAAAAAPr///8CAAYABgAEAAUAAABsaW1pdACeAAAAQVJST1cx&quot;,&quot;format&quot;:{&quot;type&quot;:&quot;arrow&quot;}},&quot;mark&quot;:{&quot;type&quot;:&quot;rule&quot;,&quot;color&quot;:&quot;#ef4444&quot;,&quot;strokeDash&quot;:[4,4],&quot;strokeWidth&quot;:2},&quot;encoding&quot;:{&quot;y&quot;:{&quot;field&quot;:&quot;limit&quot;,&quot;type&quot;:&quot;quantitative&quot;}}},{&quot;data&quot;:{&quot;url&quot;:&quot;data:application/vnd.apache.arrow.file;base64,QVJST1cxAAAEAAAA8v///xQAAAAEAAEAAAAKAAsACAAKAAQA+P///wwAAAAIAAgAAAAEAAIAAAA0AAAABAAAAMD///8cAAAAEAAAAAgAAAABGAAAAAAAAPz///8EAAQABQAAAGxhYmVsAAAA7P///zAAAAAgAAAAGAAAAAEDAAAQABIABAAQABEACAAAAAwAAAAAAPr///8CAAYABgAEAAUAAABsaW1pdAAAAAAAAAD/////2AAAAAQAAADs////wAAAAAAAAAAUAAAABAADAAwAEwAQABIADAAEAOb///8BAAAAAAAAAIQAAAAoAAAAFAAAAAAADgAYAAQADAAQAAAAFAABAAAAAQAAAAAAAAAAAAAABQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAEAAAAAAAAACAAAAAAAAAABsAAAAAAAAAAAAAAAIAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAADlAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAbAAAAMjQgRwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMjQgR0IgcGh5c2ljYWwgVlJBTSBjZWlsaW5nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP////8AAAAABAAAAOz///9AAAAAOAAAABQAAAAEAAAADAASABAABAAIAAwAAQAAALAAAAAAAAAA4AAAAAAAAADAAAAAAAAAAAAAAAAAAAAA+P///wwAAAAIAAgAAAAEAAIAAAA0AAAABAAAAMD///8cAAAAEAAAAAgAAAABGAAAAAAAAPz///8EAAQABQAAAGxhYmVsAAAA7P///zAAAAAgAAAAGAAAAAEDAAAQABIABAAQABEACAAAAAwAAAAAAPr///8CAAYABgAEAAUAAABsaW1pdADOAAAAQVJST1cx&quot;,&quot;format&quot;:{&quot;type&quot;:&quot;arrow&quot;}},&quot;mark&quot;:{&quot;type&quot;:&quot;text&quot;,&quot;align&quot;:&quot;left&quot;,&quot;color&quot;:&quot;#ef4444&quot;,&quot;dx&quot;:-140,&quot;fontSize&quot;:11},&quot;encoding&quot;:{&quot;text&quot;:{&quot;field&quot;:&quot;label&quot;,&quot;type&quot;:&quot;nominal&quot;},&quot;y&quot;:{&quot;field&quot;:&quot;limit&quot;,&quot;type&quot;:&quot;quantitative&quot;}}}],&quot;height&quot;:280,&quot;title&quot;:&quot;27B needs quantization just to load, not to go faster&quot;,&quot;width&quot;:560,&quot;&#36;schema&quot;:&quot;https://vega.github.io/schema/vega-lite/v6.4.1.json&quot;}' data-chart-selection='true' data-field-selection='true' data-embed-options='{}'></marimo-vega></marimo-ui-element>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "SFPL",
+      "code_hash": "4d66cda2ff5c1d113d0533b5a0226eee",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">27B at bf16 needs ~54GB -- more than double this card's 24GB, a hard OOM, not a performance question. At W4A16\n(~4.125 bits/weight, real -- see below), the real converted checkpoint is <strong>16GB</strong>, leaving real headroom for KV cache.\nThis is the actual, measured file size of <code>quantize_w4a16.py</code>'s real output, not a theoretical estimate.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "BYtC",
+      "code_hash": "b9d7affd4a63e6df0f696b574cc56f65",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"2-the-real-quantization-scheme-symmetric-w4a16\">2. The Real Quantization Scheme: Symmetric W4A16</h2>\n<span class=\"paragraph\">One real format was built and shipped this round: a from-scratch <strong>symmetric INT4</strong> scheme, ported from this repo's\nexisting <code>runtime-triton</code> engine's validated math and adapted to a new memory layout for <code>runtime-next</code>'s GEMV-shaped\nkernels. It is benchmarked below against two independently-implemented, already-mature formats -- <code>llama.cpp</code>'s and\n<code>Ollama</code>'s real <code>Q4_K_M</code> GGUF quantization -- as the comparison baseline. <strong>A from-scratch GPTQ-Int4 reader was planned\nbut not built this round</strong> (see the Scope section at the end) -- there is no fabricated third arm here, only the one\nreal format this session actually implemented, tested, and measured.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "RGSE",
+      "code_hash": "81486b8dfe0a571e43685dbf3a9e2dcc",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>The real scheme</strong>: symmetric INT4, one <code>bf16</code> scale per 128-element group along the input dimension, a fixed\nzero-point of 8 (no stored zero-point tensor), 8 nibbles packed LSB-first per <code>int32</code>, <strong>row-major</strong> (matching this\nengine's existing bf16 GEMV weight layout exactly -- a deliberate adaptation from <code>runtime-triton</code>'s K-major layout,\nwhich suits its tile-based Triton kernel but not this engine's one-block-per-output-row GEMV design):</span>\n<marimo-tex class=\"arithmatex\">||[q \\in [0, 15], \\quad w \\approx (q - 8) \\times \\text{scale}, \\quad \\text{effective bits/weight} = 4 + \\frac{16}{128} = 4.125||]</marimo-tex><span class=\"paragraph\"><strong>What the real kernel is -- and, just as importantly, what it is not</strong>: this is a hand-written HIP kernel doing plain\nscalar FP32 fused-multiply-add dequantization, one block per output row, warp-shuffle + shared-memory reduction --\nthe same proven pattern as this engine's existing bf16 GEMV kernel. It does <strong>not</strong> use RDNA3 matrix-core (WMMA)\ninstructions, and it does <strong>not</strong> fuse with LoRA adapters (<code>LinearWeight::as_bf16()</code> panics loudly on a quantized\nweight rather than silently miscomputing -- LoRA folding stays bf16-only this round). Both of those were considered\nand explicitly deferred, not silently dropped.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Kclp",
+      "code_hash": "1bab5529be065683a5af898c4884a982",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"3-the-real-optimization-arc-from-a-22-loss-to-a-win\">3. The Real Optimization Arc: From a 22% Loss to a Win</h2>\n<span class=\"paragraph\">The first real, correct, end-to-end quantized 27B generation worked on its first try -- coherent, on-topic, factually\nright. It was also <strong>slower than both <code>llama.cpp</code> and <code>Ollama</code>, at every size</strong>. This section is the real, measured\nstory of closing that gap, step by step, with every step gated on a real correctness check before being kept.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "emfo",
+      "code_hash": "1ce9eafbd80bfc56d48ab63824feed33",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Hstk",
+      "code_hash": "215d46f5f3c9f24053235688e5ae2bf4",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-ui-element object-id='Hstk-0' random-id='41fe38fd-8b40-9c76-5bef-7defe154b169'><marimo-vega data-initial-value='{}' data-label='null' data-spec='{&quot;config&quot;:{&quot;view&quot;:{&quot;continuousWidth&quot;:300,&quot;continuousHeight&quot;:300}},&quot;layer&quot;:[{&quot;data&quot;:{&quot;url&quot;:&quot;data:application/vnd.apache.arrow.file;base64,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&quot;,&quot;format&quot;:{&quot;type&quot;:&quot;arrow&quot;}},&quot;mark&quot;:{&quot;type&quot;:&quot;line&quot;,&quot;color&quot;:&quot;#10b981&quot;,&quot;point&quot;:{&quot;filled&quot;:true,&quot;size&quot;:90},&quot;strokeWidth&quot;:3},&quot;encoding&quot;:{&quot;tooltip&quot;:[{&quot;field&quot;:&quot;step&quot;,&quot;title&quot;:&quot;Step&quot;,&quot;type&quot;:&quot;nominal&quot;},{&quot;field&quot;:&quot;decode_27b_tok_s&quot;,&quot;format&quot;:&quot;.1f&quot;,&quot;title&quot;:&quot;tok/s&quot;,&quot;type&quot;:&quot;quantitative&quot;},{&quot;field&quot;:&quot;vs_llamacpp_27b&quot;,&quot;format&quot;:&quot;.2f&quot;,&quot;title&quot;:&quot;vs llama.cpp&quot;,&quot;type&quot;:&quot;quantitative&quot;}],&quot;x&quot;:{&quot;axis&quot;:{&quot;labelAngle&quot;:-20,&quot;labelLimit&quot;:220},&quot;field&quot;:&quot;step&quot;,&quot;sort&quot;:[&quot;1. First correct kernel&quot;,&quot;2. Safe algebra (factor scale/bias per int32)&quot;,&quot;3. Vectorized loads + adaptive thread count&quot;,&quot;4. Batched prefill kernel (TTFT only)&quot;],&quot;title&quot;:null,&quot;type&quot;:&quot;nominal&quot;},&quot;y&quot;:{&quot;field&quot;:&quot;decode_27b_tok_s&quot;,&quot;scale&quot;:{&quot;domain&quot;:[20,42],&quot;zero&quot;:false},&quot;title&quot;:&quot;27B Decode Throughput (tok/s)&quot;,&quot;type&quot;:&quot;quantitative&quot;}}},{&quot;data&quot;:{&quot;url&quot;:&quot;data:application/vnd.apache.arrow.file;base64,QVJST1cxAAAEAAAA8v///xQAAAAEAAEAAAAKAAsACAAKAAQA+P///wwAAAAIAAgAAAAEAAEAAAAEAAAA7P///zAAAAAgAAAAGAAAAAEDAAAQABIABAAQABEACAAAAAwAAAAAAPr///8CAAYABgAEAAEAAAB5AAAA/////4AAAAAEAAAA7P///0AAAAAAAAAAFAAAAAQAAwAMABMAEAASAAwABADq////AQAAAAAAAAA8AAAAEAAAAAAACgAUAAQADAAQAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAABAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAwEBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD/////AAAAAAQAAADs////QAAAADgAAAAUAAAABAAAAAwAEgAQAAQACAAMAAEAAAB4AAAAAAAAAIgAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAPj///8MAAAACAAIAAAABAABAAAABAAAAOz///8wAAAAIAAAABgAAAABAwAAEAASAAQAEAARAAgAAAAMAAAAAAD6////AgAGAAYABAABAAAAeQCaAAAAQVJST1cx&quot;,&quot;format&quot;:{&quot;type&quot;:&quot;arrow&quot;}},&quot;mark&quot;:{&quot;type&quot;:&quot;rule&quot;,&quot;color&quot;:&quot;#ef4444&quot;,&quot;strokeDash&quot;:[4,4],&quot;strokeWidth&quot;:2},&quot;encoding&quot;:{&quot;y&quot;:{&quot;field&quot;:&quot;y&quot;,&quot;type&quot;:&quot;quantitative&quot;}}},{&quot;data&quot;:{&quot;url&quot;:&quot;data:application/vnd.apache.arrow.file;base64,QVJST1cxAAAEAAAA8v///xQAAAAEAAEAAAAKAAsACAAKAAQA+P///wwAAAAIAAgAAAAEAAIAAAA0AAAABAAAAMD///8cAAAAEAAAAAgAAAABGAAAAAAAAPz///8EAAQABQAAAGxhYmVsAAAA7P///zAAAAAgAAAAGAAAAAEDAAAQABIABAAQABEACAAAAAwAAAAAAPr///8CAAYABgAEAAEAAAB5AAAA/////9gAAAAEAAAA7P///8AAAAAAAAAAFAAAAAQAAwAMABMAEAASAAwABADm////AQAAAAAAAACEAAAAKAAAABQAAAAAAA4AGAAEAAwAEAAAABQAAQAAAAEAAAAAAAAAAAAAAAUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAABAAAAAAAAAAgAAAAAAAAAA4AAAAAAAAAAAAAAACAAAAAQAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAEBBQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOAAAAGxsYW0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGxsYW1hLmNwcCBRNF9LX00gYmFzZWxpbmUgKDMzLjUgdG9rL3MsIHByZS1vcHRpbWl6YXRpb24pAAAAAAAAAAD/////AAAAAAQAAADs////QAAAADgAAAAUAAAABAAAAAwAEgAQAAQACAAMAAEAAACoAAAAAAAAAOAAAAAAAAAAwAAAAAAAAAAAAAAAAAAAAPj///8MAAAACAAIAAAABAACAAAANAAAAAQAAADA////HAAAABAAAAAIAAAAARgAAAAAAAD8////BAAEAAUAAABsYWJlbAAAAOz///8wAAAAIAAAABgAAAABAwAAEAASAAQAEAARAAgAAAAMAAAAAAD6////AgAGAAYABAABAAAAeQDKAAAAQVJST1cx&quot;,&quot;format&quot;:{&quot;type&quot;:&quot;arrow&quot;}},&quot;mark&quot;:{&quot;type&quot;:&quot;text&quot;,&quot;align&quot;:&quot;left&quot;,&quot;color&quot;:&quot;#ef4444&quot;,&quot;dx&quot;:-260,&quot;dy&quot;:-4,&quot;fontSize&quot;:10},&quot;encoding&quot;:{&quot;text&quot;:{&quot;field&quot;:&quot;label&quot;,&quot;type&quot;:&quot;nominal&quot;},&quot;y&quot;:{&quot;field&quot;:&quot;y&quot;,&quot;type&quot;:&quot;quantitative&quot;}}}],&quot;height&quot;:300,&quot;title&quot;:&quot;Real 27B decode throughput through each real optimization step&quot;,&quot;width&quot;:620,&quot;&#36;schema&quot;:&quot;https://vega.github.io/schema/vega-lite/v6.4.1.json&quot;}' data-chart-selection='true' data-field-selection='true' data-embed-options='{}'></marimo-vega></marimo-ui-element>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "nWHF",
+      "code_hash": "7b74433ca6ced84688f857e4df44ff8f",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>Step 2, why it's small</strong>: real rocprofv3 profiling (not a guess) found the decode kernel was already 90.6% of all\ndecode kernel time and bandwidth-bound at ~51% of the GPU's 960GB/s peak -- so trimming FLOPs (this step) had a real\nbut modest ceiling (50.9% to 53.2% of peak). <strong>Step 3 is where the real win came from</strong>: real per-shape kernel\nbenchmarking showed the naive vectorized version (step 3's first attempt) barely moved 2B and slightly <em>regressed</em>\n0.8B, because at those models' smaller <code>in_features</code>, a fixed 256-thread launch left most of a block idle once loads\nwere vectorized by 4x -- fixing the thread count to match the real work size is what made the gain show up at every\nsize, not just the one that motivated it. <strong>Step 4 targets TTFT specifically</strong> (prompt processing, not per-token\ndecode) and is covered in its own section below, not the chart above.</span>\n<span class=\"paragraph\">Every one of these steps was verified lossless before being kept: kernel-level cross-validation against an\nindependent CPU reference, plus a real end-to-end generation A/B where the exact same 34-token greedy-decoded\nsequence was reproduced byte-for-byte before and after each change (checked directly, not assumed from the math\n\"looking\" equivalent).</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "iLit",
+      "code_hash": "ecb97a9553e2aaabbbbe8d77f389a07c",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"4-the-real-result-decode-throughput-at-every-size\">4. The Real Result: Decode Throughput at Every Size</h2>\n<span class=\"paragraph\">Real HTTP/SSE benchmarks, one engine at a time (isolated OS processes, real VRAM-baseline gating between every arm --\nthis repo's own established safety discipline after an earlier session incident where a careless concurrent-testing\npattern caused real GPU memory pressure), three coding-task prompts averaged per arm per size.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ZHCJ",
+      "code_hash": "c46a865cbe2bd90e6201a723661ae5e4",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ROlb",
+      "code_hash": "9cc8a9480f668f7ae50ee2f0e688d9eb",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-ui-element object-id='ROlb-0' random-id='7fe14612-5a11-6863-1fee-eb3f1b184d69'><marimo-table data-initial-value='[]' data-label='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eFinal Real 3-Way Benchmark: runtime-next W4A16 vs. llama.cpp Q4_K_M vs. Ollama Q4_K_M&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-data='&quot;[{&#92;&quot;model&#92;&quot;:&#92;&quot;0.8B&#92;&quot;,&#92;&quot;llamacpp_tok_s&#92;&quot;:275.4,&#92;&quot;ollama_tok_s&#92;&quot;:297.4,&#92;&quot;runtime_next_tok_s&#92;&quot;:368.8,&#92;&quot;speedup_vs_llamacpp&#92;&quot;:1.34,&#92;&quot;speedup_vs_ollama&#92;&quot;:1.24,&#92;&quot;llamacpp_ttft_ms&#92;&quot;:36.7,&#92;&quot;runtime_next_ttft_ms&#92;&quot;:45.4},{&#92;&quot;model&#92;&quot;:&#92;&quot;2B&#92;&quot;,&#92;&quot;llamacpp_tok_s&#92;&quot;:212.2,&#92;&quot;ollama_tok_s&#92;&quot;:225.6,&#92;&quot;runtime_next_tok_s&#92;&quot;:256.1,&#92;&quot;speedup_vs_llamacpp&#92;&quot;:1.21,&#92;&quot;speedup_vs_ollama&#92;&quot;:1.14,&#92;&quot;llamacpp_ttft_ms&#92;&quot;:42.9,&#92;&quot;runtime_next_ttft_ms&#92;&quot;:69.1},{&#92;&quot;model&#92;&quot;:&#92;&quot;4B&#92;&quot;,&#92;&quot;llamacpp_tok_s&#92;&quot;:130.5,&#92;&quot;ollama_tok_s&#92;&quot;:138.2,&#92;&quot;runtime_next_tok_s&#92;&quot;:147.4,&#92;&quot;speedup_vs_llamacpp&#92;&quot;:1.13,&#92;&quot;speedup_vs_ollama&#92;&quot;:1.07,&#92;&quot;llamacpp_ttft_ms&#92;&quot;:83.0,&#92;&quot;runtime_next_ttft_ms&#92;&quot;:182.2},{&#92;&quot;model&#92;&quot;:&#92;&quot;9B&#92;&quot;,&#92;&quot;llamacpp_tok_s&#92;&quot;:90.9,&#92;&quot;ollama_tok_s&#92;&quot;:98.0,&#92;&quot;runtime_next_tok_s&#92;&quot;:114.1,&#92;&quot;speedup_vs_llamacpp&#92;&quot;:1.25,&#92;&quot;speedup_vs_ollama&#92;&quot;:1.16,&#92;&quot;llamacpp_ttft_ms&#92;&quot;:128.0,&#92;&quot;runtime_next_ttft_ms&#92;&quot;:250.3},{&#92;&quot;model&#92;&quot;:&#92;&quot;27B&#92;&quot;,&#92;&quot;llamacpp_tok_s&#92;&quot;:34.9,&#92;&quot;ollama_tok_s&#92;&quot;:37.0,&#92;&quot;runtime_next_tok_s&#92;&quot;:37.4,&#92;&quot;speedup_vs_llamacpp&#92;&quot;:1.07,&#92;&quot;speedup_vs_ollama&#92;&quot;:1.01,&#92;&quot;llamacpp_ttft_ms&#92;&quot;:334.7,&#92;&quot;runtime_next_ttft_ms&#92;&quot;:1008.8}]&quot;' data-total-rows='5' data-total-columns='8' data-max-columns='50' data-banner-text='&quot;&quot;' data-pagination='false' data-page-size='10' data-field-types='[[&quot;model&quot;,[&quot;string&quot;,&quot;str&quot;]],[&quot;llamacpp_tok_s&quot;,[&quot;number&quot;,&quot;f64&quot;]],[&quot;ollama_tok_s&quot;,[&quot;number&quot;,&quot;f64&quot;]],[&quot;runtime_next_tok_s&quot;,[&quot;number&quot;,&quot;f64&quot;]],[&quot;speedup_vs_llamacpp&quot;,[&quot;number&quot;,&quot;f64&quot;]],[&quot;speedup_vs_ollama&quot;,[&quot;number&quot;,&quot;f64&quot;]],[&quot;llamacpp_ttft_ms&quot;,[&quot;number&quot;,&quot;f64&quot;]],[&quot;runtime_next_ttft_ms&quot;,[&quot;number&quot;,&quot;f64&quot;]]]' data-show-filters='true' data-show-download='true' data-show-search='true' data-show-column-summaries='false' data-show-data-types='true' data-show-page-size-selector='false' data-show-column-explorer='true' data-show-chart-builder='true' data-row-headers='[]' data-hidden-columns='[]' data-has-stable-row-id='false' data-lazy='false' data-preload='false'></marimo-table></marimo-ui-element>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "qnkX",
+      "code_hash": "fd433f423f7e5dd18884b7197f3b71d3",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-ui-element object-id='qnkX-0' random-id='6359a141-0d1a-13fd-d077-e2ff0d35923a'><marimo-vega data-initial-value='{}' data-label='null' data-spec='{&quot;config&quot;:{&quot;view&quot;:{&quot;continuousWidth&quot;:300,&quot;continuousHeight&quot;:300}},&quot;data&quot;:{&quot;url&quot;:&quot;data:application/vnd.apache.arrow.file;base64,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&quot;,&quot;format&quot;:{&quot;type&quot;:&quot;arrow&quot;}},&quot;mark&quot;:{&quot;type&quot;:&quot;bar&quot;,&quot;cornerRadiusTopLeft&quot;:3,&quot;cornerRadiusTopRight&quot;:3},&quot;encoding&quot;:{&quot;color&quot;:{&quot;field&quot;:&quot;engine&quot;,&quot;legend&quot;:{&quot;labelExpr&quot;:&quot;datum.value == &#x27;llamacpp_tok_s&#x27; ? &#x27;llama.cpp Q4_K_M&#x27; : datum.value == &#x27;ollama_tok_s&#x27; ? &#x27;Ollama Q4_K_M&#x27; : &#x27;runtime-next W4A16&#x27;&quot;,&quot;orient&quot;:&quot;bottom&quot;},&quot;scale&quot;:{&quot;domain&quot;:[&quot;llamacpp_tok_s&quot;,&quot;ollama_tok_s&quot;,&quot;runtime_next_tok_s&quot;],&quot;range&quot;:[&quot;#94a3b8&quot;,&quot;#64748b&quot;,&quot;#10b981&quot;]},&quot;title&quot;:null,&quot;type&quot;:&quot;nominal&quot;},&quot;tooltip&quot;:[{&quot;field&quot;:&quot;model&quot;,&quot;title&quot;:&quot;Model&quot;,&quot;type&quot;:&quot;nominal&quot;},{&quot;field&quot;:&quot;engine&quot;,&quot;title&quot;:&quot;Engine&quot;,&quot;type&quot;:&quot;nominal&quot;},{&quot;field&quot;:&quot;tok_s&quot;,&quot;format&quot;:&quot;.1f&quot;,&quot;title&quot;:&quot;tok/s&quot;,&quot;type&quot;:&quot;quantitative&quot;}],&quot;x&quot;:{&quot;axis&quot;:{&quot;labelAngle&quot;:0},&quot;field&quot;:&quot;model&quot;,&quot;sort&quot;:[&quot;0.8B&quot;,&quot;2B&quot;,&quot;4B&quot;,&quot;9B&quot;,&quot;27B&quot;],&quot;title&quot;:null,&quot;type&quot;:&quot;nominal&quot;},&quot;xOffset&quot;:{&quot;field&quot;:&quot;engine&quot;,&quot;sort&quot;:[&quot;llamacpp_tok_s&quot;,&quot;ollama_tok_s&quot;,&quot;runtime_next_tok_s&quot;],&quot;type&quot;:&quot;nominal&quot;},&quot;y&quot;:{&quot;field&quot;:&quot;tok_s&quot;,&quot;title&quot;:&quot;Decode Throughput (tok/s)&quot;,&quot;type&quot;:&quot;quantitative&quot;}},&quot;height&quot;:320,&quot;title&quot;:&quot;Real decode throughput -- runtime-next wins at every real size&quot;,&quot;transform&quot;:[{&quot;fold&quot;:[&quot;llamacpp_tok_s&quot;,&quot;ollama_tok_s&quot;,&quot;runtime_next_tok_s&quot;],&quot;as&quot;:[&quot;engine&quot;,&quot;tok_s&quot;]}],&quot;width&quot;:620,&quot;&#36;schema&quot;:&quot;https://vega.github.io/schema/vega-lite/v6.4.1.json&quot;}' data-chart-selection='true' data-field-selection='true' data-embed-options='{}'></marimo-vega></marimo-ui-element>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "TqIu",
+      "code_hash": "7780ca26972c18822957921ea94ef0c0",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-ui-element object-id='TqIu-0' random-id='6e7f2454-a05e-74b2-8364-ccab2858371f'><marimo-vega data-initial-value='{}' data-label='null' data-spec='{&quot;config&quot;:{&quot;view&quot;:{&quot;continuousWidth&quot;:300,&quot;continuousHeight&quot;:300}},&quot;layer&quot;:[{&quot;data&quot;:{&quot;url&quot;:&quot;data:application/vnd.apache.arrow.file;base64,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&quot;,&quot;format&quot;:{&quot;type&quot;:&quot;arrow&quot;}},&quot;mark&quot;:{&quot;type&quot;:&quot;bar&quot;,&quot;cornerRadiusTopLeft&quot;:4,&quot;cornerRadiusTopRight&quot;:4},&quot;encoding&quot;:{&quot;color&quot;:{&quot;condition&quot;:{&quot;test&quot;:&quot;(datum.speedup_vs_llamacpp &#92;u003e= 1.0)&quot;,&quot;value&quot;:&quot;#10b981&quot;},&quot;value&quot;:&quot;#ef4444&quot;},&quot;tooltip&quot;:[{&quot;field&quot;:&quot;model&quot;,&quot;title&quot;:&quot;Model&quot;,&quot;type&quot;:&quot;nominal&quot;},{&quot;field&quot;:&quot;speedup_vs_llamacpp&quot;,&quot;format&quot;:&quot;.2f&quot;,&quot;title&quot;:&quot;Speedup&quot;,&quot;type&quot;:&quot;quantitative&quot;}],&quot;x&quot;:{&quot;axis&quot;:{&quot;labelAngle&quot;:0},&quot;field&quot;:&quot;model&quot;,&quot;sort&quot;:[&quot;0.8B&quot;,&quot;2B&quot;,&quot;4B&quot;,&quot;9B&quot;,&quot;27B&quot;],&quot;title&quot;:null,&quot;type&quot;:&quot;nominal&quot;},&quot;y&quot;:{&quot;field&quot;:&quot;speedup_vs_llamacpp&quot;,&quot;scale&quot;:{&quot;domain&quot;:[0.9,1.4],&quot;zero&quot;:false},&quot;title&quot;:&quot;Speedup vs. llama.cpp Q4_K_M (x)&quot;,&quot;type&quot;:&quot;quantitative&quot;}}},{&quot;data&quot;:{&quot;url&quot;:&quot;data:application/vnd.apache.arrow.file;base64,QVJST1cxAAAEAAAA8v///xQAAAAEAAEAAAAKAAsACAAKAAQA+P///wwAAAAIAAgAAAAEAAEAAAAEAAAA7P///zAAAAAgAAAAGAAAAAEDAAAQABIABAAQABEACAAAAAwAAAAAAPr///8CAAYABgAEAAEAAAB5AAAA/////4AAAAAEAAAA7P///0AAAAAAAAAAFAAAAAQAAwAMABMAEAASAAwABADq////AQAAAAAAAAA8AAAAEAAAAAAACgAUAAQADAAQAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAABAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAPA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD/////AAAAAAQAAADs////QAAAADgAAAAUAAAABAAAAAwAEgAQAAQACAAMAAEAAAB4AAAAAAAAAIgAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAPj///8MAAAACAAIAAAABAABAAAABAAAAOz///8wAAAAIAAAABgAAAABAwAAEAASAAQAEAARAAgAAAAMAAAAAAD6////AgAGAAYABAABAAAAeQCaAAAAQVJST1cx&quot;,&quot;format&quot;:{&quot;type&quot;:&quot;arrow&quot;}},&quot;mark&quot;:{&quot;type&quot;:&quot;rule&quot;,&quot;color&quot;:&quot;#64748b&quot;,&quot;strokeDash&quot;:[3,3]},&quot;encoding&quot;:{&quot;y&quot;:{&quot;field&quot;:&quot;y&quot;,&quot;type&quot;:&quot;quantitative&quot;}}}],&quot;height&quot;:280,&quot;title&quot;:&quot;Every real size clears parity with llama.cpp&quot;,&quot;width&quot;:560,&quot;&#36;schema&quot;:&quot;https://vega.github.io/schema/vega-lite/v6.4.1.json&quot;}' data-chart-selection='true' data-field-selection='true' data-embed-options='{}'></marimo-vega></marimo-ui-element>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Vxnm",
+      "code_hash": "6547116916ae362b1c70ca9971b50f38",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">The margin narrows with size (34% at 0.8B down to 7% at 27B) for the same real reason documented in the bf16\nnotebook: this engine's advantage comes from eliminating framework overhead and fusing kernels, and that overhead is\na bigger fraction of total time on a small model than a large one, where raw memory bandwidth increasingly dominates\nfor everyone. What's different from the bf16 story is that this margin was <strong>not free</strong> -- it took the real,\nmeasured optimization arc in Section 3 to get here from a real loss.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "DnEU",
+      "code_hash": "c7c289e966de21ad210e43962dbfd856",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"5-the-one-real-disclosed-weakness-ttft\">5. The One Real, Disclosed Weakness: TTFT</h2>\n<span class=\"paragraph\">Decode throughput won. Prompt-processing latency (time to first token) did not -- runtime-next is real, measurably\nslower here, 1.2x at 0.8B widening to exactly 3.0x at 27B. This section explains why, with a real number, not a\nguess.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ulZA",
+      "code_hash": "3743cb3eb45f5b9c2405a3ab4ee4fa57",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ecfG",
+      "code_hash": "387a1f077767aca3c804f3ffbf8d13ee",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-ui-element object-id='ecfG-0' random-id='14612481-3a47-7910-851e-10f40ff7c287'><marimo-vega data-initial-value='{}' data-label='null' data-spec='{&quot;config&quot;:{&quot;view&quot;:{&quot;continuousWidth&quot;:300,&quot;continuousHeight&quot;:300}},&quot;data&quot;:{&quot;url&quot;:&quot;data:application/vnd.apache.arrow.file;base64,QVJST1cxAAAEAAAA8v///xQAAAAEAAEAAAAKAAsACAAKAAQA+P///wwAAAAIAAgAAAAEAAQAAAC8AAAAfAAAADwAAAAEAAAAQP///xwAAAAQAAAACAAAAAEDAAAAAAAAiv///wIAAAAMAAAAZ2FwX211bHRpcGxlAAAAAHT///8cAAAAEAAAAAgAAAABAwAAAAAAAL7///8CAAAAFAAAAHJ1bnRpbWVfbmV4dF90dGZ0X21zAAAAALD///8gAAAAEAAAAAgAAAABAwAAAAAAAPr///8CAAYABgAEABAAAABsbGFtYWNwcF90dGZ0X21zAAAAAOz///8sAAAAIAAAABgAAAABGAAAEAASAAQAEAARAAgAAAAMAAAAAAD8////BAAEAAUAAABtb2RlbAAAAP////8oAQAABAAAAOz///9AAQAAAAAAABQAAAAEAAMADAATABAAEgAMAAQA5v///wUAAAAAAAAAtAAAACgAAAAUAAAAAAAOABgABAAMABAAAAAUAAEAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUAAAAAAAAACAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAoAAAAAAAAAMAAAAAAAAAAAAAAAAAAAADAAAAAAAAAACgAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAKAAAAAAAAAAAAAAABAAAAAUAAAAAAAAAAAAAAAAAAAAFAAAAAAAAAAAAAAAAAAAABQAAAAAAAAAAAAAAAAAAAAUAAAAAAAAAAAAAAAAAAAAEAAAAMC44QgAAAAAAAAAAAgAAADJCAAAAAAAAAAAAAAIAAAA0QgAAAAAAAAAAAAACAAAAOUIAAAAAAAAAAAAAAwAAADI3QgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJqZmZmZWUJAMzMzMzNzRUAAAAAAAMBUQAAAAAAAAGBAMzMzMzPrdEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAzMzMzM7NGQGZmZmZmRlFAZmZmZmbGZkCamZmZmUlvQGZmZmZmho9AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA16NwPQrX8z/D9Shcj8L5P5qZmZmZmQFAXI/C9Shc/z8UrkfhehQIQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP////8AAAAABAAAAOz///9AAAAAOAAAABQAAAAEAAAADAASABAABAAIAAwAAQAAADABAAAAAAAAMAEAAAAAAABAAQAAAAAAAAAAAAAAAAAA+P///wwAAAAIAAgAAAAEAAQAAAC8AAAAfAAAADwAAAAEAAAAQP///xwAAAAQAAAACAAAAAEDAAAAAAAAiv///wIAAAAMAAAAZ2FwX211bHRpcGxlAAAAAHT///8cAAAAEAAAAAgAAAABAwAAAAAAAL7///8CAAAAFAAAAHJ1bnRpbWVfbmV4dF90dGZ0X21zAAAAALD///8gAAAAEAAAAAgAAAABAwAAAAAAAPr///8CAAYABgAEABAAAABsbGFtYWNwcF90dGZ0X21zAAAAAOz///8sAAAAIAAAABgAAAABGAAAEAASAAQAEAARAAgAAAAMAAAAAAD8////BAAEAAUAAABtb2RlbABSAQAAQVJST1cx&quot;,&quot;format&quot;:{&quot;type&quot;:&quot;arrow&quot;}},&quot;mark&quot;:{&quot;type&quot;:&quot;bar&quot;,&quot;cornerRadiusTopLeft&quot;:3,&quot;cornerRadiusTopRight&quot;:3},&quot;encoding&quot;:{&quot;color&quot;:{&quot;field&quot;:&quot;engine&quot;,&quot;legend&quot;:{&quot;labelExpr&quot;:&quot;datum.value == &#x27;llamacpp_ttft_ms&#x27; ? &#x27;llama.cpp Q4_K_M&#x27; : &#x27;runtime-next W4A16&#x27;&quot;,&quot;orient&quot;:&quot;bottom&quot;},&quot;scale&quot;:{&quot;domain&quot;:[&quot;llamacpp_ttft_ms&quot;,&quot;runtime_next_ttft_ms&quot;],&quot;range&quot;:[&quot;#94a3b8&quot;,&quot;#f59e0b&quot;]},&quot;title&quot;:null,&quot;type&quot;:&quot;nominal&quot;},&quot;tooltip&quot;:[{&quot;field&quot;:&quot;model&quot;,&quot;title&quot;:&quot;Model&quot;,&quot;type&quot;:&quot;nominal&quot;},{&quot;field&quot;:&quot;engine&quot;,&quot;title&quot;:&quot;Engine&quot;,&quot;type&quot;:&quot;nominal&quot;},{&quot;field&quot;:&quot;ttft_ms&quot;,&quot;format&quot;:&quot;.1f&quot;,&quot;title&quot;:&quot;TTFT (ms)&quot;,&quot;type&quot;:&quot;quantitative&quot;}],&quot;x&quot;:{&quot;axis&quot;:{&quot;labelAngle&quot;:0},&quot;field&quot;:&quot;model&quot;,&quot;sort&quot;:[&quot;0.8B&quot;,&quot;2B&quot;,&quot;4B&quot;,&quot;9B&quot;,&quot;27B&quot;],&quot;title&quot;:null,&quot;type&quot;:&quot;nominal&quot;},&quot;xOffset&quot;:{&quot;field&quot;:&quot;engine&quot;,&quot;sort&quot;:[&quot;llamacpp_ttft_ms&quot;,&quot;runtime_next_ttft_ms&quot;],&quot;type&quot;:&quot;nominal&quot;},&quot;y&quot;:{&quot;field&quot;:&quot;ttft_ms&quot;,&quot;scale&quot;:{&quot;type&quot;:&quot;log&quot;},&quot;title&quot;:&quot;TTFT (ms, lower is better)&quot;,&quot;type&quot;:&quot;quantitative&quot;}},&quot;height&quot;:300,&quot;title&quot;:&quot;TTFT: the real, disclosed gap that remains&quot;,&quot;transform&quot;:[{&quot;fold&quot;:[&quot;llamacpp_ttft_ms&quot;,&quot;runtime_next_ttft_ms&quot;],&quot;as&quot;:[&quot;engine&quot;,&quot;ttft_ms&quot;]}],&quot;width&quot;:580,&quot;&#36;schema&quot;:&quot;https://vega.github.io/schema/vega-lite/v6.4.1.json&quot;}' data-chart-selection='true' data-field-selection='true' data-embed-options='{}'></marimo-vega></marimo-ui-element>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Pvdt",
+      "code_hash": "df22d94f62ebe4e7679283b4e52ca685",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>The real diagnostic</strong> (not a guess): a batched prefill kernel already exists and is real (Section 3, step 4) --\nit cut TTFT by roughly 3-4x from an even worse starting point (quantized prompts originally went through a\nper-token decode loop, launching the full per-token pipeline once per PROMPT token). But a real, isolated wall-clock\nmeasurement of <code>forward_prefill</code> on the quantized 4B model (10 iterations, warmed up, <code>hipDeviceSynchronize</code> bracketing\nthe call) found <strong>138.8ms of real wall-clock time for a 54-token prompt, while rocprofv3's own kernel-dispatch trace\nfor the same request accounts for only ~55-60ms of actual GPU execution</strong>. Roughly <strong>58% of the real prefill time is\nnot GPU compute at all.</strong></span>\n<span class=\"paragraph\">The likely cause, and the real next lever: decode already runs through HIP Graph capture/replay (the whole per-token\nkernel sequence is captured once and replayed with near-zero CPU dispatch overhead), but <strong>prefill still dispatches\nevery kernel eagerly</strong> -- and one real prefill call launches on the order of 2,000+ individual kernels across all\nlayers (the real rocprofv3 trace counted 1,152 launches from just two of the several hipBLAS GEMM variants used in\nattention/GDN alone). Graph-capturing prefill the same way decode already is would need fixed-size bucketing (capture\nonce per padded prompt-length bucket, replay whichever bucket fits, mask the padding) rather than a naive\ncapture-once-replay, since -- unlike decode's fixed one-token shape -- prefill's kernel launch configuration\ngenuinely depends on the real prompt length. That's a real architecture change, not a kernel tweak, and it was not\nattempted this round.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ZBYS",
+      "code_hash": "f4a8eada5a9e3506562a9f81c49b157b",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"6-deconstructing-59-token-agreement-a-real-number-that-needs-real-context\">6. Deconstructing \"5.9% Token Agreement\": A Real Number That Needs Real Context</h2>\n<span class=\"paragraph\">Early in this work, before the optimization arc above, positional top-1 token agreement between runtime-next's W4A16\n27B generation and llama.cpp's real Q4_K_M generation on the same prompt (<em>\"What is the capital of France?\"</em>) came\nback at <strong>2/34 (5.9%)</strong>. Read naively, that sounds like a correctness failure. It isn't, and here's why -- shown, not\nasserted.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "aLJB",
+      "code_hash": "9a2a3ac21c96ee357702cb4de36aefe8",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-accordion data-labels='[&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eSide-by-side generations: identical reasoning, identical answer&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;,&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eWhy two correct quantizers can branch at all&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;,&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eWhat would have looked different if the kernel were actually broken&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;]' data-multiple='false'><div><span class=\"markdown prose dark:prose-invert contents\"><ul>\n<li>\n<span class=\"paragraph\"><strong>llama.cpp (Q4_K_M):</strong></span>\n<blockquote>\n<span class=\"paragraph\"><em>\"The user is asking for the capital of France </em><em>in</em><em> one short sentence. This is a straightforward factual question. </em><em>The capital of France is Paris.</em><em>\"</em></span>\n</blockquote>\n</li>\n<li>\n<span class=\"paragraph\"><strong>runtime-next (W4A16):</strong></span>\n<blockquote>\n<span class=\"paragraph\"><em>\"The user is asking for the capital of France </em><em>and wants a</em><em> one short sentence answer. This is a straightforward factual question. </em><em>The capital of France is Paris.</em><em>\"</em></span>\n</blockquote>\n</li>\n</ul>\n<span class=\"paragraph\">At token position 2, the model picked a valid paraphrase (<code>\"and wants a\"</code> vs. <code>\",\"</code>). Because generation\nis autoregressive, that shift desynchronizes every later token INDEX even though both models go on to\nemit the identical 14-token suffix <code>[29350, 57879, 3296, 13, 198, 248069, 271, 760, 6511, 314, 9338, 369, 11751, 13]</code>.\nRigid positional comparison marks every one of those as \"wrong\" even though they're character-for-character\nthe same tokens.</span></span></div><div><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">llama.cpp's Q4_K_M is an asymmetric, two-level block-quantization scheme; this engine's W4A16 is\nsymmetric, single-level, group-128. At a genuinely low-confidence transition token where the top two\ncandidates' logits differ by less than 0.01, the two quantizers' different rounding noise can tip the\nargmax either way. Neither output is wrong -- both are valid, high-probability continuations.</span></span></div><div><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">A real stride bug, endianness inversion, or bad group-scale alignment produces catastrophic, visible\nfailure: repetition loops, punctuation storms, NaN tokens, or exponential activation blowup across 64\nlayers. Instead: zero syntactic or semantic degradation, flawless multi-sentence grammar, the factually\ncorrect answer, and a clean pass of every existing regression test. One example is not a rigorous\nmulti-prompt quality study (a real, disclosed limitation, not glossed over) -- but it rules out the\ncatastrophic-failure interpretation directly, not by assertion.</span></span></div></marimo-accordion>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "nHfw",
+      "code_hash": "8a273f3d8c619554b47ea0e139ff699e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"7-real-memory-footprint\">7. Real Memory Footprint</h2>\n<span class=\"paragraph\">Every arm, every size, real-time <code>rocm-smi</code>/<code>free</code> sampling (0.5s interval) wrapped around the whole real run --\npeak VRAM, and GTT (system-RAM-backed GPU memory) growth flagged if it exceeds 512MB, the real safety discipline\nthis session adopted after an earlier incident where unmonitored concurrent GPU testing caused a real\nVRAM-exhaustion desktop-compositor crash.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "xXTn",
+      "code_hash": "ef82982768e51fbb6c4cddcccfcfcf9a",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "AjVT",
+      "code_hash": "0ee10c64594bf7ab0853e232bd8b83be",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-ui-element object-id='AjVT-0' random-id='77b5e79a-4966-4dc4-72db-9571e591ccf3'><marimo-table data-initial-value='[]' data-label='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eReal Peak VRAM Per Arm, All Sizes (MB)&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-data='&quot;[{&#92;&quot;model&#92;&quot;:&#92;&quot;0.8B&#92;&quot;,&#92;&quot;llamacpp_vram_mb&#92;&quot;:3248,&#92;&quot;ollama_vram_mb&#92;&quot;:3677,&#92;&quot;runtime_next_vram_mb&#92;&quot;:3589,&#92;&quot;checkpoint_size_gb&#92;&quot;:0.94},{&#92;&quot;model&#92;&quot;:&#92;&quot;2B&#92;&quot;,&#92;&quot;llamacpp_vram_mb&#92;&quot;:3965,&#92;&quot;ollama_vram_mb&#92;&quot;:4398,&#92;&quot;runtime_next_vram_mb&#92;&quot;:4501,&#92;&quot;checkpoint_size_gb&#92;&quot;:2.3},{&#92;&quot;model&#92;&quot;:&#92;&quot;4B&#92;&quot;,&#92;&quot;llamacpp_vram_mb&#92;&quot;:5493,&#92;&quot;ollama_vram_mb&#92;&quot;:6483,&#92;&quot;runtime_next_vram_mb&#92;&quot;:6075,&#92;&quot;checkpoint_size_gb&#92;&quot;:3.6},{&#92;&quot;model&#92;&quot;:&#92;&quot;9B&#92;&quot;,&#92;&quot;llamacpp_vram_mb&#92;&quot;:7741,&#92;&quot;ollama_vram_mb&#92;&quot;:8774,&#92;&quot;runtime_next_vram_mb&#92;&quot;:8875,&#92;&quot;checkpoint_size_gb&#92;&quot;:6.8},{&#92;&quot;model&#92;&quot;:&#92;&quot;27B&#92;&quot;,&#92;&quot;llamacpp_vram_mb&#92;&quot;:18307,&#92;&quot;ollama_vram_mb&#92;&quot;:20108,&#92;&quot;runtime_next_vram_mb&#92;&quot;:18825,&#92;&quot;checkpoint_size_gb&#92;&quot;:16.0}]&quot;' data-total-rows='5' data-total-columns='5' data-max-columns='50' data-banner-text='&quot;&quot;' data-pagination='false' data-page-size='10' data-field-types='[[&quot;model&quot;,[&quot;string&quot;,&quot;str&quot;]],[&quot;llamacpp_vram_mb&quot;,[&quot;integer&quot;,&quot;i64&quot;]],[&quot;ollama_vram_mb&quot;,[&quot;integer&quot;,&quot;i64&quot;]],[&quot;runtime_next_vram_mb&quot;,[&quot;integer&quot;,&quot;i64&quot;]],[&quot;checkpoint_size_gb&quot;,[&quot;number&quot;,&quot;f64&quot;]]]' data-show-filters='true' data-show-download='true' data-show-search='true' data-show-column-summaries='false' data-show-data-types='true' data-show-page-size-selector='false' data-show-column-explorer='true' data-show-chart-builder='true' data-row-headers='[]' data-hidden-columns='[]' data-has-stable-row-id='false' data-lazy='false' data-preload='false'></marimo-table></marimo-ui-element>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "pHFh",
+      "code_hash": "57c507bf11a0ed246a476950278d385a",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Every real run stayed well within the 24GB card's budget, with GTT growth capped at a few tens of MB across every\nsingle arm and size -- no incidents, no unmonitored memory pressure, at any point in this round's benchmarking.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "NCOB",
+      "code_hash": "dc28d7a627fe0688310fa4a3528cf9c1",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"8-real-scope-what-was-built-what-was-not\">8. Real Scope: What Was Built, What Was Not</h2>\n<span class=\"paragraph\">Stated plainly, not hedged:</span>\n<ul>\n<li><strong>Built and shipped</strong>: real symmetric W4A16 quantization (<code>quantize_w4a16.py</code>), a real fused dequant+GEMV decode\n  kernel and a real batched dequant+GEMM prefill kernel, both hand-written HIP, wired through the same\n  <code>ModelWeights::load</code> path as bf16 so one function loads either format correctly by checking the real checkpoint --\n  across all five real Qwen3.5/3.8 dense sizes from 0.8B to 27B.</li>\n<li><strong>Not built this round</strong>: a GPTQ-Int4 reader (planned as a second comparison arm; the real bit-layout of a real\n  downloaded GPTQ checkpoint was never inspected, so no kernel was written against it) and Mixture-of-Experts support\n  (the real Qwen3.5-35B-A3B architecture -- router + per-token expert selection -- shares no code with anything in\n  this engine today; no <code>LayerWeights::Moe</code> variant exists). Both remain real, scoped, undone work, not silently\n  dropped -- and this notebook does not show fabricated numbers for either.</li>\n<li><strong>Real, disclosed limitation carried over from the unquantized notebook</strong>: LoRA adapter folding still only\n  supports bf16 weights (<code>LinearWeight::as_bf16()</code> panics loudly, rather than silently miscomputing, on a quantized\n  weight) -- not attempted for quantized layers this round.</li>\n<li><strong>Real, disclosed limitation, new this round</strong>: TTFT remains behind llama.cpp at every size (Section 5) --\n  diagnosed to real per-launch dispatch overhead from prefill not yet being HIP-Graph-captured, not yet fixed.</li>\n</ul></span>"
+          }
+        }
+      ],
+      "console": []
+    }
+  ]
+}

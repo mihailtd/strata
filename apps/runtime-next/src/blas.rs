@@ -313,6 +313,239 @@ pub fn gemm_bf16_linear(
     crate::hip::device_synchronize().map_err(BlasOpError::Hip)
 }
 
+/// §99 (batched-prefill causal attention): `S = Q @ K^T`, bf16 in/out, fp32
+/// accumulation -- the QK^T half of real matrix-core attention, replacing
+/// the naive per-token scalar-loop kernel (`attention.hip`) for the
+/// prefill case where more than one query row is available at once (see
+/// `docs/DECISIONS.md` §99 for the real per-kernel profiling that found
+/// this, not attention's launch count, as the actual lever).
+///
+/// UNLIKE `gemm_bf16_linear`, `q`/`k`/`s` are explicit-stride VIEWS, not
+/// necessarily tightly-packed buffers: `q_ld`/`k_ld`/`s_ld` are the real
+/// element stride between consecutive logical rows in each buffer's
+/// underlying memory, which may be wider than the logical row length
+/// itself (e.g. `q` is a `[T, num_heads*head_dim]` buffer and this call
+/// only wants ONE head's `head_dim`-wide sub-range per row -- passing
+/// `q_ld = num_heads*head_dim` while the logical shape used for the GEMM
+/// math is `[t, head_dim]` reads exactly that sub-range, no physical
+/// extraction needed, using BLAS's own leading-dimension mechanism the
+/// same way `gemm_bf16_linear`'s row-major-via-column-major derivation
+/// already relies on `lda`/`ldb`/`ldc` to mean "real memory stride," not
+/// "logical dimension").
+///
+/// Derivation: identical to `gemm_bf16_linear`'s own (`y = x @ w^T` via
+/// `OP_T, OP_N`), with `x = q` (`rows = t`, `in_features = head_dim`),
+/// `w = k` (`out_features = kv_len`), `y = s` -- just with caller-supplied
+/// strides instead of assuming `in_features`/`out_features` themselves.
+/// `scale` (real attention's `1/sqrt(head_dim)`) is folded into
+/// `hipblasGemmEx`'s own `alpha` scalar -- no separate elementwise scaling
+/// pass over `q` needed.
+#[allow(clippy::too_many_arguments)]
+pub fn gemm_qkt_bf16(
+    handle: &BlasHandle,
+    q: &crate::hip::DeviceBuffer<u16>,
+    q_offset: usize,
+    q_ld: usize,
+    k: &crate::hip::DeviceBuffer<u16>,
+    k_offset: usize,
+    s: &mut crate::hip::DeviceBuffer<u16>,
+    s_offset: usize,
+    s_ld: usize,
+    t: usize,
+    head_dim: usize,
+    kv_len: usize,
+    scale: f32,
+) -> Result<(), BlasOpError> {
+    let alpha: f32 = scale;
+    let beta: f32 = 0.0;
+    // SAFETY: `q`/`k`/`s` are real, live `hipMalloc` allocations; the
+    // caller guarantees `q_offset + (t-1)*q_ld + head_dim <= q.len()`,
+    // `k_offset + kv_len*head_dim <= k.len()` (`k`'s own real per-head
+    // slice is tightly packed starting at `k_offset` -- e.g. one head's
+    // range within a head-major KV cache), and
+    // `s_offset + (t-1)*s_ld + kv_len <= s.len()` (checked by the two
+    // decisive tests below against independently-computed references, not
+    // just asserted here).
+    let status = unsafe {
+        ffi::hipblasGemmEx(
+            handle.raw,
+            ffi::HIPBLAS_OP_T,
+            ffi::HIPBLAS_OP_N,
+            kv_len as c_int,
+            t as c_int,
+            head_dim as c_int,
+            &alpha as *const f32 as *const c_void,
+            k.as_device_ptr_at(k_offset),
+            ffi::HIP_R_16BF,
+            head_dim as c_int,
+            q.as_device_ptr_at(q_offset),
+            ffi::HIP_R_16BF,
+            q_ld as c_int,
+            &beta as *const f32 as *const c_void,
+            s.as_device_ptr_at_mut(s_offset) as *mut c_void,
+            ffi::HIP_R_16BF,
+            s_ld as c_int,
+            ffi::HIPBLAS_COMPUTE_32F,
+            ffi::HIPBLAS_GEMM_DEFAULT,
+        )
+    };
+    BlasError::from_status(status)?;
+    crate::hip::device_synchronize().map_err(BlasOpError::Hip)
+}
+
+/// §100 (chunked GDN prefill): `Y = A^T @ B` -- a THIRD real transpose
+/// pattern, needed for the delta-rule's real state update
+/// (`state_delta = key^T @ v_new`, `A=key [chunk,head_dim]`,
+/// `B=v_new [chunk,head_dim]`, `Y=[head_dim,head_dim]`). Derivation
+/// validated by re-deriving `gemm_pv_bf16`'s own already-proven call from
+/// the same general method before trusting it for a new shape (see this
+/// function's own derivation below): reading a row-major buffer's bytes
+/// as column-major ALWAYS gives that matrix's real transpose "for free"
+/// (a `hipMalloc` buffer has no concept of major-order; only the two
+/// counted dimensions plus a stride do); an EXTRA `OP_T` flag on top of
+/// that then undoes it, handing BLAS back the plain matrix.
+///
+/// Wanting `Y[K,N]_rowmajor = A^T[K,M] @ B[M,N]` (`A` real shape `[M,K]`,
+/// `B` real shape `[M,N]`, both row-major): read `Y` as column-major
+/// (`ldc=N`) to get `Y^T[N,K]`; BLAS's own output is therefore an `[N,K]`
+/// matrix. Solving `Y^T[n,k] = Y[k,n] = sum_m A[m,k]*B[m,n]` for a plain
+/// column-major `C = op(A_blas) @ op(B_blas)`: `A_blas = B` (`OP_N` --
+/// reading `B`'s row-major bytes as column-major already gives `B^T[n,m]
+/// = B[m,n]`, exactly the factor needed), `B_blas = A` (`OP_T` -- reading
+/// `A`'s row-major bytes as column-major gives `A^T[k,m]`, and applying
+/// `OP_T` undoes that back to plain `A[m,k]`, the factor needed). `M_blas
+/// = N`, `N_blas = K`, `K_blas = M`.
+#[allow(clippy::too_many_arguments)]
+pub fn gemm_atb_bf16(
+    handle: &BlasHandle,
+    a: &crate::hip::DeviceBuffer<u16>,
+    a_offset: usize,
+    a_ld: usize,
+    b: &crate::hip::DeviceBuffer<u16>,
+    b_offset: usize,
+    b_ld: usize,
+    y: &mut crate::hip::DeviceBuffer<u16>,
+    y_offset: usize,
+    y_ld: usize,
+    m: usize,
+    k: usize,
+    n: usize,
+    beta: f32,
+) -> Result<(), BlasOpError> {
+    let alpha: f32 = 1.0;
+    // §100: `beta` is a real hipBLAS accumulate scalar -- `Y_new =
+    // A^T@B + beta*Y_old`, reading `Y`'s own pre-call contents through
+    // the SAME pointer it writes to (a real, well-defined GEMM pattern,
+    // not a hazard: `Y` is never also `A` or `B`). Used by the chunked
+    // GDN recurrent-state update (`state = state*chunk_decay +
+    // key^T@v_new`, `beta = chunk_decay`) -- ordinary callers pass `0.0`
+    // for a ordinary fresh write, matching every other GEMM primitive's
+    // default.
+    // SAFETY: `a`/`b`/`y` are real, live `hipMalloc` allocations; bounds
+    // proven by the decisive test below (independent reference + a
+    // strided-view case).
+    let status = unsafe {
+        ffi::hipblasGemmEx(
+            handle.raw,
+            ffi::HIPBLAS_OP_N,
+            ffi::HIPBLAS_OP_T,
+            n as c_int,
+            k as c_int,
+            m as c_int,
+            &alpha as *const f32 as *const c_void,
+            b.as_device_ptr_at(b_offset),
+            ffi::HIP_R_16BF,
+            b_ld as c_int,
+            a.as_device_ptr_at(a_offset),
+            ffi::HIP_R_16BF,
+            a_ld as c_int,
+            &beta as *const f32 as *const c_void,
+            y.as_device_ptr_at_mut(y_offset) as *mut c_void,
+            ffi::HIP_R_16BF,
+            y_ld as c_int,
+            ffi::HIPBLAS_COMPUTE_32F,
+            ffi::HIPBLAS_GEMM_DEFAULT,
+        )
+    };
+    BlasError::from_status(status)?;
+    crate::hip::device_synchronize().map_err(BlasOpError::Hip)
+}
+
+/// §99: `O = P @ V` (NOT `P @ V^T` -- a genuinely different transpose
+/// pattern from `gemm_bf16_linear`/`gemm_qkt_bf16`'s `x @ w^T`), the AV
+/// half of real matrix-core attention. `p`/`v`/`o` are explicit-stride
+/// views, same reasoning as `gemm_qkt_bf16`.
+///
+/// Derivation (BLAS is column-major; `P`/`V`/`O` are row-major bytes):
+/// reading `V`'s row-major `[kv_len, head_dim]` bytes as column-major with
+/// `lda = v_ld` gives exactly `V^T` (shape `[head_dim, kv_len]`); reading
+/// `P`'s row-major `[t, kv_len]` bytes as column-major with `ldb = p_ld`
+/// gives exactly `P^T` (shape `[kv_len, t]`). A plain column-major
+/// `C = A @ B` (both `OP_N`) with `A = V^T`, `B = P^T` computes
+/// `C[d,row] = sum_j V^T[d,j] * P^T[j,row] = sum_j V[j,d] * P[row,j]`,
+/// which written into `O`'s row-major bytes via `ldc = o_ld` is exactly
+/// `O[row,d] = sum_j P[row,j] * V[j,d]` -- `O = P @ V`.
+#[allow(clippy::too_many_arguments)]
+pub fn gemm_pv_bf16(
+    handle: &BlasHandle,
+    p: &crate::hip::DeviceBuffer<u16>,
+    p_offset: usize,
+    p_ld: usize,
+    v: &crate::hip::DeviceBuffer<u16>,
+    v_offset: usize,
+    o: &mut crate::hip::DeviceBuffer<u16>,
+    o_offset: usize,
+    o_ld: usize,
+    t: usize,
+    kv_len: usize,
+    head_dim: usize,
+    alpha: f32,
+    beta: f32,
+) -> Result<(), BlasOpError> {
+    // §100: `alpha` (real hipBLAS scale scalar) lets a caller NEGATE the
+    // product before it lands -- needed for the chunked GDN state
+    // correction (`v_new = new_values - k_cumdecay @ last_recurrent_state`:
+    // pre-fill `o` with `new_values`, then call with `p=k_cumdecay`,
+    // `v=last_recurrent_state`, `alpha=-1.0`, `beta=1.0` to SUBTRACT the
+    // correction in place). Ordinary callers pass `1.0` (an ordinary
+    // positive product), matching every other GEMM primitive's default.
+    // `beta` (real hipBLAS accumulate scalar) lets a caller ACCUMULATE
+    // into `o` instead of overwriting it -- needed for the chunked GDN
+    // recurrent output (`out = inter_chunk_attn + intra_chunk_attn@v_new`:
+    // write `inter_chunk_attn` with `beta=0`, then accumulate
+    // `intra_chunk_attn@v_new` into the SAME buffer with `beta=1.0`).
+    // Ordinary callers (§99's attention) pass `0.0`.
+    // SAFETY: same reasoning as `gemm_qkt_bf16` -- real, live allocations
+    // (`v_offset + kv_len*head_dim <= v.len()`, `v`'s own real per-head
+    // slice tightly packed starting at `v_offset`), bounds proven by the
+    // decisive tests below.
+    let status = unsafe {
+        ffi::hipblasGemmEx(
+            handle.raw,
+            ffi::HIPBLAS_OP_N,
+            ffi::HIPBLAS_OP_N,
+            head_dim as c_int,
+            t as c_int,
+            kv_len as c_int,
+            &alpha as *const f32 as *const c_void,
+            v.as_device_ptr_at(v_offset),
+            ffi::HIP_R_16BF,
+            head_dim as c_int,
+            p.as_device_ptr_at(p_offset),
+            ffi::HIP_R_16BF,
+            p_ld as c_int,
+            &beta as *const f32 as *const c_void,
+            o.as_device_ptr_at_mut(o_offset) as *mut c_void,
+            ffi::HIP_R_16BF,
+            o_ld as c_int,
+            ffi::HIPBLAS_COMPUTE_32F,
+            ffi::HIPBLAS_GEMM_DEFAULT,
+        )
+    };
+    BlasError::from_status(status)?;
+    crate::hip::device_synchronize().map_err(BlasOpError::Hip)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -327,6 +560,274 @@ mod tests {
 
     fn bf16_to_f32(bits: u16) -> f32 {
         f32::from_bits((bits as u32) << 16)
+    }
+
+    /// §99 decisive test: `gemm_qkt_bf16` computing `S = Q @ K^T` where `Q`
+    /// is a STRIDED VIEW into a wider buffer (`q_ld > head_dim`) -- the
+    /// exact real usage pattern (`attn_query_roped`'s `[T, num_heads*head_dim]`
+    /// layout, extracting one head's `head_dim`-wide sub-range per row
+    /// without physically copying it). `T=2` query rows, `head_dim=3`,
+    /// `kv_len=4`, `Q` lives inside a `[2, 5]` buffer (2 extra "other head"
+    /// columns per row, real stride 5 not 3) at column offset 1, `K` is a
+    /// tightly-packed `[4,3]` buffer. Checked against an INDEPENDENT plain
+    /// f32 triple-loop reference that reads `Q`'s strided sub-range by
+    /// hand, not by calling this GEMM helper's own logic.
+    #[test]
+    fn real_gemm_qkt_with_strided_q_view_matches_independently_computed_reference() {
+        if hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let t = 2usize;
+        let head_dim = 3usize;
+        let kv_len = 4usize;
+        let q_ld = 5usize; // real row stride wider than head_dim
+        let q_offset = 1usize; // this head's sub-range starts at column 1
+
+        // Q lives inside a [2, 5] buffer; columns [1,4) of each row are this
+        // head's real Q values, columns 0 and 4 are OTHER heads' data this
+        // call must never read.
+        let q_full_f32: Vec<f32> = vec![
+            999.0, 1.0, -2.0, 0.5, 999.0, // row 0: real Q = [1.0, -2.0, 0.5]
+            999.0, 3.0, -0.5, 2.0, 999.0, // row 1: real Q = [3.0, -0.5, 2.0]
+        ];
+        let k_f32: Vec<f32> = vec![
+            0.2, 0.1, -0.3, // key 0
+            -0.1, 0.4, 0.2, // key 1
+            0.5, -0.2, 0.1, // key 2
+            0.3, 0.3, -0.1, // key 3
+        ];
+
+        // A real, non-1.0 scale (matching real attention's own
+        // `1/sqrt(head_dim)`) -- the exact mechanism `attn_layer_forward_prefill`
+        // relies on to avoid a separate elementwise scaling pass over Q.
+        let scale = 0.5f32;
+
+        // Independent reference using the REAL (strided) Q sub-range.
+        let q_rows: Vec<Vec<f32>> = (0..t)
+            .map(|r| q_full_f32[r * q_ld + q_offset..r * q_ld + q_offset + head_dim].to_vec())
+            .collect();
+        let mut expected = vec![0f32; t * kv_len];
+        for r in 0..t {
+            for j in 0..kv_len {
+                let mut acc = 0f32;
+                for d in 0..head_dim {
+                    acc += q_rows[r][d] * k_f32[j * head_dim + d];
+                }
+                expected[r * kv_len + j] = acc * scale;
+            }
+        }
+
+        let q_bf16: Vec<u16> = q_full_f32.iter().map(|&v| f32_to_bf16(v)).collect();
+        let k_bf16: Vec<u16> = k_f32.iter().map(|&v| f32_to_bf16(v)).collect();
+        let mut q_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(q_bf16.len()).unwrap();
+        let mut k_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(k_bf16.len()).unwrap();
+        let mut s_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(t * kv_len).unwrap();
+        q_buf.copy_from_host(&q_bf16).unwrap();
+        k_buf.copy_from_host(&k_bf16).unwrap();
+
+        let handle = BlasHandle::create().expect("real hipblasCreate failed");
+        gemm_qkt_bf16(&handle, &q_buf, q_offset, q_ld, &k_buf, 0, &mut s_buf, 0, kv_len, t, head_dim, kv_len, scale)
+            .expect("real gemm_qkt_bf16 call failed");
+
+        let mut s_bf16 = vec![0u16; t * kv_len];
+        s_buf.copy_to_host(&mut s_bf16).unwrap();
+        let got: Vec<f32> = s_bf16.iter().map(|&b| bf16_to_f32(b)).collect();
+
+        for (i, (g, e)) in got.iter().zip(expected.iter()).enumerate() {
+            assert!((g - e).abs() < 0.02, "element {i}: GPU gemm_qkt_bf16 got {g}, independent reference {e}");
+        }
+    }
+
+    /// §99 decisive test: `gemm_pv_bf16` computing `O = P @ V` (NOT
+    /// `P @ V^T`) with `O` written into a STRIDED sub-range of a wider
+    /// buffer (`o_ld > head_dim`) -- the real usage pattern (writing one
+    /// head's AV output directly into its slice of `attn_out`'s
+    /// `[T, num_heads*head_dim]` buffer, no separate per-head output
+    /// buffer or copy). Checked against an independent plain f32
+    /// triple-loop reference.
+    #[test]
+    fn real_gemm_pv_with_strided_output_view_matches_independently_computed_reference() {
+        if hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let t = 2usize;
+        let kv_len = 3usize;
+        let head_dim = 2usize;
+        let o_ld = 4usize; // real row stride wider than head_dim
+        let o_offset = 2usize; // this head's sub-range starts at column 2
+
+        let p_f32: Vec<f32> = vec![
+            0.2, 0.5, 0.3, // row 0 (already-normalized attention weights)
+            0.1, 0.1, 0.8, // row 1
+        ];
+        let v_f32: Vec<f32> = vec![
+            1.0, -1.0, // value 0
+            2.0, 0.5, // value 1
+            -0.5, 3.0, // value 2
+        ];
+
+        let mut expected_head = vec![0f32; t * head_dim];
+        for r in 0..t {
+            for d in 0..head_dim {
+                let mut acc = 0f32;
+                for j in 0..kv_len {
+                    acc += p_f32[r * kv_len + j] * v_f32[j * head_dim + d];
+                }
+                expected_head[r * head_dim + d] = acc;
+            }
+        }
+
+        let p_bf16: Vec<u16> = p_f32.iter().map(|&v| f32_to_bf16(v)).collect();
+        let v_bf16: Vec<u16> = v_f32.iter().map(|&v| f32_to_bf16(v)).collect();
+        let mut p_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(p_bf16.len()).unwrap();
+        let mut v_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(v_bf16.len()).unwrap();
+        // O lives inside a [2, 4] buffer; columns [2,4) of each row are
+        // this head's real output, columns 0-1 are ANOTHER head's data
+        // that must survive this call untouched.
+        let o_sentinel: f32 = -777.0;
+        let o_full_f32: Vec<f32> = vec![o_sentinel, o_sentinel, 0.0, 0.0, o_sentinel, o_sentinel, 0.0, 0.0];
+        let o_full_bf16: Vec<u16> = o_full_f32.iter().map(|&v| f32_to_bf16(v)).collect();
+        let mut o_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(o_full_bf16.len()).unwrap();
+        p_buf.copy_from_host(&p_bf16).unwrap();
+        v_buf.copy_from_host(&v_bf16).unwrap();
+        o_buf.copy_from_host(&o_full_bf16).unwrap();
+
+        let handle = BlasHandle::create().expect("real hipblasCreate failed");
+        gemm_pv_bf16(&handle, &p_buf, 0, kv_len, &v_buf, 0, &mut o_buf, o_offset, o_ld, t, kv_len, head_dim, 1.0, 0.0)
+            .expect("real gemm_pv_bf16 call failed");
+
+        let mut o_full_got_bf16 = vec![0u16; o_full_bf16.len()];
+        o_buf.copy_to_host(&mut o_full_got_bf16).unwrap();
+        let o_full_got: Vec<f32> = o_full_got_bf16.iter().map(|&b| bf16_to_f32(b)).collect();
+
+        // This head's real output landed at the right strided offset.
+        for r in 0..t {
+            for d in 0..head_dim {
+                let g = o_full_got[r * o_ld + o_offset + d];
+                let e = expected_head[r * head_dim + d];
+                assert!((g - e).abs() < 0.02, "row {r} dim {d}: GPU gemm_pv_bf16 got {g}, independent reference {e}");
+            }
+        }
+        // The OTHER head's untouched columns (0,1 of each row) must be
+        // BIT-IDENTICAL to what was uploaded (an exact check, not a
+        // tolerance -- a real device write anywhere in that range should
+        // never happen, so the bytes must be untouched, not merely
+        // "close"; a numeric tolerance here would also be the wrong tool
+        // since bf16's absolute precision at this sentinel's magnitude is
+        // itself several units, unrelated to whether a write occurred).
+        for r in 0..t {
+            for c in 0..o_offset {
+                let idx = r * o_ld + c;
+                assert_eq!(
+                    o_full_got_bf16[idx], o_full_bf16[idx],
+                    "row {r} col {c}: neighboring head's data was clobbered (got bits {:#06x}, expected untouched bits {:#06x} = {})",
+                    o_full_got_bf16[idx], o_full_bf16[idx], o_sentinel
+                );
+            }
+        }
+    }
+
+    /// §100 decisive test: `gemm_atb_bf16` computing `Y = A^T @ B` (the
+    /// THIRD real transpose pattern this crate needed, beyond
+    /// `gemm_bf16_linear`/`gemm_qkt_bf16`'s `x@w^T` and `gemm_pv_bf16`'s
+    /// plain `A@B`) -- checked against an independent plain f32
+    /// triple-loop reference, with a strided view on BOTH `a` and the
+    /// output `y` (the real usage pattern: `key^T @ v_new` reading a
+    /// slice of a wider per-token buffer, writing into a slice of a
+    /// wider per-head state buffer).
+    #[test]
+    fn real_gemm_atb_with_strided_views_matches_independently_computed_reference() {
+        if hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let m = 3usize; // contraction dim (e.g. chunk_size)
+        let k = 2usize; // A's real "column" dim (e.g. head_dim)
+        let n = 4usize; // B's real "column" dim (e.g. head_dim)
+        let a_ld = 5usize; // A lives inside a wider [m, 5] buffer, real data at columns [1,3)
+        let a_offset = 1usize;
+
+        // A: real logical shape [m, k], strided inside a [m, a_ld] buffer.
+        let a_full_f32: Vec<f32> = vec![
+            999.0, 1.0, 2.0, 999.0, 999.0, // row 0
+            999.0, 3.0, -1.0, 999.0, 999.0, // row 1
+            999.0, 0.5, 4.0, 999.0, 999.0, // row 2
+        ];
+        // B: real logical shape [m, n], tightly packed.
+        let b_f32: Vec<f32> = vec![
+            0.1, 0.2, 0.3, 0.4, // row 0
+            -0.5, 0.6, -0.7, 0.8, // row 1
+            1.0, -1.0, 0.5, -0.5, // row 2
+        ];
+
+        let a_rows: Vec<Vec<f32>> = (0..m).map(|r| a_full_f32[r * a_ld + a_offset..r * a_ld + a_offset + k].to_vec()).collect();
+        let mut expected = vec![0f32; k * n];
+        for ki in 0..k {
+            for ni in 0..n {
+                let mut acc = 0f32;
+                for mi in 0..m {
+                    acc += a_rows[mi][ki] * b_f32[mi * n + ni];
+                }
+                expected[ki * n + ni] = acc;
+            }
+        }
+
+        let a_bf16: Vec<u16> = a_full_f32.iter().map(|&v| f32_to_bf16(v)).collect();
+        let b_bf16: Vec<u16> = b_f32.iter().map(|&v| f32_to_bf16(v)).collect();
+        let mut a_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(a_bf16.len()).unwrap();
+        let mut b_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(b_bf16.len()).unwrap();
+
+        // Y lives inside a wider [k, 6] buffer at column offset 2, same
+        // "don't clobber a neighbor" check as gemm_pv's own test.
+        let y_ld = 6usize;
+        let y_offset = 2usize;
+        let y_sentinel: f32 = -42.0;
+        let mut y_full_f32 = vec![y_sentinel; k * y_ld];
+        for row in 0..k {
+            for col in 0..n {
+                y_full_f32[row * y_ld + y_offset + col] = 0.0;
+            }
+        }
+        let y_full_bf16: Vec<u16> = y_full_f32.iter().map(|&v| f32_to_bf16(v)).collect();
+        let mut y_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(y_full_bf16.len()).unwrap();
+        a_buf.copy_from_host(&a_bf16).unwrap();
+        b_buf.copy_from_host(&b_bf16).unwrap();
+        y_buf.copy_from_host(&y_full_bf16).unwrap();
+
+        let handle = BlasHandle::create().expect("real hipblasCreate failed");
+        gemm_atb_bf16(&handle, &a_buf, a_offset, a_ld, &b_buf, 0, n, &mut y_buf, y_offset, y_ld, m, k, n, 0.0)
+            .expect("real gemm_atb_bf16 call failed");
+
+        let mut y_full_got_bf16 = vec![0u16; y_full_bf16.len()];
+        y_buf.copy_to_host(&mut y_full_got_bf16).unwrap();
+        let y_full_got: Vec<f32> = y_full_got_bf16.iter().map(|&b| bf16_to_f32(b)).collect();
+
+        for row in 0..k {
+            for col in 0..n {
+                let g = y_full_got[row * y_ld + y_offset + col];
+                let e = expected[row * n + col];
+                assert!((g - e).abs() < 0.02, "row {row} col {col}: GPU gemm_atb_bf16 got {g}, independent reference {e}");
+            }
+        }
+        // Neighboring columns must be untouched (bit-exact).
+        for row in 0..k {
+            for col in 0..y_offset {
+                let idx = row * y_ld + col;
+                assert_eq!(
+                    y_full_got_bf16[idx], y_full_bf16[idx],
+                    "row {row} col {col}: neighboring data was clobbered (got bits {:#06x}, expected untouched bits {:#06x})",
+                    y_full_got_bf16[idx], y_full_bf16[idx]
+                );
+            }
+        }
     }
 
     /// Real correctness test: a small, fixed `x`/`w`, GEMM computed on the

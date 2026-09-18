@@ -78,3 +78,46 @@ This rule defines non-negotiable invariants established through rigorous empiric
   - Do not initialize or compile static syntax tries during server boot.
   - Do not add architectural layers or maintenance complexity that yield 0 returns in benchmark testing.
 
+---
+
+## 6. The Speculative Decoding Break-Even Invariant on Recurrent Architectures
+
+* **Empirical Finding (TODO.md §97 & IPWF Gating Audits)**:
+  - Speculative decoding is NOT an automatic speedup. On `runtime-next` (Qwen3.5-4B), prompt-lookup speculative decoding proved **15–21% SLOWER** than sequential decode (0.799x on repetitive text, 0.836x on creative text) despite a 58% acceptance rate.
+* **Root Causes**:
+  1. **The Recurrent State Hazard**: In pure Transformers, KV rollback is a non-mutating integer decrement (`kv_len -= rejected`). In hybrid/recurrent models (Qwen3.5 has 24 GDN layers out of 32), recurrent states ($S_t$) are **read-modify-write**. Verifying a draft batch mutates GPU state across all 24 layers; any rejection requires full state snapshot/restore or sequential replay, destroying speculative throughput.
+  2. **The Moving Baseline Problem**: A sequential baseline optimized with HIP Graph capture runs at ~12 ms/token (82–90 tok/s) with 0 launch overhead. A batched verification pass that runs un-graphed with short average draft acceptance ($\bar{L} \approx 1.5..2.1$ tokens) mathematically cannot beat the graphed sequential baseline.
+* **Production Invariant**:
+  - Never deploy speculative decoding on recurrent/hybrid architectures without:
+    a. A trained, high-acceptance draft mechanism (e.g. MTP head with $\tau > 75\%$), AND
+    b. Empirical verification that $(\text{Time}_{\text{draft}} + \text{Time}_{\text{verify}}) / \bar{L}_{\text{accepted}} < \text{Time}_{\text{graphed\_sequential}}$.
+  - If an engine cannot beat its own graphed sequential baseline in benchmark testing, leave speculative decoding OFF.
+
+---
+
+## 7. The Graph Capture Trap: Fixed Decode vs. Dynamic Prefill
+
+* **Empirical Mechanism (TODO.md §93 vs. §95/§96)**:
+  - HIP Graph capture (`GraphedDecodeState`) provides a massive +72% speedup for single-token decode because the execution shape is strictly constant ($rows=1$), allowing all ~160 kernel launches to be recorded once at startup and replayed as a single submission.
+  - **The Trap**: HIP Graphs require immutable buffer addresses and rigid tensor dimensions. Prompts have arbitrary, dynamic lengths ($N = 42, 318, 1200$).
+  - Capturing graphs for prefill requires coarse power-of-2 bucketing (e.g. 64, 128, 256, 512, 1024, 2048) and padding with dummy tokens, introducing padding compute waste and multi-graph VRAM footprint.
+* **Production Invariant**:
+  - Keep single-token decode in a static, pre-captured HIP Graph (`GraphedDecodeState`).
+  - Do NOT attempt to force arbitrary dynamic prompt lengths into the single-token graph.
+  - Prefill must be executed as a batched matrix-multiplication pass ($rows=N$), either un-graphed or using explicitly budgeted size buckets.
+
+---
+
+## 8. The Kernel Math Trap: Scalar Loops vs. Matrix-Core GEMMs
+
+* **Empirical Finding (TODO.md §87)**:
+  - At $rows=1$ and short context ($kv\_len=128$), hand-written scalar dot-product loops (such as `src/kernels/attention.hip`) beat PyTorch by **1.7x** (21.2 µs vs 36.3 µs) solely because eliminating CPU launch overhead dominates small workloads.
+  - **The Trap**: At $kv\_len=2048$ or batched prefill ($rows > 1$), the naive scalar loop **loses to PyTorch by 2.6x–2.8x** (384 µs vs 138 µs).
+* **Root Cause**:
+  - When $rows > 1$ or $kv\_len$ is large, the workload shifts from latency/launch-bound to compute/throughput-bound.
+  - Vendor libraries (`rocBLAS` / `hipBLAS`) utilize RDNA3 **hardware Matrix Cores (WMMA)**. Hand-written scalar loops execute on general-purpose vector ALUs, starving the GPU's dedicated matrix hardware.
+* **Production Invariant**:
+  - Never use scalar vector loops for batched prefill, chunked verification, or long-context operations ($rows > 1$).
+  - Batched attention and projections MUST use hardware matrix-core accelerated GEMM paths (`blas.rs` `gemm_bf16_linear` or tiled FlashAttention kernels) to avoid massive throughput regressions against vendor baselines.
+
+

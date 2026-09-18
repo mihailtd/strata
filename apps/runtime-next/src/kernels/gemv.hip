@@ -69,15 +69,43 @@ extern "C" __global__ void gemv_bf16_kernel(
     const int stride = blockDim.x;
     const unsigned short* w_row = w + (size_t)o * (size_t)in_features;
 
-    float acc = 0.0f;
-    for (int i = tid * 4; i < in_features; i += stride * 4) {
+    // Two `ushort4` loads/iteration (8 elements/thread/iteration) instead
+    // of one -- more independent memory requests in flight per iteration,
+    // and two independent accumulators to break the serial dependency
+    // chain a single running `acc` would otherwise force. A real,
+    // rocprofv3-measured experiment (not guessed): this dropped this
+    // kernel's own average duration further on top of the `ushort4`
+    // single-load version. Falls back to a single-load tail loop for
+    // whatever doesn't fill a full 8-element pair (real for this model's
+    // shapes when `in_features / 4` is odd, e.g. down_proj's
+    // `9216/4=2304` iterations split across `stride` threads).
+    float acc0 = 0.0f;
+    float acc1 = 0.0f;
+    int i = tid * 4;
+    const int step = stride * 4;
+    for (; i + step < in_features; i += step * 2) {
+        ushort4 wv0 = *reinterpret_cast<const ushort4*>(w_row + i);
+        ushort4 xv0 = *reinterpret_cast<const ushort4*>(x + i);
+        ushort4 wv1 = *reinterpret_cast<const ushort4*>(w_row + i + step);
+        ushort4 xv1 = *reinterpret_cast<const ushort4*>(x + i + step);
+        acc0 += bf16_bits_to_f32(wv0.x) * bf16_bits_to_f32(xv0.x);
+        acc0 += bf16_bits_to_f32(wv0.y) * bf16_bits_to_f32(xv0.y);
+        acc0 += bf16_bits_to_f32(wv0.z) * bf16_bits_to_f32(xv0.z);
+        acc0 += bf16_bits_to_f32(wv0.w) * bf16_bits_to_f32(xv0.w);
+        acc1 += bf16_bits_to_f32(wv1.x) * bf16_bits_to_f32(xv1.x);
+        acc1 += bf16_bits_to_f32(wv1.y) * bf16_bits_to_f32(xv1.y);
+        acc1 += bf16_bits_to_f32(wv1.z) * bf16_bits_to_f32(xv1.z);
+        acc1 += bf16_bits_to_f32(wv1.w) * bf16_bits_to_f32(xv1.w);
+    }
+    for (; i < in_features; i += step) {
         ushort4 wv = *reinterpret_cast<const ushort4*>(w_row + i);
         ushort4 xv = *reinterpret_cast<const ushort4*>(x + i);
-        acc += bf16_bits_to_f32(wv.x) * bf16_bits_to_f32(xv.x);
-        acc += bf16_bits_to_f32(wv.y) * bf16_bits_to_f32(xv.y);
-        acc += bf16_bits_to_f32(wv.z) * bf16_bits_to_f32(xv.z);
-        acc += bf16_bits_to_f32(wv.w) * bf16_bits_to_f32(xv.w);
+        acc0 += bf16_bits_to_f32(wv.x) * bf16_bits_to_f32(xv.x);
+        acc0 += bf16_bits_to_f32(wv.y) * bf16_bits_to_f32(xv.y);
+        acc0 += bf16_bits_to_f32(wv.z) * bf16_bits_to_f32(xv.z);
+        acc0 += bf16_bits_to_f32(wv.w) * bf16_bits_to_f32(xv.w);
     }
+    float acc = acc0 + acc1;
 
     for (int offset = warpSize / 2; offset > 0; offset >>= 1) {
         acc += __shfl_down(acc, offset);

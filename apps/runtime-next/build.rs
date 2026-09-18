@@ -54,6 +54,23 @@ fn build_hip_kernels() {
 
     let lib_path = Path::new(&out_dir).join("libruntime_next_kernels.so");
     let mut cmd = Command::new(&hipcc);
+    // Without an explicit target, hipcc auto-detects EVERY local GPU
+    // agent and builds a fat binary for all of them -- on this real dev
+    // machine that's both the real target (`gfx1100`, the RX 7900 XTX
+    // this whole engine is written for and the only device the model
+    // ever actually loads onto) AND the CPU's incidental integrated
+    // graphics (`gfx1036`), which this engine has never used for
+    // inference. Real problem this caused: an experimental kernel using
+    // RDNA3's `dot8-insts` feature (a real hardware INT8 dot-product
+    // instruction -- see docs/DECISIONS.md's real, disclosed writeup of
+    // why that experiment was tried and reverted) hard-failed the whole
+    // build when compiled for `gfx1036`, which doesn't support it, over
+    // a target nothing here runs on. Pin to the one real target instead
+    // of guarding every RDNA3-only kernel with `#ifdef`s for a device
+    // this crate never uses.
+    let offload_arch = std::env::var("RUNTIME_NEXT_OFFLOAD_ARCH").unwrap_or_else(|_| "gfx1100".to_string());
+    cmd.arg(format!("--offload-arch={offload_arch}"));
+    println!("cargo:rerun-if-env-changed=RUNTIME_NEXT_OFFLOAD_ARCH");
     cmd.arg("-fPIC").arg("-shared").arg("-O2");
     for f in &hip_files {
         println!("cargo:rerun-if-changed={}", f.display());

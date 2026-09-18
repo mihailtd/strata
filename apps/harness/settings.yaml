@@ -109,3 +109,44 @@ llm-pi-ai:
           contextWindow: 32768
           maxTokens: 8192
 
+    # §95: 4B-tier engine-comparison entries -- distinct from the 27B
+    # production entries above. Three real backends serving the SAME real
+    # byte-identical Qwen3.5-4B bf16 weights (see docs/DECISIONS.md §90/§95),
+    # each on its own port (one baseURL per provider block, so three
+    # different ports need three separate blocks, not one block with three
+    # models). Benchmark/single-turn-safe today, not yet fully
+    # interactive-multi-turn-safe for `runtime-next` specifically -- see
+    # apps/runtime-next/src/tokenizer.rs's own doc comment for the real
+    # chat-template scope limitation.
+    llamacpp-4b:
+      displayName: "llama.cpp 4B [Upstream ROCm HIP baseline]"
+      api: openai-completions
+      baseURL: http://127.0.0.1:8001/v1
+      apiKeyEnv: DEEPSEEK_API_KEY
+      models:
+        - id: "qwen3.5:4b-llamacpp"
+          name: "Qwen 3.5 4B [llama.cpp, real bf16 GGUF]"
+          contextWindow: 16384
+          maxTokens: 8192
+
+    ollama-4b:
+      displayName: "Ollama 4B [Upstream baseline]"
+      api: openai-completions
+      baseURL: http://127.0.0.1:11434/v1
+      apiKeyEnv: DEEPSEEK_API_KEY
+      models:
+        - id: "qwen3.5:4b-ollama"
+          name: "Qwen 3.5 4B [Ollama, real bf16 GGUF]"
+          contextWindow: 16384
+          maxTokens: 8192
+
+    runtime-next-4b:
+      displayName: "runtime-next 4B [From-scratch Rust/HIP engine]"
+      api: openai-completions
+      baseURL: http://127.0.0.1:8003/v1
+      apiKeyEnv: DEEPSEEK_API_KEY
+      models:
+        - id: "qwen3.5:4b-rust"
+          name: "Qwen 3.5 4B [runtime-next, real safetensors weights]"
+          contextWindow: 4096
+          maxTokens: 2048

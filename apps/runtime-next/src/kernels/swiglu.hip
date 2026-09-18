@@ -48,3 +48,69 @@ extern "C" void launch_swiglu_bf16(const void* gate, const void* up, void* out, 
         (const unsigned short*)gate, (const unsigned short*)up, (unsigned short*)out, n
     );
 }
+
+// §114: real launch-count-reduction fusion for batched prefill's MLP
+// block. Before this, `mlp_block_prefill` read `gate|up`'s real combined
+// GEMM output (one wide `[T, GATE_UP_COMBINED_DIM]` row per token, gate
+// and up sub-ranges back-to-back) via TWO real `extract_range_bf16`
+// launches (one per sub-range, physically gathering each into its own
+// tightly-packed buffer -- see that kernel's own header for why the
+// gather was needed at all) before a THIRD launch (`swiglu_bf16` above)
+// combined them. Real rocprofv3 profiling on a served prefill request
+// found `extract_range_bf16_kernel` at 138 real calls -- a real,
+// eliminable launch-count cost, not analyzed compute (this kernel does no
+// arithmetic at all, pure strided-to-packed copies) contributing to §111's
+// own real finding that prefill's real wall-clock time is dominated by
+// per-launch dispatch overhead, not GPU compute.
+//
+// This kernel reads gate/up DIRECTLY from the real strided combined-GEMM
+// output (two offsets into the same wide row) and writes `silu(gate)*up`
+// straight to the final tightly-packed destination -- the exact same
+// reads and the exact same arithmetic as the extract_range+extract_range+
+// swiglu sequence it replaces, just fused into ONE real kernel launch
+// instead of three. Not an approximation of any kind -- a pure algebraic
+// identity (reading via stride+offset instead of via a pre-copied buffer
+// changes none of the real bytes read or computed), so real output is
+// expected to be BIT-EXACT identical to the unfused sequence, not merely
+// "close."
+extern "C" __global__ void swiglu_strided_bf16_kernel(
+    const unsigned short* __restrict__ gate_up, // [rows, src_stride]
+    unsigned short* __restrict__ out,            // [rows, len], tightly packed
+    int rows,
+    int src_stride,
+    int gate_offset,
+    int up_offset,
+    int len
+) {
+    const int row = blockIdx.x;
+    if (row >= rows) {
+        return;
+    }
+    const unsigned short* grow = gate_up + (size_t)row * (size_t)src_stride + (size_t)gate_offset;
+    const unsigned short* urow = gate_up + (size_t)row * (size_t)src_stride + (size_t)up_offset;
+    unsigned short* orow = out + (size_t)row * (size_t)len;
+    for (int i = threadIdx.x; i < len; i += blockDim.x) {
+        float g = bf16_bits_to_f32(grow[i]);
+        float u = bf16_bits_to_f32(urow[i]);
+        float silu_g = g / (1.0f + expf(-g));
+        orow[i] = f32_to_bf16_bits(silu_g * u);
+    }
+}
+
+extern "C" void launch_swiglu_strided_bf16(
+    const void* gate_up,
+    void* out,
+    int rows,
+    int src_stride,
+    int gate_offset,
+    int up_offset,
+    int len,
+    void* stream
+) {
+    int threads = len < 256 ? len : 256;
+    hipLaunchKernelGGL(
+        swiglu_strided_bf16_kernel,
+        dim3(rows), dim3(threads), 0, (hipStream_t)stream,
+        (const unsigned short*)gate_up, (unsigned short*)out, rows, src_stride, gate_offset, up_offset, len
+    );
+}

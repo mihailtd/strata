@@ -1,0 +1,776 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.24.2",
+    "script_metadata_hash": null
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "a679d51231022b37347e62d855018a96",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "MJUe",
+      "code_hash": "bf7ee505136715257df7ebc08440a224",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h1 id=\"beating-llamacpp-from-scratch\">Beating llama.cpp from Scratch</h1>\n<h3 id=\"engineering-a-native-rust-hip-inference-engine-for-qwen-35-prefill-batching-network-stream-flushing-and-4-way-split-kv-attention-on-consumer-amd-hardware\">Engineering a Native Rust + HIP Inference Engine for Qwen 3.5: Prefill Batching, Network Stream Flushing, and 4-Way Split-KV Attention on Consumer AMD Hardware</h3></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "vblA",
+      "code_hash": "6c70704ea9c7e5a5147c65196d57af08",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 1rem'><marimo-stat data-value='&quot;82.89 tok/s&quot;' data-label='&quot;Decode Throughput&quot;' data-caption='&quot;+14.0% vs llama.cpp (72.73) | +13.5% vs Ollama (73.05)&quot;' data-direction='&quot;increase&quot;' data-bordered='true' data-target_direction='&quot;increase&quot;'></marimo-stat><marimo-stat data-value='&quot;96.4 ms&quot;' data-label='&quot;Time To First Token&quot;' data-caption='&quot;-10.7% vs llama.cpp (108.0 ms) | -16.2% vs Ollama (115.0 ms)&quot;' data-direction='&quot;decrease&quot;' data-bordered='true' data-target_direction='&quot;increase&quot;'></marimo-stat><marimo-stat data-value='&quot;3,300 \u2192 280&quot;' data-label='&quot;Prefill Kernel Launches&quot;' data-caption='&quot;-91.5% host CPU driver dispatch overhead&quot;' data-direction='&quot;decrease&quot;' data-bordered='true' data-target_direction='&quot;increase&quot;'></marimo-stat><marimo-stat data-value='&quot;&#92;u003c 0.3%&quot;' data-label='&quot;Per-Token SSE Framing Cost&quot;' data-caption='&quot;Streaming flush overhead under 0.3%&quot;' data-bordered='true' data-target_direction='&quot;increase&quot;'></marimo-stat><marimo-stat data-value='&quot;BF16&quot;' data-label='&quot;Weight Precision&quot;' data-caption='&quot;Unquantized baseline on all three engines&quot;' data-bordered='true' data-target_direction='&quot;increase&quot;'></marimo-stat></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "bkHC",
+      "code_hash": "88c206e3ee6cfecce036eea263b12654",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-callout-output data-html='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003e&#92;u003cstrong&#92;u003eExecutive Summary&#92;u003c/strong&#92;u003e \u2014 This article details the implementation and optimization of a bare-metal&#92;ninference runtime (&#92;u003ccode&#92;u003eruntime-next&#92;u003c/code&#92;u003e) written in Rust and AMD HIP for the &#92;u003cstrong&#92;u003eQwen 3.5&#92;u003c/strong&#92;u003e hybrid architecture,&#92;nrunning on a single consumer GPU (&#92;u003cstrong&#92;u003eAMD Radeon RX 7900 XTX 24GB&#92;u003c/strong&#92;u003e).&#92;u003c/span&#92;u003e&#92;n&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eWe benchmarked head-to-head against &#92;u003cstrong&#92;u003ellama.cpp&#92;u003c/strong&#92;u003e (&#92;u003ccode&#92;u003ellama-server&#92;u003c/code&#92;u003e) and &#92;u003cstrong&#92;u003eOllama&#92;u003c/strong&#92;u003e (&#92;u003ccode&#92;u003eollama serve&#92;u003c/code&#92;u003e)&#92;nunder identical conditions: independent HTTP daemons on localhost, OpenAI-compatible streaming chat&#92;nendpoints over TCP sockets, and unquantized BF16 weights. Both baselines were executed with &#92;u003cstrong&#92;u003e100% GPU&#92;noffload via native AMD ROCm (&#92;u003ccode&#92;u003egfx1100&#92;u003c/code&#92;u003e)&#92;u003c/strong&#92;u003e: &#92;u003ccode&#92;u003ellama-server&#92;u003c/code&#92;u003e compiled with HIPBLAS (&#92;u003ccode&#92;u003e-ngl 999&#92;u003c/code&#92;u003e), and &#92;u003ccode&#92;u003eollama serve&#92;u003c/code&#92;u003e&#92;nrunning with CachyOS&#x27;s hardware-accelerated &#92;u003ccode&#92;u003eollama-rocm&#92;u003c/code&#92;u003e package (&#92;u003ccode&#92;u003elibggml-hip.so&#92;u003c/code&#92;u003e, all 34 layers pinned to VRAM).&#92;u003c/span&#92;u003e&#92;n&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eOn the 4B model, &#92;u003ccode&#92;u003eruntime-next&#92;u003c/code&#92;u003e achieved &#92;u003cstrong&#92;u003e82.89 tok/s&#92;u003c/strong&#92;u003e sustained streaming throughput (&#92;u003cstrong&#92;u003e1.14\u00d7 faster&#92;nthan llama.cpp&#92;u003c/strong&#92;u003e, &#92;u003cstrong&#92;u003e1.13\u00d7 faster than Ollama&#92;u003c/strong&#92;u003e) and &#92;u003cstrong&#92;u003e96.4 ms Time-To-First-Token (11\u201316% lower latency)&#92;u003c/strong&#92;u003e.&#92;nAcross the wider family, speedups range from &#92;u003cstrong&#92;u003e1.35\u00d7 at 0.8B&#92;u003c/strong&#92;u003e to &#92;u003cstrong&#92;u003e1.10\u00d7 at 9B&#92;u003c/strong&#92;u003e.&#92;u003c/span&#92;u003e&#92;n&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eThis report covers the key bottlenecks encountered and resolved: eliminating a 3,300-kernel prefill launch&#92;nstorm, fixing an un-flushed 8KB HTTP buffer, isolating streaming loop overhead, and implementing a 4-way&#92;nparallel split-KV attention kernel inspired by &#92;u003ccode&#92;u003ellama.cpp&#92;u003c/code&#92;u003e.&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-kind='&quot;success&quot;'></marimo-callout-output>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "lEQa",
+      "code_hash": "96d2c47a831d91de770e07859252d0a1",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "PKri",
+      "code_hash": "327a38983d75df79ee21974125cc094b",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"the-test-bench-the-hybrid-architecture\">The Test Bench &amp; The Hybrid Architecture</h2>\n<h3 id=\"1-hardware-environment\">1. Hardware Environment</h3>\n<ul>\n<li><strong>GPU</strong>: AMD Radeon RX 7900 XTX (24GB GDDR6, gfx1100)</li>\n<li><strong>VRAM</strong>: 24 GB GDDR6 @ 960 GB/s theoretical bandwidth</li>\n<li><strong>Architecture</strong>: AMD RDNA3 (Navi 31, gfx1100, 96 Compute Units, 6,144 Stream Processors)</li>\n<li><strong>Software Stack</strong>: Linux x86_64, ROCm 7.2, HIP compiler</li>\n</ul>\n<h3 id=\"2-architecture-qwen-35-4b\">2. Architecture: Qwen 3.5 4B</h3>\n<span class=\"paragraph\">Standard Transformers (such as LLaMA or Mistral) use full attention at every layer, meaning Key-Value (KV)\ncache memory scales linearly with sequence length (<marimo-tex class=\"arithmatex\">||(O(T)||)</marimo-tex>).</span>\n<span class=\"paragraph\">Qwen 3.5 4B uses a <strong>hybrid architecture</strong> across its 32 layers:</span>\n<ul>\n<li><strong>24 Gated DeltaNet (GDN) Linear Attention Layers</strong>: Maintain a <strong>fixed-size recurrent state</strong>\n  <marimo-tex class=\"arithmatex\">||(S_t \\in \\mathbb{R}^{32 \\times 128 \\times 128}||)</marimo-tex> (in FP32, 2.0 MB per layer, totaling <strong>48.0 MB</strong> across\n  all 24 layers). As tokens arrive, <marimo-tex class=\"arithmatex\">||(S_t||)</marimo-tex> updates in-place via a causal 1D convolution and a gated delta rule.\n  Memory footprint is constant <marimo-tex class=\"arithmatex\">||(O(1)||)</marimo-tex> regardless of sequence length.</li>\n<li><strong>8 Full Grouped-Query Attention (GQA) Layers</strong>: Positioned at every 4th layer (3, 7, 11, 15, 19, 23, 27, 31).\n  These layers store standard KV caches to maintain exact context retrieval over long sequences.</li>\n</ul>\n<blockquote>\n<span class=\"paragraph\"><strong>In Plain English (The Detective's Notebook Analogy)</strong>:\nFor 75% of daily work (the 24 GDN layers), a detective writes concise summaries in a small notebook of fixed size,\ncompressing facts as they occur. The notebook never grows heavier. For the remaining 25% of critical evidence\n(the 8 Full Attention layers), they keep full transcripts of witness interviews, re-reading all past transcripts\nwhenever a new question arises.</span>\n</blockquote>\n<h3 id=\"3-evaluation-methodology\">3. Evaluation Methodology</h3>\n<ol>\n<li><strong>Weights</strong>: Native BF16 parameters loaded across all three engines.</li>\n<li><strong>Networking</strong>: Standard HTTP/1.1 servers listening on localhost (<code>runtime-next</code> on port 8000, <code>llama-server</code>\n   on port 8001, <code>ollama serve</code> on port 11434).</li>\n<li><strong>Streaming</strong>: Requests sent to <code>POST /v1/chat/completions</code> with <code>{\"stream\": true}</code>. Latency (TTFT) measures\n   time from socket opening to the first received token chunk; throughput measures total generated tokens divided\n   by total streaming duration.</li>\n<li><strong>Workloads</strong>: Three multi-turn programming tasks (FastAPI asyncpg+pgvector CRUD, PostgreSQL 17 HNSW tuning,\n   DuckDB Parquet window analytics) generating ~350 tokens each.</li>\n<li><strong>Hardware Acceleration Parity (AMD ROCm)</strong>: Both baseline engines executed with full ROCm GPU acceleration on\n   the RX 7900 XTX (<code>gfx1100</code>). <code>llama-server</code> ran with <code>-ngl 999</code> offloading all 34 layers. <code>ollama serve</code> ran\n   with the native CachyOS <code>ollama-rocm</code> package, dynamically linking <code>/usr/lib/ollama/rocm_v7_2/libggml-hip.so</code>\n   and offloading all 34 layers (8,023.7 MiB model buffer in VRAM). Neither baseline was run on CPU.</li>\n</ol></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Xref",
+      "code_hash": "2a8d324bb76994e52413f99b2b5cc080",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "\n<div style=\"background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 12px; padding: 20px; margin: 16px 0; font-family: monospace;\">\n    <div style=\"font-weight: bold; color: #38bdf8; font-size: 14px; margin-bottom: 12px;\">HYBRID MODEL TOPOLOGY: Qwen 3.5 4B (32 Layers Total)</div>\n    <div style=\"display: flex; flex-direction: column; gap: 8px;\">\n        <div style=\"background: rgba(56, 189, 248, 0.1); border-left: 4px solid #38bdf8; padding: 10px; border-radius: 4px;\">\n            <span style=\"color: #38bdf8; font-weight: bold;\">24 Layers: Gated DeltaNet (GDN) Linear Attention</span><br/>\n            <span style=\"color: #94a3b8; font-size: 12px;\">\u2022 Fixed recurrent state: S_t \u2208 \u211d^[32, 128, 128] (FP32, 2.0 MB / layer = 48.0 MB total)</span><br/>\n            <span style=\"color: #94a3b8; font-size: 12px;\">\u2022 Causal Conv1D state: [8192, 3] BF16 (48 KB / layer = 1.15 MB total)</span><br/>\n            <span style=\"color: #22c55e; font-size: 12px;\">\u2022 Memory footprint: Constant O(1) \u2014 no growth over sequence length</span>\n        </div>\n        <div style=\"background: rgba(249, 115, 22, 0.1); border-left: 4px solid #f97316; padding: 10px; border-radius: 4px;\">\n            <span style=\"color: #f97316; font-weight: bold;\">8 Layers: Full Grouped-Query Attention (Layers 3, 7, 11, 15, 19, 23, 27, 31)</span><br/>\n            <span style=\"color: #94a3b8; font-size: 12px;\">\u2022 Dynamic KV Cache: [4 heads, seq_len, 256 dim] BF16 (32 KB per token across all 8 layers)</span><br/>\n            <span style=\"color: #ef4444; font-size: 12px;\">\u2022 Memory footprint: Scales O(T) \u2014 creates compute and memory bandwidth demands at long context</span>\n        </div>\n    </div>\n</div>\n"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "SFPL",
+      "code_hash": "6ecf93a73d72cc7c50070474b0e489cb",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "BYtC",
+      "code_hash": "8ccf76f5e25e221273c1014d00cc4d81",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: row;justify-content: center;align-items: normal;flex-wrap: nowrap;gap: 2rem'><marimo-mime-renderer data-mime='&quot;application/vnd.vegalite.v6+json&quot;' data-data='&quot;{&#92;n  &#92;&quot;&#36;schema&#92;&quot;: &#92;&quot;https://vega.github.io/schema/vega-lite/v6.4.1.json&#92;&quot;,&#92;n  &#92;&quot;autosize&#92;&quot;: {&#92;n    &#92;&quot;contains&#92;&quot;: &#92;&quot;padding&#92;&quot;,&#92;n    &#92;&quot;type&#92;&quot;: &#92;&quot;fit&#92;&quot;&#92;n  },&#92;n  &#92;&quot;config&#92;&quot;: {&#92;n    &#92;&quot;view&#92;&quot;: {&#92;n      &#92;&quot;continuousHeight&#92;&quot;: 300,&#92;n      &#92;&quot;continuousWidth&#92;&quot;: 300&#92;n    }&#92;n  },&#92;n  &#92;&quot;data&#92;&quot;: {&#92;n    &#92;&quot;name&#92;&quot;: &#92;&quot;data-8242afa93234ca49cca911b63a79ca84&#92;&quot;&#92;n  },&#92;n  &#92;&quot;datasets&#92;&quot;: {&#92;n    &#92;&quot;data-8242afa93234ca49cca911b63a79ca84&#92;&quot;: [&#92;n      {&#92;n        &#92;&quot;avg_tok_s&#92;&quot;: 82.89,&#92;n        &#92;&quot;avg_ttft_ms&#92;&quot;: 96.4,&#92;n        &#92;&quot;engine&#92;&quot;: &#92;&quot;runtime-next (this port)&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;avg_tok_s&#92;&quot;: 72.73,&#92;n        &#92;&quot;avg_ttft_ms&#92;&quot;: 108.0,&#92;n        &#92;&quot;engine&#92;&quot;: &#92;&quot;llama.cpp&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;avg_tok_s&#92;&quot;: 73.05,&#92;n        &#92;&quot;avg_ttft_ms&#92;&quot;: 115.0,&#92;n        &#92;&quot;engine&#92;&quot;: &#92;&quot;Ollama&#92;&quot;&#92;n      }&#92;n    ]&#92;n  },&#92;n  &#92;&quot;encoding&#92;&quot;: {&#92;n    &#92;&quot;color&#92;&quot;: {&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;engine&#92;&quot;,&#92;n      &#92;&quot;legend&#92;&quot;: null,&#92;n      &#92;&quot;scale&#92;&quot;: {&#92;n        &#92;&quot;domain&#92;&quot;: [&#92;n          &#92;&quot;runtime-next (this port)&#92;&quot;,&#92;n          &#92;&quot;Ollama&#92;&quot;,&#92;n          &#92;&quot;llama.cpp&#92;&quot;&#92;n        ],&#92;n        &#92;&quot;range&#92;&quot;: [&#92;n          &#92;&quot;#0ea5e9&#92;&quot;,&#92;n          &#92;&quot;#64748b&#92;&quot;,&#92;n          &#92;&quot;#94a3b8&#92;&quot;&#92;n        ]&#92;n      },&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n    },&#92;n    &#92;&quot;tooltip&#92;&quot;: [&#92;n      {&#92;n        &#92;&quot;field&#92;&quot;: &#92;&quot;engine&#92;&quot;,&#92;n        &#92;&quot;title&#92;&quot;: &#92;&quot;Engine&#92;&quot;,&#92;n        &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;field&#92;&quot;: &#92;&quot;avg_tok_s&#92;&quot;,&#92;n        &#92;&quot;format&#92;&quot;: &#92;&quot;.2f&#92;&quot;,&#92;n        &#92;&quot;title&#92;&quot;: &#92;&quot;tok/s&#92;&quot;,&#92;n        &#92;&quot;type&#92;&quot;: &#92;&quot;quantitative&#92;&quot;&#92;n      }&#92;n    ],&#92;n    &#92;&quot;x&#92;&quot;: {&#92;n      &#92;&quot;axis&#92;&quot;: {&#92;n        &#92;&quot;labelAngle&#92;&quot;: 0&#92;n      },&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;engine&#92;&quot;,&#92;n      &#92;&quot;sort&#92;&quot;: &#92;&quot;-y&#92;&quot;,&#92;n      &#92;&quot;title&#92;&quot;: null,&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n    },&#92;n    &#92;&quot;y&#92;&quot;: {&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;avg_tok_s&#92;&quot;,&#92;n      &#92;&quot;scale&#92;&quot;: {&#92;n        &#92;&quot;domain&#92;&quot;: [&#92;n          0,&#92;n          95&#92;n        ]&#92;n      },&#92;n      &#92;&quot;title&#92;&quot;: &#92;&quot;Streaming tok/s&#92;&quot;,&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;quantitative&#92;&quot;&#92;n    }&#92;n  },&#92;n  &#92;&quot;height&#92;&quot;: 240,&#92;n  &#92;&quot;mark&#92;&quot;: {&#92;n    &#92;&quot;cornerRadiusTopLeft&#92;&quot;: 6,&#92;n    &#92;&quot;cornerRadiusTopRight&#92;&quot;: 6,&#92;n    &#92;&quot;type&#92;&quot;: &#92;&quot;bar&#92;&quot;&#92;n  },&#92;n  &#92;&quot;title&#92;&quot;: &#92;&quot;Sustained Generation Throughput&#92;&quot;,&#92;n  &#92;&quot;usermeta&#92;&quot;: {&#92;n    &#92;&quot;embedOptions&#92;&quot;: {}&#92;n  },&#92;n  &#92;&quot;width&#92;&quot;: 260&#92;n}&quot;'></marimo-mime-renderer><marimo-mime-renderer data-mime='&quot;application/vnd.vegalite.v6+json&quot;' data-data='&quot;{&#92;n  &#92;&quot;&#36;schema&#92;&quot;: &#92;&quot;https://vega.github.io/schema/vega-lite/v6.4.1.json&#92;&quot;,&#92;n  &#92;&quot;autosize&#92;&quot;: {&#92;n    &#92;&quot;contains&#92;&quot;: &#92;&quot;padding&#92;&quot;,&#92;n    &#92;&quot;type&#92;&quot;: &#92;&quot;fit&#92;&quot;&#92;n  },&#92;n  &#92;&quot;config&#92;&quot;: {&#92;n    &#92;&quot;view&#92;&quot;: {&#92;n      &#92;&quot;continuousHeight&#92;&quot;: 300,&#92;n      &#92;&quot;continuousWidth&#92;&quot;: 300&#92;n    }&#92;n  },&#92;n  &#92;&quot;data&#92;&quot;: {&#92;n    &#92;&quot;name&#92;&quot;: &#92;&quot;data-8242afa93234ca49cca911b63a79ca84&#92;&quot;&#92;n  },&#92;n  &#92;&quot;datasets&#92;&quot;: {&#92;n    &#92;&quot;data-8242afa93234ca49cca911b63a79ca84&#92;&quot;: [&#92;n      {&#92;n        &#92;&quot;avg_tok_s&#92;&quot;: 82.89,&#92;n        &#92;&quot;avg_ttft_ms&#92;&quot;: 96.4,&#92;n        &#92;&quot;engine&#92;&quot;: &#92;&quot;runtime-next (this port)&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;avg_tok_s&#92;&quot;: 72.73,&#92;n        &#92;&quot;avg_ttft_ms&#92;&quot;: 108.0,&#92;n        &#92;&quot;engine&#92;&quot;: &#92;&quot;llama.cpp&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;avg_tok_s&#92;&quot;: 73.05,&#92;n        &#92;&quot;avg_ttft_ms&#92;&quot;: 115.0,&#92;n        &#92;&quot;engine&#92;&quot;: &#92;&quot;Ollama&#92;&quot;&#92;n      }&#92;n    ]&#92;n  },&#92;n  &#92;&quot;encoding&#92;&quot;: {&#92;n    &#92;&quot;color&#92;&quot;: {&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;engine&#92;&quot;,&#92;n      &#92;&quot;legend&#92;&quot;: null,&#92;n      &#92;&quot;scale&#92;&quot;: {&#92;n        &#92;&quot;domain&#92;&quot;: [&#92;n          &#92;&quot;runtime-next (this port)&#92;&quot;,&#92;n          &#92;&quot;llama.cpp&#92;&quot;,&#92;n          &#92;&quot;Ollama&#92;&quot;&#92;n        ],&#92;n        &#92;&quot;range&#92;&quot;: [&#92;n          &#92;&quot;#10b981&#92;&quot;,&#92;n          &#92;&quot;#f59e0b&#92;&quot;,&#92;n          &#92;&quot;#f97316&#92;&quot;&#92;n        ]&#92;n      },&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n    },&#92;n    &#92;&quot;tooltip&#92;&quot;: [&#92;n      {&#92;n        &#92;&quot;field&#92;&quot;: &#92;&quot;engine&#92;&quot;,&#92;n        &#92;&quot;title&#92;&quot;: &#92;&quot;Engine&#92;&quot;,&#92;n        &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;field&#92;&quot;: &#92;&quot;avg_ttft_ms&#92;&quot;,&#92;n        &#92;&quot;format&#92;&quot;: &#92;&quot;.1f&#92;&quot;,&#92;n        &#92;&quot;title&#92;&quot;: &#92;&quot;TTFT (ms)&#92;&quot;,&#92;n        &#92;&quot;type&#92;&quot;: &#92;&quot;quantitative&#92;&quot;&#92;n      }&#92;n    ],&#92;n    &#92;&quot;x&#92;&quot;: {&#92;n      &#92;&quot;axis&#92;&quot;: {&#92;n        &#92;&quot;labelAngle&#92;&quot;: 0&#92;n      },&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;engine&#92;&quot;,&#92;n      &#92;&quot;sort&#92;&quot;: &#92;&quot;y&#92;&quot;,&#92;n      &#92;&quot;title&#92;&quot;: null,&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n    },&#92;n    &#92;&quot;y&#92;&quot;: {&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;avg_ttft_ms&#92;&quot;,&#92;n      &#92;&quot;scale&#92;&quot;: {&#92;n        &#92;&quot;domain&#92;&quot;: [&#92;n          0,&#92;n          130&#92;n        ]&#92;n      },&#92;n      &#92;&quot;title&#92;&quot;: &#92;&quot;Time to First Token (ms)&#92;&quot;,&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;quantitative&#92;&quot;&#92;n    }&#92;n  },&#92;n  &#92;&quot;height&#92;&quot;: 240,&#92;n  &#92;&quot;mark&#92;&quot;: {&#92;n    &#92;&quot;cornerRadiusTopLeft&#92;&quot;: 6,&#92;n    &#92;&quot;cornerRadiusTopRight&#92;&quot;: 6,&#92;n    &#92;&quot;type&#92;&quot;: &#92;&quot;bar&#92;&quot;&#92;n  },&#92;n  &#92;&quot;title&#92;&quot;: &#92;&quot;Time-To-First-Token (Lower = Better)&#92;&quot;,&#92;n  &#92;&quot;usermeta&#92;&quot;: {&#92;n    &#92;&quot;embedOptions&#92;&quot;: {}&#92;n  },&#92;n  &#92;&quot;width&#92;&quot;: 260&#92;n}&quot;'></marimo-mime-renderer></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "RGSE",
+      "code_hash": "361003bd7240b3dc61684e6f66bd1c7f",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">On 4B benchmarks, <code>runtime-next</code> leads llama.cpp by <strong>1.14x</strong>\nand Ollama by <strong>1.13x</strong> in throughput, while reducing Time-To-First-Token\nby <strong>11.6 ms (10.7%) vs. llama.cpp</strong> and <strong>18.6 ms (16.2%) vs. Ollama</strong>.</span>\n<span class=\"paragraph\">Before discussing the HTTP serving pipeline (Acts 1\u20135), we review how the raw decode loop was tuned\nfrom 31.7 tok/s up to 82.2 tok/s.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Kclp",
+      "code_hash": "8869c2335120d06549eb804fe1a8990d",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"act-0-decode-optimization-moving-from-317-to-82-toks\">Act 0 \u2014 Decode Optimization: Moving from 31.7 to 82 tok/s</h2>\n<span class=\"paragraph\">The native decode loop initially ran at <strong>31.7 tok/s</strong> on the RX 7900 XTX\u2014substantially behind mature engines.\nReaching 82+ tok/s required four targeted optimization passes on the GPU kernels.</span>\n<h3 id=\"why-rust-with-hip\">Why Rust with HIP?</h3>\n<span class=\"paragraph\">HIP kernels compiled for AMD RDNA3 run on the hardware regardless of the host language. The primary advantages\nof Rust in this runtime are architectural:</span>\n<ul>\n<li><strong>Enforced Safety Boundaries</strong>: Raw pointers and HIP runtime calls are encapsulated in a minimal FFI module\n  (<code>hip.rs</code>). The remainder of the 5,000-line model forward pass and server logic is safe Rust.</li>\n<li><strong>Zero Foreign Function / Interpreter Overhead</strong>: Moving away from Python removes GIL and runtime dispatch\n  overhead from every kernel invocation.</li>\n<li><strong>Clean Re-Implementation</strong>: Writing the kernels directly against the model architecture ensured every memory\n  layout and compute pattern could be tailored to the RX 7900 XTX.</li>\n</ul></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "emfo",
+      "code_hash": "81d86dcf79910d15091585591bc80e6c",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Hstk",
+      "code_hash": "67aa596e10fcdf779e9e6c4da3642abc",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-mime-renderer data-mime='&quot;application/vnd.vegalite.v6+json&quot;' data-data='&quot;{&#92;n  &#92;&quot;&#36;schema&#92;&quot;: &#92;&quot;https://vega.github.io/schema/vega-lite/v6.4.1.json&#92;&quot;,&#92;n  &#92;&quot;autosize&#92;&quot;: {&#92;n    &#92;&quot;contains&#92;&quot;: &#92;&quot;padding&#92;&quot;,&#92;n    &#92;&quot;type&#92;&quot;: &#92;&quot;fit&#92;&quot;&#92;n  },&#92;n  &#92;&quot;config&#92;&quot;: {&#92;n    &#92;&quot;view&#92;&quot;: {&#92;n      &#92;&quot;continuousHeight&#92;&quot;: 300,&#92;n      &#92;&quot;continuousWidth&#92;&quot;: 300&#92;n    }&#92;n  },&#92;n  &#92;&quot;data&#92;&quot;: {&#92;n    &#92;&quot;name&#92;&quot;: &#92;&quot;data-6dc2dff9b93b5db0fdf6c78686a58f8b&#92;&quot;&#92;n  },&#92;n  &#92;&quot;datasets&#92;&quot;: {&#92;n    &#92;&quot;data-6dc2dff9b93b5db0fdf6c78686a58f8b&#92;&quot;: [&#92;n      {&#92;n        &#92;&quot;stage&#92;&quot;: &#92;&quot;Baseline (naive port)&#92;&quot;,&#92;n        &#92;&quot;tok_s&#92;&quot;: 31.7&#92;n      },&#92;n      {&#92;n        &#92;&quot;stage&#92;&quot;: &#92;&quot;+ initial tuning&#92;&quot;,&#92;n        &#92;&quot;tok_s&#92;&quot;: 44.3&#92;n      },&#92;n      {&#92;n        &#92;&quot;stage&#92;&quot;: &#92;&quot;+ kernel fusion, direct KV reads&#92;&quot;,&#92;n        &#92;&quot;tok_s&#92;&quot;: 49.2&#92;n      },&#92;n      {&#92;n        &#92;&quot;stage&#92;&quot;: &#92;&quot;+ HIP Graph + custom GEMV + on-device argmax&#92;&quot;,&#92;n        &#92;&quot;tok_s&#92;&quot;: 81.2&#92;n      },&#92;n      {&#92;n        &#92;&quot;stage&#92;&quot;: &#92;&quot;+ GDN &amp; RMSNorm tuning&#92;&quot;,&#92;n        &#92;&quot;tok_s&#92;&quot;: 82.2&#92;n      }&#92;n    ]&#92;n  },&#92;n  &#92;&quot;encoding&#92;&quot;: {&#92;n    &#92;&quot;color&#92;&quot;: {&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;stage&#92;&quot;,&#92;n      &#92;&quot;legend&#92;&quot;: null,&#92;n      &#92;&quot;scale&#92;&quot;: {&#92;n        &#92;&quot;scheme&#92;&quot;: &#92;&quot;blues&#92;&quot;&#92;n      },&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n    },&#92;n    &#92;&quot;tooltip&#92;&quot;: [&#92;n      {&#92;n        &#92;&quot;field&#92;&quot;: &#92;&quot;stage&#92;&quot;,&#92;n        &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;field&#92;&quot;: &#92;&quot;tok_s&#92;&quot;,&#92;n        &#92;&quot;format&#92;&quot;: &#92;&quot;.1f&#92;&quot;,&#92;n        &#92;&quot;type&#92;&quot;: &#92;&quot;quantitative&#92;&quot;&#92;n      }&#92;n    ],&#92;n    &#92;&quot;x&#92;&quot;: {&#92;n      &#92;&quot;axis&#92;&quot;: {&#92;n        &#92;&quot;labelAngle&#92;&quot;: -20&#92;n      },&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;stage&#92;&quot;,&#92;n      &#92;&quot;sort&#92;&quot;: null,&#92;n      &#92;&quot;title&#92;&quot;: null,&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n    },&#92;n    &#92;&quot;y&#92;&quot;: {&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;tok_s&#92;&quot;,&#92;n      &#92;&quot;title&#92;&quot;: &#92;&quot;Decode tok/s&#92;&quot;,&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;quantitative&#92;&quot;&#92;n    }&#92;n  },&#92;n  &#92;&quot;height&#92;&quot;: 240,&#92;n  &#92;&quot;mark&#92;&quot;: {&#92;n    &#92;&quot;cornerRadiusTopLeft&#92;&quot;: 6,&#92;n    &#92;&quot;cornerRadiusTopRight&#92;&quot;: 6,&#92;n    &#92;&quot;type&#92;&quot;: &#92;&quot;bar&#92;&quot;&#92;n  },&#92;n  &#92;&quot;title&#92;&quot;: &#92;&quot;Decode Optimization Progression: 31.7 \u2192 82.2 tok/s&#92;&quot;,&#92;n  &#92;&quot;usermeta&#92;&quot;: {&#92;n    &#92;&quot;embedOptions&#92;&quot;: {}&#92;n  },&#92;n  &#92;&quot;width&#92;&quot;: 480&#92;n}&quot;'></marimo-mime-renderer></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "nWHF",
+      "code_hash": "2f99d60fa9d9bf2145ec1c5e446bc631",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"what-each-pass-achieved\">What each pass achieved</h3>\n<ul>\n<li><strong>Pass 1 (31.7 \u2192 44.3 tok/s, +40%)</strong>: Removed redundant host-device synchronization and streamlined buffer allocation.</li>\n<li><strong>Pass 2 (44.3 \u2192 49.2 tok/s, +11%)</strong>: Fused projection operations and read directly from combined GEMM output buffers.\n  We evaluated <code>hipBLASLt</code> as an alternative to <code>hipblasGemmEx</code>, but found it slower on these specific matrix shapes,\n  so we retained the standard path.</li>\n<li><strong>Pass 3 (49.2 \u2192 81.2 tok/s, +65%)</strong>:<ol>\n<li><em>HIP Graph replay</em>: Captured the per-token decode graph to eliminate CPU dispatch latency.</li>\n<li><em>Custom vectorized GEMV</em>: Decode operates on a single token (<marimo-tex class=\"arithmatex\">||(M=1||)</marimo-tex>), making general matrix-matrix kernels sub-optimal.\n We implemented a custom matrix-vector kernel using vectorized 4-element reads (<code>ushort4</code>), doubling throughput on\n dominant projection dimensions.</li>\n<li><em>On-device argmax</em>: Replaced host-side logit transfers (248,320 floats) with a lightweight on-GPU reduction that\n returns a single 4-byte token ID.</li>\n</ol>\n</li>\n<li><strong>Pass 4 (81.2 \u2192 82.2 tok/s)</strong>: Profiled with <code>rocprofv3</code> and discovered <code>gdn_recurrent_decode</code> utilized only 32\n  of the GPU's 96 compute units (one block per head, with 32 heads). Increasing thread block size from 128 to 1,024\n  improved occupancy, reducing kernel execution from 60.5 \u03bcs to 24.9 \u03bcs.</li>\n</ul></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "iLit",
+      "code_hash": "f0c2afc2215c3d07096e5a66dc87998c",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-callout-output data-html='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003e&#92;u003cstrong&#92;u003eProfiling Insight&#92;u003c/strong&#92;u003e: Early tuning without GPU profiling relied on indirect timers. Once &#92;u003ccode&#92;u003erocprofv3&#92;u003c/code&#92;u003e&#92;nwas introduced, compute-unit underutilization was identified and resolved in hours. Systematic profiling&#92;nproved far more effective than trial-and-error kernel adjustments.&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-kind='&quot;info&quot;'></marimo-callout-output>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ZHCJ",
+      "code_hash": "570942f826df7e429bf9cff8e9f2ade8",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"act-1-the-3300-kernel-launch-storm\">Act 1 \u2014 The 3,300-Kernel Launch Storm</h2>\n<span class=\"paragraph\">When first porting prompt prefill, the forward pass looped over tokens sequentially:</span>\n<ul>\n<li><strong>Causal Conv1D</strong>: 54 tokens <marimo-tex class=\"arithmatex\">||(\\times||)</marimo-tex> 24 GDN layers = <strong>1,296 launches</strong></li>\n<li><strong>GDN Gate/Beta</strong>: 54 tokens <marimo-tex class=\"arithmatex\">||(\\times||)</marimo-tex> 24 GDN layers = <strong>1,296 launches</strong></li>\n<li><strong>RoPE Embeddings</strong>: 54 tokens <marimo-tex class=\"arithmatex\">||(\\times||)</marimo-tex> 8 Attention layers = <strong>432 launches</strong></li>\n<li><strong>KV-Cache Appends</strong>: 54 tokens <marimo-tex class=\"arithmatex\">||(\\times||)</marimo-tex> 8 Attention layers = <strong>432 launches</strong></li>\n</ul>\n<span class=\"paragraph\">This totaled roughly <strong>3,300 kernel launches for a single 54-token prompt</strong>.</span>\n<blockquote>\n<span class=\"paragraph\"><strong>In Plain English (The Chef and Single Grains of Rice)</strong>:\nA commercial kitchen has 6,144 cooks ready to prepare an order. Instead of bringing in the full bowl of ingredients,\nan assistant walks into the kitchen 3,300 times to deliver one grain of rice per trip. The cooks spend most of their\ntime waiting for the assistant to open the door.</span>\n</blockquote>\n<span class=\"paragraph\">At 15\u201320 \u03bcs per launch, dispatch overhead consumed <strong>over 50 ms of CPU driver time</strong> before execution completed.</span>\n<h3 id=\"the-fix-batched-chunk-kernels\">The Fix: Batched Chunk Kernels</h3>\n<span class=\"paragraph\">We redesigned all four operations into batched kernels that process the sequence in a single launch per layer:</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ROlb",
+      "code_hash": "ebcd53e67df4a38d003a078570d2ab4c",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "qnkX",
+      "code_hash": "cc76202129786ad95191dee3bfa81e41",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-ui-element object-id='qnkX-0' random-id='e1962166-e850-c5ce-f1b3-5f517205ff1b'><marimo-table data-initial-value='[]' data-label='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eFour Batched Prefill Kernels Replacing 3,300 Per-Token Launches (-91.5% Host Overhead)&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-data='&quot;[{&#92;&quot;operation&#92;&quot;:&#92;&quot;Causal Conv1D&#92;&quot;,&#92;&quot;before_launches&#92;&quot;:1296,&#92;&quot;after_launches&#92;&quot;:24,&#92;&quot;parallel_mechanism&#92;&quot;:&#92;&quot;Bounded lookback (k=4): 1 thread per channel scans all T tokens carrying a 4-element register window&#92;&quot;},{&#92;&quot;operation&#92;&quot;:&#92;&quot;GDN Gate &amp; Beta&#92;&quot;,&#92;&quot;before_launches&#92;&quot;:1296,&#92;&quot;after_launches&#92;&quot;:24,&#92;&quot;parallel_mechanism&#92;&quot;:&#92;&quot;2D parallel grid over (token, head): Zero cross-token recurrence, heads indexed by tid % num_v_heads&#92;&quot;},{&#92;&quot;operation&#92;&quot;:&#92;&quot;RoPE Embeddings&#92;&quot;,&#92;&quot;before_launches&#92;&quot;:432,&#92;&quot;after_launches&#92;&quot;:8,&#92;&quot;parallel_mechanism&#92;&quot;:&#92;&quot;Vectorized position indexing: Each token rotates by its precomputed absolute position from position_buf&#92;&quot;},{&#92;&quot;operation&#92;&quot;:&#92;&quot;KV-Cache Append&#92;&quot;,&#92;&quot;before_launches&#92;&quot;:432,&#92;&quot;after_launches&#92;&quot;:8,&#92;&quot;parallel_mechanism&#92;&quot;:&#92;&quot;Direct strided scatter: Each token writes directly into its predetermined cache slot&#92;&quot;}]&quot;' data-total-rows='4' data-total-columns='4' data-max-columns='50' data-banner-text='&quot;&quot;' data-pagination='false' data-page-size='10' data-field-types='[[&quot;operation&quot;,[&quot;string&quot;,&quot;str&quot;]],[&quot;before_launches&quot;,[&quot;integer&quot;,&quot;i64&quot;]],[&quot;after_launches&quot;,[&quot;integer&quot;,&quot;i64&quot;]],[&quot;parallel_mechanism&quot;,[&quot;string&quot;,&quot;str&quot;]]]' data-show-filters='true' data-show-download='true' data-show-search='true' data-show-column-summaries='false' data-show-data-types='true' data-show-page-size-selector='false' data-show-column-explorer='true' data-show-chart-builder='true' data-row-headers='[]' data-hidden-columns='[]' data-has-stable-row-id='false' data-lazy='false' data-preload='false'></marimo-table></marimo-ui-element>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "TqIu",
+      "code_hash": "4065c55bbdedab0d08ecfe0211784d78",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Batching reduced prefill latency from <strong>78.95 ms to 71.28 ms</strong> (-9.7%) on internal microbenchmarks.\nWith host launch overhead addressed, we expected HTTP TTFT to drop proportionally. Instead, we encountered an unexpected delay.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Vxnm",
+      "code_hash": "c3e4aab6a2f9476dd41db39b61bc399e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"act-2-the-phantom-stall-a-600ms-bug-hiding-behind-a-70ms-kernel\">Act 2 \u2014 The Phantom Stall: A 600ms Bug Hiding Behind a 70ms Kernel</h2>\n<span class=\"paragraph\">Testing the HTTP server with live client requests showed Time-To-First-Token stuck at <strong>613\u2013640 ms</strong>,\ndespite internal GPU forward passes completing in ~71 ms.</span>\n<h3 id=\"investigating-the-latency-gap\">Investigating the Latency Gap</h3>\n<span class=\"paragraph\">We systematically evaluated potential causes:</span>\n<ol>\n<li><strong>Client overhead</strong>: Verified with <code>curl -N -w \"%{time_starttransfer}\\n\" -s -o /dev/null</code>, which confirmed the same 600ms+ delay.</li>\n<li><strong>State reset</strong>: Profiled <code>state.reset()</code>, which took <strong>0.05 ms</strong>.</li>\n<li><strong>Token decoding</strong>: Measured BPE token decoding across 350 tokens at <strong>3.32 ms total</strong> (~9 \u03bcs per token).</li>\n</ol>\n<h3 id=\"the-root-cause-un-flushed-8kb-http-buffer\">The Root Cause: Un-Flushed 8KB HTTP Buffer</h3>\n<span class=\"paragraph\">Reviewing the HTTP server implementation (<code>tiny_http</code> 0.12.0) revealed that <code>Response::raw_print</code> wrapped chunked transfer\nencoding in <code>chunked_transfer::Encoder</code>:</span>\n<ul>\n<li>The encoder defaulted to an <strong>8,192-byte internal buffer</strong>.</li>\n<li>It performed <strong>no flush until the stream closed</strong>.</li>\n</ul>\n<span class=\"paragraph\">At ~150 bytes per Server-Sent Event (SSE) JSON chunk, 8KB accumulated roughly <strong>55 tokens</strong> before sending any TCP packets.</span>\n<blockquote>\n<span class=\"paragraph\"><strong>In Plain English (The Reluctant Mail Carrier)</strong>:\nA mail carrier establishes a rule: <em>\"I will not walk to the mailbox until my bag weighs 8 kilograms.\"</em>\nEven though your first letter was ready in 70 milliseconds, the recipient waits until you write 54 more letters\njust to fill the carrier's bag.</span>\n</blockquote>\n<h3 id=\"the-resolution\">The Resolution</h3>\n<span class=\"paragraph\">We utilized <code>Request::into_writer()</code>, <code>tiny_http</code>'s escape hatch for raw socket access, bypassing the buffered\n<code>Response</code> abstraction. We wrote HTTP/1.1 chunked framing directly with an explicit <code>.flush()</code> after every SSE token frame.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "DnEU",
+      "code_hash": "5bfbf6e84777341369242a1f05efcf27",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ulZA",
+      "code_hash": "e015f8945d99f38bb5bee8d64c0973e7",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-mime-renderer data-mime='&quot;application/vnd.vegalite.v6+json&quot;' data-data='&quot;{&#92;n  &#92;&quot;&#36;schema&#92;&quot;: &#92;&quot;https://vega.github.io/schema/vega-lite/v6.4.1.json&#92;&quot;,&#92;n  &#92;&quot;autosize&#92;&quot;: {&#92;n    &#92;&quot;contains&#92;&quot;: &#92;&quot;padding&#92;&quot;,&#92;n    &#92;&quot;type&#92;&quot;: &#92;&quot;fit&#92;&quot;&#92;n  },&#92;n  &#92;&quot;config&#92;&quot;: {&#92;n    &#92;&quot;view&#92;&quot;: {&#92;n      &#92;&quot;continuousHeight&#92;&quot;: 300,&#92;n      &#92;&quot;continuousWidth&#92;&quot;: 300&#92;n    }&#92;n  },&#92;n  &#92;&quot;data&#92;&quot;: {&#92;n    &#92;&quot;name&#92;&quot;: &#92;&quot;data-0f8abd6dc1399d8ac98c476cf6f95a3a&#92;&quot;&#92;n  },&#92;n  &#92;&quot;datasets&#92;&quot;: {&#92;n    &#92;&quot;data-0f8abd6dc1399d8ac98c476cf6f95a3a&#92;&quot;: [&#92;n      {&#92;n        &#92;&quot;state&#92;&quot;: &#92;&quot;Before Fix (Cold Start)&#92;&quot;,&#92;n        &#92;&quot;status&#92;&quot;: &#92;&quot;Buffered (8KB Stall)&#92;&quot;,&#92;n        &#92;&quot;ttft_ms&#92;&quot;: 700.0&#92;n      },&#92;n      {&#92;n        &#92;&quot;state&#92;&quot;: &#92;&quot;Before Fix (Warm Cache)&#92;&quot;,&#92;n        &#92;&quot;status&#92;&quot;: &#92;&quot;Buffered (8KB Stall)&#92;&quot;,&#92;n        &#92;&quot;ttft_ms&#92;&quot;: 410.0&#92;n      },&#92;n      {&#92;n        &#92;&quot;state&#92;&quot;: &#92;&quot;After Fix (Cold Start)&#92;&quot;,&#92;n        &#92;&quot;status&#92;&quot;: &#92;&quot;Direct SSE Flush&#92;&quot;,&#92;n        &#92;&quot;ttft_ms&#92;&quot;: 180.0&#92;n      },&#92;n      {&#92;n        &#92;&quot;state&#92;&quot;: &#92;&quot;After Fix (Warm Cache)&#92;&quot;,&#92;n        &#92;&quot;status&#92;&quot;: &#92;&quot;Direct SSE Flush&#92;&quot;,&#92;n        &#92;&quot;ttft_ms&#92;&quot;: 75.0&#92;n      }&#92;n    ]&#92;n  },&#92;n  &#92;&quot;encoding&#92;&quot;: {&#92;n    &#92;&quot;color&#92;&quot;: {&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;status&#92;&quot;,&#92;n      &#92;&quot;scale&#92;&quot;: {&#92;n        &#92;&quot;domain&#92;&quot;: [&#92;n          &#92;&quot;Buffered (8KB Stall)&#92;&quot;,&#92;n          &#92;&quot;Direct SSE Flush&#92;&quot;&#92;n        ],&#92;n        &#92;&quot;range&#92;&quot;: [&#92;n          &#92;&quot;#ef4444&#92;&quot;,&#92;n          &#92;&quot;#10b981&#92;&quot;&#92;n        ]&#92;n      },&#92;n      &#92;&quot;title&#92;&quot;: &#92;&quot;Delivery Mode&#92;&quot;,&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n    },&#92;n    &#92;&quot;tooltip&#92;&quot;: [&#92;n      {&#92;n        &#92;&quot;field&#92;&quot;: &#92;&quot;state&#92;&quot;,&#92;n        &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;field&#92;&quot;: &#92;&quot;ttft_ms&#92;&quot;,&#92;n        &#92;&quot;type&#92;&quot;: &#92;&quot;quantitative&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;field&#92;&quot;: &#92;&quot;status&#92;&quot;,&#92;n        &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n      }&#92;n    ],&#92;n    &#92;&quot;x&#92;&quot;: {&#92;n      &#92;&quot;axis&#92;&quot;: {&#92;n        &#92;&quot;labelAngle&#92;&quot;: 0&#92;n      },&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;state&#92;&quot;,&#92;n      &#92;&quot;sort&#92;&quot;: null,&#92;n      &#92;&quot;title&#92;&quot;: null,&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n    },&#92;n    &#92;&quot;y&#92;&quot;: {&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;ttft_ms&#92;&quot;,&#92;n      &#92;&quot;title&#92;&quot;: &#92;&quot;Time to First Token (ms)&#92;&quot;,&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;quantitative&#92;&quot;&#92;n    }&#92;n  },&#92;n  &#92;&quot;height&#92;&quot;: 240,&#92;n  &#92;&quot;mark&#92;&quot;: {&#92;n    &#92;&quot;cornerRadiusTopLeft&#92;&quot;: 6,&#92;n    &#92;&quot;cornerRadiusTopRight&#92;&quot;: 6,&#92;n    &#92;&quot;type&#92;&quot;: &#92;&quot;bar&#92;&quot;&#92;n  },&#92;n  &#92;&quot;title&#92;&quot;: &#92;&quot;Time-To-First-Token: Buffering Fix Impact&#92;&quot;,&#92;n  &#92;&quot;usermeta&#92;&quot;: {&#92;n    &#92;&quot;embedOptions&#92;&quot;: {}&#92;n  },&#92;n  &#92;&quot;width&#92;&quot;: 480&#92;n}&quot;'></marimo-mime-renderer><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><em>Bypassing the 8KB socket buffer dropped warm TTFT from 410 ms to 75 ms.</em></span></span></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ecfG",
+      "code_hash": "0b6783ae55f7523f62890e42ab27b7fe",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"act-3-isolating-streaming-overhead\">Act 3 \u2014 Isolating Streaming Overhead</h2>\n<span class=\"paragraph\">Following the buffering fix, full 350-token streaming benchmarks reported <strong>78.7\u201380.2 tok/s</strong>.\nEarlier isolated tests on short prompts had reached 90+ tok/s. We investigated whether per-token network flushing\nwas creating a bottleneck.</span>\n<span class=\"paragraph\">We tested two initial adjustments:</span>\n<ol>\n<li><strong>Flush Coalescing (<code>FLUSH_INTERVAL</code>)</strong>: Buffering writes into a 250ms window raised throughput to <strong>85.4 tok/s</strong>,\n   but increased TTFT to <strong>336.4 ms</strong>.</li>\n<li><strong>TCP_NODELAY</strong>: Enabling <code>TCP_NODELAY</code> on the server socket left throughput unchanged at <strong>79.0 tok/s</strong>.</li>\n</ol>\n<h3 id=\"the-in-process-abc-test\">The In-Process A/B/C Test</h3>\n<span class=\"paragraph\">Rather than accepting flush coalescing, we designed an in-process diagnostic to isolate the exact cost of each stage:</span>\n<ul>\n<li><strong>Arm A</strong>: <code>engine.step()</code> alone (GPU forward pass only).</li>\n<li><strong>Arm B</strong>: Arm A + BPE tokenizer decode + JSON string formatting + SSE frame serialization.</li>\n<li><strong>Arm C</strong>: Arm B + writing into an in-memory buffer followed by an explicit <code>.flush()</code>.</li>\n</ul></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Pvdt",
+      "code_hash": "004a04823717cea34cf1bbd3c5dc84fa",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ZBYS",
+      "code_hash": "a45b60df2e6e6d1538b5c99c9030e110",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-mime-renderer data-mime='&quot;application/vnd.vegalite.v6+json&quot;' data-data='&quot;{&#92;n  &#92;&quot;&#36;schema&#92;&quot;: &#92;&quot;https://vega.github.io/schema/vega-lite/v6.4.1.json&#92;&quot;,&#92;n  &#92;&quot;autosize&#92;&quot;: {&#92;n    &#92;&quot;contains&#92;&quot;: &#92;&quot;padding&#92;&quot;,&#92;n    &#92;&quot;type&#92;&quot;: &#92;&quot;fit&#92;&quot;&#92;n  },&#92;n  &#92;&quot;config&#92;&quot;: {&#92;n    &#92;&quot;view&#92;&quot;: {&#92;n      &#92;&quot;continuousHeight&#92;&quot;: 300,&#92;n      &#92;&quot;continuousWidth&#92;&quot;: 300&#92;n    }&#92;n  },&#92;n  &#92;&quot;data&#92;&quot;: {&#92;n    &#92;&quot;name&#92;&quot;: &#92;&quot;data-7eeb13b4d9f85e5b6cb3d7a1a462c508&#92;&quot;&#92;n  },&#92;n  &#92;&quot;datasets&#92;&quot;: {&#92;n    &#92;&quot;data-7eeb13b4d9f85e5b6cb3d7a1a462c508&#92;&quot;: [&#92;n      {&#92;n        &#92;&quot;configuration&#92;&quot;: &#92;&quot;Arm A: Raw GPU engine.step()&#92;&quot;,&#92;n        &#92;&quot;tok_s&#92;&quot;: 79.4&#92;n      },&#92;n      {&#92;n        &#92;&quot;configuration&#92;&quot;: &#92;&quot;Arm B: Step + Tokenizer + JSON/SSE&#92;&quot;,&#92;n        &#92;&quot;tok_s&#92;&quot;: 80.15&#92;n      },&#92;n      {&#92;n        &#92;&quot;configuration&#92;&quot;: &#92;&quot;Arm C: Step + Tokenizer + SSE + Write + Flush&#92;&quot;,&#92;n        &#92;&quot;tok_s&#92;&quot;: 79.51&#92;n      }&#92;n    ]&#92;n  },&#92;n  &#92;&quot;encoding&#92;&quot;: {&#92;n    &#92;&quot;color&#92;&quot;: {&#92;n      &#92;&quot;value&#92;&quot;: &#92;&quot;#0ea5e9&#92;&quot;&#92;n    },&#92;n    &#92;&quot;tooltip&#92;&quot;: [&#92;n      {&#92;n        &#92;&quot;field&#92;&quot;: &#92;&quot;configuration&#92;&quot;,&#92;n        &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;field&#92;&quot;: &#92;&quot;tok_s&#92;&quot;,&#92;n        &#92;&quot;type&#92;&quot;: &#92;&quot;quantitative&#92;&quot;&#92;n      }&#92;n    ],&#92;n    &#92;&quot;x&#92;&quot;: {&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;tok_s&#92;&quot;,&#92;n      &#92;&quot;scale&#92;&quot;: {&#92;n        &#92;&quot;clamp&#92;&quot;: true,&#92;n        &#92;&quot;domain&#92;&quot;: [&#92;n          75,&#92;n          82&#92;n        ],&#92;n        &#92;&quot;nice&#92;&quot;: false,&#92;n        &#92;&quot;zero&#92;&quot;: false&#92;n      },&#92;n      &#92;&quot;title&#92;&quot;: &#92;&quot;tok/s&#92;&quot;,&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;quantitative&#92;&quot;&#92;n    },&#92;n    &#92;&quot;y&#92;&quot;: {&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;configuration&#92;&quot;,&#92;n      &#92;&quot;sort&#92;&quot;: null,&#92;n      &#92;&quot;title&#92;&quot;: null,&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n    }&#92;n  },&#92;n  &#92;&quot;height&#92;&quot;: 180,&#92;n  &#92;&quot;mark&#92;&quot;: {&#92;n    &#92;&quot;clip&#92;&quot;: true,&#92;n    &#92;&quot;type&#92;&quot;: &#92;&quot;bar&#92;&quot;&#92;n  },&#92;n  &#92;&quot;title&#92;&quot;: &#92;&quot;In-Process Isolation Test: Arms A, B, and C Within 0.3%&#92;&quot;,&#92;n  &#92;&quot;usermeta&#92;&quot;: {&#92;n    &#92;&quot;embedOptions&#92;&quot;: {}&#92;n  },&#92;n  &#92;&quot;width&#92;&quot;: 460&#92;n}&quot;'></marimo-mime-renderer><span class=\"markdown prose dark:prose-invert contents\"><blockquote>\n<span class=\"paragraph\"><strong>In Plain English (The Engine and the Dashboard Light)</strong>:\nBlaming per-token HTTP flushing for GPU slowdown was like blaming the flashing turn signal on your\ndashboard for your car losing engine horsepower. The two systems aren't mechanically coupled.</span>\n<span class=\"paragraph\">The isolation test showed that formatting and flushing SSE chunks accounts\nfor <strong>less than 0.3% of execution time</strong>.</span>\n</blockquote></span></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "aLJB",
+      "code_hash": "76d23d6015c4ddbe763590b984ca2e44",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">The results confirmed that per-token flushing does not limit decode speed. We removed the flush-coalescing buffer\nand kept immediate per-frame flushes.</span>\n<span class=\"paragraph\">The throughput variation was explained by examining Arm A's segment logs across generation depth.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "nHfw",
+      "code_hash": "4bc84edbc5cce34473bcc3082fe16bf5",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"act-4-the-kv-cache-bottleneck-in-attention-layers\">Act 4 \u2014 The KV Cache Bottleneck in Attention Layers</h2>\n<span class=\"paragraph\">Timing Arm A (<code>engine.step()</code> alone) in 50-token windows revealed a clear trend:</span>\n<ul>\n<li>Tokens 54 \u2192 104: <strong>80.00 tok/s</strong></li>\n<li>Tokens 104 \u2192 154: <strong>80.57 tok/s</strong></li>\n<li>Tokens 154 \u2192 204: <strong>80.38 tok/s</strong></li>\n<li>Tokens 204 \u2192 254: <strong>79.53 tok/s</strong></li>\n<li>Tokens 254 \u2192 304: <strong>77.61 tok/s</strong></li>\n<li>Tokens 304 \u2192 354: <strong>78.43 tok/s</strong></li>\n</ul>\n<span class=\"paragraph\">Throughput gradually decreased as the sequence grew. The earlier 90+ tok/s measurements had been taken on 5-token prompts\nat positions 5\u201328. Over longer sequences, attention cost grew with cache length.</span>\n<h3 id=\"the-mechanism\">The Mechanism</h3>\n<span class=\"paragraph\">In the 8 full-attention layers, each new token computes attention across all preceding tokens in the KV cache.\nOur initial decode attention kernel assigned <strong>one thread per output dimension</strong> (<code>head_dim = 256</code>), with that thread\nrunning a serial loop over all <marimo-tex class=\"arithmatex\">||(K||)</marimo-tex> past positions (<marimo-tex class=\"arithmatex\">||(O(kv\\_len)||)</marimo-tex> scan).</span>\n<blockquote>\n<span class=\"paragraph\"><strong>In Plain English (The Single Researcher in an Expanding Archive)</strong>:\nA researcher reviews past files. With 20 files, one person finishes quickly. When the archive reaches 350 files,\nthat same single researcher must read through all 350 files alone while colleagues remain unassigned.</span>\n</blockquote>\n<h3 id=\"4-way-split-kv-parallel-reduction\">4-Way Split-KV Parallel Reduction</h3>\n<span class=\"paragraph\">Following the approach in <code>llama.cpp</code>'s <code>fattn-vec.cuh</code>, we restructured decode attention to split the sequence across parallel threads:</span>\n<ul>\n<li><strong>4 cooperative threads</strong> (<code>kv_split = 4</code>) work on each output dimension: <code>tid % head_dim</code> selects the dimension,\n  while <code>tid / head_dim</code> assigns the split worker.</li>\n<li>Each thread scans <marimo-tex class=\"arithmatex\">||(\\frac{1}{4}||)</marimo-tex> of the KV cache length concurrently.</li>\n<li>Partial sums are combined in GPU shared memory (LDS) via a warp reduction tree.</li>\n<li><strong>Hardware limit</strong>: <code>head_dim (256) \u00d7 4 = 1,024 threads</code>, matching the maximum thread count per block on AMD RDNA3.</li>\n</ul></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "xXTn",
+      "code_hash": "b3ed74868d8dbde51efa96805896a323",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "AjVT",
+      "code_hash": "fc730e282fc6a28aa20e5548fd8de976",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-mime-renderer data-mime='&quot;application/vnd.vegalite.v6+json&quot;' data-data='&quot;{&#92;n  &#92;&quot;&#36;schema&#92;&quot;: &#92;&quot;https://vega.github.io/schema/vega-lite/v6.4.1.json&#92;&quot;,&#92;n  &#92;&quot;autosize&#92;&quot;: {&#92;n    &#92;&quot;contains&#92;&quot;: &#92;&quot;padding&#92;&quot;,&#92;n    &#92;&quot;type&#92;&quot;: &#92;&quot;fit&#92;&quot;&#92;n  },&#92;n  &#92;&quot;config&#92;&quot;: {&#92;n    &#92;&quot;view&#92;&quot;: {&#92;n      &#92;&quot;continuousHeight&#92;&quot;: 300,&#92;n      &#92;&quot;continuousWidth&#92;&quot;: 300&#92;n    }&#92;n  },&#92;n  &#92;&quot;data&#92;&quot;: {&#92;n    &#92;&quot;name&#92;&quot;: &#92;&quot;data-7dc4e1cf046efbeaef62f9065fa5dc78&#92;&quot;&#92;n  },&#92;n  &#92;&quot;datasets&#92;&quot;: {&#92;n    &#92;&quot;data-7dc4e1cf046efbeaef62f9065fa5dc78&#92;&quot;: [&#92;n      {&#92;n        &#92;&quot;kv_len&#92;&quot;: 64,&#92;n        &#92;&quot;scalar_us&#92;&quot;: 14.345,&#92;n        &#92;&quot;speedup&#92;&quot;: 1.65,&#92;n        &#92;&quot;split_us&#92;&quot;: 8.686&#92;n      },&#92;n      {&#92;n        &#92;&quot;kv_len&#92;&quot;: 128,&#92;n        &#92;&quot;scalar_us&#92;&quot;: 19.553,&#92;n        &#92;&quot;speedup&#92;&quot;: 1.88,&#92;n        &#92;&quot;split_us&#92;&quot;: 10.374&#92;n      },&#92;n      {&#92;n        &#92;&quot;kv_len&#92;&quot;: 256,&#92;n        &#92;&quot;scalar_us&#92;&quot;: 32.462,&#92;n        &#92;&quot;speedup&#92;&quot;: 2.31,&#92;n        &#92;&quot;split_us&#92;&quot;: 14.042&#92;n      },&#92;n      {&#92;n        &#92;&quot;kv_len&#92;&quot;: 354,&#92;n        &#92;&quot;scalar_us&#92;&quot;: 44.812,&#92;n        &#92;&quot;speedup&#92;&quot;: 2.67,&#92;n        &#92;&quot;split_us&#92;&quot;: 16.789&#92;n      }&#92;n    ]&#92;n  },&#92;n  &#92;&quot;encoding&#92;&quot;: {&#92;n    &#92;&quot;tooltip&#92;&quot;: [&#92;n      {&#92;n        &#92;&quot;field&#92;&quot;: &#92;&quot;kv_len&#92;&quot;,&#92;n        &#92;&quot;title&#92;&quot;: &#92;&quot;Cache Length&#92;&quot;,&#92;n        &#92;&quot;type&#92;&quot;: &#92;&quot;quantitative&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;field&#92;&quot;: &#92;&quot;scalar_us&#92;&quot;,&#92;n        &#92;&quot;format&#92;&quot;: &#92;&quot;.2f&#92;&quot;,&#92;n        &#92;&quot;title&#92;&quot;: &#92;&quot;Scalar (\u03bcs)&#92;&quot;,&#92;n        &#92;&quot;type&#92;&quot;: &#92;&quot;quantitative&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;field&#92;&quot;: &#92;&quot;split_us&#92;&quot;,&#92;n        &#92;&quot;format&#92;&quot;: &#92;&quot;.2f&#92;&quot;,&#92;n        &#92;&quot;title&#92;&quot;: &#92;&quot;Split-4 (\u03bcs)&#92;&quot;,&#92;n        &#92;&quot;type&#92;&quot;: &#92;&quot;quantitative&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;field&#92;&quot;: &#92;&quot;speedup&#92;&quot;,&#92;n        &#92;&quot;format&#92;&quot;: &#92;&quot;.2f&#92;&quot;,&#92;n        &#92;&quot;title&#92;&quot;: &#92;&quot;Speedup&#92;&quot;,&#92;n        &#92;&quot;type&#92;&quot;: &#92;&quot;quantitative&#92;&quot;&#92;n      }&#92;n    ],&#92;n    &#92;&quot;x&#92;&quot;: {&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;kv_len&#92;&quot;,&#92;n      &#92;&quot;title&#92;&quot;: &#92;&quot;KV Cache Length (Tokens Generated)&#92;&quot;,&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;quantitative&#92;&quot;&#92;n    },&#92;n    &#92;&quot;y&#92;&quot;: {&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;speedup&#92;&quot;,&#92;n      &#92;&quot;scale&#92;&quot;: {&#92;n        &#92;&quot;zero&#92;&quot;: false&#92;n      },&#92;n      &#92;&quot;title&#92;&quot;: &#92;&quot;Speedup vs. Scalar Kernel&#92;&quot;,&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;quantitative&#92;&quot;&#92;n    }&#92;n  },&#92;n  &#92;&quot;height&#92;&quot;: 240,&#92;n  &#92;&quot;mark&#92;&quot;: {&#92;n    &#92;&quot;color&#92;&quot;: &#92;&quot;#0ea5e9&#92;&quot;,&#92;n    &#92;&quot;point&#92;&quot;: {&#92;n      &#92;&quot;filled&#92;&quot;: true,&#92;n      &#92;&quot;size&#92;&quot;: 80&#92;n    },&#92;n    &#92;&quot;strokeWidth&#92;&quot;: 3,&#92;n    &#92;&quot;type&#92;&quot;: &#92;&quot;line&#92;&quot;&#92;n  },&#92;n  &#92;&quot;title&#92;&quot;: &#92;&quot;Split-KV Kernel Speedup vs. Sequence Length&#92;&quot;,&#92;n  &#92;&quot;usermeta&#92;&quot;: {&#92;n    &#92;&quot;embedOptions&#92;&quot;: {}&#92;n  },&#92;n  &#92;&quot;width&#92;&quot;: 480&#92;n}&quot;'></marimo-mime-renderer><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><em>At length 64, the split kernel is 1.65\u00d7 faster. By length 354, it reaches 2.67\u00d7 (16.8 \u03bcs vs. 44.8 \u03bcs).</em></span></span></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "pHFh",
+      "code_hash": "03ad1242326f1b1328040c1e856dce4f",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "NCOB",
+      "code_hash": "7c8c6493ed893badb8a44af71fdffb17",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-mime-renderer data-mime='&quot;application/vnd.vegalite.v6+json&quot;' data-data='&quot;{&#92;n  &#92;&quot;&#36;schema&#92;&quot;: &#92;&quot;https://vega.github.io/schema/vega-lite/v6.4.1.json&#92;&quot;,&#92;n  &#92;&quot;autosize&#92;&quot;: {&#92;n    &#92;&quot;contains&#92;&quot;: &#92;&quot;padding&#92;&quot;,&#92;n    &#92;&quot;type&#92;&quot;: &#92;&quot;fit&#92;&quot;&#92;n  },&#92;n  &#92;&quot;config&#92;&quot;: {&#92;n    &#92;&quot;view&#92;&quot;: {&#92;n      &#92;&quot;continuousHeight&#92;&quot;: 300,&#92;n      &#92;&quot;continuousWidth&#92;&quot;: 300&#92;n    }&#92;n  },&#92;n  &#92;&quot;data&#92;&quot;: {&#92;n    &#92;&quot;name&#92;&quot;: &#92;&quot;data-7f4152e3d95150b9222a81db4d1cdd15&#92;&quot;&#92;n  },&#92;n  &#92;&quot;datasets&#92;&quot;: {&#92;n    &#92;&quot;data-7f4152e3d95150b9222a81db4d1cdd15&#92;&quot;: [&#92;n      {&#92;n        &#92;&quot;kernel&#92;&quot;: &#92;&quot;Original Scalar Kernel&#92;&quot;,&#92;n        &#92;&quot;segment_start_position&#92;&quot;: 54,&#92;n        &#92;&quot;tok_s&#92;&quot;: 80.0&#92;n      },&#92;n      {&#92;n        &#92;&quot;kernel&#92;&quot;: &#92;&quot;Original Scalar Kernel&#92;&quot;,&#92;n        &#92;&quot;segment_start_position&#92;&quot;: 104,&#92;n        &#92;&quot;tok_s&#92;&quot;: 80.57&#92;n      },&#92;n      {&#92;n        &#92;&quot;kernel&#92;&quot;: &#92;&quot;Original Scalar Kernel&#92;&quot;,&#92;n        &#92;&quot;segment_start_position&#92;&quot;: 154,&#92;n        &#92;&quot;tok_s&#92;&quot;: 80.38&#92;n      },&#92;n      {&#92;n        &#92;&quot;kernel&#92;&quot;: &#92;&quot;Original Scalar Kernel&#92;&quot;,&#92;n        &#92;&quot;segment_start_position&#92;&quot;: 204,&#92;n        &#92;&quot;tok_s&#92;&quot;: 79.53&#92;n      },&#92;n      {&#92;n        &#92;&quot;kernel&#92;&quot;: &#92;&quot;Original Scalar Kernel&#92;&quot;,&#92;n        &#92;&quot;segment_start_position&#92;&quot;: 254,&#92;n        &#92;&quot;tok_s&#92;&quot;: 77.61&#92;n      },&#92;n      {&#92;n        &#92;&quot;kernel&#92;&quot;: &#92;&quot;Original Scalar Kernel&#92;&quot;,&#92;n        &#92;&quot;segment_start_position&#92;&quot;: 304,&#92;n        &#92;&quot;tok_s&#92;&quot;: 78.43&#92;n      },&#92;n      {&#92;n        &#92;&quot;kernel&#92;&quot;: &#92;&quot;4-Way Split-KV Kernel&#92;&quot;,&#92;n        &#92;&quot;segment_start_position&#92;&quot;: 54,&#92;n        &#92;&quot;tok_s&#92;&quot;: 83.05&#92;n      },&#92;n      {&#92;n        &#92;&quot;kernel&#92;&quot;: &#92;&quot;4-Way Split-KV Kernel&#92;&quot;,&#92;n        &#92;&quot;segment_start_position&#92;&quot;: 104,&#92;n        &#92;&quot;tok_s&#92;&quot;: 83.86&#92;n      },&#92;n      {&#92;n        &#92;&quot;kernel&#92;&quot;: &#92;&quot;4-Way Split-KV Kernel&#92;&quot;,&#92;n        &#92;&quot;segment_start_position&#92;&quot;: 154,&#92;n        &#92;&quot;tok_s&#92;&quot;: 83.8&#92;n      },&#92;n      {&#92;n        &#92;&quot;kernel&#92;&quot;: &#92;&quot;4-Way Split-KV Kernel&#92;&quot;,&#92;n        &#92;&quot;segment_start_position&#92;&quot;: 204,&#92;n        &#92;&quot;tok_s&#92;&quot;: 83.66&#92;n      },&#92;n      {&#92;n        &#92;&quot;kernel&#92;&quot;: &#92;&quot;4-Way Split-KV Kernel&#92;&quot;,&#92;n        &#92;&quot;segment_start_position&#92;&quot;: 254,&#92;n        &#92;&quot;tok_s&#92;&quot;: 83.41&#92;n      },&#92;n      {&#92;n        &#92;&quot;kernel&#92;&quot;: &#92;&quot;4-Way Split-KV Kernel&#92;&quot;,&#92;n        &#92;&quot;segment_start_position&#92;&quot;: 304,&#92;n        &#92;&quot;tok_s&#92;&quot;: 83.21&#92;n      }&#92;n    ]&#92;n  },&#92;n  &#92;&quot;encoding&#92;&quot;: {&#92;n    &#92;&quot;color&#92;&quot;: {&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;kernel&#92;&quot;,&#92;n      &#92;&quot;scale&#92;&quot;: {&#92;n        &#92;&quot;domain&#92;&quot;: [&#92;n          &#92;&quot;Original Scalar Kernel&#92;&quot;,&#92;n          &#92;&quot;4-Way Split-KV Kernel&#92;&quot;&#92;n        ],&#92;n        &#92;&quot;range&#92;&quot;: [&#92;n          &#92;&quot;#ef4444&#92;&quot;,&#92;n          &#92;&quot;#10b981&#92;&quot;&#92;n        ]&#92;n      },&#92;n      &#92;&quot;title&#92;&quot;: &#92;&quot;Attention Implementation&#92;&quot;,&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n    },&#92;n    &#92;&quot;tooltip&#92;&quot;: [&#92;n      {&#92;n        &#92;&quot;field&#92;&quot;: &#92;&quot;kernel&#92;&quot;,&#92;n        &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;field&#92;&quot;: &#92;&quot;segment_start_position&#92;&quot;,&#92;n        &#92;&quot;type&#92;&quot;: &#92;&quot;quantitative&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;field&#92;&quot;: &#92;&quot;tok_s&#92;&quot;,&#92;n        &#92;&quot;type&#92;&quot;: &#92;&quot;quantitative&#92;&quot;&#92;n      }&#92;n    ],&#92;n    &#92;&quot;x&#92;&quot;: {&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;segment_start_position&#92;&quot;,&#92;n      &#92;&quot;title&#92;&quot;: &#92;&quot;Token Position in Generation Sequence&#92;&quot;,&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;quantitative&#92;&quot;&#92;n    },&#92;n    &#92;&quot;y&#92;&quot;: {&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;tok_s&#92;&quot;,&#92;n      &#92;&quot;scale&#92;&quot;: {&#92;n        &#92;&quot;zero&#92;&quot;: false&#92;n      },&#92;n      &#92;&quot;title&#92;&quot;: &#92;&quot;Decode tok/s (50-Token Window)&#92;&quot;,&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;quantitative&#92;&quot;&#92;n    }&#92;n  },&#92;n  &#92;&quot;height&#92;&quot;: 240,&#92;n  &#92;&quot;mark&#92;&quot;: {&#92;n    &#92;&quot;point&#92;&quot;: {&#92;n      &#92;&quot;filled&#92;&quot;: true,&#92;n      &#92;&quot;size&#92;&quot;: 70&#92;n    },&#92;n    &#92;&quot;strokeWidth&#92;&quot;: 3,&#92;n    &#92;&quot;type&#92;&quot;: &#92;&quot;line&#92;&quot;&#92;n  },&#92;n  &#92;&quot;title&#92;&quot;: &#92;&quot;Throughput Across Sequence Depth: Flat Cadence&#92;&quot;,&#92;n  &#92;&quot;usermeta&#92;&quot;: {&#92;n    &#92;&quot;embedOptions&#92;&quot;: {}&#92;n  },&#92;n  &#92;&quot;width&#92;&quot;: 480&#92;n}&quot;'></marimo-mime-renderer><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><em>With the 4-way split-KV kernel, decode throughput stays at ~83.2\u201383.8 tok/s across the entire 350-token trajectory.</em></span></span></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "aqbW",
+      "code_hash": "9012282e35e123538dee2b5cbed7c91c",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"act-5-baseline-configuration-and-speculative-decoding\">Act 5 \u2014 Baseline Configuration and Speculative Decoding</h2>\n<span class=\"paragraph\">To ensure a fair comparison, we reviewed every compilation and runtime flag used with <code>llama-server</code> on this hardware:</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "TRpd",
+      "code_hash": "524055b9fd102a34e886abbdedbff4c0",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "TXez",
+      "code_hash": "af6491d28691b5ea2620ddf109d7628b",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-ui-element object-id='TXez-0' random-id='3f74cdbb-9c23-bf4a-c1ea-394cb5d6e09a'><marimo-table data-initial-value='[]' data-label='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eAudit of llama.cpp Performance Flags&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-data='&quot;[{&#92;&quot;flag&#92;&quot;:&#92;&quot;-ngl 99&#92;&quot;,&#92;&quot;status_in_baseline&#92;&quot;:&#92;&quot;ACTIVE &#92;&#92;u2014 100% of all 32 layers offloaded to GPU VRAM&#92;&quot;,&#92;&quot;impact_on_comparison&#92;&quot;:&#92;&quot;Parity: Zero CPU fallback for either engine&#92;&quot;},{&#92;&quot;flag&#92;&quot;:&#92;&quot;-fa on&#92;&quot;,&#92;&quot;status_in_baseline&#92;&quot;:&#92;&quot;ACTIVE &#92;&#92;u2014 Flash Attention enabled for full-attention layers&#92;&quot;,&#92;&quot;impact_on_comparison&#92;&quot;:&#92;&quot;Parity: Optimal attention kernels active&#92;&quot;},{&#92;&quot;flag&#92;&quot;:&#92;&quot;-ctk / -ctv q8_0&#92;&quot;,&#92;&quot;status_in_baseline&#92;&quot;:&#92;&quot;ACTIVE &#92;&#92;u2014 8-bit quantized KV cache (bandwidth advantage for llama.cpp)&#92;&quot;,&#92;&quot;impact_on_comparison&#92;&quot;:&#92;&quot;Advantage llama.cpp: runtime-next uses unquantized BF16 KV buffers&#92;&quot;},{&#92;&quot;flag&#92;&quot;:&#92;&quot;GGML_HIP_GRAPHS&#92;&quot;,&#92;&quot;status_in_baseline&#92;&quot;:&#92;&quot;ACTIVE &#92;&#92;u2014 Verified compiled ON in CMakeCache.txt, RDNA3 graph replay enabled&#92;&quot;,&#92;&quot;impact_on_comparison&#92;&quot;:&#92;&quot;Parity: Both engines replay decode via hardware HIP graphs&#92;&quot;},{&#92;&quot;flag&#92;&quot;:&#92;&quot;-b 512 / -ub 512&#92;&quot;,&#92;&quot;status_in_baseline&#92;&quot;:&#92;&quot;ACTIVE &#92;&#92;u2014 Prompt processing batch sizes matched to standard server configs&#92;&quot;,&#92;&quot;impact_on_comparison&#92;&quot;:&#92;&quot;Parity: Standard inference parameters&#92;&quot;},{&#92;&quot;flag&#92;&quot;:&#92;&quot;-t 8&#92;&quot;,&#92;&quot;status_in_baseline&#92;&quot;:&#92;&quot;ACTIVE &#92;&#92;u2014 8 CPU threads allocated for host-side dispatch&#92;&quot;,&#92;&quot;impact_on_comparison&#92;&quot;:&#92;&quot;Parity: GPU-bound workload unaffected by host thread pool&#92;&quot;},{&#92;&quot;flag&#92;&quot;:&#92;&quot;--spec-type ngram-mod&#92;&quot;,&#92;&quot;status_in_baseline&#92;&quot;:&#92;&quot;TESTED SEPARATELY &#92;&#92;u2014 Model-free n-gram speculation evaluated below&#92;&quot;,&#92;&quot;impact_on_comparison&#92;&quot;:&#92;&quot;Evaluated: Verified whether speculation changes the outcome&#92;&quot;}]&quot;' data-total-rows='7' data-total-columns='3' data-max-columns='50' data-banner-text='&quot;&quot;' data-pagination='false' data-page-size='10' data-field-types='[[&quot;flag&quot;,[&quot;string&quot;,&quot;str&quot;]],[&quot;status_in_baseline&quot;,[&quot;string&quot;,&quot;str&quot;]],[&quot;impact_on_comparison&quot;,[&quot;string&quot;,&quot;str&quot;]]]' data-show-filters='true' data-show-download='true' data-show-search='true' data-show-column-summaries='false' data-show-data-types='true' data-show-page-size-selector='true' data-show-column-explorer='true' data-show-chart-builder='true' data-row-headers='[]' data-hidden-columns='[]' data-has-stable-row-id='false' data-lazy='false' data-preload='false'></marimo-table></marimo-ui-element>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "dNNg",
+      "code_hash": "2772a2ccb849e2ae04e064556d8225f9",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Standard acceleration features were enabled for <code>llama.cpp</code>: full offload, flash attention, quantized KV cache\n(which reduces memory bandwidth requirements vs. unquantized BF16), and HIP Graph execution.</span>\n<h3 id=\"why-speculative-decoding-failed-on-code-generation\">Why Speculative Decoding Failed on Code Generation</h3>\n<span class=\"paragraph\">We evaluated model-free speculative decoding (<code>--spec-type ngram-mod</code>) in <code>llama-server</code> to see if prompt-lookup\nspeculation could improve throughput:</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "yCnT",
+      "code_hash": "d4f0680030b1957978231ad6e09bc63f",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "wlCL",
+      "code_hash": "b207a9243df0a1edbd4ef539841216da",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-ui-element object-id='wlCL-0' random-id='fd43fdc0-a1dd-93a9-b724-4fe302e0a2fc'><marimo-table data-initial-value='[]' data-label='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003ellama.cpp Speculative Decoding Benchmark Results&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-data='&quot;[{&#92;&quot;configuration&#92;&quot;:&#92;&quot;llama.cpp Baseline (No Speculation)&#92;&quot;,&#92;&quot;avg_tok_s&#92;&quot;:72.73,&#92;&quot;avg_ttft_ms&#92;&quot;:108.0,&#92;&quot;delta_throughput&#92;&quot;:&#92;&quot;Baseline&#92;&quot;},{&#92;&quot;configuration&#92;&quot;:&#92;&quot;llama.cpp + ngram-mod (Run 1)&#92;&quot;,&#92;&quot;avg_tok_s&#92;&quot;:72.75,&#92;&quot;avg_ttft_ms&#92;&quot;:107.4,&#92;&quot;delta_throughput&#92;&quot;:&#92;&quot;+0.02 tok/s (0.0%)&#92;&quot;},{&#92;&quot;configuration&#92;&quot;:&#92;&quot;llama.cpp + ngram-mod (Run 2)&#92;&quot;,&#92;&quot;avg_tok_s&#92;&quot;:71.04,&#92;&quot;avg_ttft_ms&#92;&quot;:140.7,&#92;&quot;delta_throughput&#92;&quot;:&#92;&quot;-1.69 tok/s (-2.3%)&#92;&quot;}]&quot;' data-total-rows='3' data-total-columns='4' data-max-columns='50' data-banner-text='&quot;&quot;' data-pagination='false' data-page-size='10' data-field-types='[[&quot;configuration&quot;,[&quot;string&quot;,&quot;str&quot;]],[&quot;avg_tok_s&quot;,[&quot;number&quot;,&quot;f64&quot;]],[&quot;avg_ttft_ms&quot;,[&quot;number&quot;,&quot;f64&quot;]],[&quot;delta_throughput&quot;,[&quot;string&quot;,&quot;str&quot;]]]' data-show-filters='true' data-show-download='true' data-show-search='true' data-show-column-summaries='false' data-show-data-types='true' data-show-page-size-selector='false' data-show-column-explorer='true' data-show-chart-builder='true' data-row-headers='[]' data-hidden-columns='[]' data-has-stable-row-id='false' data-lazy='false' data-preload='false'></marimo-table></marimo-ui-element>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "kqZH",
+      "code_hash": "b6dee804d94386e4db787171db67674c",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Telemetry from <code>llama-server</code> showed 64 drafted tokens with only 5 accepted\u2014a <strong>7.8% acceptance rate</strong>:\n<div class=\"language-json codehilite\"><pre><span></span><code><span class=\"nt\">\"timings\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"p\">{</span>\n<span class=\"w\">    </span><span class=\"nt\">\"prompt_n\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mi\">54</span><span class=\"p\">,</span>\n<span class=\"w\">    </span><span class=\"nt\">\"predicted_n\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mi\">350</span><span class=\"p\">,</span>\n<span class=\"w\">    </span><span class=\"nt\">\"draft_n\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mi\">64</span><span class=\"p\">,</span>\n<span class=\"w\">    </span><span class=\"nt\">\"draft_n_accepted\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mi\">5</span>\n<span class=\"p\">}</span>\n</code></pre></div></span>\n<blockquote>\n<span class=\"paragraph\"><strong>In Plain English (The Overconfident Assistant)</strong>:\nAn assistant attempts to predict the remainder of your sentence. If they guess 64 words and 59 are incorrect,\nyou spend more time correcting their guesses than if you had spoken at your normal speed.</span>\n</blockquote>\n<span class=\"paragraph\">In code generation, token predictions require high contextual accuracy. Because each rejected token incurs validation\nand rollback costs, an acceptance rate under 10% reduces throughput on an already-optimized decode loop.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "wAgl",
+      "code_hash": "f9be85f19e4e542f0532b6772e7d1142",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"act-6-multi-size-scaling-08b-2b-4b-and-9b\">Act 6 \u2014 Multi-Size Scaling: 0.8B, 2B, 4B, and 9B</h2>\n<span class=\"paragraph\">To evaluate whether this performance profile generalizes across model sizes, we benchmarked the entire Qwen 3.5 family:\n0.8B, 2B, 4B, and 9B.</span>\n<span class=\"paragraph\">The architecture scales primarily by layer count and layer width:</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "rEll",
+      "code_hash": "a3166a2570ad2f8b39c4106808b06c9e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "dGlV",
+      "code_hash": "dcd229ce0ca7347feb77e70d0021bd2c",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-ui-element object-id='dGlV-0' random-id='9b11667e-32b2-8412-dfe3-56ccc6d03e6e'><marimo-table data-initial-value='[]' data-label='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eArchitecture Parameters Across the Qwen 3.5 Family&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-data='&quot;[{&#92;&quot;dimension&#92;&quot;:&#92;&quot;hidden_size&#92;&quot;,&#92;&quot;0.8B&#92;&quot;:&#92;&quot;1,024&#92;&quot;,&#92;&quot;2B&#92;&quot;:&#92;&quot;2,048&#92;&quot;,&#92;&quot;4B&#92;&quot;:&#92;&quot;2,560&#92;&quot;,&#92;&quot;9B&#92;&quot;:&#92;&quot;4,096&#92;&quot;},{&#92;&quot;dimension&#92;&quot;:&#92;&quot;intermediate_size&#92;&quot;,&#92;&quot;0.8B&#92;&quot;:&#92;&quot;3,584&#92;&quot;,&#92;&quot;2B&#92;&quot;:&#92;&quot;6,144&#92;&quot;,&#92;&quot;4B&#92;&quot;:&#92;&quot;9,216&#92;&quot;,&#92;&quot;9B&#92;&quot;:&#92;&quot;12,288&#92;&quot;},{&#92;&quot;dimension&#92;&quot;:&#92;&quot;num_hidden_layers&#92;&quot;,&#92;&quot;0.8B&#92;&quot;:&#92;&quot;24&#92;&quot;,&#92;&quot;2B&#92;&quot;:&#92;&quot;24&#92;&quot;,&#92;&quot;4B&#92;&quot;:&#92;&quot;32&#92;&quot;,&#92;&quot;9B&#92;&quot;:&#92;&quot;32&#92;&quot;},{&#92;&quot;dimension&#92;&quot;:&#92;&quot;attn Q heads&#92;&quot;,&#92;&quot;0.8B&#92;&quot;:&#92;&quot;8&#92;&quot;,&#92;&quot;2B&#92;&quot;:&#92;&quot;8&#92;&quot;,&#92;&quot;4B&#92;&quot;:&#92;&quot;16&#92;&quot;,&#92;&quot;9B&#92;&quot;:&#92;&quot;16&#92;&quot;},{&#92;&quot;dimension&#92;&quot;:&#92;&quot;attn KV heads&#92;&quot;,&#92;&quot;0.8B&#92;&quot;:&#92;&quot;2&#92;&quot;,&#92;&quot;2B&#92;&quot;:&#92;&quot;2&#92;&quot;,&#92;&quot;4B&#92;&quot;:&#92;&quot;4&#92;&quot;,&#92;&quot;9B&#92;&quot;:&#92;&quot;4&#92;&quot;},{&#92;&quot;dimension&#92;&quot;:&#92;&quot;GDN V heads&#92;&quot;,&#92;&quot;0.8B&#92;&quot;:&#92;&quot;16&#92;&quot;,&#92;&quot;2B&#92;&quot;:&#92;&quot;16&#92;&quot;,&#92;&quot;4B&#92;&quot;:&#92;&quot;32&#92;&quot;,&#92;&quot;9B&#92;&quot;:&#92;&quot;32&#92;&quot;},{&#92;&quot;dimension&#92;&quot;:&#92;&quot;head_dim (attn)&#92;&quot;,&#92;&quot;0.8B&#92;&quot;:&#92;&quot;256&#92;&quot;,&#92;&quot;2B&#92;&quot;:&#92;&quot;256&#92;&quot;,&#92;&quot;4B&#92;&quot;:&#92;&quot;256&#92;&quot;,&#92;&quot;9B&#92;&quot;:&#92;&quot;256&#92;&quot;},{&#92;&quot;dimension&#92;&quot;:&#92;&quot;GDN key head_dim&#92;&quot;,&#92;&quot;0.8B&#92;&quot;:&#92;&quot;128&#92;&quot;,&#92;&quot;2B&#92;&quot;:&#92;&quot;128&#92;&quot;,&#92;&quot;4B&#92;&quot;:&#92;&quot;128&#92;&quot;,&#92;&quot;9B&#92;&quot;:&#92;&quot;128&#92;&quot;},{&#92;&quot;dimension&#92;&quot;:&#92;&quot;full_attention_interval&#92;&quot;,&#92;&quot;0.8B&#92;&quot;:&#92;&quot;4&#92;&quot;,&#92;&quot;2B&#92;&quot;:&#92;&quot;4&#92;&quot;,&#92;&quot;4B&#92;&quot;:&#92;&quot;4&#92;&quot;,&#92;&quot;9B&#92;&quot;:&#92;&quot;4&#92;&quot;},{&#92;&quot;dimension&#92;&quot;:&#92;&quot;lm_head tied to embeddings?&#92;&quot;,&#92;&quot;0.8B&#92;&quot;:&#92;&quot;Yes&#92;&quot;,&#92;&quot;2B&#92;&quot;:&#92;&quot;Yes&#92;&quot;,&#92;&quot;4B&#92;&quot;:&#92;&quot;Yes&#92;&quot;,&#92;&quot;9B&#92;&quot;:&#92;&quot;No &#92;&#92;u2014 separate lm_head.weight&#92;&quot;}]&quot;' data-total-rows='10' data-total-columns='5' data-max-columns='50' data-banner-text='&quot;&quot;' data-pagination='false' data-page-size='10' data-field-types='[[&quot;dimension&quot;,[&quot;string&quot;,&quot;str&quot;]],[&quot;0.8B&quot;,[&quot;string&quot;,&quot;str&quot;]],[&quot;2B&quot;,[&quot;string&quot;,&quot;str&quot;]],[&quot;4B&quot;,[&quot;string&quot;,&quot;str&quot;]],[&quot;9B&quot;,[&quot;string&quot;,&quot;str&quot;]]]' data-show-filters='true' data-show-download='true' data-show-search='true' data-show-column-summaries='false' data-show-data-types='true' data-show-page-size-selector='true' data-show-column-explorer='true' data-show-chart-builder='true' data-row-headers='[]' data-hidden-columns='[]' data-has-stable-row-id='false' data-lazy='false' data-preload='false'></marimo-table></marimo-ui-element>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "SdmI",
+      "code_hash": "f3686a6b0d4a3f3304f7f2444e7de922",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Key structural elements\u2014head dimensions (256 for attention, 128 for GDN) and the 4-layer attention cadence\u2014remain\nconstant across the family. The main architectural distinction occurs at 9B, which uses an untied output projection\n(<code>lm_head.weight</code>) rather than sharing the input embedding table.</span>\n<h3 id=\"correctness-verification-across-sizes\">Correctness Verification Across Sizes</h3>\n<span class=\"paragraph\">To verify numerical correctness across all four sizes, we generated greedy reference completions with Hugging Face <code>transformers</code>\nand matched output token IDs exactly:</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "lgWD",
+      "code_hash": "e1adb9b39891d13e479e877da93d6814",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "yOPj",
+      "code_hash": "e7bf5b9a7fae963ddd168ee24a089150",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-ui-element object-id='yOPj-0' random-id='b5a805f5-9c7a-31d5-1ea0-03fd951b580e'><marimo-table data-initial-value='[]' data-label='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eToken Output Verification vs. Hugging Face Reference&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-data='&quot;[{&#92;&quot;size&#92;&quot;:&#92;&quot;0.8B&#92;&quot;,&#92;&quot;generated_ids&#92;&quot;:&#92;&quot;[11751, 13, 198, 760, 6511, 314]&#92;&quot;,&#92;&quot;matches_hf_reference&#92;&quot;:&#92;&quot;Exact match&#92;&quot;},{&#92;&quot;size&#92;&quot;:&#92;&quot;2B&#92;&quot;,&#92;&quot;generated_ids&#92;&quot;:&#92;&quot;[11751, 13, 198, 32, 13, 2912]&#92;&quot;,&#92;&quot;matches_hf_reference&#92;&quot;:&#92;&quot;Exact match&#92;&quot;},{&#92;&quot;size&#92;&quot;:&#92;&quot;4B&#92;&quot;,&#92;&quot;generated_ids&#92;&quot;:&#92;&quot;[11751, 13, 198, 32, 13, 2912]&#92;&quot;,&#92;&quot;matches_hf_reference&#92;&quot;:&#92;&quot;Exact match&#92;&quot;},{&#92;&quot;size&#92;&quot;:&#92;&quot;9B&#92;&quot;,&#92;&quot;generated_ids&#92;&quot;:&#92;&quot;[11751, 13, 198, 760, 6511, 314]&#92;&quot;,&#92;&quot;matches_hf_reference&#92;&quot;:&#92;&quot;Exact match (untied lm_head)&#92;&quot;}]&quot;' data-total-rows='4' data-total-columns='3' data-max-columns='50' data-banner-text='&quot;&quot;' data-pagination='false' data-page-size='10' data-field-types='[[&quot;size&quot;,[&quot;string&quot;,&quot;str&quot;]],[&quot;generated_ids&quot;,[&quot;string&quot;,&quot;str&quot;]],[&quot;matches_hf_reference&quot;,[&quot;string&quot;,&quot;str&quot;]]]' data-show-filters='true' data-show-download='true' data-show-search='true' data-show-column-summaries='false' data-show-data-types='true' data-show-page-size-selector='false' data-show-column-explorer='true' data-show-chart-builder='true' data-row-headers='[]' data-hidden-columns='[]' data-has-stable-row-id='false' data-lazy='false' data-preload='false'></marimo-table></marimo-ui-element>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "fwwy",
+      "code_hash": "964c6b610e5d9532ec6d01ee022b88eb",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "LJZf",
+      "code_hash": "a3e6b0af0f2e56ac50507997cd448776",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "urSm",
+      "code_hash": "3eb81dbce9e25e9bad1a9f8ab58fdfb7",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-mime-renderer data-mime='&quot;application/vnd.vegalite.v6+json&quot;' data-data='&quot;{&#92;n  &#92;&quot;&#36;schema&#92;&quot;: &#92;&quot;https://vega.github.io/schema/vega-lite/v6.4.1.json&#92;&quot;,&#92;n  &#92;&quot;autosize&#92;&quot;: {&#92;n    &#92;&quot;contains&#92;&quot;: &#92;&quot;padding&#92;&quot;,&#92;n    &#92;&quot;type&#92;&quot;: &#92;&quot;fit&#92;&quot;&#92;n  },&#92;n  &#92;&quot;config&#92;&quot;: {&#92;n    &#92;&quot;view&#92;&quot;: {&#92;n      &#92;&quot;continuousHeight&#92;&quot;: 300,&#92;n      &#92;&quot;continuousWidth&#92;&quot;: 300&#92;n    }&#92;n  },&#92;n  &#92;&quot;data&#92;&quot;: {&#92;n    &#92;&quot;name&#92;&quot;: &#92;&quot;data-67b453a3ee20ef6bb7d06de4b4cf92b8&#92;&quot;&#92;n  },&#92;n  &#92;&quot;datasets&#92;&quot;: {&#92;n    &#92;&quot;data-67b453a3ee20ef6bb7d06de4b4cf92b8&#92;&quot;: [&#92;n      {&#92;n        &#92;&quot;avg_tok_s&#92;&quot;: 215.14,&#92;n        &#92;&quot;avg_ttft_ms&#92;&quot;: 36.7,&#92;n        &#92;&quot;engine&#92;&quot;: &#92;&quot;llama.cpp&#92;&quot;,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;0.8B&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;avg_tok_s&#92;&quot;: 230.31,&#92;n        &#92;&quot;avg_ttft_ms&#92;&quot;: 39.7,&#92;n        &#92;&quot;engine&#92;&quot;: &#92;&quot;Ollama&#92;&quot;,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;0.8B&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;avg_tok_s&#92;&quot;: 289.83,&#92;n        &#92;&quot;avg_ttft_ms&#92;&quot;: 37.6,&#92;n        &#92;&quot;engine&#92;&quot;: &#92;&quot;runtime-next (this port)&#92;&quot;,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;0.8B&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;avg_tok_s&#92;&quot;: 138.4,&#92;n        &#92;&quot;avg_ttft_ms&#92;&quot;: 53.9,&#92;n        &#92;&quot;engine&#92;&quot;: &#92;&quot;llama.cpp&#92;&quot;,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;2B&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;avg_tok_s&#92;&quot;: 144.11,&#92;n        &#92;&quot;avg_ttft_ms&#92;&quot;: 55.3,&#92;n        &#92;&quot;engine&#92;&quot;: &#92;&quot;Ollama&#92;&quot;,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;2B&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;avg_tok_s&#92;&quot;: 170.62,&#92;n        &#92;&quot;avg_ttft_ms&#92;&quot;: 47.4,&#92;n        &#92;&quot;engine&#92;&quot;: &#92;&quot;runtime-next (this port)&#92;&quot;,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;2B&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;avg_tok_s&#92;&quot;: 74.53,&#92;n        &#92;&quot;avg_ttft_ms&#92;&quot;: 127.9,&#92;n        &#92;&quot;engine&#92;&quot;: &#92;&quot;llama.cpp&#92;&quot;,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;4B&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;avg_tok_s&#92;&quot;: 76.69,&#92;n        &#92;&quot;avg_ttft_ms&#92;&quot;: 111.0,&#92;n        &#92;&quot;engine&#92;&quot;: &#92;&quot;Ollama&#92;&quot;,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;4B&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;avg_tok_s&#92;&quot;: 85.36,&#92;n        &#92;&quot;avg_ttft_ms&#92;&quot;: 94.9,&#92;n        &#92;&quot;engine&#92;&quot;: &#92;&quot;runtime-next (this port)&#92;&quot;,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;4B&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;avg_tok_s&#92;&quot;: 45.41,&#92;n        &#92;&quot;avg_ttft_ms&#92;&quot;: 170.5,&#92;n        &#92;&quot;engine&#92;&quot;: &#92;&quot;llama.cpp&#92;&quot;,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;9B&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;avg_tok_s&#92;&quot;: 46.22,&#92;n        &#92;&quot;avg_ttft_ms&#92;&quot;: 164.6,&#92;n        &#92;&quot;engine&#92;&quot;: &#92;&quot;Ollama&#92;&quot;,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;9B&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;avg_tok_s&#92;&quot;: 49.86,&#92;n        &#92;&quot;avg_ttft_ms&#92;&quot;: 126.8,&#92;n        &#92;&quot;engine&#92;&quot;: &#92;&quot;runtime-next (this port)&#92;&quot;,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;9B&#92;&quot;&#92;n      }&#92;n    ]&#92;n  },&#92;n  &#92;&quot;encoding&#92;&quot;: {&#92;n    &#92;&quot;color&#92;&quot;: {&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;engine&#92;&quot;,&#92;n      &#92;&quot;scale&#92;&quot;: {&#92;n        &#92;&quot;domain&#92;&quot;: [&#92;n          &#92;&quot;runtime-next (this port)&#92;&quot;,&#92;n          &#92;&quot;Ollama&#92;&quot;,&#92;n          &#92;&quot;llama.cpp&#92;&quot;&#92;n        ],&#92;n        &#92;&quot;range&#92;&quot;: [&#92;n          &#92;&quot;#0ea5e9&#92;&quot;,&#92;n          &#92;&quot;#64748b&#92;&quot;,&#92;n          &#92;&quot;#94a3b8&#92;&quot;&#92;n        ]&#92;n      },&#92;n      &#92;&quot;title&#92;&quot;: &#92;&quot;Engine&#92;&quot;,&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n    },&#92;n    &#92;&quot;tooltip&#92;&quot;: [&#92;n      {&#92;n        &#92;&quot;field&#92;&quot;: &#92;&quot;size&#92;&quot;,&#92;n        &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;field&#92;&quot;: &#92;&quot;engine&#92;&quot;,&#92;n        &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;field&#92;&quot;: &#92;&quot;avg_tok_s&#92;&quot;,&#92;n        &#92;&quot;format&#92;&quot;: &#92;&quot;.1f&#92;&quot;,&#92;n        &#92;&quot;type&#92;&quot;: &#92;&quot;quantitative&#92;&quot;&#92;n      }&#92;n    ],&#92;n    &#92;&quot;x&#92;&quot;: {&#92;n      &#92;&quot;axis&#92;&quot;: {&#92;n        &#92;&quot;labelAngle&#92;&quot;: 0&#92;n      },&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;size&#92;&quot;,&#92;n      &#92;&quot;sort&#92;&quot;: [&#92;n        &#92;&quot;0.8B&#92;&quot;,&#92;n        &#92;&quot;2B&#92;&quot;,&#92;n        &#92;&quot;4B&#92;&quot;,&#92;n        &#92;&quot;9B&#92;&quot;&#92;n      ],&#92;n      &#92;&quot;title&#92;&quot;: &#92;&quot;Model Size&#92;&quot;,&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n    },&#92;n    &#92;&quot;xOffset&#92;&quot;: {&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;engine&#92;&quot;,&#92;n      &#92;&quot;sort&#92;&quot;: [&#92;n        &#92;&quot;runtime-next (this port)&#92;&quot;,&#92;n        &#92;&quot;Ollama&#92;&quot;,&#92;n        &#92;&quot;llama.cpp&#92;&quot;&#92;n      ],&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n    },&#92;n    &#92;&quot;y&#92;&quot;: {&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;avg_tok_s&#92;&quot;,&#92;n      &#92;&quot;title&#92;&quot;: &#92;&quot;Streaming tok/s&#92;&quot;,&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;quantitative&#92;&quot;&#92;n    }&#92;n  },&#92;n  &#92;&quot;height&#92;&quot;: 250,&#92;n  &#92;&quot;mark&#92;&quot;: {&#92;n    &#92;&quot;cornerRadiusTopLeft&#92;&quot;: 4,&#92;n    &#92;&quot;cornerRadiusTopRight&#92;&quot;: 4,&#92;n    &#92;&quot;type&#92;&quot;: &#92;&quot;bar&#92;&quot;&#92;n  },&#92;n  &#92;&quot;title&#92;&quot;: &#92;&quot;Throughput Across Qwen 3.5 Model Sizes&#92;&quot;,&#92;n  &#92;&quot;usermeta&#92;&quot;: {&#92;n    &#92;&quot;embedOptions&#92;&quot;: {}&#92;n  },&#92;n  &#92;&quot;width&#92;&quot;: 480&#92;n}&quot;'></marimo-mime-renderer></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "jxvo",
+      "code_hash": "adf7d44820103411a3bb1e12f4514c9b",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><code>runtime-next</code> maintains higher throughput across all four sizes, though the relative margin narrows at larger scales:</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "mWxS",
+      "code_hash": "5afcaaebfe449e397b3dd079dfd77432",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "CcZR",
+      "code_hash": "937739db359285930beb0f20eacf2936",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-mime-renderer data-mime='&quot;application/vnd.vegalite.v6+json&quot;' data-data='&quot;{&#92;n  &#92;&quot;&#36;schema&#92;&quot;: &#92;&quot;https://vega.github.io/schema/vega-lite/v6.4.1.json&#92;&quot;,&#92;n  &#92;&quot;autosize&#92;&quot;: {&#92;n    &#92;&quot;contains&#92;&quot;: &#92;&quot;padding&#92;&quot;,&#92;n    &#92;&quot;type&#92;&quot;: &#92;&quot;fit&#92;&quot;&#92;n  },&#92;n  &#92;&quot;config&#92;&quot;: {&#92;n    &#92;&quot;view&#92;&quot;: {&#92;n      &#92;&quot;continuousHeight&#92;&quot;: 300,&#92;n      &#92;&quot;continuousWidth&#92;&quot;: 300&#92;n    }&#92;n  },&#92;n  &#92;&quot;data&#92;&quot;: {&#92;n    &#92;&quot;name&#92;&quot;: &#92;&quot;data-52dcf56c15747da17f59fc8c09b5ed00&#92;&quot;&#92;n  },&#92;n  &#92;&quot;datasets&#92;&quot;: {&#92;n    &#92;&quot;data-52dcf56c15747da17f59fc8c09b5ed00&#92;&quot;: [&#92;n      {&#92;n        &#92;&quot;baseline&#92;&quot;: &#92;&quot;vs llama.cpp&#92;&quot;,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;0.8B&#92;&quot;,&#92;n        &#92;&quot;speedup&#92;&quot;: 1.347&#92;n      },&#92;n      {&#92;n        &#92;&quot;baseline&#92;&quot;: &#92;&quot;vs llama.cpp&#92;&quot;,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;2B&#92;&quot;,&#92;n        &#92;&quot;speedup&#92;&quot;: 1.233&#92;n      },&#92;n      {&#92;n        &#92;&quot;baseline&#92;&quot;: &#92;&quot;vs llama.cpp&#92;&quot;,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;4B&#92;&quot;,&#92;n        &#92;&quot;speedup&#92;&quot;: 1.145&#92;n      },&#92;n      {&#92;n        &#92;&quot;baseline&#92;&quot;: &#92;&quot;vs llama.cpp&#92;&quot;,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;9B&#92;&quot;,&#92;n        &#92;&quot;speedup&#92;&quot;: 1.098&#92;n      },&#92;n      {&#92;n        &#92;&quot;baseline&#92;&quot;: &#92;&quot;vs Ollama&#92;&quot;,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;0.8B&#92;&quot;,&#92;n        &#92;&quot;speedup&#92;&quot;: 1.258&#92;n      },&#92;n      {&#92;n        &#92;&quot;baseline&#92;&quot;: &#92;&quot;vs Ollama&#92;&quot;,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;2B&#92;&quot;,&#92;n        &#92;&quot;speedup&#92;&quot;: 1.184&#92;n      },&#92;n      {&#92;n        &#92;&quot;baseline&#92;&quot;: &#92;&quot;vs Ollama&#92;&quot;,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;4B&#92;&quot;,&#92;n        &#92;&quot;speedup&#92;&quot;: 1.113&#92;n      },&#92;n      {&#92;n        &#92;&quot;baseline&#92;&quot;: &#92;&quot;vs Ollama&#92;&quot;,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;9B&#92;&quot;,&#92;n        &#92;&quot;speedup&#92;&quot;: 1.079&#92;n      }&#92;n    ]&#92;n  },&#92;n  &#92;&quot;encoding&#92;&quot;: {&#92;n    &#92;&quot;color&#92;&quot;: {&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;baseline&#92;&quot;,&#92;n      &#92;&quot;scale&#92;&quot;: {&#92;n        &#92;&quot;domain&#92;&quot;: [&#92;n          &#92;&quot;vs llama.cpp&#92;&quot;,&#92;n          &#92;&quot;vs Ollama&#92;&quot;&#92;n        ],&#92;n        &#92;&quot;range&#92;&quot;: [&#92;n          &#92;&quot;#f59e0b&#92;&quot;,&#92;n          &#92;&quot;#64748b&#92;&quot;&#92;n        ]&#92;n      },&#92;n      &#92;&quot;title&#92;&quot;: null,&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n    },&#92;n    &#92;&quot;tooltip&#92;&quot;: [&#92;n      {&#92;n        &#92;&quot;field&#92;&quot;: &#92;&quot;size&#92;&quot;,&#92;n        &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;field&#92;&quot;: &#92;&quot;baseline&#92;&quot;,&#92;n        &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;field&#92;&quot;: &#92;&quot;speedup&#92;&quot;,&#92;n        &#92;&quot;format&#92;&quot;: &#92;&quot;.3f&#92;&quot;,&#92;n        &#92;&quot;type&#92;&quot;: &#92;&quot;quantitative&#92;&quot;&#92;n      }&#92;n    ],&#92;n    &#92;&quot;x&#92;&quot;: {&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;size&#92;&quot;,&#92;n      &#92;&quot;sort&#92;&quot;: [&#92;n        &#92;&quot;0.8B&#92;&quot;,&#92;n        &#92;&quot;2B&#92;&quot;,&#92;n        &#92;&quot;4B&#92;&quot;,&#92;n        &#92;&quot;9B&#92;&quot;&#92;n      ],&#92;n      &#92;&quot;title&#92;&quot;: &#92;&quot;Model size&#92;&quot;,&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n    },&#92;n    &#92;&quot;y&#92;&quot;: {&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;speedup&#92;&quot;,&#92;n      &#92;&quot;scale&#92;&quot;: {&#92;n        &#92;&quot;zero&#92;&quot;: false&#92;n      },&#92;n      &#92;&quot;title&#92;&quot;: &#92;&quot;Speedup (\u00d7)&#92;&quot;,&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;quantitative&#92;&quot;&#92;n    }&#92;n  },&#92;n  &#92;&quot;height&#92;&quot;: 240,&#92;n  &#92;&quot;mark&#92;&quot;: {&#92;n    &#92;&quot;point&#92;&quot;: {&#92;n      &#92;&quot;filled&#92;&quot;: true,&#92;n      &#92;&quot;size&#92;&quot;: 90&#92;n    },&#92;n    &#92;&quot;strokeWidth&#92;&quot;: 3,&#92;n    &#92;&quot;type&#92;&quot;: &#92;&quot;line&#92;&quot;&#92;n  },&#92;n  &#92;&quot;title&#92;&quot;: &#92;&quot;Speedup Margin Across Model Sizes&#92;&quot;,&#92;n  &#92;&quot;usermeta&#92;&quot;: {&#92;n    &#92;&quot;embedOptions&#92;&quot;: {}&#92;n  },&#92;n  &#92;&quot;width&#92;&quot;: 480&#92;n}&quot;'></marimo-mime-renderer><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><em>1.35\u00d7 at 0.8B, tapering to 1.10\u00d7 at 9B (vs. llama.cpp) as memory bandwidth dominates.</em></span></span></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "YWSi",
+      "code_hash": "21c8640e8c6b9939b50fb26348454f86",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">To understand why the performance margin narrows at 9B, we profiled decode kernel execution using <code>rocprofv3</code>:</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "zlud",
+      "code_hash": "6f31adba20b521e5aaafef9199a24d6b",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "tZnO",
+      "code_hash": "163fb253721bd6214bc172c5efa2222a",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-mime-renderer data-mime='&quot;application/vnd.vegalite.v6+json&quot;' data-data='&quot;{&#92;n  &#92;&quot;&#36;schema&#92;&quot;: &#92;&quot;https://vega.github.io/schema/vega-lite/v6.4.1.json&#92;&quot;,&#92;n  &#92;&quot;autosize&#92;&quot;: {&#92;n    &#92;&quot;contains&#92;&quot;: &#92;&quot;padding&#92;&quot;,&#92;n    &#92;&quot;type&#92;&quot;: &#92;&quot;fit&#92;&quot;&#92;n  },&#92;n  &#92;&quot;config&#92;&quot;: {&#92;n    &#92;&quot;view&#92;&quot;: {&#92;n      &#92;&quot;continuousHeight&#92;&quot;: 300,&#92;n      &#92;&quot;continuousWidth&#92;&quot;: 300&#92;n    }&#92;n  },&#92;n  &#92;&quot;data&#92;&quot;: {&#92;n    &#92;&quot;name&#92;&quot;: &#92;&quot;data-b7ddafe26fe8a426da51193376cc8805&#92;&quot;&#92;n  },&#92;n  &#92;&quot;datasets&#92;&quot;: {&#92;n    &#92;&quot;data-b7ddafe26fe8a426da51193376cc8805&#92;&quot;: [&#92;n      {&#92;n        &#92;&quot;kernel_group&#92;&quot;: &#92;&quot;gemv (weight-read GEMVs)&#92;&quot;,&#92;n        &#92;&quot;pct_of_decode_time&#92;&quot;: 72.66,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;0.8B&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;kernel_group&#92;&quot;: &#92;&quot;gemv (weight-read GEMVs)&#92;&quot;,&#92;n        &#92;&quot;pct_of_decode_time&#92;&quot;: 88.85,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;4B&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;kernel_group&#92;&quot;: &#92;&quot;gemv (weight-read GEMVs)&#92;&quot;,&#92;n        &#92;&quot;pct_of_decode_time&#92;&quot;: 93.64,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;9B&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;kernel_group&#92;&quot;: &#92;&quot;gdn_recurrent (GDN kernel)&#92;&quot;,&#92;n        &#92;&quot;pct_of_decode_time&#92;&quot;: 13.59,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;0.8B&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;kernel_group&#92;&quot;: &#92;&quot;gdn_recurrent (GDN kernel)&#92;&quot;,&#92;n        &#92;&quot;pct_of_decode_time&#92;&quot;: 5.4,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;4B&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;kernel_group&#92;&quot;: &#92;&quot;gdn_recurrent (GDN kernel)&#92;&quot;,&#92;n        &#92;&quot;pct_of_decode_time&#92;&quot;: 3.02,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;9B&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;kernel_group&#92;&quot;: &#92;&quot;other ops (attn, conv1d, gates, RoPE, norms)&#92;&quot;,&#92;n        &#92;&quot;pct_of_decode_time&#92;&quot;: 13.75,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;0.8B&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;kernel_group&#92;&quot;: &#92;&quot;other ops (attn, conv1d, gates, RoPE, norms)&#92;&quot;,&#92;n        &#92;&quot;pct_of_decode_time&#92;&quot;: 5.75,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;4B&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;kernel_group&#92;&quot;: &#92;&quot;other ops (attn, conv1d, gates, RoPE, norms)&#92;&quot;,&#92;n        &#92;&quot;pct_of_decode_time&#92;&quot;: 3.34,&#92;n        &#92;&quot;size&#92;&quot;: &#92;&quot;9B&#92;&quot;&#92;n      }&#92;n    ]&#92;n  },&#92;n  &#92;&quot;encoding&#92;&quot;: {&#92;n    &#92;&quot;color&#92;&quot;: {&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;kernel_group&#92;&quot;,&#92;n      &#92;&quot;scale&#92;&quot;: {&#92;n        &#92;&quot;domain&#92;&quot;: [&#92;n          &#92;&quot;gemv (weight-read GEMVs)&#92;&quot;,&#92;n          &#92;&quot;gdn_recurrent (GDN kernel)&#92;&quot;,&#92;n          &#92;&quot;other ops (attn, conv1d, gates, RoPE, norms)&#92;&quot;&#92;n        ],&#92;n        &#92;&quot;range&#92;&quot;: [&#92;n          &#92;&quot;#0ea5e9&#92;&quot;,&#92;n          &#92;&quot;#f59e0b&#92;&quot;,&#92;n          &#92;&quot;#94a3b8&#92;&quot;&#92;n        ]&#92;n      },&#92;n      &#92;&quot;title&#92;&quot;: null,&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n    },&#92;n    &#92;&quot;tooltip&#92;&quot;: [&#92;n      {&#92;n        &#92;&quot;field&#92;&quot;: &#92;&quot;size&#92;&quot;,&#92;n        &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;field&#92;&quot;: &#92;&quot;kernel_group&#92;&quot;,&#92;n        &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n      },&#92;n      {&#92;n        &#92;&quot;field&#92;&quot;: &#92;&quot;pct_of_decode_time&#92;&quot;,&#92;n        &#92;&quot;format&#92;&quot;: &#92;&quot;.1f&#92;&quot;,&#92;n        &#92;&quot;type&#92;&quot;: &#92;&quot;quantitative&#92;&quot;&#92;n      }&#92;n    ],&#92;n    &#92;&quot;x&#92;&quot;: {&#92;n      &#92;&quot;axis&#92;&quot;: {&#92;n        &#92;&quot;labelAngle&#92;&quot;: 0&#92;n      },&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;size&#92;&quot;,&#92;n      &#92;&quot;sort&#92;&quot;: [&#92;n        &#92;&quot;0.8B&#92;&quot;,&#92;n        &#92;&quot;4B&#92;&quot;,&#92;n        &#92;&quot;9B&#92;&quot;&#92;n      ],&#92;n      &#92;&quot;title&#92;&quot;: &#92;&quot;Model Size&#92;&quot;,&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;nominal&#92;&quot;&#92;n    },&#92;n    &#92;&quot;y&#92;&quot;: {&#92;n      &#92;&quot;axis&#92;&quot;: {&#92;n        &#92;&quot;format&#92;&quot;: &#92;&quot;%&#92;&quot;&#92;n      },&#92;n      &#92;&quot;field&#92;&quot;: &#92;&quot;pct_of_decode_time&#92;&quot;,&#92;n      &#92;&quot;stack&#92;&quot;: &#92;&quot;normalize&#92;&quot;,&#92;n      &#92;&quot;title&#92;&quot;: &#92;&quot;% of Decode Kernel Time&#92;&quot;,&#92;n      &#92;&quot;type&#92;&quot;: &#92;&quot;quantitative&#92;&quot;&#92;n    }&#92;n  },&#92;n  &#92;&quot;height&#92;&quot;: 240,&#92;n  &#92;&quot;mark&#92;&quot;: {&#92;n    &#92;&quot;type&#92;&quot;: &#92;&quot;bar&#92;&quot;&#92;n  },&#92;n  &#92;&quot;title&#92;&quot;: &#92;&quot;Kernel Execution Breakdown by Model Size&#92;&quot;,&#92;n  &#92;&quot;usermeta&#92;&quot;: {&#92;n    &#92;&quot;embedOptions&#92;&quot;: {}&#92;n  },&#92;n  &#92;&quot;width&#92;&quot;: 440&#92;n}&quot;'></marimo-mime-renderer></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "xvXZ",
+      "code_hash": "06d80c545d6e05421641c815cd50a5bb",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Two architectural factors explain this trend:</span>\n<ol>\n<li><strong>GEMV dominates execution time at larger sizes</strong>: Weight matrix sizes scale with <code>hidden_size \u00d7 intermediate_size</code>\n   (1,024 at 0.8B <marimo-tex class=\"arithmatex\">||(\\to||)</marimo-tex> 4,096 at 9B). GDN recurrence cost, by contrast, depends on <code>num_heads \u00d7 head_dim\u00b2</code> and remains\n   comparatively constant within size tiers.</li>\n<li><strong>Memory bandwidth saturation</strong>: At 9B, decode is heavily memory-bandwidth bound (GEMV consumes over 93% of execution time).\n   Both runtimes operate near the theoretical bandwidth ceiling of the GPU (960 GB/s), naturally compressing the margin.</li>\n</ol>\n<span class=\"paragraph\">Time-To-First-Token advantages remain substantial across all sizes (e.g. <strong>126.8 ms vs. 170.5 ms / 164.6 ms at 9B</strong>),\nas the prefill batching and HTTP streaming fixes apply uniformly regardless of parameter scale.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "CLip",
+      "code_hash": "59f143b4095a0a6c1fd37fdddb93eb93",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "YECM",
+      "code_hash": "c16436a98a0799e99df3c24dfe62fb9f",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"the-complete-final-scorecard\">The Complete Final Scorecard</h2>\n<span class=\"paragraph\">Task-by-task results across all three independent HTTP server daemons:</span></span><marimo-ui-element object-id='YECM-0' random-id='6c378de2-3714-e219-0fa0-af810dab6b5a'><marimo-table data-initial-value='[]' data-label='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eHead-to-Head Per-Task Benchmark Results (HTTP + SSE Streaming)&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-data='&quot;[{&#92;&quot;engine&#92;&quot;:&#92;&quot;llama.cpp&#92;&quot;,&#92;&quot;task&#92;&quot;:&#92;&quot;FastAPI Asyncpg &amp; pgvector CRUD Service&#92;&quot;,&#92;&quot;tokens&#92;&quot;:350,&#92;&quot;ttft_ms&#92;&quot;:128.6,&#92;&quot;tok_per_sec&#92;&quot;:73.19},{&#92;&quot;engine&#92;&quot;:&#92;&quot;llama.cpp&#92;&quot;,&#92;&quot;task&#92;&quot;:&#92;&quot;PostgreSQL 17 HNSW Migration &amp; Tuning&#92;&quot;,&#92;&quot;tokens&#92;&quot;:348,&#92;&quot;ttft_ms&#92;&quot;:97.0,&#92;&quot;tok_per_sec&#92;&quot;:72.49},{&#92;&quot;engine&#92;&quot;:&#92;&quot;llama.cpp&#92;&quot;,&#92;&quot;task&#92;&quot;:&#92;&quot;DuckDB Parquet Window Analytics Pipeline&#92;&quot;,&#92;&quot;tokens&#92;&quot;:348,&#92;&quot;ttft_ms&#92;&quot;:98.5,&#92;&quot;tok_per_sec&#92;&quot;:72.5},{&#92;&quot;engine&#92;&quot;:&#92;&quot;Ollama&#92;&quot;,&#92;&quot;task&#92;&quot;:&#92;&quot;FastAPI Asyncpg &amp; pgvector CRUD Service&#92;&quot;,&#92;&quot;tokens&#92;&quot;:350,&#92;&quot;ttft_ms&#92;&quot;:135.8,&#92;&quot;tok_per_sec&#92;&quot;:73.36},{&#92;&quot;engine&#92;&quot;:&#92;&quot;Ollama&#92;&quot;,&#92;&quot;task&#92;&quot;:&#92;&quot;PostgreSQL 17 HNSW Migration &amp; Tuning&#92;&quot;,&#92;&quot;tokens&#92;&quot;:348,&#92;&quot;ttft_ms&#92;&quot;:104.8,&#92;&quot;tok_per_sec&#92;&quot;:73.23},{&#92;&quot;engine&#92;&quot;:&#92;&quot;Ollama&#92;&quot;,&#92;&quot;task&#92;&quot;:&#92;&quot;DuckDB Parquet Window Analytics Pipeline&#92;&quot;,&#92;&quot;tokens&#92;&quot;:348,&#92;&quot;ttft_ms&#92;&quot;:104.4,&#92;&quot;tok_per_sec&#92;&quot;:72.57},{&#92;&quot;engine&#92;&quot;:&#92;&quot;runtime-next (this port)&#92;&quot;,&#92;&quot;task&#92;&quot;:&#92;&quot;FastAPI Asyncpg &amp; pgvector CRUD Service&#92;&quot;,&#92;&quot;tokens&#92;&quot;:350,&#92;&quot;ttft_ms&#92;&quot;:79.6,&#92;&quot;tok_per_sec&#92;&quot;:83.14},{&#92;&quot;engine&#92;&quot;:&#92;&quot;runtime-next (this port)&#92;&quot;,&#92;&quot;task&#92;&quot;:&#92;&quot;PostgreSQL 17 HNSW Migration &amp; Tuning&#92;&quot;,&#92;&quot;tokens&#92;&quot;:350,&#92;&quot;ttft_ms&#92;&quot;:105.5,&#92;&quot;tok_per_sec&#92;&quot;:83.17},{&#92;&quot;engine&#92;&quot;:&#92;&quot;runtime-next (this port)&#92;&quot;,&#92;&quot;task&#92;&quot;:&#92;&quot;DuckDB Parquet Window Analytics Pipeline&#92;&quot;,&#92;&quot;tokens&#92;&quot;:350,&#92;&quot;ttft_ms&#92;&quot;:104.1,&#92;&quot;tok_per_sec&#92;&quot;:82.37}]&quot;' data-total-rows='9' data-total-columns='5' data-max-columns='50' data-banner-text='&quot;&quot;' data-pagination='false' data-page-size='10' data-field-types='[[&quot;engine&quot;,[&quot;string&quot;,&quot;str&quot;]],[&quot;task&quot;,[&quot;string&quot;,&quot;str&quot;]],[&quot;tokens&quot;,[&quot;integer&quot;,&quot;i64&quot;]],[&quot;ttft_ms&quot;,[&quot;number&quot;,&quot;f64&quot;]],[&quot;tok_per_sec&quot;,[&quot;number&quot;,&quot;f64&quot;]]]' data-show-filters='true' data-show-download='true' data-show-search='true' data-show-column-summaries='false' data-show-data-types='true' data-show-page-size-selector='true' data-show-column-explorer='true' data-show-chart-builder='true' data-row-headers='[]' data-hidden-columns='[]' data-has-stable-row-id='false' data-lazy='false' data-preload='false'></marimo-table></marimo-ui-element><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Across each task, <code>runtime-next</code> achieved the lowest Time-To-First-Token and the highest sustained throughput.</span></span></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "cEAS",
+      "code_hash": "e8e1e37d6705e4b2d55ff3554dd9a900",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"performance-analysis-the-hardware-ceiling\">Performance Analysis: The Hardware Ceiling</h2>\n<span class=\"paragraph\">While <strong>82.89 tok/s</strong> outperforms <code>llama.cpp</code> (72.7 tok/s) and Ollama (73.1 tok/s), it is below the initial 100 tok/s aspiration.</span>\n<h3 id=\"hardware-factors\">Hardware Factors</h3>\n<ol>\n<li><strong>Single-Block Thread Limit</strong>: The 4-way split attention kernel uses <code>head_dim (256) \u00d7 4 = 1,024</code> threads per block,\n   which reaches the physical limit per compute block on AMD RDNA3. Moving to <code>kv_split = 8</code> requires a multi-block\n   launch architecture (full Flash-Decode with separate partial reduction buffers).</li>\n<li><strong>GDN Recurrence Cost</strong>: The 8 full-attention layers now execute in ~16 \u03bcs per token. The <strong>24 GDN layers</strong> represent\n   the remaining decode execution floor. Further gains will require deeper fusion across the GDN update step and RMSNorm.</li>\n</ol></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "iXej",
+      "code_hash": "726954762d7efa333af848e987fb141b",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"key-engineering-takeaways\">Key Engineering Takeaways</h2>\n<ol>\n<li><strong>Host-Side Overhead Can Dwarf GPU Execution</strong>:\n   The initial prototype's 3,300 kernel launches spent more time in CPU driver queues than in GPU execution.\n   Batching operations to minimize host-to-device dispatch is as critical as optimizing GEMM kernels.</li>\n<li><strong>Default Buffering in HTTP Crates Traps Streaming</strong>:\n   A standard 8KB buffer in an HTTP library added 540 ms of latency by holding the first 55 tokens.\n   Streaming requires direct socket control with per-frame flushing.</li>\n<li><strong>Empirical Isolation Over Intuitive Tradeoffs</strong>:\n   When throughput dropped from 90 to 79 tok/s, our initial hypothesis blamed per-token network flushing.\n   An in-process isolation test proved network overhead was under 0.3%, preventing the introduction of unnecessary\n   flush coalescing buffers.</li>\n<li><strong>Consumer Hardware Performance</strong>:\n   With dedicated HIP kernels and low-overhead Rust architecture, a consumer AMD GPU can provide high-throughput,\n   low-latency inference on modern hybrid models.</li>\n</ol></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "EJmg",
+      "code_hash": "1d2dc5406742abb274b8761e0585e81e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-callout-output data-html='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003e&#92;u003cstrong&#92;u003ePrecision Note&#92;u003c/strong&#92;u003e: Every benchmark in this article used &#92;u003cstrong&#92;u003eunquantized BF16 weights&#92;u003c/strong&#92;u003e across all three engines&#92;nfor direct comparability. Weight quantization (such as INT4/INT8) involves a distinct set of kernels and tradeoffs,&#92;nwhich will be covered in Part 2.&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-kind='&quot;warn&quot;'></marimo-callout-output>"
+          }
+        }
+      ],
+      "console": []
+    }
+  ]
+}

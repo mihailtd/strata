@@ -2,8 +2,12 @@ mod blas;
 mod blaslt;
 mod hip;
 mod kernels;
+mod lora;
 mod model;
 mod model_loader;
+mod server;
+mod state_handoff;
+mod tokenizer;
 
 fn main() {
     println!("[runtime-next] Native Rust ROCm/HIP Serving Engine initialized.");
@@ -40,6 +44,15 @@ fn main() {
             eprintln!("[runtime-next] HIP device query failed: {e}");
             std::process::exit(1);
         }
+    }
+
+    // §95: the reserved port for this engine (see apps/RUNTIME.md's port
+    // table) -- real HTTP server, not a placeholder; loads real weights
+    // and serves real requests until killed.
+    let port: u16 = std::env::var("PORT").ok().and_then(|s| s.parse().ok()).unwrap_or(8003);
+    if let Err(e) = server::run(port) {
+        eprintln!("[runtime-next] server failed: {e}");
+        std::process::exit(1);
     }
 }
 

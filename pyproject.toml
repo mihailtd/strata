@@ -37,6 +37,7 @@ dependencies = [
     "pgvector>=0.5.0",
     "deepseek-harness-sdk",
     "runtime-common",
+    "marimo[recommended]>=0.24.2",
 ]
 
 [project.scripts]

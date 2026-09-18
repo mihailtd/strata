@@ -1,0 +1,85 @@
+{
+  "hardware": "AMD Radeon RX 7900 XTX (24GB GDDR6, gfx1100)",
+  "model": "Qwen 3.5 4B bf16 (real, byte-identical weights across all 3 arms)",
+  "avg_llamacpp_tok_s": 72.73,
+  "avg_ollama_tok_s": 73.05,
+  "avg_runtime_next_tok_s": 82.89,
+  "runtime_next_speedup_vs_llamacpp": "1.14x",
+  "runtime_next_speedup_vs_ollama": "1.13x",
+  "avg_ttft_ms": {
+    "llamacpp": 108.0,
+    "ollama": 115.0,
+    "runtime_next": 96.4
+  },
+  "tasks": {
+    "llamacpp": [
+      {
+        "task_id": "fastapi_pgvector_crud",
+        "name": "FastAPI Asyncpg & pgvector CRUD Service",
+        "tokens": 350,
+        "ttft_ms": 128.6,
+        "tok_per_sec": 73.19
+      },
+      {
+        "task_id": "postgres_hnsw_migration",
+        "name": "PostgreSQL 17 HNSW Migration & Tuning",
+        "tokens": 348,
+        "ttft_ms": 97.0,
+        "tok_per_sec": 72.49
+      },
+      {
+        "task_id": "duckdb_parquet_analytics",
+        "name": "DuckDB Parquet Window Analytics Pipeline",
+        "tokens": 348,
+        "ttft_ms": 98.5,
+        "tok_per_sec": 72.5
+      }
+    ],
+    "ollama": [
+      {
+        "task_id": "fastapi_pgvector_crud",
+        "name": "FastAPI Asyncpg & pgvector CRUD Service",
+        "tokens": 350,
+        "ttft_ms": 135.8,
+        "tok_per_sec": 73.36
+      },
+      {
+        "task_id": "postgres_hnsw_migration",
+        "name": "PostgreSQL 17 HNSW Migration & Tuning",
+        "tokens": 348,
+        "ttft_ms": 104.8,
+        "tok_per_sec": 73.23
+      },
+      {
+        "task_id": "duckdb_parquet_analytics",
+        "name": "DuckDB Parquet Window Analytics Pipeline",
+        "tokens": 348,
+        "ttft_ms": 104.4,
+        "tok_per_sec": 72.57
+      }
+    ],
+    "runtime_next": [
+      {
+        "task_id": "fastapi_pgvector_crud",
+        "name": "FastAPI Asyncpg & pgvector CRUD Service",
+        "tokens": 350,
+        "ttft_ms": 79.6,
+        "tok_per_sec": 83.14
+      },
+      {
+        "task_id": "postgres_hnsw_migration",
+        "name": "PostgreSQL 17 HNSW Migration & Tuning",
+        "tokens": 350,
+        "ttft_ms": 105.5,
+        "tok_per_sec": 83.17
+      },
+      {
+        "task_id": "duckdb_parquet_analytics",
+        "name": "DuckDB Parquet Window Analytics Pipeline",
+        "tokens": 350,
+        "ttft_ms": 104.1,
+        "tok_per_sec": 82.37
+      }
+    ]
+  }
+}

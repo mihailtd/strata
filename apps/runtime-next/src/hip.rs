@@ -86,6 +86,23 @@ mod ffi {
             kind: c_int,
             stream: *mut c_void,
         ) -> c_int;
+        // §95: real HTTP server -- `DecodeState::reset()` needs to zero
+        // GDN's `conv_state`/`recurrent_state` between independent
+        // requests (real read-modify-write state, unlike the KV caches,
+        // which never need zeroing -- see that method's own doc comment).
+        pub fn hipMemset(dst: *mut c_void, value: c_int, size_bytes: usize) -> c_int;
+        // §117: real, STREAM-ORDERED, async zero-fill -- `hipMemset`
+        // above is synchronous and always targets the legacy default
+        // stream, both of which make it real, confirmed-incompatible with
+        // HIP Graph capture (capture only records async, stream-ordered
+        // operations on the SPECIFIC stream being captured). Needed for
+        // bucketed prefill's own real zero-pad step to be capturable.
+        pub fn hipMemsetAsync(dst: *mut c_void, value: c_int, size_bytes: usize, stream: *mut c_void) -> c_int;
+        // §106: real free/total VRAM query -- used to fail loudly before a
+        // model load that won't fit (27B/MoE quantized weights are large
+        // enough on this 24GB card that "try it and see" risks an opaque
+        // mid-load OOM instead of a clear, actionable error).
+        pub fn hipMemGetInfo(free: *mut usize, total: *mut usize) -> c_int;
     }
 
     // hipMemcpyKind (driver_types.h) -- the two directions this crate uses.
@@ -142,6 +159,21 @@ pub fn device_count() -> Result<i32, HipError> {
     let code = unsafe { ffi::hipGetDeviceCount(&mut count) };
     HipError::from_code(code)?;
     Ok(count)
+}
+
+/// Real free/total VRAM on the currently-selected device, in bytes
+/// (`hipMemGetInfo`) -- not estimated from the model's own weight sizes,
+/// since other processes (or a prior load in the same process) can hold
+/// real allocations this crate doesn't know about otherwise. Meant to be
+/// checked before a large load (27B+/MoE), not in a hot loop.
+pub fn mem_info() -> Result<(usize, usize), HipError> {
+    let mut free: usize = 0;
+    let mut total: usize = 0;
+    // SAFETY: `free`/`total` are valid, aligned, writable `usize`s for the
+    // duration of this call; HIP writes exactly one `usize` through each.
+    let code = unsafe { ffi::hipMemGetInfo(&mut free, &mut total) };
+    HipError::from_code(code)?;
+    Ok((free, total))
 }
 
 /// Selects the active HIP device for the calling thread's subsequent HIP
@@ -283,6 +315,20 @@ impl<T: Copy> DeviceBuffer<T> {
         unsafe { (self.ptr as *const T).add(elem_offset) as *const c_void }
     }
 
+    /// Mutable counterpart of `as_device_ptr_at` -- §96: a batched prefill
+    /// chunk's per-token inner loops (rope/kv_cache_append/attention_decode/
+    /// causal_conv1d_update/gdn_gate_beta/gdn_recurrent_decode) each write
+    /// one row's worth of a `[T, dim]` scratch buffer per iteration; this is
+    /// that write target.
+    pub fn as_device_ptr_at_mut(&mut self, elem_offset: usize) -> *mut c_void {
+        debug_assert!(
+            elem_offset <= self.len,
+            "as_device_ptr_at_mut: offset {elem_offset} out of bounds for length {}",
+            self.len
+        );
+        unsafe { (self.ptr as *mut T).add(elem_offset) as *mut c_void }
+    }
+
     fn byte_len(&self) -> usize {
         self.len * std::mem::size_of::<T>()
     }
@@ -313,6 +359,63 @@ impl<T: Copy> DeviceBuffer<T> {
         HipError::from_code(code)
     }
 
+    /// §96: copies `host_data` into the FIRST `host_data.len()` elements of
+    /// this buffer -- `host_data.len()` must be `<= self.len()` (not equal,
+    /// unlike `copy_from_host`). Needed for `PrefillScratch`'s
+    /// `token_ids_dev`/`position_buf`, allocated once at the fixed
+    /// `MAX_PREFILL_CHUNK` capacity but written with real, varying-length
+    /// chunk data (a real prompt is essentially never exactly
+    /// `MAX_PREFILL_CHUNK` tokens long) -- `copy_from_host`'s exact-length
+    /// check exists specifically to catch accidental short/long writes
+    /// where a full-buffer copy really was intended; this method exists for
+    /// the genuinely different case where a partial write is the real,
+    /// correct intent.
+    pub fn copy_from_host_prefix(&mut self, host_data: &[T]) -> Result<(), HipError> {
+        assert!(
+            host_data.len() <= self.len,
+            "DeviceBuffer::copy_from_host_prefix: {} host elements exceed device capacity {}",
+            host_data.len(),
+            self.len
+        );
+        let byte_len = host_data.len() * std::mem::size_of::<T>();
+        // SAFETY: `self.ptr` is a live `hipMalloc`'d allocation of at least
+        // `self.byte_len()` bytes, and `byte_len <= self.byte_len()` by the
+        // assert above; `host_data` is a valid, readable slice of exactly
+        // `byte_len` bytes for `T: Copy`. Direction is host->device.
+        let code = unsafe {
+            ffi::hipMemcpy(
+                self.ptr,
+                host_data.as_ptr() as *const c_void,
+                byte_len,
+                ffi::HIP_MEMCPY_HOST_TO_DEVICE,
+            )
+        };
+        HipError::from_code(code)
+    }
+
+    /// Copies another `DeviceBuffer`'s contents into this one, entirely on
+    /// the GPU (no host round-trip). `src.len()` must equal `self.len()`.
+    /// §100 (LoRA in-place weight folding): the real pristine-weight
+    /// restore step (`W_active <- W_0`) -- a device-to-device copy is the
+    /// correct primitive here (both buffers already live in VRAM; a
+    /// host round-trip would be pure waste, and per `TODO_LORA_SWAP.md`'s
+    /// own real bandwidth math, ~200x slower for a multi-GB restore).
+    pub fn copy_from_device(&mut self, src: &DeviceBuffer<T>) -> Result<(), HipError> {
+        assert_eq!(
+            src.len,
+            self.len,
+            "DeviceBuffer::copy_from_device: length mismatch ({} src vs {} dst)",
+            src.len,
+            self.len
+        );
+        // SAFETY: both `self.ptr` and `src.ptr` are live `hipMalloc`'d
+        // allocations of at least `self.byte_len()` bytes (equal lengths
+        // checked above); `hipMemcpy` with `HIP_MEMCPY_DEVICE_TO_DEVICE`
+        // is a well-defined GPU-to-GPU copy for any `T: Copy`.
+        let code = unsafe { ffi::hipMemcpy(self.ptr, src.ptr as *const c_void, self.byte_len(), ffi::HIP_MEMCPY_DEVICE_TO_DEVICE) };
+        HipError::from_code(code)
+    }
+
     /// Copies this buffer's contents into `host_data`. `host_data.len()`
     /// must equal `self.len()`.
     pub fn copy_to_host(&self, host_data: &mut [T]) -> Result<(), HipError> {
@@ -332,6 +435,64 @@ impl<T: Copy> DeviceBuffer<T> {
                 ffi::HIP_MEMCPY_DEVICE_TO_HOST,
             )
         };
+        HipError::from_code(code)
+    }
+
+    /// Zeroes this buffer's entire contents in place, synchronously.
+    /// §95: `DecodeState::reset()` uses this to clear GDN's real
+    /// read-modify-write recurrent state between independent HTTP
+    /// requests -- unlike a host-side zero `Vec` + `copy_from_host`, this
+    /// never touches host memory at all.
+    pub fn fill_zero(&mut self) -> Result<(), HipError> {
+        // SAFETY: `self.ptr` is a live `hipMalloc`'d allocation of at least
+        // `self.byte_len()` bytes; `hipMemset` writes exactly that many
+        // bytes to the single byte value 0, a well-defined operation for
+        // any `T: Copy` (all-zero-bytes is the additive identity for both
+        // `f32` and `u16`-as-bf16-bits, the only element types this crate
+        // ever zeroes).
+        let code = unsafe { ffi::hipMemset(self.ptr, 0, self.byte_len()) };
+        HipError::from_code(code)
+    }
+
+    /// Zeroes only the TAIL of this buffer, `[elem_offset, self.len())`,
+    /// synchronously. §100 (chunked GDN prefill): real chunk padding --
+    /// the last chunk of a `num_tokens` not evenly divisible by
+    /// `GDN_CHUNK_SIZE` needs its `[num_tokens, padded_len)` tail zeroed
+    /// (matching the real reference's own `F.pad(..., 0)`) so the fake
+    /// padding positions become pure no-op identity steps (zero
+    /// key/value/beta, zero log-decay) instead of leaking stale data from
+    /// a previous call into this call's real recurrent-state update.
+    pub fn fill_zero_from(&mut self, elem_offset: usize) -> Result<(), HipError> {
+        debug_assert!(
+            elem_offset <= self.len,
+            "fill_zero_from: offset {elem_offset} out of bounds for length {}",
+            self.len
+        );
+        let byte_offset = elem_offset * std::mem::size_of::<T>();
+        let remaining_bytes = self.byte_len() - byte_offset;
+        // SAFETY: same reasoning as `fill_zero`, restricted to the real
+        // in-bounds sub-range `[elem_offset, self.len())` (checked above).
+        let code = unsafe { ffi::hipMemset((self.ptr as *mut u8).add(byte_offset) as *mut c_void, 0, remaining_bytes) };
+        HipError::from_code(code)
+    }
+
+    /// §117: real, STREAM-ORDERED async counterpart of `fill_zero_from`
+    /// above -- same real zeroing semantics (`[elem_offset, self.len())`),
+    /// queued on the given real `stream` via `hipMemsetAsync` instead of
+    /// blocking the host on the legacy default stream. The one real
+    /// difference that matters: this IS capturable into a HIP Graph
+    /// (`fill_zero_from`'s own `hipMemset` is not -- see that FFI decl's
+    /// own doc comment).
+    pub fn fill_zero_from_async(&mut self, elem_offset: usize, stream: *mut c_void) -> Result<(), HipError> {
+        debug_assert!(
+            elem_offset <= self.len,
+            "fill_zero_from_async: offset {elem_offset} out of bounds for length {}",
+            self.len
+        );
+        let byte_offset = elem_offset * std::mem::size_of::<T>();
+        let remaining_bytes = self.byte_len() - byte_offset;
+        // SAFETY: same reasoning as `fill_zero_from` above.
+        let code = unsafe { ffi::hipMemsetAsync((self.ptr as *mut u8).add(byte_offset) as *mut c_void, 0, remaining_bytes, stream) };
         HipError::from_code(code)
     }
 
@@ -505,6 +666,39 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Real test: queries actual free/total VRAM, sanity-checks the
+    /// relationship (free <= total, total roughly matches this card's real
+    /// 24GB), then allocates a real, sizeable buffer and confirms free
+    /// VRAM actually DROPS by roughly that amount -- not just that the
+    /// call returns success, but that it reflects a real, observable
+    /// change in device state.
+    #[test]
+    fn real_mem_info_reflects_a_real_allocation() {
+        if device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let (free_before, total) = mem_info().expect("hipMemGetInfo failed");
+        assert!(free_before <= total, "free ({free_before}) must not exceed total ({total})");
+        assert!(
+            total > 8 * 1024 * 1024 * 1024,
+            "total VRAM ({total} bytes) implausibly small for a real discrete GPU"
+        );
+
+        let alloc_bytes = 512 * 1024 * 1024usize; // 512MB, big enough to not be noise
+        let buf: DeviceBuffer<u8> = DeviceBuffer::alloc(alloc_bytes).expect("hipMalloc failed");
+        let (free_after, _) = mem_info().expect("hipMemGetInfo failed (after alloc)");
+
+        let dropped = free_before.saturating_sub(free_after);
+        assert!(
+            dropped >= alloc_bytes / 2,
+            "free VRAM only dropped by {dropped} bytes after a real {alloc_bytes}-byte allocation -- mem_info doesn't seem to reflect real device state"
+        );
+        drop(buf);
     }
 
     /// Real round-trip test: allocates real GPU memory, copies real data to

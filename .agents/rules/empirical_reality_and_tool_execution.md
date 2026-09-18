@@ -5,6 +5,7 @@
 2. **Complete & Pure Implementations**: Build complete, authentic implementations or do not build them at all. Never create mock workarounds, stub files, or synthetic placeholders that pretend to implement functionality.
 3. **No Deceptive Naming or Facades**: Never wrap third-party software (e.g., Ollama, HuggingFace, stock llama.cpp) and label it as a custom proprietary engine, fleet, or novelty. Third-party baselines must be called exactly what they are.
 4. **Verifiable Hardware Telemetry**: All throughput, latency, VRAM, and accuracy numbers must originate from live subprocess telemetry on physical hardware. Never fabricate or hardcode performance numbers.
+5. **Labor-Neutral Scoping vs. Hardware Time**: Never evaluate or describe engineering work in terms of calendar days, developer hours of effort, or engineer headcount. However, **GPU execution time is critical**: benchmark duration, GPU busy time, and device lock duration must always be anticipated, measured, and reported. Scope and trade-offs are strictly evaluated by Technical Complexity, Risk, Hardware Execution Cost, Return, and Probability of Success.
 
 ## Mandatory 4-Stage Research & Experimentation Pipeline
 
@@ -60,3 +61,29 @@ Whenever designing, optimizing, or validating a new feature, kernel, or architec
 | **Hardcoded Performance Metrics** | Returning synthetic tok/s or latency numbers without running a live hardware timer produces fictitious claims. | Measure elapsed wall-clock time (`time.perf_counter()`) and token counts from live inference runs on the GPU. |
 | **Mock Inference / Stubs** | Using `time.sleep()` or canned strings to simulate model output or kernel execution hides memory leaks, crashes, and real bottlenecks. | Always invoke the real engine (`Native27BEngine`, compiled binary, or live server) with real tensors. |
 | **"Temporary" Workarounds Disguised as Solutions** | Leaving partial stubs with comments claiming future implementation while reporting the task as "done". | Either implement the complete, pure solution or explicitly document the limitation as unbuilt work. |
+| **Human Labor & Calendar Estimates** | Framing technical tasks by calendar days, weeks, developer hours, or team size ("will take 3 days", "needs 2 engineers"). These abstractions are subjective, noisy, and technically irrelevant. *(Note: Physical GPU benchmark runtime and device occupancy duration are hardware metrics, not labor estimates, and remain strictly required).* | Frame work strictly by: (1) Technical Complexity, (2) Technical & Numerical Risk, (3) Hardware/GPU Execution Budget, (4) Measurable Return / Payoff, and (5) Probability of Success. |
+
+---
+
+## 6. Technical Scoping & Decision Framework (Complexity & Risk vs. Return)
+
+When scoping features, writing architectural proposals, or comparing alternatives, evaluate options strictly across the following five technical dimensions:
+
+1. **Technical Complexity**:
+   - Lines of code and architectural surface area.
+   - Algorithmic structure (e.g., standard GEMM reuse vs. custom triangular solvers).
+   - Memory hierarchy requirements (LDS allocation, VGPR/register pressure, cache-line alignment).
+2. **Technical & Numerical Risk**:
+   - Sensitivity to floating-point precision (fp32 vs. bf16 rounding accumulation).
+   - Potential for state corruption (read-modify-write recurrent state vs. immutable buffers).
+   - Risk of regression against existing verified test suites.
+3. **Hardware & GPU Execution Budget**:
+   - Anticipated benchmark execution duration (e.g., 30 seconds vs. 15 minutes).
+   - GPU occupancy and lock duration on the single 24GB VRAM device.
+4. **Expected Return**:
+   - Quantified performance ceiling (e.g., eliminating a 246 ms sequential bottleneck vs. an 85 ms attention loop).
+   - Strategic functional capabilities unlocked (e.g., serving specialized domain LoRA adapters vs. vanilla base model only).
+5. **Probability of Success**:
+   - Mathematical soundness of the closed-form formulation.
+   - Availability of ground-truth oracle references (e.g., PyTorch reference implementations) for bit-identical validation.
+

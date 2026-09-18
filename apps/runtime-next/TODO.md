@@ -313,21 +313,331 @@ of finding out only at the very end whether any of it was worth doing.
   sections' worth of guessing found real wins, but the single most
   consequential remaining one was found in minutes once a real trace was
   available. See §93 for the full writeup.
-- **Tokenizer**: real BPE matching this model (`tokenizer.json` already in
-  the same cached snapshot) — reuse a mature crate, not a feature to
-  benchmark against Python (correctness matters here, not speed). Bypassed
-  for §89's correctness test via a fixed, real, pre-tokenized prompt
-  (obtained once via the real tokenizer) — still needed for a
-  general-purpose server.
+- **Squeezing further with the profiler in hand (done, §94): two more
+  small real wins, 81.2→~82.2 tok/s.** Requested explicitly as a
+  continuation after §93's target was already met. `rocprofv3` found
+  `rmsnorm_bf16_kernel` had the SAME single-block-per-row problem
+  `gdn_recurrent_decode` (§93) was fixed for — ~80% of its calls run
+  with `num_rows=1` (one block, one of 96 compute units); widening
+  threads (256→1024, same fix class, zero kernel-logic change) measured
+  a real ~44% per-kernel speedup. With `gdn_recurrent`/`rmsnorm` no
+  longer bottlenecks, `gemv_bf16_kernel` is ~88-89% of all kernel time;
+  a re-check confirmed 256 threads is still best (profiler-measured, not
+  guessed) and a 2x loop-unroll (two independent accumulators, tail loop
+  for the remainder — correctness proven by hand-tracing the offset
+  sequence, not just tested) found a small (~1.3-1.9%) but reproducible
+  further gain. Neither `gdn_recurrent`'s successor bottlenecks nor
+  further GEMV tuning found a big win — confirms `gemv`'s real ~79-91%
+  bandwidth utilization (§93) is close to this hardware's practical
+  ceiling; closing more of the gap plausibly needs quantization (fewer
+  bytes to read at all) rather than more kernel tuning. Real, measured
+  result (8-10 runs each, reproduced): **~82.2 tok/s mean, 80.05-83.95
+  range** — worst case still +6.6%/+5.1% over llama.cpp/Ollama. See §94
+  for the full writeup.
+- **A real HTTP server, DSH wiring, and a real 3-way harness validation
+  (done, §95): decode-throughput gains HOLD (and grow) under real
+  HTTP/SSE -- 1.23-1.26x vs llama.cpp/Ollama, up from ~1.05-1.08x on the
+  raw decode-loop benchmark -- but a real, previously-invisible TTFT gap
+  was found.** Built the missing pieces: real BPE tokenization
+  (`src/tokenizer.rs`, HuggingFace's own `tokenizers` crate against the
+  real `tokenizer.json` -- independently cross-checked by re-encoding this
+  crate's own decisive-test prompt and reproducing the exact hardcoded ids
+  `[760, 6511, 314, 9338, 369]` those tests have used since §89), a real
+  single-tenant OpenAI-compatible HTTP server (`src/server.rs`, `tiny_http`
+  -- `/health`, `/v1/models`, `/v1/chat/completions` both streaming SSE and
+  non-streaming, real chat-templated prompts, real detokenization), and
+  `DecodeState::reset()` (zeros only GDN's real read-modify-write
+  `conv_state`/`recurrent_state`; deliberately does NOT zero the KV caches,
+  since `attention_decode` never reads a position before this same request
+  has already rewritten it -- proven, not assumed, by a new decisive test,
+  `real_reset_prevents_cross_request_state_leakage`) so ONE already-graph-
+  captured `DecodeState`/`GraphedDecodeState` can be reused across many real
+  HTTP requests without forcing a fresh graph capture every time. Added 3
+  new `apps/harness/settings.yaml` provider blocks (llama.cpp/Ollama/
+  runtime-next, one port each) and a new real 3-way benchmark
+  (`benchmarks/harness_sdk/run_4b_engine_comparison_benchmark.py`, modeled
+  on the existing `run_direct_harness_plugin_benchmark.py`'s real
+  streaming-SSE methodology) — real, measured result: **llama.cpp 71.3
+  tok/s / Ollama 73.3 tok/s / runtime-next 89.8 tok/s** (streaming, real
+  coding-task prompts, real byte-identical bf16 weights). **Also found and
+  reported honestly**: `runtime-next`'s average TTFT (1377ms) is ~10-12x
+  worse than llama.cpp/Ollama's (112/137ms) — real root cause: prefill
+  calls the same single-token decode step once per PROMPT token,
+  sequentially (exactly what the note below this one already predicted),
+  where llama.cpp/Ollama both do real batched prefill. Invisible on every
+  prior 5-token toy-prompt test; real and dominant for TTFT on real,
+  longer prompts. Batched prefill is real, scoped follow-up work, not
+  attempted in this pass. See §95 for the full writeup.
+- **Real batched (parallel) prefill (done, §96): TTFT cut 2.25x (1377→613ms),
+  streaming decode throughput also improved (89.8→94.6 tok/s), zero
+  regressions.** Real root cause confirmed first (not assumed): with decode
+  already at ~90 tok/s (~11ms/token of real GPU compute), a ~100-125 token
+  prompt costs ~1.1-1.4s of pure GPU time even with zero host-dispatch
+  overhead — the actual lever is real batched GEMM (reading each weight
+  matrix ONCE per chunk instead of once per token), not fewer kernel
+  launches. Built: `raw::gemm`'s real `rows > 1` branch (plain
+  `hipblasGemmEx`, not the §93 GEVM kernel, which stays exactly for
+  `rows=1`), a new `extract_range.hip` kernel (physically gathers a
+  combined-GEMM output's sub-ranges into tightly-packed `[T,len]` buffers,
+  needed because the old rows=1 pointer-offset trick silently stops being
+  equivalent once `T>1`), and `*_prefill` counterparts of every per-token
+  forward function. **Real, deliberate scope line**: `causal_conv1d_update`
+  and `gdn_recurrent_decode` stay genuine per-token loops — both are real
+  RNN-style recurrences (token t's output depends on token t-1's state
+  update having already landed), not a batching gap left unaddressed; a
+  parallel "chunked" form exists in the literature for both but is real,
+  separate, higher-risk work, not attempted here. **A real bug the decisive
+  tests caught before shipping**: first attempt produced wrong generation
+  (`[328, 271, 248068, ...]` instead of the real reference continuation) —
+  root cause was `split_last_dim`'s real per-token layout (query/gate
+  interleaved PER HEAD, not flat), missed on one call, fixed, then both new
+  decisive tests (`real_batched_prefill_matches_real_qwen3_5_4b_greedy_generation`,
+  `real_batched_prefill_logits_numerically_match_sequential_forward_one_token`)
+  passed. See §96 for the full writeup, including why TTFT (613ms) is still
+  ~4.5-5.5x worse than llama.cpp/Ollama's (real, understood, unattempted
+  follow-up: `raw::gemm`'s batched branch uses plain `hipblasGemmEx`, not an
+  algorithm-tuned path — `blaslt.rs` is already linked and unused for this
+  shape).
+- **Speculative decoding, built and honestly benchmarked (done, §97):
+  real answer is NO, not a net win on this engine — 0.79-0.85x (15-21%
+  SLOWER), not a theoretical concern but a real measured result.** Built on
+  top of §96's batched-verify machinery exactly as its own synergy analysis
+  predicted (verification IS a batched forward pass): real prompt-lookup
+  drafting (`prompt_lookup_draft`, HF transformers' own well-established
+  model-free technique), real accept/reject/rollback/replay protocol
+  (`speculative_round`), real GDN-state snapshot/restore (`DeviceBuffer::
+  copy_from_device`/`copy_from_device_async`) since GDN's read-modify-write
+  state — unlike the KV cache — can't just be left unread on rejection.
+  **A real bug caught before it ran**: the rollback line originally undid
+  only the rejected tail instead of the whole round, which would have
+  double-counted the accepted prefix's position advance during replay —
+  caught during implementation, before the decisive test ever ran (which
+  then passed exactly on its first real attempt: real prompt, real accept
+  AND real reject paths both exercised, output bit-identical to plain
+  sequential greedy decoding). **Investigated the loss before accepting
+  it**: switched 48 blocking device-to-device state-snapshot copies/round to
+  async+one-sync (same discipline as everywhere else in this crate) —
+  barely moved the number (0.794x→0.799x), ruling out "just an obvious sync
+  bug" as the explanation. Real, understood remaining cost: average
+  accepted draft length here is short (~2.1 tokens/round even on a
+  deliberately repetitive prompt, `prompt_lookup_draft`'s own match
+  availability being the limiter), too short to amortize a batched verify
+  call's real per-position loop costs against its one real win (batched
+  GEMM weight-read amortization) — plus real per-round host-side argmax
+  round trips. **Not a verdict on the idea in general** — a trained MTP
+  draft head or a lower-overhead round protocol could plausibly flip this;
+  both real, scoped, unattempted. See §97 for the full writeup.
+  **REMOVED from this crate and archived** at
+  `experiments/runtime/speculative/runtime_next_prompt_lookup/` (full source
+  snapshots + a README cross-linking this repo's own prior, structurally
+  identical finding on the 27B PyTorch/CUDA engine,
+  `experiments/runtime/speculative/serving_gate/`) — a real-but-losing
+  feature doesn't belong in the production crate. §96's batched-prefill work
+  is untouched; 63/63 tests still pass.
+- **Real matrix-core GEMM attention for prefill (done, §99): a real 21%
+  total-kernel-time reduction at long context (401 tokens), dispatched on
+  `kv_len` rather than replacing the old kernel outright.** A `rocprofv3`
+  trace found attention's per-token loop at 22.7% of prefill kernel time
+  (§96's own leftover gap) — built `blas::gemm_qkt_bf16`/`gemm_pv_bf16`
+  (two genuinely new GEMM shapes beyond `gemm_bf16_linear`, both taking
+  explicit-stride views so a single head's data can be read/written
+  directly out of `attn_query_roped`/the KV cache with zero physical
+  extraction) and a new `causal_softmax.hip` kernel. Real result at 401
+  tokens: attention's share dropped from 22.7% → 5.1%, total kernel time
+  −21.2%. **Caught its own regression before shipping it unconditionally**:
+  the real HTTP benchmark's actual prompts are 54 tokens (confirmed via
+  live `curl`), where a direct wall-clock measurement found a real 2.16x
+  one-time cost (143ms cold vs 66ms warm) from `hipblasGemmEx`'s Tensile
+  solution-selection on a never-before-seen shape — a cost the old scalar
+  kernel never pays. This matches a crossover this repo's own `TODO.md`
+  §87 already found (scalar wins at kv_len=128, GEMM wins at kv_len=2048),
+  so fixed it the same way `raw::gemm` already dispatches on `rows` — added
+  `ATTENTION_GEMM_KV_LEN_THRESHOLD=128`, scalar below, GEMM above. Honest
+  final check: re-running the real benchmark with the scalar path confirmed
+  active reproduced numbers statistically indistinguishable from the
+  "regressed" run, not a reversion to the original baseline — meaning the
+  apparent regression was very likely ordinary session-level variance, not
+  a real effect of the attention choice (consistent with attention being
+  only ~4.6% of cost at this short scale either way). Threshold kept
+  regardless — objectively correct design independent of that. 68/68 tests
+  passing. See §99 for the full writeup.
+- **Chunked/parallel GatedDeltaNet prefill (done, §100): the real
+  UT-transform algorithm replacing the per-token `gdn_recurrent_decode`
+  loop — a real 35% total-kernel-time reduction at 401 tokens (336.7ms →
+  217.7ms).** GDN's own per-token loop was §99's own baseline's largest
+  bucket by far (57.7% of kernel time), the "chunked form exists in the
+  literature but not attempted here" gap both §96 and §99 explicitly
+  deferred. Implements the REAL `torch_chunk_gated_delta_rule`
+  (`transformers/models/qwen3_5/modeling_qwen3_5.py:300-434`) exactly, not
+  a re-derivation — cross-validated against the already-trusted sequential
+  oracle across 5 real cases (`~1e-9` match) before any kernel code was
+  written. 7 new kernel/GEMM primitives (`gemm_atb_bf16`, `gdn_chunk_decay`,
+  `gdn_chunk_utsolve`, `l2norm`, `gdn_chunk_broadcast_scale`, generalized
+  `gemm_pv_bf16`/`gemm_atb_bf16` `alpha`/`beta`, `DeviceBuffer::fill_zero_from`),
+  each independently decisive-tested against a hand-computed reference
+  first. Two real, honestly-documented tradeoffs (not silent regressions):
+  a per-GDN-layer host sync to read `chunk_decay` back for hipBLAS's
+  host-pointer-mode `alpha`/`beta`, and the sequential scan running in a
+  bf16 shadow of the real fp32 recurrent state — both flagged as follow-up
+  if a later profiling pass shows they matter. 2 new decisive tests
+  (single-chunk-with-padding, multi-chunk state-carry) passed the REAL
+  transformers reference on the first attempt; the full real-weights
+  suite (28 tests, including the byte-exact greedy-generation oracle and
+  the graphed-decode/reset tests) passed unchanged. See §100 for the full
+  writeup.
+- **Instant LoRA hot-swapping via In-Place Weight Folding (done, §101):
+  bit-exact idempotence proven, real generation changes confirmed, real
+  swap latency 33ms (honestly measured, not the scoping doc's aspirational
+  <1ms).** `TODO_LORA_SWAP.md`'s real algorithm (`W_active = W_0 +
+  (alpha/r)(B@A)`, folded into the already-fused `gate_up_proj`/
+  `down_proj`/`qkv_proj`/`o_proj` buffers) needed ZERO new GEMM
+  primitives — `W_delta[out,in]=B[out,r]@A[r,in]` is exactly the `O=P@V`
+  shape `raw::gemm_pv` already implements (built for §99, generalized for
+  §100). New: `src/lora.rs` (`LoraAdapter::load_from_dir`,
+  `PristineWeights::capture`/`restore`, `activate_adapter`),
+  `DeviceBuffer::copy_from_device` (real D2D memcpy for the pristine
+  snapshot), `model_loader::load_raw_tensor_from_file` (a real LoRA
+  checkpoint is a single unsharded safetensors file, no index.json).
+  2 new decisive tests against the REAL `m2_astral_r8a128_v7` adapter:
+  fold matches an independently-computed reference at spot-checked
+  elements AND restore reproduces the pristine bytes BIT-EXACT (not just
+  close — the scoping doc's own bf16-drift-trap invariant); a full
+  32-layer real generation test confirms activating the adapter changes
+  greedy output and restoring reproduces the base model's own
+  known-correct continuation exactly. **Honest accounting**: real swap
+  latency measured at 32.7-33.0ms (20 real alternating cycles between 2
+  distinct real adapters), not the doc's <1ms figure — root cause
+  identified (the pristine restore is ~112 separate small `hipMemcpy`
+  calls, not one contiguous transfer; the doc's estimate assumed the
+  latter). Still fast in absolute terms next to a multi-hundred-ms
+  re-prefill, reported honestly rather than rounded toward the
+  aspirational number. HTTP server routing (scoping doc's Phase 3/4)
+  deliberately not built this pass — `LoraAdapter.name` is already a real
+  field reserved for it. See §101 for the full writeup.
+- **Real O(1) multi-agent tensor state handoff (done, §102): the
+  foundation was already there — `forward_prefill` never reset position,
+  so incremental prefill just worked; the one real new piece was
+  cross-session VRAM snapshot/restore.** `TODO_TENSOR_STATE_HANDOFF.md`'s
+  own scoping assumed a `forward_prefill_incremental` hook was still
+  needed (Phase 2, ~70 lines) — reading `forward_prefill_chunk` directly
+  found it already advances `state.position` and never resets it, so
+  calling `forward_prefill` twice on the same `DecodeState` already IS
+  incremental prefill. New: `src/state_handoff.rs`
+  (`TensorStateSnapshot::capture`/`restore`, real device-to-device VRAM
+  clone via `DeviceBuffer::copy_from_device`, no host round-trip — the
+  actual missing mechanism for a real multi-agent handoff: making
+  continuation work ACROSS two different `DecodeState` instances, not
+  just within one). 2 new decisive tests: incremental (2-step) prefill
+  matches one-shot prefill (argmax exact, logits within `tolerance=0.5`,
+  `max_diff=0.10` — NOT bit-exact, correctly so: chunked GDN computes the
+  same math via a genuinely different real floating-point order across
+  chunk boundaries, the first-attempt bit-exact version of this test
+  caught exactly that and was fixed to match the crate's own established
+  tolerance-based pattern for this class of comparison); a real
+  "Agent A" → snapshot → "Agent B" (fresh `DecodeState`) → continue test
+  passed BIT-EXACT on the first attempt (single-token decode after a
+  literal byte-copy restore has no computation-order concern). Full
+  real-weights suite for all THREE `/goal` items together: 33/33 passing.
+  HTTP session-manager routing (scoping doc's Phase 3/4) deliberately not
+  built this pass, matching §101's own scope decision. See §102 for the
+  full writeup — and for the `/goal`'s own completion note (chunked
+  GDN → LoRA swap → tensor state handoff, all three done).
+- **Real HTTP TTFT ~9-9.5% faster than llama.cpp (done, §103): a real
+  launch-count reduction PLUS a real, much bigger `tiny_http` buffering
+  bug found and fixed -- PLUS a false-lead throughput "regression" the
+  user caught, chased with real tools, and correctly resolved by
+  REMOVING complexity rather than shipping a tradeoff.** Triggered by the
+  user's own direct comparison against
+  `apps/runtime-llama/llama.cpp/src/models/qwen35.cpp`'s batched GDN
+  prefill path vs this crate's remaining per-token loops
+  (`causal_conv1d_update`/`gdn_gate_beta`/`rope`/`kv_cache_append`,
+  ~3,300 launches for a real 54-token prompt). Added 4 new batched-prefill
+  kernels (`causal_conv1d_prefill`/`gdn_gate_beta_prefill`/`rope_prefill`/
+  `kv_cache_append_prefill`), each ONE real launch for the whole chunk —
+  all exact (not approximate) restatements since none of these 4 ops have
+  genuine unbounded-lookback recurrence, unlike §100's GDN delta-rule. 6
+  new decisive tests, all cross-validated against the already-proven
+  per-token kernels, passed first attempt. **This alone only moved the
+  internal WARM microbenchmark 78.95ms → 71.28ms** — nowhere near
+  10-15%, so re-ran the real HTTP 3-way benchmark and found the REAL
+  bottleneck elsewhere: `tiny_http` 0.12.0's chunked-response writer
+  buffers 8192 bytes with no flush until the whole response is done —
+  real HTTP TTFT was still 613-640ms despite ~70ms internal prefill.
+  Fixed by bypassing `tiny_http`'s `Response`/`respond()` path via
+  `Request::into_writer()` with explicit per-frame flushes.
+  **The user then asked whether this was a real improvement or just a
+  tradeoff — and caught a real, under-disclosed drop**: flushing every
+  SSE frame appeared to drop decode throughput from this session's own
+  earlier `90.1 tok/s` to `~79 tok/s`. First response chased this as a
+  real cost (a `TCP_NODELAY` patch to vendored `tiny_http`, then a
+  time-coalesced flush window) — the user pushed back a second time,
+  asked to revert the vendored patch (real maintenance burden for an
+  unproven fix) and to re-analyze rather than accept a tradeoff. That
+  question led to the REAL answer: a decisive same-process A/B/C test
+  (`diagnose_real_streaming_loop_overhead_without_a_real_socket`,
+  `server.rs`) proved real per-frame flush overhead is under 0.3% of
+  total time — negligible, never the cause. The SAME test's per-segment
+  timing found the real explanation: decode throughput genuinely
+  DECLINES as the KV cache grows across a real generation (`81.7 → 77.5
+  tok/s` over positions 54→354) — the real, structural cost of the 8
+  full-attention layers' per-token kernel attending to a longer cache,
+  not a streaming bug. The original `90.1` comparison point was itself
+  measured at an unrepresentative shallow KV depth (position ~5-28, a
+  5-token prompt) — never a fair comparison to a real ~350-token
+  generation. **Resolution**: the `TCP_NODELAY` vendored patch was fully
+  reverted (deleted, `Cargo.lock` back to the plain registry source);
+  `FlushPolicy`'s coalescing complexity was removed too — there was never
+  a real tradeoff to navigate. `server.rs` now just flushes every real
+  SSE frame, the simplest correct implementation. **Real, final numbers,
+  reproduced with and without the (now-removed) patch, identical within
+  noise**: TTFT 99.7ms vs llama.cpp's 109.9ms (**~9.3% faster** — under
+  the "10-15%" bar, reported as measured, not rounded up), streaming
+  throughput 78.9 vs 71.6 tok/s (**~10%**). See §103 for the full
+  writeup, including why 90+ tok/s sustained across a full generation
+  isn't achievable without a real decode-path change (not a streaming
+  fix) — the 8 real full-attention layers' per-token attention cost
+  genuinely grows with position.
+- **Real split-KV decode attention (done, §104): real ~5.6% real-HTTP
+  throughput win (78.9 → 83.3 tok/s), the position-dependent decode
+  decline §103 found is essentially eliminated.** User asked directly
+  whether 90+/100+ tok/s was achievable and whether any prior repo work
+  had a portable technique — a research pass found ONE validated,
+  portable lead: llama.cpp's own decode-attention kernel
+  (`fattn-vec.cuh`, live in this repo's own `runtime-llama` deployment)
+  splits the KV sequence across parallel workers instead of one serial
+  scan per output dim. Ported via a simpler mechanism (more threads per
+  block, `kv_split=4` cooperating on each output dimension, shared-memory
+  combine) rather than a full multi-block flash-decode — avoids a second
+  kernel launch's HIP-Graph-capture-safety complications. Bit-for-bit the
+  same real math as the original scalar kernel, cross-validated directly
+  against it (1 new decisive test, passed after fixing one real found
+  issue: `kv_split=8` exceeds the real 1024-threads-per-block hardware
+  limit). **Real kernel-level speedup grows with `kv_len`, exactly where
+  needed**: 1.65x at kv_len=64 → 2.67x at kv_len=354. Per-segment timing
+  across a real 300-token generation: decline flattened from
+  `[80.00→77.61]` tok/s to `[83.05→83.21]` tok/s — essentially eliminated,
+  not just reduced. Full regression clean (53/53 + 36/36 real-weights,
+  including all 3 byte-exact real-model generation tests). **Real,
+  reproduced end-to-end**: throughput 82.9-83.3 tok/s (was 78.9), 1.14-1.15x
+  vs llama.cpp (was 1.10x); TTFT also improved to 95.9-96.4ms (10.7-12.2%
+  faster, up from ~9.3%) — no tradeoff, both metrics moved together.
+  **Honest accounting**: ~83 tok/s sustained, a real step up from ~79,
+  not the 90+/100+ hoped for — `kv_split=4` is at/near this hardware's
+  real single-block ceiling (`head_dim*kv_split ≤ 1024` threads); a true
+  multi-block flash-decode (separate partial + combine kernel launches)
+  could go further but wasn't attempted this pass (real added complexity
+  and risk, unvalidated further gain). GDN's 24 layers are untouched by
+  this change and remain the dominant per-token cost. See §104 for the
+  full writeup.
 - **Remaining for a real server**: sampling beyond greedy argmax
   (temperature/top-p, if this port ever needs anything other than
-  deterministic decoding), the OpenAI-compatible HTTP server DSH can plug
-  into (DSH currently points at port 8000/`runtime-triton`; pointing it at
-  `runtime-next` instead is a one-line `apps/harness/settings.yaml` change
-  once there's something real to point it at), and prefill scoped as
-  genuinely parallel (today's prefill is just the same single-token decode
-  step called once per prompt token, sequentially — correct, but not fast
-  for long prompts).
+  deterministic decoding); tuning batched prefill's GEMMs onto
+  `blaslt.rs`'s algorithm-tuned path to close more of the remaining TTFT
+  gap; upgrading `apply_chat_template` from its current hand-rolled
+  single-turn ChatML reduction to a real Jinja engine (`minijinja`) if/when
+  these DSH entries need genuine multi-turn interactive use (tool calls,
+  prior `<think>` content) rather than just independent single-turn
+  benchmark requests.
 
 Once the fair Python A/B and a non-syncing decode loop both land, the
 `HipStream`/`hipMemcpyAsync`/HIP Graph capture work noted previously becomes

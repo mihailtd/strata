@@ -82,21 +82,53 @@ impl RawTensor {
             .map(|b| u16::from_le_bytes([b[0], b[1]]))
             .collect()
     }
+
+    /// §106: reads a real I32 tensor's raw bytes as `u32`s -- used for
+    /// W4A16's packed `qweight` (8 nibbles/int32, see `quantize_w4a16.py`).
+    /// Bit-reinterpreted, not value-converted: this crate only ever does
+    /// bitwise unpacking on these values, so I32 vs U32's signedness never
+    /// matters, only the raw bit pattern (asserted below either way, not
+    /// silently accepted for a mismatched dtype).
+    pub fn to_u32_bits(&self) -> Vec<u32> {
+        assert!(
+            self.dtype == Dtype::I32 || self.dtype == Dtype::U32,
+            "to_u32_bits called on non-(u)i32 tensor {:?} (dtype {:?})",
+            self.name,
+            self.dtype
+        );
+        self.data
+            .chunks_exact(4)
+            .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+            .collect()
+    }
 }
 
 /// Locates this project's real Qwen3.5-4B snapshot on disk, via the same
 /// Hugging Face cache layout `transformers.AutoModelForCausalLM` already
-/// reads in the Python runtime. Override with `RUNTIME_NEXT_MODEL_DIR` for
-/// a different machine/cache location -- never silently falls back to a
-/// synthetic or bundled model.
+/// reads in the Python runtime. Which repo this looks for is picked by
+/// whichever `qwen35_*` size feature this binary was built with (§105) --
+/// override with `RUNTIME_NEXT_MODEL_DIR` for a different machine/cache
+/// location regardless of build; never silently falls back to a synthetic
+/// or bundled model.
 pub fn locate_model_snapshot() -> Result<PathBuf, String> {
     if let Ok(dir) = std::env::var("RUNTIME_NEXT_MODEL_DIR") {
         return Ok(PathBuf::from(dir));
     }
 
+    #[cfg(feature = "qwen35_0_8b")]
+    const REPO_DIR_NAME: &str = "models--Qwen--Qwen3.5-0.8B";
+    #[cfg(feature = "qwen35_2b")]
+    const REPO_DIR_NAME: &str = "models--Qwen--Qwen3.5-2B";
+    #[cfg(feature = "qwen35_4b")]
+    const REPO_DIR_NAME: &str = "models--Qwen--Qwen3.5-4B";
+    #[cfg(feature = "qwen35_9b")]
+    const REPO_DIR_NAME: &str = "models--Qwen--Qwen3.5-9B";
+    #[cfg(feature = "qwen35_27b")]
+    const REPO_DIR_NAME: &str = "models--Qwen--Qwen3.8-27B";
+
     let home = std::env::var("HOME").map_err(|_| "HOME not set".to_string())?;
     let base =
-        PathBuf::from(home).join(".cache/huggingface/hub/models--Qwen--Qwen3.5-4B/snapshots");
+        PathBuf::from(home).join(format!(".cache/huggingface/hub/{REPO_DIR_NAME}/snapshots"));
 
     let mut entries: Vec<_> = fs::read_dir(&base)
         .map_err(|e| format!("reading {}: {e}", base.display()))?
@@ -171,6 +203,33 @@ pub fn load_raw_tensor(snapshot_dir: &Path, tensor_name: &str) -> Result<RawTens
     })
 }
 
+/// §100 (LoRA in-place weight folding): reads one real named tensor's raw
+/// bytes out of a SINGLE unsharded `.safetensors` file directly -- a real
+/// LoRA adapter checkpoint (`adapter_model.safetensors`, ~256 small
+/// tensors, no `model.safetensors.index.json`) is a genuinely different
+/// on-disk shape from the main sharded model checkpoint `load_raw_tensor`
+/// reads, so this skips the weight-map indirection entirely rather than
+/// forcing a fake single-entry index. Same mmap + `SafeTensors::deserialize`
+/// mechanics otherwise.
+pub fn load_raw_tensor_from_file(file_path: &Path, tensor_name: &str) -> Result<RawTensor, String> {
+    let file = fs::File::open(file_path).map_err(|e| format!("opening {}: {e}", file_path.display()))?;
+    // SAFETY: same reasoning as `load_raw_tensor`'s own mmap -- a read-only
+    // adapter checkpoint this process never mutates.
+    let mmap = unsafe { memmap2::Mmap::map(&file).map_err(|e| format!("mmap {}: {e}", file_path.display()))? };
+
+    let tensors = SafeTensors::deserialize(&mmap).map_err(|e| format!("parsing safetensors header in {}: {e}", file_path.display()))?;
+    let view = tensors
+        .tensor(tensor_name)
+        .map_err(|e| format!("tensor {tensor_name:?} not found in {}: {e}", file_path.display()))?;
+
+    Ok(RawTensor {
+        name: tensor_name.to_string(),
+        shape: view.shape().to_vec(),
+        dtype: view.dtype(),
+        data: view.data().to_vec(),
+    })
+}
+
 /// Loads a real bf16 weight tensor straight onto the GPU as a
 /// `DeviceBuffer<u16>` (the bf16-bit-pattern layout every kernel in this
 /// crate expects). Convenience wrapper around `load_raw_tensor` +
@@ -187,6 +246,33 @@ pub fn load_bf16_weight(
     buf.copy_from_host(&bits)
         .map_err(|e| format!("uploading {tensor_name:?}: {e}"))?;
     Ok(buf)
+}
+
+/// §106: loads a real W4A16-quantized weight pair (`<tensor_name>.qweight`
+/// packed I32, `<tensor_name>.scales` bf16) -- written by
+/// `quantize_w4a16.py`, read through the exact same `safetensors`
+/// machinery `load_bf16_weight` uses for unquantized tensors (no new file
+/// format on this side, just new tensor names and dtypes).
+pub fn load_w4a16_weight(
+    snapshot_dir: &Path,
+    tensor_name: &str,
+) -> Result<(DeviceBuffer<u32>, DeviceBuffer<u16>), String> {
+    let qraw = load_raw_tensor(snapshot_dir, &format!("{tensor_name}.qweight"))?;
+    let sraw = load_raw_tensor(snapshot_dir, &format!("{tensor_name}.scales"))?;
+    let qbits = qraw.to_u32_bits();
+    let sbits = sraw.to_bf16_bits();
+
+    let mut qbuf: DeviceBuffer<u32> =
+        DeviceBuffer::alloc(qbits.len()).map_err(|e| format!("hipMalloc for {tensor_name:?}.qweight: {e}"))?;
+    qbuf.copy_from_host(&qbits)
+        .map_err(|e| format!("uploading {tensor_name:?}.qweight: {e}"))?;
+
+    let mut sbuf: DeviceBuffer<u16> =
+        DeviceBuffer::alloc(sbits.len()).map_err(|e| format!("hipMalloc for {tensor_name:?}.scales: {e}"))?;
+    sbuf.copy_from_host(&sbits)
+        .map_err(|e| format!("uploading {tensor_name:?}.scales: {e}"))?;
+
+    Ok((qbuf, sbuf))
 }
 
 /// §92 performance pass: loads several real bf16 weight tensors that share
@@ -231,6 +317,49 @@ pub fn load_concat_bf16_weights(
     buf.copy_from_host(&combined)
         .map_err(|e| format!("uploading concatenated {tensor_names:?}: {e}"))?;
     Ok(buf)
+}
+
+/// §106: the W4A16 analogue of `load_concat_bf16_weights` -- concatenates
+/// several real quantized weight pairs (`<name>.qweight`/`<name>.scales`,
+/// each real row-major `[out_i, in/8]`/`[out_i, in/group_size]`) along the
+/// row (`out_features`) axis into ONE combined pair, for the same real
+/// reason the bf16 version exists: this engine's combined-GEMM fusion
+/// (§92) needs `q_proj`+`k_proj`+`v_proj` etc. as one wide weight matrix.
+/// Same real per-tensor `in_features` consistency check as the bf16
+/// version, checked via each `.qweight` tensor's own real shape.
+pub fn load_concat_w4a16_weights(
+    snapshot_dir: &Path,
+    tensor_names: &[&str],
+) -> Result<(DeviceBuffer<u32>, DeviceBuffer<u16>), String> {
+    let mut combined_q: Vec<u32> = Vec::new();
+    let mut combined_s: Vec<u16> = Vec::new();
+    let mut in_features_over_8: Option<usize> = None;
+    for &name in tensor_names {
+        let qname = format!("{name}.qweight");
+        let sname = format!("{name}.scales");
+        let qraw = load_raw_tensor(snapshot_dir, &qname)?;
+        let sraw = load_raw_tensor(snapshot_dir, &sname)?;
+        assert_eq!(qraw.shape.len(), 2, "load_concat_w4a16_weights: {qname:?} is not 2D");
+        let this_k8 = qraw.shape[1];
+        match in_features_over_8 {
+            None => in_features_over_8 = Some(this_k8),
+            Some(expected) => assert_eq!(
+                this_k8, expected,
+                "load_concat_w4a16_weights: {qname:?} has in_features/8={this_k8}, expected {expected} (all concatenated tensors must share in_features)"
+            ),
+        }
+        combined_q.extend_from_slice(&qraw.to_u32_bits());
+        combined_s.extend_from_slice(&sraw.to_bf16_bits());
+    }
+    let mut qbuf: DeviceBuffer<u32> = DeviceBuffer::alloc(combined_q.len())
+        .map_err(|e| format!("hipMalloc for concatenated qweight {tensor_names:?}: {e}"))?;
+    qbuf.copy_from_host(&combined_q)
+        .map_err(|e| format!("uploading concatenated qweight {tensor_names:?}: {e}"))?;
+    let mut sbuf: DeviceBuffer<u16> = DeviceBuffer::alloc(combined_s.len())
+        .map_err(|e| format!("hipMalloc for concatenated scales {tensor_names:?}: {e}"))?;
+    sbuf.copy_from_host(&combined_s)
+        .map_err(|e| format!("uploading concatenated scales {tensor_names:?}: {e}"))?;
+    Ok((qbuf, sbuf))
 }
 
 /// Loads a real parameter tensor (bf16 OR f32, per its REAL header dtype)
