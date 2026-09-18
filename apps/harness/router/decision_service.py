@@ -1,30 +1,47 @@
 """System One Decision Service.
 
 Local high-performance microservice serving non-autoregressive decision gates
-(Choice, Noul, Score, and DSH domain routing) in sub-5ms latency.
+(Choice, Noul, Score, and DSH domain routing) in sub-10ms latency.
+
+Universal Domain-Agnostic Platform Invariant:
+Zero hardcoded domain strings or technology regexes.
+Adapters self-describe via metadata / settings.yaml and are discovered dynamically
+by the AdapterRegistry.
 """
 
 from __future__ import annotations
 
+import argparse
 import logging
 import os
 import sys
 import time
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any
 
 import torch
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from transformers import AutoTokenizer
 
+from dotenv import load_dotenv
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+if (REPO_ROOT / ".env").exists():
+    load_dotenv(REPO_ROOT / ".env")
+
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+if str(REPO_ROOT / "apps") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "apps"))
+
 from apps.factory.decision_engine.models import (
-    HARNESS_DOMAIN_DESCRIPTIONS,
-    HARNESS_DOMAINS,
     DecisionHeadConfig,
     ModernBertDecisionEngine,
     QwenDecisionEngine,
 )
+from apps.factory.decision_engine.registry import AdapterRegistry
 
 logger = logging.getLogger("decision_service")
 
@@ -33,34 +50,11 @@ _STATE: dict[str, Any] = {
     "model": None,
     "tokenizer": None,
     "device": None,
+    "device_str": None,
     "model_name": None,
+    "registry": None,
     "ready": False,
 }
-
-# -----------------------------------------------------------------------------
-# Mapping constants matching router_cli.py
-# -----------------------------------------------------------------------------
-
-DOMAIN_PROMPTS = {
-    "postgresql": "PostgreSQL 17 pgvector HNSW (<=>) & asyncpg parameterized pooling",
-    "python_web": "FastAPI @asynccontextmanager lifespan & Pydantic v2 ConfigDict",
-    "duckdb": "DuckDB vectorized SQL with native QUALIFY window analytics",
-    "astral": "Astral uv workspace & strict [tool.ruff.lint] tables",
-    "python_modern": "Python 3.12 PEP 695 type parameter syntax without legacy TypeVar",
-    "financial_planning": "Vectorized numpy Value-at-Risk (VaR) and Conditional VaR (CVaR)",
-}
-
-_STACK_MODEL_MAP: dict[frozenset[str], str] = {
-    frozenset({"postgresql"}): "qwen3.8-27b-postgresql",
-    frozenset({"python_web"}): "qwen3.8-27b-fastapi",
-    frozenset({"duckdb"}): "qwen3.8-27b-duckdb",
-    frozenset({"financial_planning"}): "qwen3.8-27b-financial",
-    frozenset({"postgresql", "python_web"}): "ornith-1.5-stack-pg-web",
-    frozenset({"postgresql", "duckdb", "python_web"}): "ornith-1.5-stack-pg-duck-web",
-}
-
-_FALLBACK_MULTI_MODEL = "qwen3.8-27b-auto"
-_FALLBACK_GENERAL_MODEL = "qwen3.8:27b"
 
 
 # -----------------------------------------------------------------------------
@@ -69,14 +63,14 @@ _FALLBACK_GENERAL_MODEL = "qwen3.8:27b"
 
 class ChoiceRequest(BaseModel):
     prompt: str
-    candidates: Optional[list[str]] = None
-    candidate_labels: Optional[list[str]] = None
-    temperature: Optional[float] = None
+    candidates: list[str] | None = None
+    candidate_labels: list[str] | None = None
+    temperature: float | None = None
 
 
 class ChoiceResponse(BaseModel):
     chosen_index: int
-    chosen_label: Optional[str]
+    chosen_label: str | None
     confidence: float
     probabilities: dict[str, float]
     latency_ms: float
@@ -85,7 +79,7 @@ class ChoiceResponse(BaseModel):
 class NoulRequest(BaseModel):
     prompt: str
     threshold: float = 0.5
-    temperature: Optional[float] = None
+    temperature: float | None = None
 
 
 class NoulResponse(BaseModel):
@@ -119,26 +113,67 @@ class RouteResponse(BaseModel):
 
 
 # -----------------------------------------------------------------------------
+# Device Resolution Helper
+# -----------------------------------------------------------------------------
+
+def resolve_device(device_str: str | None = None) -> tuple[torch.device, str]:
+    """Resolve target compute device (CPU, discrete GPU, NPU/MPS).
+
+    Defaults to CPU unless explicitly requested, preventing VRAM contention
+    with running LLM engines.
+    """
+    dev_str = device_str or os.environ.get("DECISION_DEVICE", "cpu").lower()
+
+    if dev_str in ("cuda", "cuda:0", "gpu"):
+        if torch.cuda.is_available():
+            return torch.device("cuda:0"), "cuda:0"
+        logger.warning("CUDA requested but not available. Falling back to CPU.")
+        return torch.device("cpu"), "cpu"
+
+    if dev_str.startswith("cuda:"):
+        try:
+            dev = torch.device(dev_str)
+            # Test simple allocation to avoid driver fault
+            _ = torch.zeros(1, device=dev)
+            return dev, dev_str
+        except Exception as exc:
+            logger.warning("Failed to initialize %s (%s). Falling back to CPU.", dev_str, exc)
+            return torch.device("cpu"), "cpu"
+
+    if dev_str == "mps" and hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        return torch.device("mps"), "mps"
+
+    return torch.device("cpu"), "cpu"
+
+
+# -----------------------------------------------------------------------------
 # Model Initialization Helper
 # -----------------------------------------------------------------------------
 
 def load_engine(
-    model_path: Optional[str] = None,
+    model_path: str | None = None,
     model_type: str = "modernbert",
     model_name_or_path: str = "answerdotai/ModernBERT-base",
-    device_str: Optional[str] = None,
+    device_str: str | None = None,
 ) -> None:
-    """Initialize the decision engine and tokenizer."""
-    if device_str is not None:
-        device = torch.device(device_str)
-    elif torch.cuda.is_available() and os.environ.get("CUDA_VISIBLE_DEVICES") != "":
-        device = torch.device("cuda")
-    else:
-        device = torch.device("cpu")
+    """Initialize the decision engine, tokenizer, and adapter registry."""
+    device, resolved_str = resolve_device(device_str)
+    logger.info("Initializing Decision Engine on device: %s (%s)", resolved_str, device)
 
-    logger.info("Loading Decision Engine on %s...", device)
-
-    tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, trust_remote_code=True)
+    token = os.environ.get("HF_TOKEN")
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_name_or_path,
+            trust_remote_code=True,
+            local_files_only=True,
+            token=token,
+        )
+    except Exception:
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_name_or_path,
+            trust_remote_code=True,
+            token=token,
+        )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -157,15 +192,23 @@ def load_engine(
     model.to(device)
     model.eval()
 
-    # Precompute candidate cache for the 6 DSH domains
-    model.init_harness_cache(tokenizer, device)
+    # Discover self-describing adapters dynamically
+    registry = AdapterRegistry()
+    model.init_from_registry(registry, tokenizer, device)
 
     _STATE["model"] = model
     _STATE["tokenizer"] = tokenizer
     _STATE["device"] = device
+    _STATE["device_str"] = resolved_str
     _STATE["model_name"] = model_name_or_path
+    _STATE["registry"] = registry
     _STATE["ready"] = True
-    logger.info("Decision Engine is ready.")
+    logger.info(
+        "Decision Engine ready on %s with %d registered domains: %s",
+        resolved_str,
+        len(registry.domains),
+        registry.domains,
+    )
 
 
 @asynccontextmanager
@@ -173,8 +216,11 @@ async def lifespan(app: FastAPI):
     # Lifecycle handler: auto-initialize engine on startup
     model_type = os.environ.get("DECISION_MODEL_TYPE", "modernbert")
     model_id = os.environ.get("DECISION_MODEL_ID", "answerdotai/ModernBERT-base")
-    checkpoint = os.environ.get("DECISION_CHECKPOINT", "results/models/decision_engine_v1/decision_engine.pt")
-    device_str = os.environ.get("DECISION_DEVICE", None)
+    checkpoint = os.environ.get(
+        "DECISION_CHECKPOINT",
+        "results/models/decision_engine_v1/decision_engine.pt",
+    )
+    device_str = os.environ.get("DECISION_DEVICE", "cpu")
 
     load_engine(
         model_path=checkpoint if os.path.exists(checkpoint) else None,
@@ -195,16 +241,51 @@ app = FastAPI(title="System One Decision Service", lifespan=lifespan)
 
 @app.get("/health")
 def health() -> dict[str, Any]:
+    registry: AdapterRegistry | None = _STATE.get("registry")
+    dev_str = _STATE.get("device_str", "unknown")
+    vram_mb = 0.0
+    if dev_str.startswith("cuda") and torch.cuda.is_available():
+        vram_mb = round(torch.cuda.memory_allocated(_STATE["device"]) / (1024 * 1024), 2)
+
     return {
         "status": "ok" if _STATE["ready"] else "initializing",
-        "device": str(_STATE["device"]),
-        "model_name": _STATE["model_name"],
-        "cached_domains": HARNESS_DOMAINS,
+        "device": dev_str,
+        "vram_mb": vram_mb,
+        "model_name": _STATE.get("model_name"),
+        "registered_domains": registry.domains if registry else [],
+        "stack_models": (
+            {", ".join(sorted(k)): v for k, v in registry.stack_models.items()}
+            if registry
+            else {}
+        ),
+    }
+
+
+@app.post("/registry/reload")
+def reload_registry() -> dict[str, Any]:
+    """Hot-reload adapter registry without daemon restart."""
+    if not _STATE["ready"]:
+        raise HTTPException(status_code=503, detail="Decision engine not ready")
+
+    registry: AdapterRegistry = _STATE["registry"]
+    model: ModernBertDecisionEngine = _STATE["model"]
+    tokenizer = _STATE["tokenizer"]
+    device = _STATE["device"]
+
+    registry.discover()
+    model.init_from_registry(registry, tokenizer, device)
+
+    return {
+        "status": "reloaded",
+        "domain_count": len(registry.domains),
+        "domains": registry.domains,
+        "stack_models": {", ".join(sorted(k)): v for k, v in registry.stack_models.items()},
     }
 
 
 @app.post("/decide/choice", response_model=ChoiceResponse)
 def decide_choice(req: ChoiceRequest) -> ChoiceResponse:
+    """Dynamic candidate matching over user-provided or cached candidates."""
     if not _STATE["ready"]:
         raise HTTPException(status_code=503, detail="Decision engine not ready")
 
@@ -212,12 +293,12 @@ def decide_choice(req: ChoiceRequest) -> ChoiceResponse:
     model: ModernBertDecisionEngine = _STATE["model"]
     tokenizer = _STATE["tokenizer"]
     device = _STATE["device"]
+    registry: AdapterRegistry = _STATE["registry"]
 
     inputs = tokenizer(req.prompt, return_tensors="pt").to(device)
 
     with torch.no_grad():
         if req.candidates is not None:
-            # Dynamic candidates
             cand_tokens = tokenizer(req.candidates, padding=True, return_tensors="pt").to(device)
             cand_embs = model.get_context_embedding(
                 cand_tokens["input_ids"], cand_tokens["attention_mask"]
@@ -230,8 +311,7 @@ def decide_choice(req: ChoiceRequest) -> ChoiceResponse:
                 temperature=req.temperature,
             )
         else:
-            # Pre-cached fixed harness domains
-            labels = HARNESS_DOMAINS
+            labels = model.choice_head.cached_labels or registry.domains
             choice_out = model.choice_head(
                 model.get_context_embedding(inputs["input_ids"], inputs["attention_mask"]),
                 temperature=req.temperature,
@@ -257,6 +337,7 @@ def decide_choice(req: ChoiceRequest) -> ChoiceResponse:
 
 @app.post("/decide/noul", response_model=NoulResponse)
 def decide_noul(req: NoulRequest) -> NoulResponse:
+    """Calibrated boolean verification (loop detection, test pass/fail check)."""
     if not _STATE["ready"]:
         raise HTTPException(status_code=503, detail="Decision engine not ready")
 
@@ -286,6 +367,7 @@ def decide_noul(req: NoulRequest) -> NoulResponse:
 
 @app.post("/decide/score", response_model=ScoreResponse)
 def decide_score(req: ScoreRequest) -> ScoreResponse:
+    """Continuous 0-100 rubric score."""
     if not _STATE["ready"]:
         raise HTTPException(status_code=503, detail="Decision engine not ready")
 
@@ -311,7 +393,10 @@ def decide_score(req: ScoreRequest) -> ScoreResponse:
 
 @app.post("/route", response_model=RouteResponse)
 def route_prompt(req: RouteRequest) -> RouteResponse:
-    """Specialized neural routing endpoint for DSH specialist adapters."""
+    """Universal multi-expert router with calibrated silence gating.
+
+    Routes prompt to the optimal specialist team via dynamic candidate projections.
+    """
     if not _STATE["ready"]:
         raise HTTPException(status_code=503, detail="Decision engine not ready")
 
@@ -319,6 +404,7 @@ def route_prompt(req: RouteRequest) -> RouteResponse:
     model: ModernBertDecisionEngine = _STATE["model"]
     tokenizer = _STATE["tokenizer"]
     device = _STATE["device"]
+    registry: AdapterRegistry = _STATE["registry"]
 
     inputs = tokenizer(req.prompt, return_tensors="pt").to(device)
 
@@ -327,77 +413,135 @@ def route_prompt(req: RouteRequest) -> RouteResponse:
         choice_out = model.choice_head(pooled)
 
     probs = choice_out.probabilities[0].tolist()
-    domains = HARNESS_DOMAINS
+    domains = model.choice_head.cached_labels or registry.domains
 
-    # Retain all domains with probability >= 0.15 for multi-expert fusion
-    active_weights = {domains[i]: round(probs[i], 3) for i in range(len(domains)) if probs[i] >= 0.15}
+    chosen_idx = choice_out.chosen_index[0]
+    chosen_label = domains[chosen_idx]
+    top_confidence = choice_out.confidence[0]
 
-    if not active_weights:
-        # If no single domain exceeds 0.15 threshold, fall back to general
+    # Universal Silence Gating Invariant:
+    # If general is chosen or confidence is below 0.20 (barely above uniform 1/K baseline),
+    # fall back cleanly to base model
+    if chosen_label == "general" or top_confidence < 0.20:
         lat_ms = (time.perf_counter() - t0) * 1000.0
         return RouteResponse(
             is_multi_expert=False,
             experts={"general": 1.0},
-            recommended_model_id=_FALLBACK_GENERAL_MODEL,
+            recommended_model_id=registry.fallback_general_model,
             active_domains=[],
-            system_prompt_prefix=(
-                "You are an expert autonomous software engineer writing clean modern Python code."
+            system_prompt_prefix=registry.format_system_prompt({"general": 1.0}),
+            rationale=(
+                f"Confidence below threshold ({top_confidence:.2f} < 0.20) or general intent "
+                f"({chosen_label}) — using base engine without specialist adapter interference."
             ),
-            rationale="No specialist domain exceeded confidence threshold — using general engine.",
             routing_latency_ms=round(lat_ms, 2),
         )
 
-    # Normalize weights
-    total_w = sum(active_weights.values())
-    weights = {d: round(w / total_w, 3) for d, w in active_weights.items()}
 
-    is_multi = len(weights) >= 2
-    active_set = frozenset(weights.keys())
+    # Multi-expert fusion: retain specialist domains exceeding 0.15 threshold
+    active_weights = {
+        domains[i]: round(probs[i], 3)
+        for i in range(len(domains))
+        if domains[i] != "general" and probs[i] >= 0.15
+    }
 
-    model_id = _STACK_MODEL_MAP.get(active_set)
-    if model_id is None:
-        best_overlap = 0
-        for known_set, mid in _STACK_MODEL_MAP.items():
-            overlap = len(known_set & active_set)
-            if overlap > best_overlap and known_set <= active_set:
-                best_overlap = overlap
-                model_id = mid
-        if model_id is None:
-            model_id = _FALLBACK_MULTI_MODEL if is_multi else _FALLBACK_GENERAL_MODEL
-
-    active_specs = [f"• {DOMAIN_PROMPTS[d]}" for d in weights]
-    if is_multi:
-        sys_prefix = (
-            "You are an expert autonomous software engineer with "
-            "simultaneous multi-domain mastery:\n"
-            + "\n".join(active_specs)
-            + "\nStrictly follow all modern conventions across all active domains."
+    if not active_weights:
+        lat_ms = (time.perf_counter() - t0) * 1000.0
+        return RouteResponse(
+            is_multi_expert=False,
+            experts={"general": 1.0},
+            recommended_model_id=registry.fallback_general_model,
+            active_domains=[],
+            system_prompt_prefix=registry.format_system_prompt({"general": 1.0}),
+            rationale="No specialist domain exceeded 0.15 activation threshold — using base engine.",
+            routing_latency_ms=round(lat_ms, 2),
         )
-        detected_str = ", ".join(f"{d} (γ={w:.2f})" for d, w in sorted(weights.items(), key=lambda x: -x[1]))
+
+    # Physical Energy Norm Normalization (§60)
+    # Scale each weight inversely by energy_norm to prevent loud adapters from dominating
+    scaled_weights: dict[str, float] = {}
+    for d, raw_w in active_weights.items():
+        energy = registry.adapters[d].energy_norm if d in registry.adapters else 1.0
+        scaled_weights[d] = raw_w / max(energy, 1e-4)
+
+    total_scaled = sum(scaled_weights.values())
+    normalized_weights = {d: round(w / total_scaled, 3) for d, w in scaled_weights.items()}
+
+    is_multi = len(normalized_weights) >= 2
+    sorted_domains = sorted(normalized_weights.keys())
+
+    # Dynamically resolve target model endpoint and system prompt prefix from registry
+    model_id = registry.resolve_model(sorted_domains)
+    sys_prefix = registry.format_system_prompt(normalized_weights)
+
+    if is_multi:
+        detected_str = ", ".join(
+            f"{d} (γ={w:.2f})"
+            for d, w in sorted(normalized_weights.items(), key=lambda x: -x[1])
+        )
         rationale = f"Neural multi-domain detected: {detected_str}."
     else:
-        domain = next(iter(weights))
-        sys_prefix = (
-            f"You are an expert software engineer specializing in {DOMAIN_PROMPTS[domain]}. "
-            "Apply domain conventions precisely."
-        )
-        rationale = f"Neural single domain detected: {domain} (confidence={weights[domain]:.2f})."
+        domain = next(iter(normalized_weights))
+        rationale = f"Neural single domain detected: {domain} (confidence={normalized_weights[domain]:.2f})."
 
     lat_ms = (time.perf_counter() - t0) * 1000.0
 
     return RouteResponse(
         is_multi_expert=is_multi,
-        experts=weights,
+        experts=normalized_weights,
         recommended_model_id=model_id,
-        active_domains=sorted(weights.keys()),
+        active_domains=sorted_domains,
         system_prompt_prefix=sys_prefix,
         rationale=rationale,
         routing_latency_ms=round(lat_ms, 2),
     )
 
 
-if __name__ == "__main__":
+# -----------------------------------------------------------------------------
+# Standalone CLI Entry Point
+# -----------------------------------------------------------------------------
+
+def main() -> None:
     import uvicorn
 
-    port = int(os.environ.get("DECISION_PORT", 8100))
-    uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")
+    parser = argparse.ArgumentParser(description="System One Decision Service")
+    parser.add_argument("--host", default="127.0.0.1", help="Host IP to bind to")
+    parser.add_argument("--port", type=int, default=8100, help="Port to bind to")
+    parser.add_argument(
+        "--device",
+        default=os.environ.get("DECISION_DEVICE", "cpu"),
+        help="Target device: 'cpu', 'cuda', 'cuda:0', 'mps'",
+    )
+    parser.add_argument(
+        "--checkpoint",
+        default=os.environ.get(
+            "DECISION_CHECKPOINT",
+            "results/models/decision_engine_v1/decision_engine.pt",
+        ),
+        help="Path to trained decision engine checkpoint",
+    )
+    parser.add_argument(
+        "--model-id",
+        default="answerdotai/ModernBERT-base",
+        help="Base encoder HuggingFace ID",
+    )
+    parser.add_argument(
+        "--model-type",
+        default="modernbert",
+        choices=["modernbert", "qwen"],
+        help="Model architecture",
+    )
+    args = parser.parse_args()
+
+    # Pass configuration to lifespan via environment
+    os.environ["DECISION_DEVICE"] = args.device
+    os.environ["DECISION_CHECKPOINT"] = args.checkpoint
+    os.environ["DECISION_MODEL_ID"] = args.model_id
+    os.environ["DECISION_MODEL_TYPE"] = args.model_type
+
+    print(f"Starting System One Decision Service on http://{args.host}:{args.port} [Device: {args.device}]...")
+    uvicorn.run(app, host=args.host, port=args.port, log_level="info")
+
+
+if __name__ == "__main__":
+    main()

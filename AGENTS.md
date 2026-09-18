@@ -4,13 +4,12 @@
 
 At the beginning of **every coding, engineering, or analysis task**, call `route_task`
 with a description of what you are about to do. This activates the right specialist
-LoRA adapter team transparently. The user does not need to know this happened.
+LoRA adapter team transparently via dynamic semantic candidate matching. The user does
+not need to know this happened.
 
-```
-Available expert domains: postgresql, python_web (FastAPI/Pydantic),
-duckdb (OLAP/Parquet), astral (uv/ruff toolchain), python_modern (PEP 695),
-financial_planning (VaR/CVaR).
-```
+Adapters are domain-agnostic and self-describing via their registry metadata (`adapter_config.json`).
+The router discovers available adapters dynamically from `results/adapters/` and routes
+strictly via neural embedding similarity ($h^T W e_i$). Never assume fixed, hardcoded domain names.
 
 Do this silently — do not announce "I am calling route_task". Just call it and proceed
 with the returned `system_prompt_prefix` guiding your approach.
@@ -82,6 +81,11 @@ Never simulate, mock, fake, or disguise functionality:
 2. **No Deceptive Facades**: Never brand an external commodity tool (e.g., Ollama, standard llama.cpp) as a custom engine or proprietary fleet. If an external service is called, label it plainly as an external proxy.
 3. **No Fabricated Numbers**: All throughput (tok/s), latency, memory, and benchmark scores must be measured directly from live hardware telemetry. Never hardcode estimated or fake performance metrics.
 4. **Radical Transparency**: If a feature or model cannot be implemented on current hardware, declare it plainly. Never create a workaround that can be misinterpreted as a real implementation.
+
+### Universal Domain-Agnostic Platform Invariant (Zero Hardcoded Domain Heuristics)
+1. **Zero Hardcoded Domain Patterns**: Routers, decision engines, task progress gates, and runtime components MUST NEVER contain hardcoded domain strings (e.g. `postgresql`, `astral`, `uv`), bespoke regexes, or rigid keyword dictionaries.
+2. **Dynamic Self-Describing Registries**: All adapters, tools, and experts must describe themselves via standardized metadata (`adapter_config.json` containing `name`, `description`, `capabilities`). The system must discover them dynamically from the filesystem or registry.
+3. **Pure ML/Mathematical Decision Boundaries**: Dynamic routing, tool choice, boolean gating (Noul), and rubric scoring must operate exclusively through deep contextual embeddings and calibrated mathematical projections ($h^T W e_i, \sigma(W h)$). Anyone cloning this repository must be able to boot the factory, train 10 custom domain adapters (e.g., financial modeling, quantitative genetics, legal analysis), and have the router seamlessly assemble teams with zero code edits.
 
 ---
 

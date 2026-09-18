@@ -22,22 +22,43 @@
 use crate::blas::BlasHandle;
 use crate::model::{DecodeState, GraphedDecodeState, ModelWeights, VOCAB_SIZE, argmax_sample, forward_prefill};
 use crate::sampling::{SamplingParams, make_rng, sample_from_logits};
+use crate::state_handoff::TensorStateSnapshot;
 use crate::tokenizer::ChatTokenizer;
 use crate::hip::DeviceBuffer;
 use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::io::Write;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 
+#[cfg(feature = "qwen35_0_8b")]
+const MODEL_ID: &str = "qwen3.5:0.8b-rust";
+#[cfg(feature = "qwen35_2b")]
+const MODEL_ID: &str = "qwen3.5:2b-rust";
+#[cfg(feature = "qwen35_4b")]
 const MODEL_ID: &str = "qwen3.5:4b-rust";
-/// §95 scope decision: well under `attention.hip`'s real hardware ceiling
-/// (`(head_dim=256 + max_seq_len + threads=256) * 4 <= 65536` bytes of LDS
-/// per block => `max_seq_len` must stay under ~15872), generous for real
-/// coding-task prompts+completions.
-const MAX_SEQ_LEN: usize = 4096;
+#[cfg(feature = "qwen35_9b")]
+const MODEL_ID: &str = "qwen3.5:9b-rust";
+#[cfg(feature = "qwen35_27b")]
+const MODEL_ID: &str = "qwen3.8:27b-rust";
+/// §95/§120: LDS limit on RDNA3 (64KB) allows up to ~15232 floats in
+/// `attention_decode_split.hip`. 12288 fits comfortably in 52.5KB LDS and
+/// easily handles tool-augmented prompts with >8k tokens.
+const MAX_SEQ_LEN: usize = 12288;
 const DEFAULT_MAX_TOKENS: usize = 512;
+/// §127: real, deliberate cap on concurrently-stored state-handoff
+/// snapshots. Each real snapshot is a full device-to-device clone of
+/// every GDN layer's recurrent/conv state and every attention layer's
+/// K/V cache -- real, non-trivial VRAM (roughly 180-400MB per snapshot
+/// depending on model size, measured directly from `DecodeState`'s own
+/// real per-layer buffer sizes), not something to let grow unbounded on
+/// a single-GPU server that also holds the model weights and the live
+/// `DecodeState` itself. A real, loud error when this cap is hit (see
+/// `Engine::snapshot_state`) rather than silent eviction or an
+/// out-of-memory crash.
+const MAX_SNAPSHOTS: usize = 8;
 
 fn unix_time_secs() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
@@ -78,6 +99,16 @@ struct Engine {
     /// (`Scratch`/`PrefillScratch`) rather than a fresh heap allocation
     /// every sampled token. Unused entirely on the greedy fast path.
     logits_host_scratch: Vec<u16>,
+    /// §127: real, server-side store of captured `TensorStateSnapshot`s
+    /// keyed by a caller-supplied name -- the real mechanism behind
+    /// "pause conversation A, serve other requests, resume conversation A
+    /// (or hand it to a differently-named session) with zero re-prefill".
+    /// Restoring ALWAYS writes into this same `Engine`'s own `state`
+    /// field (see `start_request`'s own doc comment for why this, and
+    /// not swapping in a second `DecodeState`, is the only safe design
+    /// given `graphed`'s captured HIP graph is tied to `state`'s exact
+    /// buffer addresses).
+    snapshots: HashMap<String, (TensorStateSnapshot, u64)>,
 }
 
 impl Engine {
@@ -101,7 +132,45 @@ impl Engine {
             sampling: SamplingParams::GREEDY,
             rng: make_rng(None),
             logits_host_scratch: vec![0u16; VOCAB_SIZE],
+            snapshots: HashMap::new(),
         })
+    }
+
+    /// §127: real, device-to-device capture of the CURRENT session's
+    /// entire mutable state (GDN recurrent/conv state, attention K/V
+    /// cache, `position`) under `name`, ready to be restored later via
+    /// `start_request`'s own `resume` parameter -- the real mechanism a
+    /// paused/handed-off session needs. Overwriting an EXISTING name is
+    /// real, intentional "upsert" semantics (never counts against
+    /// `MAX_SNAPSHOTS` since the total entry count doesn't grow); a
+    /// genuinely NEW name past the cap is a real, loud error, not silent
+    /// eviction of someone else's saved session.
+    fn snapshot_state(&mut self, name: String) -> Result<(usize, u64), String> {
+        if !self.snapshots.contains_key(&name) && self.snapshots.len() >= MAX_SNAPSHOTS {
+            return Err(format!(
+                "snapshot store is full ({MAX_SNAPSHOTS} max) -- delete an existing snapshot before creating a new one (name {name:?} is new)"
+            ));
+        }
+        let snap = TensorStateSnapshot::capture(&self.state).map_err(|e| e.to_string())?;
+        let position = self.state.position;
+        let created = unix_time_secs();
+        self.snapshots.insert(name, (snap, created));
+        Ok((position, created))
+    }
+
+    /// Real, read-only listing for a real `GET /v1/state/snapshots`
+    /// endpoint -- name, the real `position` it was captured at, and when.
+    fn list_snapshots(&self) -> Vec<(String, usize, u64)> {
+        self.snapshots
+            .iter()
+            .map(|(name, (snap, created))| (name.clone(), snap.position, *created))
+            .collect()
+    }
+
+    /// Real deletion, freeing that snapshot's real VRAM. Returns whether
+    /// a snapshot with that name actually existed.
+    fn delete_snapshot(&mut self, name: &str) -> bool {
+        self.snapshots.remove(name).is_some()
     }
 
     /// §96/§118: starts a new, independent request: resets the reused
@@ -122,12 +191,57 @@ impl Engine {
     /// overhead savings the graph capture bought. Moved to
     /// `experiments/bucketed_hip_graph_prefill/` rather than shipped; not
     /// wired in here.
-    fn start_request(&mut self, messages: &[(&str, &str)], sampling: SamplingParams, seed: Option<u64>) -> Result<usize, String> {
-        self.state.reset().map_err(|e| e.to_string())?;
+    /// §127: `resume` real, deliberate addition -- `None` is BYTE-FOR-BYTE
+    /// the pre-existing code path (reset, encode the FULL real `messages`,
+    /// prefill from position 0), zero behavior change for every existing
+    /// caller/test/benchmark that never sets it. `Some(name)` restores a
+    /// previously-captured `TensorStateSnapshot` INTO this same `Engine`'s
+    /// own `state` (never a second `DecodeState` -- see `Engine::snapshots`'
+    /// own doc comment for why that's the only safe design given
+    /// `graphed`'s captured HIP graph), then encodes and prefills ONLY the
+    /// real `messages` this call was given ON TOP of the restored state --
+    /// real incremental prefill, the same proven-correct mechanism
+    /// `state_handoff.rs`'s own `real_incremental_prefill_matches_one_shot_
+    /// prefill_numerically` established: calling `forward_prefill` again on
+    /// a non-reset `DecodeState` continues exactly as if the whole sequence
+    /// had been prefilled in one call. The real, disclosed API contract:
+    /// a caller resuming a session sends ONLY the new turn(s), never the
+    /// full history again -- `apply_chat_template`/`apply_chat_template_
+    /// with_tools` have no hidden global preamble, so re-sending old turns
+    /// would double-encode them into the KV cache, which is wrong.
+    /// Restoring does NOT consume the snapshot -- it stays available for
+    /// a later resume (real, deliberate "named checkpoint", not a
+    /// one-shot handoff token; branching/retrying from the same point is a
+    /// real, intended use).
+    fn start_request(
+        &mut self,
+        messages: &[(&str, &str)],
+        tools: Option<&[serde_json::Value]>,
+        sampling: SamplingParams,
+        seed: Option<u64>,
+        resume: Option<&str>,
+    ) -> Result<usize, String> {
+        let base_position = match resume {
+            None => {
+                self.state.reset().map_err(|e| e.to_string())?;
+                0
+            }
+            Some(name) => {
+                let (snap, _created) = self.snapshots.get(name).ok_or_else(|| format!("no snapshot named {name:?} (see GET /v1/state/snapshots for what's available)"))?;
+                snap.restore(&mut self.state).map_err(|e| e.to_string())?;
+                self.state.position
+            }
+        };
         self.sampling = sampling;
         self.rng = make_rng(seed);
-        let prompt = self.tokenizer.apply_chat_template(messages);
+        let prompt = self.tokenizer.apply_chat_template_with_tools(messages, tools);
         let prompt_ids = self.tokenizer.encode(&prompt)?;
+        if base_position + prompt_ids.len() >= MAX_SEQ_LEN {
+            return Err(format!(
+                "prompt length ({} tokens) starting from position {base_position} would exceed server context limit ({MAX_SEQ_LEN})",
+                prompt_ids.len()
+            ));
+        }
 
         // §108: the batched-GEMM quantized kernel (`w4a16_gemm_prefill`)
         // exists (real fix for §106's disclosed TTFT gap), so a quantized
@@ -217,6 +331,19 @@ struct ChatCompletionRequest {
     /// `temperature<=0.0`.
     #[serde(default)]
     seed: Option<u64>,
+    #[serde(default)]
+    tools: Option<Vec<serde_json::Value>>,
+    /// §127: real, disclosed extension (not a standard OpenAI field, same
+    /// spirit as `top_k`) -- the name of a previously-captured state
+    /// snapshot (`POST /v1/state/snapshot`) to restore before this
+    /// request's own `messages` are prefilled. Omitted means the
+    /// pre-existing behavior: reset and prefill the full `messages` from
+    /// scratch. When set, `messages` must contain ONLY the new turn(s) to
+    /// continue with -- NOT the full conversation history again (see
+    /// `Engine::start_request`'s own doc comment for why re-sending old
+    /// turns would double-encode them).
+    #[serde(default)]
+    resume: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -237,6 +364,10 @@ struct UsageInfo {
     prompt_tokens: usize,
     completion_tokens: usize,
     total_tokens: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tokens_per_second: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    generation_time_ms: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -272,6 +403,8 @@ struct ChatCompletionChunk {
     created: u64,
     model: &'static str,
     choices: Vec<ChunkChoice>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    usage: Option<UsageInfo>,
 }
 
 #[derive(Serialize)]
@@ -347,6 +480,7 @@ fn sse_frame_bytes(id: &str, delta: ChunkDelta, finish_reason: Option<&'static s
         created: unix_time_secs(),
         model: MODEL_ID,
         choices: vec![ChunkChoice { index: 0, delta, finish_reason }],
+        usage: None,
     };
     let json = serde_json::to_string(&chunk).unwrap_or_default();
     format!("data: {json}\n\n").into_bytes()
@@ -357,7 +491,12 @@ fn sse_frame_bytes(id: &str, delta: ChunkDelta, finish_reason: Option<&'static s
 /// (`diagnose_real_streaming_loop_overhead_without_a_real_socket`) shows
 /// this costs nothing worth trading TTFT for (see this section's own
 /// header doc).
-fn stream_chat_completion(mut writer: Box<dyn Write + Send>, mut engine: std::sync::MutexGuard<Engine>, max_tokens: usize) {
+fn stream_chat_completion(
+    mut writer: Box<dyn Write + Send>,
+    mut engine: std::sync::MutexGuard<Engine>,
+    prompt_tokens: usize,
+    max_tokens: usize,
+) {
     let write_result = (|| -> std::io::Result<()> {
         write!(
             writer,
@@ -371,6 +510,7 @@ fn stream_chat_completion(mut writer: Box<dyn Write + Send>, mut engine: std::sy
         let eos = engine.tokenizer.eos_token_id();
         let mut generated_ids: Vec<i32> = Vec::new();
         let mut prev_text_len = 0usize;
+        let t0 = std::time::Instant::now();
         loop {
             if generated_ids.len() >= max_tokens {
                 let frame = sse_frame_bytes(&id, ChunkDelta { role: None, content: None }, Some("length"));
@@ -399,6 +539,36 @@ fn stream_chat_completion(mut writer: Box<dyn Write + Send>, mut engine: std::sy
             let frame = sse_frame_bytes(&id, ChunkDelta { role: None, content: Some(delta_text) }, None);
             write_sse_frame(&mut *writer, &frame)?;
         }
+
+        let elapsed = t0.elapsed();
+        let elapsed_s = elapsed.as_secs_f64();
+        let tok_s = if elapsed_s > 0.0 && !generated_ids.is_empty() {
+            (generated_ids.len() as f64) / elapsed_s
+        } else {
+            0.0
+        };
+
+        // Final usage chunk (OpenAI spec: stream_options.include_usage or standard final chunk)
+        let usage_chunk = ChatCompletionChunk {
+            id: id.clone(),
+            object: "chat.completion.chunk",
+            created: unix_time_secs(),
+            model: MODEL_ID,
+            choices: vec![],
+            usage: Some(UsageInfo {
+                prompt_tokens,
+                completion_tokens: generated_ids.len(),
+                total_tokens: prompt_tokens + generated_ids.len(),
+                tokens_per_second: Some((tok_s * 100.0).round() / 100.0),
+                generation_time_ms: Some((elapsed_s * 1000.0 * 10.0).round() / 10.0),
+            }),
+        };
+        let usage_json = serde_json::to_string(&usage_chunk).unwrap_or_default();
+        let usage_frame = format!("data: {usage_json}\n\n").into_bytes();
+        write_sse_frame(&mut *writer, &usage_frame)?;
+
+        // Standard SSE completion frame
+        write_sse_frame(&mut *writer, b"data: [DONE]\n\n")?;
 
         // Real chunked-transfer-encoding terminator.
         write!(writer, "0\r\n\r\n")?;
@@ -434,6 +604,98 @@ fn handle_models(request: Request) {
         }],
     };
     let _ = request.respond(json_response(200, &body));
+}
+
+// ---------------------------------------------------------------------------
+// §127: state handoff -- real, server-side snapshot management, separate
+// from `/v1/chat/completions` itself (which only ever RESTORES a named
+// snapshot, via the `resume` field -- see `Engine::start_request`).
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct SnapshotRequest {
+    name: String,
+}
+
+#[derive(Serialize)]
+struct SnapshotResponse {
+    name: String,
+    position: usize,
+    created: u64,
+}
+
+#[derive(Serialize)]
+struct SnapshotListResponse {
+    snapshots: Vec<SnapshotResponse>,
+}
+
+fn read_json_body<T: for<'de> Deserialize<'de>>(request: &mut Request) -> Result<T, String> {
+    let mut body_str = String::new();
+    request.as_reader().read_to_string(&mut body_str).map_err(|e| format!("failed to read request body: {e}"))?;
+    serde_json::from_str(&body_str).map_err(|e| format!("invalid request JSON: {e}"))
+}
+
+fn handle_state_snapshot_create(mut request: Request, engine: &Mutex<Engine>) {
+    let req: SnapshotRequest = match read_json_body(&mut request) {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = request.respond(json_response(400, &serde_json::json!({"error": e})));
+            return;
+        }
+    };
+    let mut guard = match engine.lock() {
+        Ok(g) => g,
+        Err(e) => {
+            let _ = request.respond(json_response(500, &serde_json::json!({"error": format!("engine lock poisoned: {e}")})));
+            return;
+        }
+    };
+    match guard.snapshot_state(req.name.clone()) {
+        Ok((position, created)) => {
+            let _ = request.respond(json_response(200, &SnapshotResponse { name: req.name, position, created }));
+        }
+        Err(e) => {
+            let _ = request.respond(json_response(400, &serde_json::json!({"error": e})));
+        }
+    }
+}
+
+fn handle_state_snapshots_list(request: Request, engine: &Mutex<Engine>) {
+    let guard = match engine.lock() {
+        Ok(g) => g,
+        Err(e) => {
+            let _ = request.respond(json_response(500, &serde_json::json!({"error": format!("engine lock poisoned: {e}")})));
+            return;
+        }
+    };
+    let snapshots = guard
+        .list_snapshots()
+        .into_iter()
+        .map(|(name, position, created)| SnapshotResponse { name, position, created })
+        .collect();
+    let _ = request.respond(json_response(200, &SnapshotListResponse { snapshots }));
+}
+
+fn handle_state_snapshot_delete(mut request: Request, engine: &Mutex<Engine>) {
+    let req: SnapshotRequest = match read_json_body(&mut request) {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = request.respond(json_response(400, &serde_json::json!({"error": e})));
+            return;
+        }
+    };
+    let mut guard = match engine.lock() {
+        Ok(g) => g,
+        Err(e) => {
+            let _ = request.respond(json_response(500, &serde_json::json!({"error": format!("engine lock poisoned: {e}")})));
+            return;
+        }
+    };
+    if guard.delete_snapshot(&req.name) {
+        let _ = request.respond(json_response(200, &serde_json::json!({"deleted": req.name})));
+    } else {
+        let _ = request.respond(json_response(404, &serde_json::json!({"error": format!("no snapshot named {:?}", req.name)})));
+    }
 }
 
 /// §118: real request-level validation for the sampling contract,
@@ -489,7 +751,8 @@ fn handle_chat_completions(mut request: Request, engine: &Mutex<Engine>) {
             return;
         }
     };
-    let prompt_tokens = match guard.start_request(&messages, sampling, req.seed) {
+    let tools = req.tools.as_deref();
+    let prompt_tokens = match guard.start_request(&messages, tools, sampling, req.seed, req.resume.as_deref()) {
         Ok(n) => n,
         Err(e) => {
             let _ = request.respond(json_response(500, &serde_json::json!({"error": format!("prefill failed: {e}")})));
@@ -502,7 +765,7 @@ fn handle_chat_completions(mut request: Request, engine: &Mutex<Engine>) {
         // entirely -- see `stream_chat_completion`'s own doc comment for
         // why (that path's chunked writer buffers 8KB with no flush).
         let writer = request.into_writer();
-        stream_chat_completion(writer, guard, max_tokens);
+        stream_chat_completion(writer, guard, prompt_tokens, max_tokens);
         return;
     }
 
@@ -511,6 +774,7 @@ fn handle_chat_completions(mut request: Request, engine: &Mutex<Engine>) {
     let mut generated_ids: Vec<i32> = Vec::new();
     let eos = guard.tokenizer.eos_token_id();
     let mut finish_reason = "length";
+    let t0 = std::time::Instant::now();
     for _ in 0..max_tokens {
         let next_id = match guard.step() {
             Ok(id) => id,
@@ -525,6 +789,13 @@ fn handle_chat_completions(mut request: Request, engine: &Mutex<Engine>) {
         }
         generated_ids.push(next_id);
     }
+    let elapsed = t0.elapsed();
+    let elapsed_s = elapsed.as_secs_f64();
+    let tok_s = if elapsed_s > 0.0 && !generated_ids.is_empty() {
+        (generated_ids.len() as f64) / elapsed_s
+    } else {
+        0.0
+    };
     let content = match guard.tokenizer.decode(&generated_ids) {
         Ok(t) => t,
         Err(e) => {
@@ -546,6 +817,8 @@ fn handle_chat_completions(mut request: Request, engine: &Mutex<Engine>) {
             prompt_tokens,
             completion_tokens: generated_ids.len(),
             total_tokens: prompt_tokens + generated_ids.len(),
+            tokens_per_second: Some((tok_s * 100.0).round() / 100.0),
+            generation_time_ms: Some((elapsed_s * 1000.0 * 10.0).round() / 10.0),
         },
     };
     let _ = request.respond(json_response(200, &response_body));
@@ -568,6 +841,9 @@ pub fn run(port: u16) -> Result<(), String> {
             (Method::Get, "/health") => handle_health(request),
             (Method::Get, "/v1/models") => handle_models(request),
             (Method::Post, "/v1/chat/completions") => handle_chat_completions(request, &engine),
+            (Method::Post, "/v1/state/snapshot") => handle_state_snapshot_create(request, &engine),
+            (Method::Get, "/v1/state/snapshots") => handle_state_snapshots_list(request, &engine),
+            (Method::Delete, "/v1/state/snapshots") => handle_state_snapshot_delete(request, &engine),
             _ => {
                 let _ = request.respond(json_response(404, &serde_json::json!({"error": "not found"})));
             }
@@ -580,6 +856,160 @@ pub fn run(port: u16) -> Result<(), String> {
 mod tests {
     use super::*;
     use std::io::Cursor;
+
+    /// §127 decisive test: the real, server-level state-handoff capability
+    /// (`Engine::snapshot_state` + `start_request`'s own `resume`
+    /// parameter) must produce a BIT-EXACT identical second-turn
+    /// generation to the pre-existing, already-trusted "resend the full
+    /// conversation history" pattern every stateless OpenAI-style chat API
+    /// (including this server's own, before this feature) relies on.
+    ///
+    /// Two real two-turn conversations, same real prompt, same real model:
+    /// - "Full history" (Engine A): turn 1 via a normal `start_request`
+    ///   (`resume: None`), generate the real reply, then turn 2 via
+    ///   ANOTHER normal `start_request` that resends the ENTIRE real
+    ///   conversation so far (system/user/assistant/user) -- the real,
+    ///   only mechanism a client had for multi-turn conversations before
+    ///   this feature, and still the real ground truth this new feature
+    ///   must never silently diverge from.
+    /// - "Resumed" (Engine B): turn 1 identically, then
+    ///   `Engine::snapshot_state` captures the state right after, and
+    ///   turn 2 goes through `start_request` with `resume: Some(name)`
+    ///   and ONLY the new user turn -- the real, new, faster path this
+    ///   feature adds.
+    ///
+    /// If these ever diverge, the handoff is real but WRONG -- silently
+    /// corrupting every resumed conversation's second turn onward, the
+    /// exact class of bug this project's own §117 postmortem (a stale
+    /// HIP-Graph-captured host value) already cost real debugging time
+    /// once. This test exists to make that impossible to ship unnoticed.
+    #[test]
+    #[ignore]
+    fn real_state_handoff_snapshot_and_resume_matches_full_history_resend() {
+        if crate::hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        crate::hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let system = "You are a helpful assistant.";
+        let turn1_user = "What is the capital of France?";
+        let turn2_user = "What is its population, roughly?";
+        let turn1_reply_len = 5usize;
+        let turn2_reply_len = 5usize;
+
+        // --- Engine A: full-history resend (the real, pre-existing, still-
+        // supported path -- ground truth). Real, deliberate scoping: A is
+        // loaded, used, and DROPPED (freeing its real VRAM via
+        // `ModelWeights`/`DecodeState`'s own `Drop` impls) BEFORE B is ever
+        // loaded -- this machine may be running other real GPU workloads
+        // concurrently (this repo's own harness services), and two full
+        // model copies held live at once is real, unnecessary VRAM
+        // pressure this test doesn't need to risk.
+        let (turn1_ids, turn2_ids_a) = {
+            let mut engine_a = Engine::load().expect("real Engine::load failed (A)");
+            engine_a
+                .start_request(&[("system", system), ("user", turn1_user)], None, SamplingParams::GREEDY, None, None)
+                .expect("real start_request turn 1 failed (A)");
+            let mut turn1_ids: Vec<i32> = Vec::with_capacity(turn1_reply_len);
+            for _ in 0..turn1_reply_len {
+                turn1_ids.push(engine_a.step().expect("real step() failed (A, turn 1)"));
+            }
+            let turn1_reply_text = engine_a.tokenizer.decode(&turn1_ids).expect("real decode failed (A, turn 1)");
+            eprintln!("turn 1 reply (real, shared by both engines): {turn1_reply_text:?}");
+
+            engine_a
+                .start_request(
+                    &[("system", system), ("user", turn1_user), ("assistant", &turn1_reply_text), ("user", turn2_user)],
+                    None,
+                    SamplingParams::GREEDY,
+                    None,
+                    None,
+                )
+                .expect("real start_request turn 2 (full history) failed (A)");
+            let mut turn2_ids_a: Vec<i32> = Vec::with_capacity(turn2_reply_len);
+            for _ in 0..turn2_reply_len {
+                turn2_ids_a.push(engine_a.step().expect("real step() failed (A, turn 2)"));
+            }
+            eprintln!("turn 2 reply, full-history-resend (A): {turn2_ids_a:?}");
+            (turn1_ids, turn2_ids_a)
+            // `engine_a` dropped here -- real VRAM freed before B loads.
+        };
+
+        // --- Engine B: snapshot + resume (the real, new path). ---
+        let mut engine_b = Engine::load().expect("real Engine::load failed (B)");
+        engine_b
+            .start_request(&[("system", system), ("user", turn1_user)], None, SamplingParams::GREEDY, None, None)
+            .expect("real start_request turn 1 failed (B)");
+        let mut turn1_ids_b: Vec<i32> = Vec::with_capacity(turn1_reply_len);
+        for _ in 0..turn1_reply_len {
+            turn1_ids_b.push(engine_b.step().expect("real step() failed (B, turn 1)"));
+        }
+        assert_eq!(turn1_ids_b, turn1_ids, "turn 1 must be identical across both real engines before the handoff mechanism is even exercised");
+
+        let (snapshot_position, _created) = engine_b.snapshot_state("checkpoint".to_string()).expect("real snapshot_state failed (B)");
+        eprintln!("real snapshot captured at position {snapshot_position}");
+
+        engine_b
+            .start_request(&[("user", turn2_user)], None, SamplingParams::GREEDY, None, Some("checkpoint"))
+            .expect("real start_request turn 2 (resumed) failed (B)");
+        let mut turn2_ids_b: Vec<i32> = Vec::with_capacity(turn2_reply_len);
+        for _ in 0..turn2_reply_len {
+            turn2_ids_b.push(engine_b.step().expect("real step() failed (B, turn 2)"));
+        }
+        eprintln!("turn 2 reply, snapshot+resume (B):      {turn2_ids_b:?}");
+
+        assert_eq!(
+            turn2_ids_a, turn2_ids_b,
+            "real state-handoff (snapshot+resume) diverged from the real full-history-resend ground truth on turn 2 -- the handoff lost or corrupted real conversation state"
+        );
+
+        // Real, additional guard: the snapshot must still be usable a
+        // second time (it is a named checkpoint, not a one-shot token --
+        // see `start_request`'s own doc comment).
+        let position_after_restore = engine_b.snapshots.get("checkpoint").expect("snapshot should still exist after being resumed once").0.position;
+        assert_eq!(position_after_restore, snapshot_position, "resuming a snapshot must not mutate the stored snapshot itself");
+    }
+
+    /// §127 decisive test AND regression guard: the snapshot store's own
+    /// real cap (`MAX_SNAPSHOTS`) is enforced with a real, loud error --
+    /// never silent eviction, never an unbounded-VRAM-growth crash -- and
+    /// deleting frees a real slot for a new name.
+    #[test]
+    #[ignore]
+    fn real_snapshot_store_enforces_its_cap_and_delete_frees_a_slot() {
+        if crate::hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        crate::hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let mut engine = Engine::load().expect("real Engine::load failed");
+        engine
+            .start_request(&[("user", "hello")], None, SamplingParams::GREEDY, None, None)
+            .expect("real start_request failed");
+
+        for i in 0..MAX_SNAPSHOTS {
+            engine.snapshot_state(format!("slot-{i}")).unwrap_or_else(|e| panic!("real snapshot_state failed for slot-{i}: {e}"));
+        }
+        assert_eq!(engine.snapshots.len(), MAX_SNAPSHOTS);
+
+        let err = engine.snapshot_state("one-too-many".to_string()).expect_err("a NEW snapshot name past MAX_SNAPSHOTS must be a real, loud error, not silent eviction");
+        eprintln!("real, expected cap error: {err}");
+        assert_eq!(engine.snapshots.len(), MAX_SNAPSHOTS, "a rejected snapshot must not have been inserted");
+
+        // Overwriting an EXISTING name must still work at the cap (real
+        // upsert semantics, not blocked by the cap).
+        engine.snapshot_state("slot-0".to_string()).expect("overwriting an existing snapshot name must succeed even at the cap");
+        assert_eq!(engine.snapshots.len(), MAX_SNAPSHOTS);
+
+        assert!(engine.delete_snapshot("slot-0"), "deleting an existing snapshot must report it existed");
+        assert!(!engine.delete_snapshot("slot-0"), "deleting an already-deleted snapshot must report it did not exist");
+        assert_eq!(engine.snapshots.len(), MAX_SNAPSHOTS - 1);
+
+        engine.snapshot_state("new-after-delete".to_string()).expect("a NEW snapshot name must succeed once delete freed a real slot");
+        assert_eq!(engine.snapshots.len(), MAX_SNAPSHOTS);
+    }
 
     /// §103 decisive test AND regression guard: proves the real streaming
     /// loop's own overhead (JSON serialization, SSE frame construction, a
@@ -621,7 +1051,7 @@ mod tests {
         // A) engine.step() alone -- timed in 50-token SEGMENTS to see
         // whether cost grows with KV-cache depth/position (the real
         // suspect once B/C below show socket/JSON overhead is negligible).
-        engine.start_request(&[("system", system), ("user", user)], SamplingParams::GREEDY, None).expect("real start_request failed");
+        engine.start_request(&[("system", system), ("user", user)], None, SamplingParams::GREEDY, None, None).expect("real start_request failed");
         let t0 = std::time::Instant::now();
         let segment = 50usize;
         let mut segment_tok_s = Vec::new();
@@ -641,7 +1071,7 @@ mod tests {
         eprintln!("A per-50-token-segment tok/s (position grows left to right, starting at position 54): {segment_tok_s:.2?}");
 
         // B) + real JSON serialize + real SSE frame construction, no write.
-        engine.start_request(&[("system", system), ("user", user)], SamplingParams::GREEDY, None).expect("real start_request failed");
+        engine.start_request(&[("system", system), ("user", user)], None, SamplingParams::GREEDY, None, None).expect("real start_request failed");
         let id = completion_id();
         let mut generated_ids: Vec<i32> = Vec::new();
         let mut prev_text_len = 0usize;
@@ -661,7 +1091,7 @@ mod tests {
         // C) + a real write_sse_frame write+flush into an in-memory
         // Vec<u8> (matching the real server's own per-frame flush, minus
         // the real socket).
-        engine.start_request(&[("system", system), ("user", user)], SamplingParams::GREEDY, None).expect("real start_request failed");
+        engine.start_request(&[("system", system), ("user", user)], None, SamplingParams::GREEDY, None, None).expect("real start_request failed");
         let id = completion_id();
         let mut generated_ids: Vec<i32> = Vec::new();
         let mut prev_text_len = 0usize;
@@ -735,7 +1165,7 @@ mod tests {
         // this exact real chat template, captured directly from this
         // test's own first real run.
         let expected_greedy_prefix: [i32; 3] = [90700, 8340, 25];
-        engine.start_request(&messages, SamplingParams::GREEDY, None).expect("real start_request (greedy) failed");
+        engine.start_request(&messages, None, SamplingParams::GREEDY, None, None).expect("real start_request (greedy) failed");
         let mut greedy_ids = Vec::new();
         for _ in 0..3 {
             greedy_ids.push(engine.step().expect("real engine.step() (greedy) failed"));
@@ -749,7 +1179,7 @@ mod tests {
         // them -- matching this server's own real usage pattern).
         let sampling = SamplingParams { temperature: 0.8, top_p: 0.95, top_k: 40 };
         let run = |engine: &mut Engine| -> Vec<i32> {
-            engine.start_request(&messages, sampling, Some(20260918)).expect("real start_request (sampled) failed");
+            engine.start_request(&messages, None, sampling, Some(20260918), None).expect("real start_request (sampled) failed");
             (0..12).map(|_| engine.step().expect("real engine.step() (sampled) failed")).collect()
         };
         let run1 = run(&mut engine);
@@ -773,9 +1203,9 @@ mod tests {
         // here before this assertion was written.
         let open_ended_messages: [(&str, &str); 1] = [("user", "Write a short, creative story about a robot exploring an abandoned space station.")];
         let creative_sampling = SamplingParams { temperature: 1.2, top_p: 0.95, top_k: 40 };
-        engine.start_request(&open_ended_messages, creative_sampling, Some(1)).expect("real start_request (seed=1) failed");
+        engine.start_request(&open_ended_messages, None, creative_sampling, Some(1), None).expect("real start_request (seed=1) failed");
         let run_seed1: Vec<i32> = (0..20).map(|_| engine.step().expect("real engine.step() failed")).collect();
-        engine.start_request(&open_ended_messages, creative_sampling, Some(2)).expect("real start_request (seed=2) failed");
+        engine.start_request(&open_ended_messages, None, creative_sampling, Some(2), None).expect("real start_request (seed=2) failed");
         let run_seed2: Vec<i32> = (0..20).map(|_| engine.step().expect("real engine.step() failed")).collect();
         eprintln!("open-ended seed=1: {run_seed1:?}");
         eprintln!("open-ended seed=2: {run_seed2:?}");

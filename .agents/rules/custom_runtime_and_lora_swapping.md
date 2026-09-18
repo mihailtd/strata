@@ -71,8 +71,11 @@ Existing commodity engines execute static, quantized models with discrete, isola
    - Scribe all global memory loads into 128-bit vector bundles (`int32x4`) to achieve $\ge 70\%$ physical GDDR6 bus bandwidth saturation on AMD RDNA3 hardware.
    - Fuse Gate + Up GEMV with in-register SiLU activation to eliminate intermediate VRAM traffic.
 
-5. **Ultrafast Semantic Routing ($<30\mu\text{s}$)**:
-   - Route incoming agent steps to the optimal domain specialist manifold using an embedded Riemannian covariance classifier executing in $<30\mu\text{s}$ before the first token is emitted.
+5. **Universal Domain-Agnostic Architecture (Zero Hardcoded Domain Regexes)**:
+   - The runtime, harness, and decision engine form a universal platform applicable to ANY domain (finance, medicine, law, robotics, software).
+   - **Strict Prohibition on Bespoke Regex/Keyword Lookups**: Never ship routers or decision gates reliant on technology-specific regexes (e.g. `r"postgres"`, `r"uv"`).
+   - **Self-Describing Adapters**: Adapters in `results/adapters/` provide natural language descriptions in `adapter_config.json`. The non-autoregressive decision engine embeds these descriptions dynamically as candidates ($e_i$) and routes via calibrated matrix projections ($h^T W e_i / \sqrt{d}$).
+   - **Drop-in Extensibility**: Adding new adapters trained by `apps/factory` requires ZERO router code changes.
 
 6. **Single-Engine Isolation & Directory Separation (Single 24 GB GPU Guardrail)**:
    - On 24 GB VRAM (AMD RX 7900 XTX), multiple engines (18.2 GB `llama-server` + 15.4 GB Triton engine) CANNOT be co-resident in VRAM.

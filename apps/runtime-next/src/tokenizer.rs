@@ -89,14 +89,69 @@ impl ChatTokenizer {
     /// generation-prompt tail: `<|im_start|>assistant\n<think>\n` (this
     /// model's real default is thinking-mode ON).
     pub fn apply_chat_template(&self, messages: &[(&str, &str)]) -> String {
+        self.apply_chat_template_with_tools(messages, None)
+    }
+
+    /// One real chat message: `role` is `"system"`, `"user"`, or
+    /// `"assistant"`. When `tools` are present, injects Qwen's standard tool-calling
+    /// schema and guidance into the system prompt.
+    pub fn apply_chat_template_with_tools(
+        &self,
+        messages: &[(&str, &str)],
+        tools: Option<&[serde_json::Value]>,
+    ) -> String {
         let mut out = String::new();
+        let tools_text = if let Some(ts) = tools {
+            if !ts.is_empty() {
+                let mut t_str = String::from("# Tools\n\nYou have access to the following functions:\n\n<tools>\n");
+                for tool in ts {
+                    let tool_target = if let Some(func) = tool.get("function") {
+                        func
+                    } else {
+                        tool
+                    };
+                    let tool_json = serde_json::to_string(tool_target).unwrap_or_default();
+                    t_str.push_str(&tool_json);
+                    t_str.push('\n');
+                }
+                t_str.push_str("</tools>\n\nIf you choose to call a function ONLY reply in the following format with NO suffix:\n\n<tool_call>\n<function=example_function_name>\n<parameter=example_parameter_1>\nvalue_1\n</parameter>\n</function>\n</tool_call>\n\n<IMPORTANT>\nReminder:\n- Function calls MUST follow the specified format: an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags\n- Required parameters MUST be specified\n- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after\n- If there is no function call needed, do NOT include <tool_call> tags\n</IMPORTANT>");
+                Some(t_str)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        let mut has_system = false;
         for &(role, content) in messages {
-            out.push_str("<|im_start|>");
-            out.push_str(role);
-            out.push('\n');
-            out.push_str(content);
-            out.push_str("<|im_end|>\n");
+            if role == "system" {
+                has_system = true;
+                out.push_str("<|im_start|>system\n");
+                if let Some(ref t) = tools_text {
+                    out.push_str(t);
+                    out.push_str("\n\n");
+                }
+                out.push_str(content);
+                out.push_str("<|im_end|>\n");
+            } else {
+                out.push_str("<|im_start|>");
+                out.push_str(role);
+                out.push('\n');
+                out.push_str(content);
+                out.push_str("<|im_end|>\n");
+            }
         }
+
+        if !has_system {
+            if let Some(ref t) = tools_text {
+                let mut prefix = String::from("<|im_start|>system\n");
+                prefix.push_str(t);
+                prefix.push_str("<|im_end|>\n");
+                out = format!("{prefix}{out}");
+            }
+        }
+
         out.push_str("<|im_start|>assistant\n<think>\n");
         out
     }

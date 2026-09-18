@@ -33,7 +33,16 @@ from runtime_common.gpu_preflight import ensure_gpu_exclusive  # noqa: E402
 
 GGUF_27B = "/var/lib/ollama/blobs/sha256-f5f1dd8920d417aac2718b0bda3403da274301efdd6760b4f0f4b864ff2ad57d"
 QUANTIZED_DIR = REPO_ROOT / "models" / "qwen38_27b_w4a16"
-RUNTIME_NEXT_BIN = REPO_ROOT / "apps/runtime-next/target/release/runtime-next"
+# Real, deliberate fix: NOT the shared `target/release/runtime-next` --
+# that path holds whichever Cargo feature was LAST built there, silently
+# whatever that happens to be (real incident: a 4B-feature build left in
+# place ran against this real 27B checkpoint, producing a fast-but-wrong
+# result -- 12.4GB VRAM instead of the real ~19GB, ~167 tok/s instead of
+# the real ~35-37 tok/s -- with no error, since the loader trusts tensor
+# shapes from the checkpoint file itself while everything else runs on
+# the WRONG compiled-in size constants). The dedicated, unambiguous
+# `qwen35_27b`-feature binary always lives here instead.
+RUNTIME_NEXT_BIN = REPO_ROOT / "models" / "runtime_next_bins" / "runtime-next-qwen35_27b"
 OLLAMA_MODEL_NAME = "qwen3.8:27b-q4km-bench"
 
 

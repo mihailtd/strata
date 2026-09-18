@@ -11,17 +11,16 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any
 
 import torch
 from torch.utils.data import DataLoader, Dataset
 from transformers import PreTrainedTokenizerBase
 
 from .models import (
-    HARNESS_DOMAINS,
     HARNESS_DOMAIN_DESCRIPTIONS,
+    HARNESS_DOMAINS,
 )
-
 
 # -----------------------------------------------------------------------------
 # Data Samples and Schema Definitions
@@ -34,13 +33,13 @@ class DecisionSample:
     prompt: str
     task_type: str  # "choice", "noul", "score", or "multi"
     # Choice fields
-    candidate_texts: Optional[list[str]] = None
-    candidate_labels: Optional[list[str]] = None
-    choice_target: Optional[int] = None
+    candidate_texts: list[str] | None = None
+    candidate_labels: list[str] | None = None
+    choice_target: int | None = None
     # Noul fields (boolean binary target in {0.0, 1.0})
-    noul_target: Optional[float] = None
+    noul_target: float | None = None
     # Score fields (continuous target in [0.0, 100.0])
-    score_target: Optional[float] = None
+    score_target: float | None = None
 
 
 # -----------------------------------------------------------------------------
@@ -299,7 +298,7 @@ class DecisionDataset(Dataset):
         samples: list[DecisionSample],
         tokenizer: PreTrainedTokenizerBase,
         max_length: int = 256,
-        fixed_candidates: Optional[list[str]] = None,
+        fixed_candidates: list[str] | None = None,
     ) -> None:
         self.samples = samples
         self.tokenizer = tokenizer

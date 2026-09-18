@@ -138,7 +138,13 @@ def eval_http_stream(endpoint_url: str, model_id: str, prompts: list[dict], arm_
                     chunk = json.loads(s[6:])
                 except Exception:  # noqa: BLE001
                     continue
-                delta = chunk["choices"][0]["delta"]
+                choices = chunk.get("choices") or []
+                if not choices:
+                    # Real, final "usage" chunk (tok/s, timing) some
+                    # engines send with an empty `choices` list right
+                    # before `[DONE]` -- not a per-token delta.
+                    continue
+                delta = choices[0]["delta"]
                 content = delta.get("content") or delta.get("reasoning") or delta.get("reasoning_content")
                 if content:
                     if ttft is None:

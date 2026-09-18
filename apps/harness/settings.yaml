@@ -43,6 +43,21 @@ llm-deepseek:
 
 llm-pi-ai:
   providers:
+    runtime-next:
+      displayName: "⚡ runtime-next [Native Rust / ROCm Engine]"
+      api: openai-completions
+      baseURL: http://127.0.0.1:8003/v1
+      apiKeyEnv: DEEPSEEK_API_KEY
+      models:
+        - id: "qwen3.5:9b-rust"
+          name: "Qwen 3.5 9B [runtime-next]"
+          contextWindow: 12288
+          maxTokens: 2048
+        - id: "qwen3.5:4b-rust"
+          name: "Qwen 3.5 4B [runtime-next]"
+          contextWindow: 12288
+          maxTokens: 2048
+
     local-moa:
       displayName: "Local Dynamic Mixture-of-Adapters (MoA) Engine"
       api: openai-completions
@@ -140,13 +155,4 @@ llm-pi-ai:
           contextWindow: 16384
           maxTokens: 8192
 
-    runtime-next-4b:
-      displayName: "runtime-next 4B [From-scratch Rust/HIP engine]"
-      api: openai-completions
-      baseURL: http://127.0.0.1:8003/v1
-      apiKeyEnv: DEEPSEEK_API_KEY
-      models:
-        - id: "qwen3.5:4b-rust"
-          name: "Qwen 3.5 4B [runtime-next, real safetensors weights]"
-          contextWindow: 4096
-          maxTokens: 2048
+

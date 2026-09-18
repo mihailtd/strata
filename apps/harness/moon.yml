@@ -16,6 +16,12 @@ tags: ['python', 'shared-root-venv']
 # top-level apps/* or moon will try to manage an install it has no business
 # touching.
 tasks:
+  dev:
+    command: './start_all.sh'
+    preset: 'server'
+  serve:
+    command: './start_all.sh'
+    preset: 'server'
   test:
     command: 'uv run pytest tests -q'
   lint:

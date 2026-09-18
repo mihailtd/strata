@@ -2766,6 +2766,13 @@ pub fn forward_prefill_chunk(
         num_tokens <= MAX_PREFILL_CHUNK,
         "forward_prefill_chunk: {num_tokens} tokens exceeds MAX_PREFILL_CHUNK ({MAX_PREFILL_CHUNK}); caller must chunk (see forward_prefill)"
     );
+    assert!(
+        state.position + num_tokens <= state.max_seq_len,
+        "forward_prefill_chunk: position ({}) + num_tokens ({}) exceeds max_seq_len ({})",
+        state.position,
+        num_tokens,
+        state.max_seq_len
+    );
     let handle_raw = handle.raw();
 
     state.prefill_scratch.token_ids_dev.copy_from_host_prefix(token_ids)?;
@@ -2797,6 +2804,12 @@ pub fn forward_prefill(
     logits_out: &mut DeviceBuffer<u16>,
 ) -> Result<(), HipError> {
     assert!(!token_ids.is_empty(), "forward_prefill: token_ids must be non-empty");
+    assert!(
+        state.position + token_ids.len() <= state.max_seq_len,
+        "forward_prefill: total tokens ({}) exceeds max_seq_len ({})",
+        state.position + token_ids.len(),
+        state.max_seq_len
+    );
     for chunk in token_ids.chunks(MAX_PREFILL_CHUNK) {
         forward_prefill_chunk(handle, weights, state, chunk, logits_out)?;
     }
@@ -4199,5 +4212,23 @@ mod tests {
             gdn_avg_us * 24.0 / 1000.0,
             attn_avg_us * 8.0 / 1000.0,
         );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_multi_chunk_prefill_repro() {
+        let snapshot = crate::model_loader::locate_model_snapshot().expect("snapshot");
+        let weights = ModelWeights::load(&snapshot).expect("weights");
+        let max_seq_len = 4096;
+        let mut state = DecodeState::new(max_seq_len).expect("DecodeState allocation failed");
+        let handle = BlasHandle::create().expect("handle");
+        let mut logits = DeviceBuffer::alloc(VOCAB_SIZE).expect("logits");
+        let prompt_ids: Vec<i32> = (0..2500).map(|i| (i % 1000) + 10).collect();
+        forward_prefill(&handle, &weights, &mut state, &prompt_ids, &mut logits).expect("forward_prefill failed");
+        let mut graphed = GraphedDecodeState::new().expect("graphed");
+        for _ in 0..10 {
+            let next_token = argmax_sample(&logits).expect("argmax");
+            graphed.forward_one_token(&weights, &mut state, next_token, &mut logits).expect("forward_one_token failed");
+        }
     }
 }

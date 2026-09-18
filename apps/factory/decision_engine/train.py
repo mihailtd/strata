@@ -9,11 +9,9 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import math
-import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import torch
@@ -25,8 +23,6 @@ from transformers import AutoTokenizer
 
 from .data_loader import create_dataloaders
 from .models import (
-    HARNESS_DOMAINS,
-    HARNESS_DOMAIN_DESCRIPTIONS,
     DecisionHeadConfig,
     DecisionOutputs,
     ModernBertDecisionEngine,
@@ -339,7 +335,7 @@ def train_decision_engine(
     num_epochs: int = 5,
     batch_size: int = 16,
     lr: float = 3e-4,
-    device_str: Optional[str] = None,
+    device_str: str | None = None,
     use_lora: bool = False,
     num_samples: int = 1200,
 ) -> dict[str, Any]:

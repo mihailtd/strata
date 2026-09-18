@@ -269,4 +269,69 @@ mod tests {
         assert_eq!(host_a, host_b, "Agent B's continuation after a snapshot handoff diverged from Agent A's own direct continuation -- the handoff lost or corrupted real state");
         assert_eq!(agent_a.position, agent_b.position, "position diverged between the two agents after continuing with the same number of tokens");
     }
+
+    /// Real, decisive verification that state handoff works through the
+    /// REAL quantized (W4A16) forward path too, not just bf16 -- direct
+    /// answer to a real, previously-unverified question: `TensorStateSnapshot`
+    /// only ever touches `DecodeState` (GDN recurrent/conv state, attention
+    /// K/V cache, `position`), never `ModelWeights` -- architecturally
+    /// quantization-agnostic by construction, since W4A16 only changes
+    /// WEIGHT tensors, never the bf16/f32 activation/cache tensors
+    /// `DecodeState` owns. This test confirms that reasoning empirically
+    /// against the real quantized 27B checkpoint (real per-token
+    /// `LinearWeight::Quantized` dispatch, real WMMA-accelerated prefill)
+    /// rather than leaving it as an assumption. Same real success
+    /// criterion as the bf16 test above: bit-exact continuation.
+    #[test]
+    #[ignore]
+    #[cfg(feature = "qwen35_27b")]
+    fn real_snapshot_restored_into_fresh_state_continues_bit_exact_quantized() {
+        if hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let quantized_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../models/qwen38_27b_w4a16");
+        if !quantized_dir.is_dir() {
+            eprintln!("skipping: no real quantized 27B checkpoint at {}", quantized_dir.display());
+            return;
+        }
+        eprintln!("loading real quantized weights for all {} layers...", crate::model::NUM_LAYERS);
+        let weights = ModelWeights::load(&quantized_dir).expect("real quantized weight loading failed");
+        assert!(weights.is_quantized(), "sanity: this checkpoint must actually be quantized for this test to mean anything");
+        let handle = BlasHandle::create().expect("real hipblasCreate failed");
+
+        let prompt_ids: [i32; 5] = [760, 6511, 314, 9338, 369];
+        let max_seq_len = 64usize;
+
+        let mut agent_a = DecodeState::new(max_seq_len).expect("DecodeState allocation failed");
+        let mut logits: DeviceBuffer<u16> = DeviceBuffer::alloc(VOCAB_SIZE).unwrap();
+        forward_prefill(&handle, &weights, &mut agent_a, &prompt_ids, &mut logits).expect("real quantized forward_prefill failed");
+        for _ in 0..3 {
+            let next_id = argmax_sample(&logits).expect("argmax_sample failed");
+            forward_one_token(&handle, &weights, &mut agent_a, next_id, &mut logits).expect("real quantized forward_one_token failed");
+        }
+        let position_at_handoff = agent_a.position;
+
+        let handoff_snapshot = TensorStateSnapshot::capture(&agent_a).expect("real TensorStateSnapshot::capture failed (quantized)");
+        let mut agent_b = DecodeState::new(max_seq_len).expect("DecodeState allocation failed");
+        handoff_snapshot.restore(&mut agent_b).expect("real TensorStateSnapshot::restore failed (quantized)");
+        assert_eq!(agent_b.position, position_at_handoff, "restored position doesn't match the snapshotted position");
+
+        let mut logits_a: DeviceBuffer<u16> = DeviceBuffer::alloc(VOCAB_SIZE).unwrap();
+        let mut logits_b: DeviceBuffer<u16> = DeviceBuffer::alloc(VOCAB_SIZE).unwrap();
+        let follow_up_tokens: [i32; 4] = [11751, 13, 198, 32];
+        for &tok in follow_up_tokens.iter() {
+            forward_one_token(&handle, &weights, &mut agent_a, tok, &mut logits_a).expect("agent A (quantized) continuation step failed");
+            forward_one_token(&handle, &weights, &mut agent_b, tok, &mut logits_b).expect("agent B (quantized) continuation step failed");
+        }
+
+        let mut host_a = vec![0u16; VOCAB_SIZE];
+        let mut host_b = vec![0u16; VOCAB_SIZE];
+        logits_a.copy_to_host(&mut host_a).unwrap();
+        logits_b.copy_to_host(&mut host_b).unwrap();
+        assert_eq!(host_a, host_b, "Agent B's continuation after a snapshot handoff diverged from Agent A's own direct continuation on the QUANTIZED path -- the handoff lost or corrupted real state");
+        assert_eq!(agent_a.position, agent_b.position, "position diverged between the two agents after continuing with the same number of tokens (quantized)");
+    }
 }

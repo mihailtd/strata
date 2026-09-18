@@ -13,55 +13,33 @@ Supports:
 
 from __future__ import annotations
 
-import math
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+import os
+from pathlib import Path
+from typing import Any
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import AutoModel, AutoTokenizer, PreTrainedModel
+from transformers import AutoModel, PreTrainedModel
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 
 # -----------------------------------------------------------------------------
-# Fixed Harness Specialist Adapter Constants
+# Dynamic Self-Describing Adapter Registry (Domain-Agnostic Invariant)
 # -----------------------------------------------------------------------------
 
-HARNESS_DOMAINS: list[str] = [
-    "postgresql",
-    "python_web",
-    "duckdb",
-    "astral",
-    "python_modern",
-    "financial_planning",
-]
+from apps.factory.decision_engine.registry import (
+    BASELINE_DOMAIN_DESCRIPTIONS,
+    AdapterRegistry,
+)
 
-HARNESS_DOMAIN_DESCRIPTIONS: dict[str, str] = {
-    "postgresql": (
-        "PostgreSQL 17 relational database, pgvector vector embeddings, HNSW distance index, "
-        "asyncpg connection pooling, SQL query optimization, and schema migrations."
-    ),
-    "python_web": (
-        "Python web applications, FastAPI REST framework, lifespan asynccontextmanager, "
-        "Pydantic v2 validation models, Starlette middleware, and API endpoints."
-    ),
-    "duckdb": (
-        "DuckDB in-process analytical SQL, columnar vectorized OLAP execution, Parquet format "
-        "reading and writing, QUALIFY window analytics, and high-performance aggregations."
-    ),
-    "astral": (
-        "Astral tooling ecosystem, uv package manager and lockfile resolution, ruff linter and "
-        "formatter rules, pyproject.toml configuration, and workspace management."
-    ),
-    "python_modern": (
-        "Modern Python 3.12+ features, PEP 695 type parameter syntax, generic classes, "
-        "type aliases, structural pattern matching, and type hints without legacy TypeVar."
-    ),
-    "financial_planning": (
-        "Quantitative financial modeling, portfolio risk optimization, Value at Risk (VaR), "
-        "Conditional Value at Risk (CVaR), Monte Carlo wealth simulation, and expected returns."
-    ),
-}
+# Backwards compatibility aliases
+HARNESS_DOMAIN_DESCRIPTIONS: dict[str, str] = BASELINE_DOMAIN_DESCRIPTIONS
+HARNESS_DOMAINS: list[str] = list(BASELINE_DOMAIN_DESCRIPTIONS.keys())
+
 
 
 # -----------------------------------------------------------------------------
@@ -106,7 +84,7 @@ class ChoiceOutput:
     probabilities: torch.Tensor  # [B, K]
     chosen_index: list[int]
     confidence: list[float]
-    chosen_label: Optional[list[str]] = None
+    chosen_label: list[str] | None = None
 
 
 @dataclass
@@ -132,10 +110,10 @@ class ScoreOutput:
 class DecisionOutputs:
     """Consolidated container for decision engine outputs."""
 
-    choice: Optional[ChoiceOutput] = None
-    noul: Optional[NoulOutput] = None
-    score: Optional[ScoreOutput] = None
-    pooled_hidden: Optional[torch.Tensor] = None
+    choice: ChoiceOutput | None = None
+    noul: NoulOutput | None = None
+    score: ScoreOutput | None = None
+    pooled_hidden: torch.Tensor | None = None
 
 
 # -----------------------------------------------------------------------------
@@ -149,7 +127,7 @@ class DynamicChoiceHead(nn.Module):
         logits_i = (LayerNorm(W_c * h))^T (LayerNorm(W_e * e_i)) / sqrt(D_proj) / tau
     """
 
-    def __init__(self, config: DecisionHeadConfig, cand_dim: Optional[int] = None) -> None:
+    def __init__(self, config: DecisionHeadConfig, cand_dim: int | None = None) -> None:
         super().__init__()
         self.config = config
         cand_dim = cand_dim or config.hidden_size
@@ -162,7 +140,7 @@ class DynamicChoiceHead(nn.Module):
         self.cand_ln = nn.LayerNorm(self.proj_dim)
 
         self.dropout = nn.Dropout(config.dropout)
-        self.scale = 1.0 / math.sqrt(self.proj_dim)
+        self.scale = 1.0
 
         # Learned or post-hoc calibrated temperature
         self.temperature = nn.Parameter(
@@ -171,12 +149,12 @@ class DynamicChoiceHead(nn.Module):
 
         # Optional cached candidate projections: [K, proj_dim]
         self.register_buffer("cached_cand_projs", None, persistent=False)
-        self.cached_labels: Optional[list[str]] = None
+        self.cached_labels: list[str] | None = None
 
     def set_cached_candidates(
         self,
         candidate_embeddings: torch.Tensor,
-        labels: Optional[list[str]] = None,
+        labels: list[str] | None = None,
     ) -> None:
         """Cache pre-projected candidate embeddings for instant O(1) fixed routing.
 
@@ -201,9 +179,9 @@ class DynamicChoiceHead(nn.Module):
     def forward(
         self,
         pooled_context: torch.Tensor,
-        candidate_embeddings: Optional[torch.Tensor] = None,
-        candidate_labels: Optional[list[str]] = None,
-        temperature: Optional[float] = None,
+        candidate_embeddings: torch.Tensor | None = None,
+        candidate_labels: list[str] | None = None,
+        temperature: float | None = None,
     ) -> ChoiceOutput:
         """Forward pass for dynamic choice matching.
 
@@ -308,7 +286,7 @@ class NoulHead(nn.Module):
         self,
         pooled_context: torch.Tensor,
         threshold: float = 0.5,
-        temperature: Optional[float] = None,
+        temperature: float | None = None,
     ) -> NoulOutput:
         """Forward pass for boolean readiness prediction.
 
@@ -401,8 +379,8 @@ class ModernBertDecisionEngine(nn.Module):
     def __init__(
         self,
         model_name_or_path: str = "answerdotai/ModernBERT-base",
-        config: Optional[DecisionHeadConfig] = None,
-        backbone: Optional[PreTrainedModel] = None,
+        config: DecisionHeadConfig | None = None,
+        backbone: PreTrainedModel | None = None,
     ) -> None:
         super().__init__()
         self.model_name_or_path = model_name_or_path
@@ -410,7 +388,18 @@ class ModernBertDecisionEngine(nn.Module):
         if backbone is not None:
             self.backbone = backbone
         else:
-            self.backbone = AutoModel.from_pretrained(model_name_or_path)
+            token = os.environ.get("HF_TOKEN")
+            try:
+                self.backbone = AutoModel.from_pretrained(
+                    model_name_or_path,
+                    local_files_only=True,
+                    token=token,
+                )
+            except Exception:
+                self.backbone = AutoModel.from_pretrained(
+                    model_name_or_path,
+                    token=token,
+                )
 
         hidden_size = getattr(self.backbone.config, "hidden_size", 768)
 
@@ -433,7 +422,7 @@ class ModernBertDecisionEngine(nn.Module):
     def pool_representation(
         self,
         last_hidden_state: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Pool token representations into a single sentence vector."""
         if self.config.pooling_mode == "cls":
@@ -451,7 +440,7 @@ class ModernBertDecisionEngine(nn.Module):
     def get_context_embedding(
         self,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Extract pooled context embedding for input text."""
         outputs = self.backbone(input_ids=input_ids, attention_mask=attention_mask)
@@ -460,9 +449,9 @@ class ModernBertDecisionEngine(nn.Module):
     def forward(
         self,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        candidate_embeddings: Optional[torch.Tensor] = None,
-        candidate_labels: Optional[list[str]] = None,
+        attention_mask: torch.Tensor | None = None,
+        candidate_embeddings: torch.Tensor | None = None,
+        candidate_labels: list[str] | None = None,
         tasks: Sequence[str] = ("choice", "noul", "score"),
     ) -> DecisionOutputs:
         """Unified parallel forward pass across requested heads."""
@@ -490,9 +479,10 @@ class ModernBertDecisionEngine(nn.Module):
             pooled_hidden=pooled,
         )
 
-    def init_harness_cache(self, tokenizer: Any, device: torch.device) -> None:
-        """Pre-compute and cache candidate embeddings for the 6 DSH specialist adapters."""
-        descriptions = [HARNESS_DOMAIN_DESCRIPTIONS[d] for d in HARNESS_DOMAINS]
+    def init_from_registry(self, registry: AdapterRegistry, tokenizer: Any, device: torch.device) -> None:
+        """Dynamically pre-compute and cache candidate projections for all discovered adapters."""
+        domains = registry.domains
+        descriptions = registry.descriptions
         tokens = tokenizer(descriptions, padding=True, return_tensors="pt").to(device)
 
         self.eval()
@@ -500,7 +490,12 @@ class ModernBertDecisionEngine(nn.Module):
             cand_embs = self.get_context_embedding(
                 tokens["input_ids"], tokens["attention_mask"]
             )
-            self.choice_head.set_cached_candidates(cand_embs, labels=HARNESS_DOMAINS)
+            self.choice_head.set_cached_candidates(cand_embs, labels=domains)
+
+    def init_harness_cache(self, tokenizer: Any, device: torch.device) -> None:
+        """Initialize candidate cache from the dynamic adapter registry."""
+        registry = AdapterRegistry()
+        self.init_from_registry(registry, tokenizer, device)
 
 
 class QwenDecisionEngine(nn.Module):
@@ -514,8 +509,8 @@ class QwenDecisionEngine(nn.Module):
     def __init__(
         self,
         model_name_or_path: str = "Qwen/Qwen2.5-0.5B",
-        config: Optional[DecisionHeadConfig] = None,
-        backbone: Optional[PreTrainedModel] = None,
+        config: DecisionHeadConfig | None = None,
+        backbone: PreTrainedModel | None = None,
         trust_remote_code: bool = True,
     ) -> None:
         super().__init__()
@@ -576,7 +571,7 @@ class QwenDecisionEngine(nn.Module):
     def pool_representation(
         self,
         last_hidden_state: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Extract representation from the last non-padded token."""
         if attention_mask is None:
@@ -593,7 +588,7 @@ class QwenDecisionEngine(nn.Module):
     def get_context_embedding(
         self,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Extract pooled context embedding for input text."""
         outputs = self.backbone(input_ids=input_ids, attention_mask=attention_mask)
@@ -602,9 +597,9 @@ class QwenDecisionEngine(nn.Module):
     def forward(
         self,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        candidate_embeddings: Optional[torch.Tensor] = None,
-        candidate_labels: Optional[list[str]] = None,
+        attention_mask: torch.Tensor | None = None,
+        candidate_embeddings: torch.Tensor | None = None,
+        candidate_labels: list[str] | None = None,
         tasks: Sequence[str] = ("choice", "noul", "score"),
     ) -> DecisionOutputs:
         """Unified parallel forward pass across requested heads."""
@@ -632,9 +627,10 @@ class QwenDecisionEngine(nn.Module):
             pooled_hidden=pooled,
         )
 
-    def init_harness_cache(self, tokenizer: Any, device: torch.device) -> None:
-        """Pre-compute and cache candidate embeddings for the 6 DSH specialist adapters."""
-        descriptions = [HARNESS_DOMAIN_DESCRIPTIONS[d] for d in HARNESS_DOMAINS]
+    def init_from_registry(self, registry: AdapterRegistry, tokenizer: Any, device: torch.device) -> None:
+        """Dynamically pre-compute and cache candidate projections for all discovered adapters."""
+        domains = registry.domains
+        descriptions = registry.descriptions
         tokens = tokenizer(descriptions, padding=True, return_tensors="pt").to(device)
 
         self.eval()
@@ -642,7 +638,12 @@ class QwenDecisionEngine(nn.Module):
             cand_embs = self.get_context_embedding(
                 tokens["input_ids"], tokens["attention_mask"]
             )
-            self.choice_head.set_cached_candidates(cand_embs, labels=HARNESS_DOMAINS)
+            self.choice_head.set_cached_candidates(cand_embs, labels=domains)
+
+    def init_harness_cache(self, tokenizer: Any, device: torch.device) -> None:
+        """Initialize candidate cache from the dynamic adapter registry."""
+        registry = AdapterRegistry()
+        self.init_from_registry(registry, tokenizer, device)
 
 
 # Alias for backward compatibility

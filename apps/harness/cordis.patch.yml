@@ -1,8 +1,8 @@
-# 1. Configure Default Model to Local ROCm Engine
+# 1. Configure Default Model to runtime-next
 - id: agent-default-model
   config:
-    provider: local-moa
-    model: qwen3.8:27b
+    provider: runtime-next
+    model: qwen3.5:9b-rust
 
 
 # 2. Enable Native Subagent Tools
