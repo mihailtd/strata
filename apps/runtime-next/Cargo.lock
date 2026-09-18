@@ -669,6 +669,7 @@ name = "runtime-next"
 version = "0.1.0"
 dependencies = [
  "memmap2",
+ "rand",
  "safetensors",
  "serde",
  "serde_json",

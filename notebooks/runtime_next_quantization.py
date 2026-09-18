@@ -16,7 +16,7 @@ def _():
     import marimo as mo
     import polars as pl
 
-    return alt, mo, pl
+    return alt, json, mo, pathlib, pl
 
 
 @app.cell
@@ -115,26 +115,39 @@ def _(pl):
             "vram_status_w4a16": ["Fits", "Fits", "Fits", "Fits", "Fits (~8 GB free)"],
         }
     )
-    return (roofline_data,)
+    roofline_tidy_df = pl.DataFrame(
+        [
+            {"model": "0.8B", "precision": "bf16 (16 bpw)", "weight_gb": 1.55},
+            {"model": "0.8B", "precision": "W4A16 (4.125 bpw)", "weight_gb": 0.94},
+            {"model": "2B", "precision": "bf16 (16 bpw)", "weight_gb": 3.81},
+            {"model": "2B", "precision": "W4A16 (4.125 bpw)", "weight_gb": 2.30},
+            {"model": "4B", "precision": "bf16 (16 bpw)", "weight_gb": 8.06},
+            {"model": "4B", "precision": "W4A16 (4.125 bpw)", "weight_gb": 3.60},
+            {"model": "9B", "precision": "bf16 (16 bpw)", "weight_gb": 17.60},
+            {"model": "9B", "precision": "W4A16 (4.125 bpw)", "weight_gb": 6.80},
+            {"model": "27B", "precision": "bf16 (16 bpw)", "weight_gb": 54.00},
+            {"model": "27B", "precision": "W4A16 (4.125 bpw)", "weight_gb": 16.00},
+        ]
+    )
+    return roofline_data, roofline_tidy_df
 
 
 @app.cell
-def _(alt, mo, pl, roofline_data):
+def _(alt, mo, pl, roofline_tidy_df):
     _vram_chart = (
-        alt.Chart(roofline_data)
-        .transform_fold(["bf16_weight_gb", "w4a16_weight_gb"], as_=["precision", "weight_gb"])
+        alt.Chart(roofline_tidy_df)
         .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
         .encode(
             x=alt.X("model:N", title=None, axis=alt.Axis(labelAngle=0), sort=["0.8B", "2B", "4B", "9B", "27B"]),
             y=alt.Y("weight_gb:Q", title="Real Weight Size in VRAM (GB)", scale=alt.Scale(domain=[0, 58], zero=True, nice=False)),
-            xOffset="precision:N",
+            xOffset=alt.XOffset("precision:N", sort=["bf16 (16 bpw)", "W4A16 (4.125 bpw)"]),
             color=alt.Color(
                 "precision:N",
                 title=None,
-                scale=alt.Scale(domain=["bf16_weight_gb", "w4a16_weight_gb"], range=["#94a3b8", "#10b981"]),
-                legend=alt.Legend(orient="bottom", labelExpr="datum.value == 'bf16_weight_gb' ? 'bf16 (16 bpw)' : 'W4A16 (4.125 bpw)'"),
+                scale=alt.Scale(domain=["bf16 (16 bpw)", "W4A16 (4.125 bpw)"], range=["#94a3b8", "#10b981"]),
+                legend=alt.Legend(orient="bottom"),
             ),
-            tooltip=[alt.Tooltip("model:N", title="Model"), alt.Tooltip("weight_gb:Q", title="Weight Size (GB)", format=".2f")],
+            tooltip=[alt.Tooltip("model:N", title="Model"), alt.Tooltip("precision:N", title="Format"), alt.Tooltip("weight_gb:Q", title="Weight Size (GB)", format=".2f")],
         )
     )
     _vram_limit = alt.Chart(pl.DataFrame({"limit": [24.0]})).mark_rule(color="#ef4444", strokeDash=[4, 4], strokeWidth=2).encode(y="limit:Q")
@@ -143,7 +156,8 @@ def _(alt, mo, pl, roofline_data):
         .mark_text(align="left", dx=-140, color="#ef4444", fontSize=11)
         .encode(y="limit:Q", text="label:N")
     )
-    mo.ui.altair_chart((_vram_chart + _vram_limit + _vram_text).properties(width=560, height=280, title="27B needs quantization just to load, not to go faster"))
+    _combined = (_vram_chart + _vram_limit + _vram_text).properties(width=560, height=280, title="27B needs quantization just to load, not to go faster")
+    mo.vstack([_combined])
     return
 
 
@@ -247,7 +261,8 @@ def _(alt, arc_data, mo, pl):
     )
     _label = pl.DataFrame({"y": [34.5], "label": ["llama.cpp Q4_K_M baseline (33.5 tok/s, pre-optimization)"]})
     _label_chart = alt.Chart(_label).mark_text(align="left", dx=-260, dy=-4, color="#ef4444", fontSize=10).encode(y="y:Q", text="label:N")
-    mo.ui.altair_chart((_chart + _baseline + _label_chart).properties(width=620, height=300, title="Real 27B decode throughput through each real optimization step"))
+    _combined = (_chart + _baseline + _label_chart).properties(width=620, height=300, title="Real 27B decode throughput through each real optimization step")
+    mo.vstack([_combined])
     return
 
 
@@ -285,20 +300,58 @@ def _(mo):
 
 
 @app.cell
-def _(pl):
+def _(json, pathlib):
+    _repo_root = pathlib.Path(__file__).resolve().parent.parent
+    _bench_dir = _repo_root / "results/benchmarks"
+    quantized_scorecard = json.loads(
+        (_bench_dir / "quantized_multi_size_engine_comparison_scorecard.json").read_text()
+    )
+    scorecard_27b = json.loads(
+        (_bench_dir / "27b_quantized_engine_comparison_scorecard.json").read_text()
+    )
+    return quantized_scorecard, scorecard_27b
+
+
+@app.cell
+def _(pl, quantized_scorecard, scorecard_27b):
+    _sizes = ["0.8B", "2B", "4B", "9B", "27B"]
+    _models, _llamacpp_tok_s, _ollama_tok_s, _runtime_next_tok_s = [], [], [], []
+    _speedup_vs_llamacpp, _speedup_vs_ollama = [], []
+    _llamacpp_ttft_ms, _runtime_next_ttft_ms = [], []
+    _throughput_rows = []
+
+    for _s in _sizes:
+        _data = quantized_scorecard[_s] if _s in quantized_scorecard else scorecard_27b
+        _models.append(_s)
+        _l_tok = round(_data["avg_llamacpp_tok_s"], 1)
+        _o_tok = round(_data["avg_ollama_tok_s"], 1)
+        _r_tok = round(_data["avg_runtime_next_tok_s"], 1)
+        _llamacpp_tok_s.append(_l_tok)
+        _ollama_tok_s.append(_o_tok)
+        _runtime_next_tok_s.append(_r_tok)
+        _speedup_vs_llamacpp.append(round(_data["runtime_next_speedup_vs_llamacpp"], 2))
+        _speedup_vs_ollama.append(round(_data["runtime_next_speedup_vs_ollama"], 2))
+        _llamacpp_ttft_ms.append(round(_data["avg_ttft_ms"]["llamacpp"], 1))
+        _runtime_next_ttft_ms.append(round(_data["avg_ttft_ms"]["runtime_next"], 1))
+
+        _throughput_rows.append({"model": _s, "engine": "llama.cpp Q4_K_M", "tok_s": _l_tok})
+        _throughput_rows.append({"model": _s, "engine": "Ollama Q4_K_M", "tok_s": _o_tok})
+        _throughput_rows.append({"model": _s, "engine": "runtime-next W4A16", "tok_s": _r_tok})
+
     final_results = pl.DataFrame(
         {
-            "model": ["0.8B", "2B", "4B", "9B", "27B"],
-            "llamacpp_tok_s": [275.4, 212.2, 130.5, 90.9, 34.9],
-            "ollama_tok_s": [297.4, 225.6, 138.2, 98.0, 37.0],
-            "runtime_next_tok_s": [368.8, 256.1, 147.4, 114.1, 37.4],
-            "speedup_vs_llamacpp": [1.34, 1.21, 1.13, 1.25, 1.07],
-            "speedup_vs_ollama": [1.24, 1.14, 1.07, 1.16, 1.01],
-            "llamacpp_ttft_ms": [36.7, 42.9, 83.0, 128.0, 334.7],
-            "runtime_next_ttft_ms": [45.4, 69.1, 182.2, 250.3, 1008.8],
+            "model": _models,
+            "llamacpp_tok_s": _llamacpp_tok_s,
+            "ollama_tok_s": _ollama_tok_s,
+            "runtime_next_tok_s": _runtime_next_tok_s,
+            "speedup_vs_llamacpp": _speedup_vs_llamacpp,
+            "speedup_vs_ollama": _speedup_vs_ollama,
+            "llamacpp_ttft_ms": _llamacpp_ttft_ms,
+            "runtime_next_ttft_ms": _runtime_next_ttft_ms,
         }
     )
-    return (final_results,)
+    throughput_tidy_df = pl.DataFrame(_throughput_rows)
+    return final_results, throughput_tidy_df
 
 
 @app.cell
@@ -308,26 +361,68 @@ def _(mo, final_results):
 
 
 @app.cell
-def _(alt, final_results, mo):
+def _(pl, quantized_scorecard, scorecard_27b):
+    _sizes = ["0.8B", "2B", "4B", "9B", "27B"]
+    _task_rows = []
+    for _s in _sizes:
+        _data = quantized_scorecard[_s] if _s in quantized_scorecard else scorecard_27b
+        for _engine_key, _engine_label in [
+            ("llamacpp", "llama.cpp Q4_K_M"),
+            ("ollama", "Ollama Q4_K_M"),
+            ("runtime_next", "runtime-next W4A16"),
+        ]:
+            for _t in _data["tasks"][_engine_key]:
+                _task_rows.append(
+                    {
+                        "model": _s,
+                        "engine": _engine_label,
+                        "task": _t["name"],
+                        "tokens": _t["tokens"],
+                        "ttft_ms": round(_t["ttft_ms"], 1),
+                        "tok_per_sec": round(_t["tok_per_sec"], 2),
+                    }
+                )
+    quantized_tasks_df = pl.DataFrame(_task_rows)
+    return (quantized_tasks_df,)
+
+
+@app.cell
+def _(mo, quantized_tasks_df):
+    mo.accordion(
+        {
+            "Detailed Task-by-Task Telemetry (All Engines & Sizes)": mo.ui.table(
+                quantized_tasks_df,
+                label="Per-Task Live Telemetry Across Models",
+                selection=None,
+            )
+        }
+    )
+    return
+
+
+@app.cell
+def _(alt, mo, throughput_tidy_df):
     _throughput_chart = (
-        alt.Chart(final_results)
-        .transform_fold(["llamacpp_tok_s", "ollama_tok_s", "runtime_next_tok_s"], as_=["engine", "tok_s"])
+        alt.Chart(throughput_tidy_df)
         .mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
         .encode(
             x=alt.X("model:N", title=None, sort=["0.8B", "2B", "4B", "9B", "27B"], axis=alt.Axis(labelAngle=0)),
             y=alt.Y("tok_s:Q", title="Decode Throughput (tok/s)"),
-            xOffset=alt.XOffset("engine:N", sort=["llamacpp_tok_s", "ollama_tok_s", "runtime_next_tok_s"]),
+            xOffset=alt.XOffset("engine:N", sort=["llama.cpp Q4_K_M", "Ollama Q4_K_M", "runtime-next W4A16"]),
             color=alt.Color(
                 "engine:N",
                 title=None,
-                scale=alt.Scale(domain=["llamacpp_tok_s", "ollama_tok_s", "runtime_next_tok_s"], range=["#94a3b8", "#64748b", "#10b981"]),
-                legend=alt.Legend(orient="bottom", labelExpr="datum.value == 'llamacpp_tok_s' ? 'llama.cpp Q4_K_M' : datum.value == 'ollama_tok_s' ? 'Ollama Q4_K_M' : 'runtime-next W4A16'"),
+                scale=alt.Scale(
+                    domain=["llama.cpp Q4_K_M", "Ollama Q4_K_M", "runtime-next W4A16"],
+                    range=["#94a3b8", "#64748b", "#10b981"],
+                ),
+                legend=alt.Legend(orient="bottom"),
             ),
             tooltip=[alt.Tooltip("model:N", title="Model"), alt.Tooltip("engine:N", title="Engine"), alt.Tooltip("tok_s:Q", title="tok/s", format=".1f")],
         )
         .properties(width=620, height=320, title="Real decode throughput -- runtime-next wins at every real size")
     )
-    mo.ui.altair_chart(_throughput_chart)
+    mo.vstack([_throughput_chart])
     return
 
 
@@ -338,13 +433,14 @@ def _(alt, final_results, mo, pl):
         .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
         .encode(
             x=alt.X("model:N", title=None, sort=["0.8B", "2B", "4B", "9B", "27B"], axis=alt.Axis(labelAngle=0)),
-            y=alt.Y("speedup_vs_llamacpp:Q", title="Speedup vs. llama.cpp Q4_K_M (x)", scale=alt.Scale(domain=[0.9, 1.4], zero=False)),
+            y=alt.Y("speedup_vs_llamacpp:Q", title="Speedup vs. llama.cpp Q4_K_M (x)", scale=alt.Scale(domain=[0, 1.4], zero=True)),
             color=alt.condition(alt.datum.speedup_vs_llamacpp >= 1.0, alt.value("#10b981"), alt.value("#ef4444")),
             tooltip=[alt.Tooltip("model:N", title="Model"), alt.Tooltip("speedup_vs_llamacpp:Q", title="Speedup", format=".2f")],
         )
     )
-    _parity = alt.Chart(pl.DataFrame({"y": [1.0]})).mark_rule(color="#64748b", strokeDash=[3, 3]).encode(y="y:Q")
-    mo.ui.altair_chart((_speedup_chart + _parity).properties(width=560, height=280, title="Every real size clears parity with llama.cpp"))
+    _parity = alt.Chart(pl.DataFrame({"y": [1.0]})).mark_rule(color="#ef4444", strokeDash=[3, 3], strokeWidth=2).encode(y="y:Q")
+    _combined = (_speedup_chart + _parity).properties(width=560, height=280, title="Every real size clears parity with llama.cpp")
+    mo.vstack([_combined])
     return
 
 
@@ -374,39 +470,43 @@ def _(mo):
 
 
 @app.cell
-def _(pl):
-    ttft_data = pl.DataFrame(
-        {
-            "model": ["0.8B", "2B", "4B", "9B", "27B"],
-            "llamacpp_ttft_ms": [36.7, 42.9, 83.0, 128.0, 334.7],
-            "runtime_next_ttft_ms": [45.4, 69.1, 182.2, 250.3, 1008.8],
-            "gap_multiple": [1.24, 1.61, 2.20, 1.96, 3.01],
-        }
+def _(final_results, pl):
+    ttft_data = final_results.select(
+        [
+            pl.col("model"),
+            pl.col("llamacpp_ttft_ms"),
+            pl.col("runtime_next_ttft_ms"),
+            (pl.col("runtime_next_ttft_ms") / pl.col("llamacpp_ttft_ms")).round(2).alias("gap_multiple"),
+        ]
     )
-    return (ttft_data,)
+    _ttft_rows = []
+    for _row in final_results.iter_rows(named=True):
+        _ttft_rows.append({"model": _row["model"], "engine": "llama.cpp Q4_K_M", "ttft_ms": _row["llamacpp_ttft_ms"]})
+        _ttft_rows.append({"model": _row["model"], "engine": "runtime-next W4A16", "ttft_ms": _row["runtime_next_ttft_ms"]})
+    ttft_tidy_df = pl.DataFrame(_ttft_rows)
+    return ttft_data, ttft_tidy_df
 
 
 @app.cell
-def _(alt, mo, ttft_data):
+def _(alt, mo, ttft_tidy_df):
     _ttft_chart = (
-        alt.Chart(ttft_data)
-        .transform_fold(["llamacpp_ttft_ms", "runtime_next_ttft_ms"], as_=["engine", "ttft_ms"])
+        alt.Chart(ttft_tidy_df)
         .mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
         .encode(
             x=alt.X("model:N", title=None, sort=["0.8B", "2B", "4B", "9B", "27B"], axis=alt.Axis(labelAngle=0)),
             y=alt.Y("ttft_ms:Q", title="TTFT (ms, lower is better)", scale=alt.Scale(type="log")),
-            xOffset=alt.XOffset("engine:N", sort=["llamacpp_ttft_ms", "runtime_next_ttft_ms"]),
+            xOffset=alt.XOffset("engine:N", sort=["llama.cpp Q4_K_M", "runtime-next W4A16"]),
             color=alt.Color(
                 "engine:N",
                 title=None,
-                scale=alt.Scale(domain=["llamacpp_ttft_ms", "runtime_next_ttft_ms"], range=["#94a3b8", "#f59e0b"]),
-                legend=alt.Legend(orient="bottom", labelExpr="datum.value == 'llamacpp_ttft_ms' ? 'llama.cpp Q4_K_M' : 'runtime-next W4A16'"),
+                scale=alt.Scale(domain=["llama.cpp Q4_K_M", "runtime-next W4A16"], range=["#94a3b8", "#f59e0b"]),
+                legend=alt.Legend(orient="bottom"),
             ),
             tooltip=[alt.Tooltip("model:N", title="Model"), alt.Tooltip("engine:N", title="Engine"), alt.Tooltip("ttft_ms:Q", title="TTFT (ms)", format=".1f")],
         )
         .properties(width=580, height=300, title="TTFT: the real, disclosed gap that remains")
     )
-    mo.ui.altair_chart(_ttft_chart)
+    mo.vstack([_ttft_chart])
     return
 
 
@@ -504,14 +604,28 @@ def _(mo):
 
 
 @app.cell
-def _(pl):
+def _(pl, quantized_scorecard, roofline_data, scorecard_27b):
+    _sizes = ["0.8B", "2B", "4B", "9B", "27B"]
+    _llamacpp_vram, _ollama_vram, _runtime_vram, _gtt_growth = [], [], [], []
+
+    for _s in _sizes:
+        _data = quantized_scorecard[_s] if _s in quantized_scorecard else scorecard_27b
+        _mem = _data["memory_footprint"]
+        _llamacpp_vram.append(_mem["llamacpp"]["vram_peak_mb"])
+        _ollama_vram.append(_mem["ollama"]["vram_peak_mb"])
+        _runtime_vram.append(_mem["runtime_next"]["vram_peak_mb"])
+        _gtt_growth.append(_mem["runtime_next"]["gtt_grew"])
+
+    _checkpoint_sizes = roofline_data["w4a16_weight_gb"].to_list()
+
     memory_data = pl.DataFrame(
         {
-            "model": ["0.8B", "2B", "4B", "9B", "27B"],
-            "llamacpp_vram_mb": [3248, 3965, 5493, 7741, 18307],
-            "ollama_vram_mb": [3677, 4398, 6483, 8774, 20108],
-            "runtime_next_vram_mb": [3589, 4501, 6075, 8875, 18825],
-            "checkpoint_size_gb": [0.94, 2.3, 3.6, 6.8, 16.0],
+            "model": _sizes,
+            "llamacpp_vram_mb": _llamacpp_vram,
+            "ollama_vram_mb": _ollama_vram,
+            "runtime_next_vram_mb": _runtime_vram,
+            "runtime_next_gtt_growth_mb": _gtt_growth,
+            "checkpoint_size_gb": _checkpoint_sizes,
         }
     )
     return (memory_data,)

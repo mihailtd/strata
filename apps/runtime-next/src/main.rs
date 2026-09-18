@@ -5,6 +5,7 @@ mod kernels;
 mod lora;
 mod model;
 mod model_loader;
+mod sampling;
 mod server;
 mod state_handoff;
 mod tokenizer;

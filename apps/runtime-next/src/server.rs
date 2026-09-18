@@ -21,8 +21,10 @@
 
 use crate::blas::BlasHandle;
 use crate::model::{DecodeState, GraphedDecodeState, ModelWeights, VOCAB_SIZE, argmax_sample, forward_prefill};
+use crate::sampling::{SamplingParams, make_rng, sample_from_logits};
 use crate::tokenizer::ChatTokenizer;
 use crate::hip::DeviceBuffer;
+use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::sync::Mutex;
@@ -55,6 +57,27 @@ struct Engine {
     state: DecodeState,
     logits: DeviceBuffer<u16>,
     tokenizer: ChatTokenizer,
+    /// §118: the real, current request's sampling parameters -- set once
+    /// per real request in `start_request`, read every `step()` call
+    /// after. `temperature<=0.0` (the pre-existing default, and every
+    /// real benchmark script in `benchmarks/harness_sdk` that hits this
+    /// server already sends `"temperature": 0.0` explicitly) keeps
+    /// `step()` on the EXACT SAME on-device `argmax_sample` path it
+    /// always used -- this field existing changes nothing for any
+    /// existing caller/test/benchmark.
+    sampling: SamplingParams,
+    /// §118: one real, seedable RNG per request (re-seeded in
+    /// `start_request`, not per token) -- see `sampling::make_rng`'s own
+    /// doc comment for why per-token reseeding would be both slower and
+    /// architecturally wrong.
+    rng: StdRng,
+    /// §118: real, reused host-side scratch for `step()`'s real
+    /// logits-to-host copy when `sampling.temperature>0.0` -- allocated
+    /// ONCE (`VOCAB_SIZE` elements), matching this crate's own
+    /// established "preallocate once, reuse every call" discipline
+    /// (`Scratch`/`PrefillScratch`) rather than a fresh heap allocation
+    /// every sampled token. Unused entirely on the greedy fast path.
+    logits_host_scratch: Vec<u16>,
 }
 
 impl Engine {
@@ -68,15 +91,27 @@ impl Engine {
         let blas_handle = BlasHandle::create().map_err(|e| e.to_string())?;
         let state = DecodeState::new(MAX_SEQ_LEN).map_err(|e| e.to_string())?;
         let logits: DeviceBuffer<u16> = DeviceBuffer::alloc(VOCAB_SIZE).map_err(|e| e.to_string())?;
-        Ok(Engine { weights, graphed, blas_handle, state, logits, tokenizer })
+        Ok(Engine {
+            weights,
+            graphed,
+            blas_handle,
+            state,
+            logits,
+            tokenizer,
+            sampling: SamplingParams::GREEDY,
+            rng: make_rng(None),
+            logits_host_scratch: vec![0u16; VOCAB_SIZE],
+        })
     }
 
-    /// §96: starts a new, independent request: resets the reused
+    /// §96/§118: starts a new, independent request: resets the reused
     /// `DecodeState` (§95's `DecodeState::reset`, proven leak-free by
     /// `real_reset_prevents_cross_request_state_leakage`), applies the
-    /// real chat template, encodes it, and prefills via the real batched
+    /// real chat template, encodes it, prefills via the real batched
     /// `forward_prefill` (chunked internally at `MAX_PREFILL_CHUNK` tokens
-    /// per real batched GEMM).
+    /// per real batched GEMM), and latches in this real request's own
+    /// sampling parameters + a freshly (re)seeded RNG for every `step()`
+    /// call that follows.
     ///
     /// A real bucketed, HIP-Graph-captured prefill path was built and
     /// made fully correct (see `docs/DECISIONS.md` §117), but a
@@ -87,8 +122,10 @@ impl Engine {
     /// overhead savings the graph capture bought. Moved to
     /// `experiments/bucketed_hip_graph_prefill/` rather than shipped; not
     /// wired in here.
-    fn start_request(&mut self, messages: &[(&str, &str)]) -> Result<usize, String> {
+    fn start_request(&mut self, messages: &[(&str, &str)], sampling: SamplingParams, seed: Option<u64>) -> Result<usize, String> {
         self.state.reset().map_err(|e| e.to_string())?;
+        self.sampling = sampling;
+        self.rng = make_rng(seed);
         let prompt = self.tokenizer.apply_chat_template(messages);
         let prompt_ids = self.tokenizer.encode(&prompt)?;
 
@@ -105,8 +142,23 @@ impl Engine {
     /// One real decode step: sample the next token from the CURRENT
     /// logits (reflecting whatever was prefilled/generated last), then
     /// advance state for the NEXT call. Returns the sampled token id.
+    ///
+    /// §118: `self.sampling.temperature<=0.0` keeps the EXACT pre-existing
+    /// on-device greedy path (`argmax_sample`) -- zero new cost, zero
+    /// behavior change, every existing byte-exact-greedy correctness test
+    /// and benchmark in this crate is unaffected. Only a real,
+    /// explicitly-requested `temperature>0.0` pays the real logits->host
+    /// copy (`sampling::sample_from_logits`'s own doc comment explains why
+    /// that copy is unavoidable and why it's cheap -- the same real
+    /// ~0.2ms cost `argmax_sample`'s own pre-optimization implementation
+    /// already had).
     fn step(&mut self) -> Result<i32, String> {
-        let next_id = argmax_sample(&self.logits).map_err(|e| e.to_string())?;
+        let next_id = if self.sampling.temperature <= 0.0 {
+            argmax_sample(&self.logits).map_err(|e| e.to_string())?
+        } else {
+            self.logits.copy_to_host(&mut self.logits_host_scratch).map_err(|e| e.to_string())?;
+            sample_from_logits(&self.logits_host_scratch, &self.sampling, &mut self.rng)
+        };
         self.graphed
             .forward_one_token(&self.weights, &mut self.state, next_id, &mut self.logits)
             .map_err(|e| e.to_string())?;
@@ -136,6 +188,35 @@ struct ChatCompletionRequest {
     max_tokens: Option<usize>,
     #[serde(default)]
     stream: bool,
+    /// §118: real sampling contract, applies to BOTH bf16 and quantized
+    /// checkpoints (operates purely at the logit-sampling layer, entirely
+    /// agnostic of weight precision -- see `sampling.rs`). Omitted or
+    /// `<=0.0` means greedy (the pre-existing default behavior, and what
+    /// every real benchmark in `benchmarks/harness_sdk` already sends
+    /// explicitly) -- a deliberate departure from the OpenAI API's own
+    /// implicit default of `1.0`, in favor of this crate's own
+    /// established "deterministic by default" convention.
+    #[serde(default)]
+    temperature: Option<f32>,
+    /// Real nucleus sampling threshold. Omitted, `<=0.0`, or `>=1.0`
+    /// means disabled (matches llama.cpp's own `llama_sampler_init_top_p`
+    /// convention).
+    #[serde(default)]
+    top_p: Option<f32>,
+    /// Real top-k truncation. Not a standard OpenAI field (OpenAI's API
+    /// has no `top_k`), but a real, disclosed extension every other
+    /// OpenAI-compatible LLM server (llama.cpp, Ollama) already ships --
+    /// omitted or `<=0` means disabled.
+    #[serde(default)]
+    top_k: Option<i32>,
+    /// Real, optional deterministic seed for this request's own sampling
+    /// RNG -- the same seed reproduces the exact same real sampled
+    /// sequence (`real_same_seed_reproduces_the_same_sample_sequence`).
+    /// Omitted draws real OS entropy once, matching llama.cpp's own
+    /// `LLAMA_DEFAULT_SEED` behavior. Meaningless (and unused) when
+    /// `temperature<=0.0`.
+    #[serde(default)]
+    seed: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -355,6 +436,29 @@ fn handle_models(request: Request) {
     let _ = request.respond(json_response(200, &body));
 }
 
+/// §118: real request-level validation for the sampling contract,
+/// applying this crate's own documented defaults (`temperature<=0.0` =
+/// greedy, `top_p` default 1.0/disabled, `top_k` default 0/disabled --
+/// see `ChatCompletionRequest`'s own field doc comments). Returns a
+/// human-readable error for a real out-of-range value rather than
+/// silently clamping it -- matches OpenAI's own API behavior (a bad
+/// `temperature`/`top_p` is a 400, not a quiet reinterpretation).
+fn parse_sampling_params(req: &ChatCompletionRequest) -> Result<SamplingParams, String> {
+    let temperature = req.temperature.unwrap_or(0.0);
+    if !temperature.is_finite() || temperature < 0.0 {
+        return Err(format!("temperature must be >= 0.0, got {temperature}"));
+    }
+    let top_p = req.top_p.unwrap_or(1.0);
+    if !top_p.is_finite() || !(0.0..=1.0).contains(&top_p) {
+        return Err(format!("top_p must be within [0.0, 1.0], got {top_p}"));
+    }
+    let top_k = req.top_k.unwrap_or(0);
+    if top_k < 0 {
+        return Err(format!("top_k must be >= 0, got {top_k}"));
+    }
+    Ok(SamplingParams { temperature, top_p, top_k })
+}
+
 fn handle_chat_completions(mut request: Request, engine: &Mutex<Engine>) {
     let mut body_str = String::new();
     if let Err(e) = request.as_reader().read_to_string(&mut body_str) {
@@ -368,6 +472,13 @@ fn handle_chat_completions(mut request: Request, engine: &Mutex<Engine>) {
             return;
         }
     };
+    let sampling = match parse_sampling_params(&req) {
+        Ok(s) => s,
+        Err(e) => {
+            let _ = request.respond(json_response(400, &serde_json::json!({"error": e})));
+            return;
+        }
+    };
     let messages: Vec<(&str, &str)> = req.messages.iter().map(|m| (m.role.as_str(), m.content.as_str())).collect();
     let max_tokens = req.max_tokens.unwrap_or(DEFAULT_MAX_TOKENS);
 
@@ -378,7 +489,7 @@ fn handle_chat_completions(mut request: Request, engine: &Mutex<Engine>) {
             return;
         }
     };
-    let prompt_tokens = match guard.start_request(&messages) {
+    let prompt_tokens = match guard.start_request(&messages, sampling, req.seed) {
         Ok(n) => n,
         Err(e) => {
             let _ = request.respond(json_response(500, &serde_json::json!({"error": format!("prefill failed: {e}")})));
@@ -510,7 +621,7 @@ mod tests {
         // A) engine.step() alone -- timed in 50-token SEGMENTS to see
         // whether cost grows with KV-cache depth/position (the real
         // suspect once B/C below show socket/JSON overhead is negligible).
-        engine.start_request(&[("system", system), ("user", user)]).expect("real start_request failed");
+        engine.start_request(&[("system", system), ("user", user)], SamplingParams::GREEDY, None).expect("real start_request failed");
         let t0 = std::time::Instant::now();
         let segment = 50usize;
         let mut segment_tok_s = Vec::new();
@@ -530,7 +641,7 @@ mod tests {
         eprintln!("A per-50-token-segment tok/s (position grows left to right, starting at position 54): {segment_tok_s:.2?}");
 
         // B) + real JSON serialize + real SSE frame construction, no write.
-        engine.start_request(&[("system", system), ("user", user)]).expect("real start_request failed");
+        engine.start_request(&[("system", system), ("user", user)], SamplingParams::GREEDY, None).expect("real start_request failed");
         let id = completion_id();
         let mut generated_ids: Vec<i32> = Vec::new();
         let mut prev_text_len = 0usize;
@@ -550,7 +661,7 @@ mod tests {
         // C) + a real write_sse_frame write+flush into an in-memory
         // Vec<u8> (matching the real server's own per-frame flush, minus
         // the real socket).
-        engine.start_request(&[("system", system), ("user", user)]).expect("real start_request failed");
+        engine.start_request(&[("system", system), ("user", user)], SamplingParams::GREEDY, None).expect("real start_request failed");
         let id = completion_id();
         let mut generated_ids: Vec<i32> = Vec::new();
         let mut prev_text_len = 0usize;
@@ -589,5 +700,85 @@ mod tests {
         // OWN loop logic has regressed, not the (already understood,
         // structural) KV-cache-depth cost.
         assert!((a_tok_s - c_tok_s).abs() / a_tok_s < 0.05, "real streaming-loop overhead (JSON + frame + in-memory write) exceeded 5% of decode-alone throughput: A={a_tok_s:.2} tok/s, C={c_tok_s:.2} tok/s");
+    }
+
+    /// §118 decisive test: real, end-to-end proof (the real `Engine`, real
+    /// weights, real GPU forward passes -- not just `sampling.rs`'s own
+    /// pure-algorithm tests) that (a) `temperature<=0.0` is still
+    /// byte-exact identical to this crate's own established greedy
+    /// reference for the SAME real 5-token prompt every other decisive
+    /// test in this crate uses, and (b) a real, explicit `seed` makes a
+    /// `temperature>0.0` request's generation byte-exact REPRODUCIBLE
+    /// across two entirely separate real `start_request`/`step()` runs --
+    /// the real property the HTTP `seed` field promises callers, checked
+    /// through the actual GPU decode loop, not assumed from
+    /// `sampling.rs`'s own host-only tests.
+    #[test]
+    #[ignore]
+    fn real_end_to_end_sampling_matches_greedy_at_temp_zero_and_is_reproducible_with_a_seed() {
+        if crate::hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        crate::hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let mut engine = Engine::load().expect("real Engine::load failed");
+
+        // (a) temp<=0.0 must remain byte-exact against this crate's own
+        // established real greedy reference (the same 5-token prompt +
+        // expected continuation `model::tests::
+        // real_greedy_generation_matches_real_qwen3_5_4b` and friends use
+        // throughout this crate).
+        let messages: [(&str, &str); 1] = [("user", "What is the capital of France?")];
+        // Real, measured (not guessed) -- the real Qwen3.5-4B model's own
+        // real greedy continuation for this exact real prompt through
+        // this exact real chat template, captured directly from this
+        // test's own first real run.
+        let expected_greedy_prefix: [i32; 3] = [90700, 8340, 25];
+        engine.start_request(&messages, SamplingParams::GREEDY, None).expect("real start_request (greedy) failed");
+        let mut greedy_ids = Vec::new();
+        for _ in 0..3 {
+            greedy_ids.push(engine.step().expect("real engine.step() (greedy) failed"));
+        }
+        eprintln!("greedy (temp<=0.0): {greedy_ids:?}");
+        assert_eq!(greedy_ids, expected_greedy_prefix, "temperature<=0.0 must remain byte-exact against this crate's own established greedy path -- sampling.rs must never be reached for this case");
+
+        // (b) temperature>0.0 with a real, explicit seed must reproduce
+        // the exact same real generated sequence across two SEPARATE
+        // requests (the SAME reused `Engine`/`DecodeState`, reset between
+        // them -- matching this server's own real usage pattern).
+        let sampling = SamplingParams { temperature: 0.8, top_p: 0.95, top_k: 40 };
+        let run = |engine: &mut Engine| -> Vec<i32> {
+            engine.start_request(&messages, sampling, Some(20260918)).expect("real start_request (sampled) failed");
+            (0..12).map(|_| engine.step().expect("real engine.step() (sampled) failed")).collect()
+        };
+        let run1 = run(&mut engine);
+        let run2 = run(&mut engine);
+        eprintln!("sampled run 1 (seed=20260918): {run1:?}");
+        eprintln!("sampled run 2 (seed=20260918): {run2:?}");
+        assert_eq!(run1, run2, "the same real seed must reproduce the exact same real sampled generation across two separate requests through the actual GPU decode loop");
+
+        // Real, decisive sanity check: a DIFFERENT seed, on a real
+        // OPEN-ENDED prompt (deliberately not the factual capital-of-
+        // France prompt above -- a real, found-not-assumed discovery
+        // while building this test: that specific prompt's real
+        // probability distribution is SO peaked that several arbitrarily
+        // chosen seeds reproduced the identical greedy continuation for
+        // 12+ real tokens even with temperature=0.8, which is a genuine
+        // property of that prompt, confirmed NOT an RNG bug by
+        // `sampling::tests::real_different_seeds_produce_different_raw_random_streams`
+        // -- but a poor choice for THIS specific assertion). A real
+        // creative-writing prompt at a higher temperature is far less
+        // deterministic; seeds 1 vs 2 were directly confirmed to diverge
+        // here before this assertion was written.
+        let open_ended_messages: [(&str, &str); 1] = [("user", "Write a short, creative story about a robot exploring an abandoned space station.")];
+        let creative_sampling = SamplingParams { temperature: 1.2, top_p: 0.95, top_k: 40 };
+        engine.start_request(&open_ended_messages, creative_sampling, Some(1)).expect("real start_request (seed=1) failed");
+        let run_seed1: Vec<i32> = (0..20).map(|_| engine.step().expect("real engine.step() failed")).collect();
+        engine.start_request(&open_ended_messages, creative_sampling, Some(2)).expect("real start_request (seed=2) failed");
+        let run_seed2: Vec<i32> = (0..20).map(|_| engine.step().expect("real engine.step() failed")).collect();
+        eprintln!("open-ended seed=1: {run_seed1:?}");
+        eprintln!("open-ended seed=2: {run_seed2:?}");
+        assert_ne!(run_seed1, run_seed2, "a real, different seed on a real open-ended prompt must produce a different real generation -- the sampling RNG must not be a silent no-op end-to-end");
     }
 }
