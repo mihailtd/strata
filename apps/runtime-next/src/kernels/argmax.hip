@@ -19,11 +19,7 @@
 // correctness-critical kernel (feeds directly into what token gets
 // generated next), so it's handled exactly, not assumed away.
 
-#include <hip/hip_runtime.h>
-
-__device__ __forceinline__ float bf16_bits_to_f32(unsigned short bits) {
-    return __uint_as_float(((unsigned int)bits) << 16);
-}
+#include "bf16_utils.hip"
 
 // One block, `blockDim.x` threads (power of two). Each thread scans a
 // strided subset of `logits[n]`, tracking its own best (value, index);

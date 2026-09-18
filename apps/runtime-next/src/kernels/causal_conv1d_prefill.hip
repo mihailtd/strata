@@ -46,18 +46,7 @@
 // consumer (`l2norm_bf16`, `gdn_chunk_broadcast_scale_bf16`, and
 // GDN's real value/query/key split) already expects that exact layout.
 
-#include <hip/hip_runtime.h>
-
-__device__ __forceinline__ float bf16_bits_to_f32(unsigned short bits) {
-    return __uint_as_float(((unsigned int)bits) << 16);
-}
-
-__device__ __forceinline__ unsigned short f32_to_bf16_bits(float v) {
-    unsigned int bits = __float_as_uint(v);
-    unsigned int lsb = (bits >> 16) & 1u;
-    unsigned int rounded = bits + 0x7fffu + lsb;
-    return (unsigned short)(rounded >> 16);
-}
+#include "bf16_utils.hip"
 
 // `kernel_size` is real-model-fixed at 4 (`state_len=3`); 8 is a safe
 // register-array upper bound with a runtime `kernel_size` still driving

@@ -317,7 +317,7 @@ def _(pl, quantized_scorecard, scorecard_27b):
     _sizes = ["0.8B", "2B", "4B", "9B", "27B"]
     _models, _llamacpp_tok_s, _ollama_tok_s, _runtime_next_tok_s = [], [], [], []
     _speedup_vs_llamacpp, _speedup_vs_ollama = [], []
-    _llamacpp_ttft_ms, _runtime_next_ttft_ms = [], []
+    _llamacpp_ttft_ms, _ollama_ttft_ms, _runtime_next_ttft_ms = [], [], []
     _throughput_rows = []
 
     for _s in _sizes:
@@ -332,6 +332,7 @@ def _(pl, quantized_scorecard, scorecard_27b):
         _speedup_vs_llamacpp.append(round(_data["runtime_next_speedup_vs_llamacpp"], 2))
         _speedup_vs_ollama.append(round(_data["runtime_next_speedup_vs_ollama"], 2))
         _llamacpp_ttft_ms.append(round(_data["avg_ttft_ms"]["llamacpp"], 1))
+        _ollama_ttft_ms.append(round(_data["avg_ttft_ms"]["ollama"], 1))
         _runtime_next_ttft_ms.append(round(_data["avg_ttft_ms"]["runtime_next"], 1))
 
         _throughput_rows.append({"model": _s, "engine": "llama.cpp Q4_K_M", "tok_s": _l_tok})
@@ -347,6 +348,7 @@ def _(pl, quantized_scorecard, scorecard_27b):
             "speedup_vs_llamacpp": _speedup_vs_llamacpp,
             "speedup_vs_ollama": _speedup_vs_ollama,
             "llamacpp_ttft_ms": _llamacpp_ttft_ms,
+            "ollama_ttft_ms": _ollama_ttft_ms,
             "runtime_next_ttft_ms": _runtime_next_ttft_ms,
         }
     )
@@ -475,14 +477,22 @@ def _(final_results, pl):
         [
             pl.col("model"),
             pl.col("llamacpp_ttft_ms"),
+            pl.col("ollama_ttft_ms"),
             pl.col("runtime_next_ttft_ms"),
             (pl.col("runtime_next_ttft_ms") / pl.col("llamacpp_ttft_ms")).round(2).alias("gap_multiple"),
         ]
     )
     _ttft_rows = []
     for _row in final_results.iter_rows(named=True):
-        _ttft_rows.append({"model": _row["model"], "engine": "llama.cpp Q4_K_M", "ttft_ms": _row["llamacpp_ttft_ms"]})
-        _ttft_rows.append({"model": _row["model"], "engine": "runtime-next W4A16", "ttft_ms": _row["runtime_next_ttft_ms"]})
+        _ttft_rows.append(
+            {"model": _row["model"], "engine": "llama.cpp Q4_K_M", "ttft_ms": _row["llamacpp_ttft_ms"]}
+        )
+        _ttft_rows.append(
+            {"model": _row["model"], "engine": "Ollama Q4_K_M", "ttft_ms": _row["ollama_ttft_ms"]}
+        )
+        _ttft_rows.append(
+            {"model": _row["model"], "engine": "runtime-next W4A16", "ttft_ms": _row["runtime_next_ttft_ms"]}
+        )
     ttft_tidy_df = pl.DataFrame(_ttft_rows)
     return ttft_data, ttft_tidy_df
 
@@ -494,17 +504,24 @@ def _(alt, mo, ttft_tidy_df):
         .mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
         .encode(
             x=alt.X("model:N", title=None, sort=["0.8B", "2B", "4B", "9B", "27B"], axis=alt.Axis(labelAngle=0)),
-            y=alt.Y("ttft_ms:Q", title="TTFT (ms, lower is better)", scale=alt.Scale(type="log")),
-            xOffset=alt.XOffset("engine:N", sort=["llama.cpp Q4_K_M", "runtime-next W4A16"]),
+            y=alt.Y("ttft_ms:Q", title="Time to First Token (ms, lower is better)", scale=alt.Scale(zero=True)),
+            xOffset=alt.XOffset("engine:N", sort=["llama.cpp Q4_K_M", "Ollama Q4_K_M", "runtime-next W4A16"]),
             color=alt.Color(
                 "engine:N",
                 title=None,
-                scale=alt.Scale(domain=["llama.cpp Q4_K_M", "runtime-next W4A16"], range=["#94a3b8", "#f59e0b"]),
+                scale=alt.Scale(
+                    domain=["llama.cpp Q4_K_M", "Ollama Q4_K_M", "runtime-next W4A16"],
+                    range=["#94a3b8", "#64748b", "#f59e0b"],
+                ),
                 legend=alt.Legend(orient="bottom"),
             ),
-            tooltip=[alt.Tooltip("model:N", title="Model"), alt.Tooltip("engine:N", title="Engine"), alt.Tooltip("ttft_ms:Q", title="TTFT (ms)", format=".1f")],
+            tooltip=[
+                alt.Tooltip("model:N", title="Model"),
+                alt.Tooltip("engine:N", title="Engine"),
+                alt.Tooltip("ttft_ms:Q", title="TTFT (ms)", format=".1f"),
+            ],
         )
-        .properties(width=580, height=300, title="TTFT: the real, disclosed gap that remains")
+        .properties(width=620, height=320, title="TTFT: the real, disclosed gap that remains")
     )
     mo.vstack([_ttft_chart])
     return

@@ -33,18 +33,7 @@
 // real, measured answer to whether that extra rounding ever changes a
 // real generated token.
 
-#include <hip/hip_runtime.h>
-
-__device__ __forceinline__ float bf16_bits_to_f32(unsigned short bits) {
-    return __uint_as_float(((unsigned int)bits) << 16);
-}
-
-__device__ __forceinline__ unsigned short f32_to_bf16_bits(float v) {
-    unsigned int bits = __float_as_uint(v);
-    unsigned int lsb = (bits >> 16) & 1u;
-    unsigned int rounded = bits + 0x7fffu + lsb;
-    return (unsigned short)(rounded >> 16);
-}
+#include "bf16_utils.hip"
 
 extern "C" __global__ void scale_bf16_by_device_scalar_kernel(
     unsigned short* __restrict__ buf,
@@ -67,5 +56,33 @@ extern "C" void launch_scale_bf16_by_device_scalar(void* buf, const void* scalar
         scale_bf16_by_device_scalar_kernel,
         dim3(blocks), dim3(threads), 0, (hipStream_t)stream,
         (unsigned short*)buf, (const float*)scalar_ptr, n
+    );
+}
+
+extern "C" __global__ void scale_bf16_by_device_scalars_batched_kernel(
+    unsigned short* __restrict__ buf,
+    const float* __restrict__ scalars,
+    int n_per_head,
+    int h
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = h * n_per_head;
+    if (idx >= total) {
+        return;
+    }
+    int head = idx / n_per_head;
+    float scale = scalars[head];
+    float v = bf16_bits_to_f32(buf[idx]);
+    buf[idx] = f32_to_bf16_bits(v * scale);
+}
+
+extern "C" void launch_scale_bf16_by_device_scalars_batched(void* buf, const void* scalars, int n_per_head, int h, void* stream) {
+    int threads = 256;
+    int total = h * n_per_head;
+    int blocks = (total + threads - 1) / threads;
+    hipLaunchKernelGGL(
+        scale_bf16_by_device_scalars_batched_kernel,
+        dim3(blocks), dim3(threads), 0, (hipStream_t)stream,
+        (unsigned short*)buf, (const float*)scalars, n_per_head, h
     );
 }

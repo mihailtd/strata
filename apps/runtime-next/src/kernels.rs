@@ -188,6 +188,43 @@ pub(crate) mod ffi {
             stream: *mut c_void,
         );
 
+        /// §119: 2D batched causal attention for prefill (T < 128)
+        #[allow(clippy::too_many_arguments)]
+        pub fn launch_attention_causal_prefill_bf16(
+            q: *const c_void,
+            k: *const c_void,
+            v: *const c_void,
+            out: *mut c_void,
+            num_tokens: c_int,
+            num_q_heads: c_int,
+            num_kv_heads: c_int,
+            positions: *const c_int,
+            kv_stride: c_int,
+            head_dim: c_int,
+            kv_split: c_int,
+            scaling: c_float,
+            max_chunk_kv_len: c_int,
+            stream: *mut c_void,
+        );
+
+        /// §119: Fused attention QKV prep for prefill
+        #[allow(clippy::too_many_arguments)]
+        pub fn launch_fused_attn_qkv_prep_bf16(
+            qkv_in: *const c_void,
+            q_weight: *const c_void,
+            k_weight: *const c_void,
+            q_normed_out: *mut c_void,
+            gate_out: *mut c_void,
+            k_normed_out: *mut c_void,
+            v_out: *mut c_void,
+            num_tokens: c_int,
+            num_q_heads: c_int,
+            num_kv_heads: c_int,
+            head_dim: c_int,
+            eps: c_float,
+            stream: *mut c_void,
+        );
+
         /// See `src/kernels/gdn_recurrent.hip` for what this actually
         /// computes. `stream` (§93).
         #[allow(clippy::too_many_arguments)]
@@ -283,6 +320,7 @@ pub(crate) mod ffi {
         /// device address (no host read) -- see
         /// `src/kernels/scale_by_device_scalar.hip`.
         pub fn launch_scale_bf16_by_device_scalar(buf: *mut c_void, scalar_ptr: *const c_void, n: c_int, stream: *mut c_void);
+        pub fn launch_scale_bf16_by_device_scalars_batched(buf: *mut c_void, scalars: *const c_void, n_per_head: c_int, h: c_int, stream: *mut c_void);
 
         /// See `src/kernels/split_last_dim.hip` for what this actually
         /// computes. `stream` (§93).
@@ -2716,6 +2754,193 @@ mod tests {
         fused_out.copy_to_host(&mut fused_bf16).unwrap();
 
         assert_eq!(fused_bf16, unfused_bf16, "fused swiglu_strided must be BIT-EXACT identical to the unfused extract_range+extract_range+swiglu sequence -- same real reads, same real math, only the launch count differs");
+    }
+
+    #[test]
+    fn real_fused_attn_qkv_prep_matches_unfused_extract_split_norm() {
+        if hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let num_tokens = 3usize;
+        let num_q_heads = 4usize;
+        let num_kv_heads = 2usize;
+        let head_dim = 128usize;
+        let eps = 1e-6f32;
+
+        let q_row_len = num_q_heads * head_dim;
+        let kv_row_len = num_kv_heads * head_dim;
+        let combined_dim = q_row_len * 2 + kv_row_len * 2;
+
+        let qkv_f32: Vec<f32> = (0..num_tokens * combined_dim).map(|i| (((i % 17) as i32 - 8) as f32) * 0.05).collect();
+        let qkv_bf16: Vec<u16> = qkv_f32.iter().map(|&v| f32_to_bf16(v)).collect();
+        let mut qkv_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(qkv_bf16.len()).unwrap();
+        qkv_buf.copy_from_host(&qkv_bf16).unwrap();
+
+        let qw_f32: Vec<f32> = (0..head_dim).map(|i| 0.9 + 0.01 * (i as f32)).collect();
+        let qw_bf16: Vec<u16> = qw_f32.iter().map(|&v| f32_to_bf16(v)).collect();
+        let mut qw_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(head_dim).unwrap();
+        qw_buf.copy_from_host(&qw_bf16).unwrap();
+
+        let kw_f32: Vec<f32> = (0..head_dim).map(|i| 1.1 - 0.01 * (i as f32)).collect();
+        let kw_bf16: Vec<u16> = kw_f32.iter().map(|&v| f32_to_bf16(v)).collect();
+        let mut kw_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(head_dim).unwrap();
+        kw_buf.copy_from_host(&kw_bf16).unwrap();
+
+        // 1. Unfused reference sequence:
+        let mut q_raw = DeviceBuffer::<u16>::alloc(num_tokens * q_row_len * 2).unwrap();
+        let mut k_raw = DeviceBuffer::<u16>::alloc(num_tokens * kv_row_len).unwrap();
+        let mut v_raw_unfused = DeviceBuffer::<u16>::alloc(num_tokens * kv_row_len).unwrap();
+        let mut query = DeviceBuffer::<u16>::alloc(num_tokens * q_row_len).unwrap();
+        let mut gate_unfused = DeviceBuffer::<u16>::alloc(num_tokens * q_row_len).unwrap();
+        let mut q_normed_unfused = DeviceBuffer::<u16>::alloc(num_tokens * q_row_len).unwrap();
+        let mut k_normed_unfused = DeviceBuffer::<u16>::alloc(num_tokens * kv_row_len).unwrap();
+
+        extract_range_bf16(&qkv_buf, &mut q_raw, num_tokens, combined_dim, 0, q_row_len * 2).unwrap();
+        extract_range_bf16(&qkv_buf, &mut k_raw, num_tokens, combined_dim, q_row_len * 2, kv_row_len).unwrap();
+        extract_range_bf16(&qkv_buf, &mut v_raw_unfused, num_tokens, combined_dim, q_row_len * 2 + kv_row_len, kv_row_len).unwrap();
+
+        split_last_dim_bf16(&q_raw, &mut query, &mut gate_unfused, num_tokens * num_q_heads, head_dim).unwrap();
+        rmsnorm_bf16(&query, &qw_buf, &mut q_normed_unfused, num_tokens * num_q_heads, head_dim, eps).unwrap();
+        rmsnorm_bf16(&k_raw, &kw_buf, &mut k_normed_unfused, num_tokens * num_kv_heads, head_dim, eps).unwrap();
+
+        let mut ref_q_normed = vec![0u16; num_tokens * q_row_len];
+        let mut ref_gate = vec![0u16; num_tokens * q_row_len];
+        let mut ref_k_normed = vec![0u16; num_tokens * kv_row_len];
+        let mut ref_v = vec![0u16; num_tokens * kv_row_len];
+        q_normed_unfused.copy_to_host(&mut ref_q_normed).unwrap();
+        gate_unfused.copy_to_host(&mut ref_gate).unwrap();
+        k_normed_unfused.copy_to_host(&mut ref_k_normed).unwrap();
+        v_raw_unfused.copy_to_host(&mut ref_v).unwrap();
+
+        // 2. Fused kernel:
+        let mut fused_q_normed = DeviceBuffer::<u16>::alloc(num_tokens * q_row_len).unwrap();
+        let mut fused_gate = DeviceBuffer::<u16>::alloc(num_tokens * q_row_len).unwrap();
+        let mut fused_k_normed = DeviceBuffer::<u16>::alloc(num_tokens * kv_row_len).unwrap();
+        let mut fused_v = DeviceBuffer::<u16>::alloc(num_tokens * kv_row_len).unwrap();
+
+        unsafe {
+            ffi::launch_fused_attn_qkv_prep_bf16(
+                qkv_buf.as_device_ptr(),
+                qw_buf.as_device_ptr(),
+                kw_buf.as_device_ptr(),
+                fused_q_normed.as_device_ptr_mut() as *mut c_void,
+                fused_gate.as_device_ptr_mut() as *mut c_void,
+                fused_k_normed.as_device_ptr_mut() as *mut c_void,
+                fused_v.as_device_ptr_mut() as *mut c_void,
+                num_tokens as i32,
+                num_q_heads as i32,
+                num_kv_heads as i32,
+                head_dim as i32,
+                eps,
+                std::ptr::null_mut(),
+            );
+        }
+        check_last_error().unwrap();
+        device_synchronize().unwrap();
+
+        let mut actual_q_normed = vec![0u16; num_tokens * q_row_len];
+        let mut actual_gate = vec![0u16; num_tokens * q_row_len];
+        let mut actual_k_normed = vec![0u16; num_tokens * kv_row_len];
+        let mut actual_v = vec![0u16; num_tokens * kv_row_len];
+        fused_q_normed.copy_to_host(&mut actual_q_normed).unwrap();
+        fused_gate.copy_to_host(&mut actual_gate).unwrap();
+        fused_k_normed.copy_to_host(&mut actual_k_normed).unwrap();
+        fused_v.copy_to_host(&mut actual_v).unwrap();
+
+        assert_eq!(actual_gate, ref_gate, "gate must be bit-exact match");
+        assert_eq!(actual_v, ref_v, "v_raw must be bit-exact match");
+        assert_eq!(actual_q_normed, ref_q_normed, "q_normed must be bit-exact match");
+        assert_eq!(actual_k_normed, ref_k_normed, "k_normed must be bit-exact match");
+    }
+
+    #[test]
+    fn real_attention_causal_prefill_matches_attention_decode_split() {
+        if hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let num_tokens = 4usize;
+        let num_q_heads = 4usize;
+        let num_kv_heads = 2usize;
+        let head_dim = 128usize;
+        let kv_stride = 64usize;
+        let kv_split = 2usize;
+        let scaling = (head_dim as f32).powf(-0.5);
+
+        let q_len = num_tokens * num_q_heads * head_dim;
+        let kv_len = num_kv_heads * kv_stride * head_dim;
+
+        let q_f32: Vec<f32> = (0..q_len).map(|i| (((i % 19) as i32 - 9) as f32) * 0.08).collect();
+        let k_f32: Vec<f32> = (0..kv_len).map(|i| (((i % 23) as i32 - 11) as f32) * 0.06).collect();
+        let v_f32: Vec<f32> = (0..kv_len).map(|i| (((i % 29) as i32 - 14) as f32) * 0.05).collect();
+
+        let mut q_buf = DeviceBuffer::<u16>::alloc(q_len).unwrap();
+        let mut k_buf = DeviceBuffer::<u16>::alloc(kv_len).unwrap();
+        let mut v_buf = DeviceBuffer::<u16>::alloc(kv_len).unwrap();
+        q_buf.copy_from_host(&q_f32.iter().map(|&x| f32_to_bf16(x)).collect::<Vec<_>>()).unwrap();
+        k_buf.copy_from_host(&k_f32.iter().map(|&x| f32_to_bf16(x)).collect::<Vec<_>>()).unwrap();
+        v_buf.copy_from_host(&v_f32.iter().map(|&x| f32_to_bf16(x)).collect::<Vec<_>>()).unwrap();
+
+        let positions = vec![0i32, 1, 2, 3];
+        let mut pos_buf = DeviceBuffer::<i32>::alloc(positions.len()).unwrap();
+        pos_buf.copy_from_host(&positions).unwrap();
+
+        // 1. Loop of attention_decode_split:
+        let q_row_len = num_q_heads * head_dim;
+        let mut ref_out_buf = DeviceBuffer::<u16>::alloc(num_tokens * q_row_len).unwrap();
+        for i in 0..num_tokens {
+            unsafe {
+                ffi::launch_attention_decode_split_bf16(
+                    q_buf.as_device_ptr_at(i * q_row_len),
+                    k_buf.as_device_ptr(),
+                    v_buf.as_device_ptr(),
+                    ref_out_buf.as_device_ptr_at_mut(i * q_row_len) as *mut c_void,
+                    num_q_heads as i32,
+                    num_kv_heads as i32,
+                    pos_buf.as_device_ptr_at(i) as *const i32,
+                    kv_stride as i32,
+                    head_dim as i32,
+                    kv_split as i32,
+                    scaling,
+                    std::ptr::null_mut(),
+                );
+            }
+        }
+        device_synchronize().unwrap();
+        let mut ref_out = vec![0u16; num_tokens * q_row_len];
+        ref_out_buf.copy_to_host(&mut ref_out).unwrap();
+
+        // 2. Batched attention_causal_prefill:
+        let mut actual_out_buf = DeviceBuffer::<u16>::alloc(num_tokens * q_row_len).unwrap();
+        unsafe {
+            ffi::launch_attention_causal_prefill_bf16(
+                q_buf.as_device_ptr(),
+                k_buf.as_device_ptr(),
+                v_buf.as_device_ptr(),
+                actual_out_buf.as_device_ptr_mut() as *mut c_void,
+                num_tokens as i32,
+                num_q_heads as i32,
+                num_kv_heads as i32,
+                pos_buf.as_device_ptr() as *const i32,
+                kv_stride as i32,
+                head_dim as i32,
+                kv_split as i32,
+                scaling,
+                4i32,
+                std::ptr::null_mut(),
+            );
+        }
+        check_last_error().unwrap();
+        device_synchronize().unwrap();
+        let mut actual_out = vec![0u16; num_tokens * q_row_len];
+        actual_out_buf.copy_to_host(&mut actual_out).unwrap();
+
+        assert_eq!(actual_out, ref_out, "2D batched attention_causal_prefill must be BIT-EXACT identical to the sequential attention_decode_split loop");
     }
 
     #[test]

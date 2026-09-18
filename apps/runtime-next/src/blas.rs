@@ -73,6 +73,33 @@ pub(crate) mod ffi {
             compute_type: i32,
             algo: i32,
         ) -> i32;
+
+        #[allow(clippy::too_many_arguments)]
+        pub fn hipblasGemmStridedBatchedEx(
+            handle: HipblasHandle,
+            trans_a: i32,
+            trans_b: i32,
+            m: i32,
+            n: i32,
+            k: i32,
+            alpha: *const c_void,
+            a: *const c_void,
+            a_type: i32,
+            lda: i32,
+            stride_a: i64,
+            b: *const c_void,
+            b_type: i32,
+            ldb: i32,
+            stride_b: i64,
+            beta: *const c_void,
+            c: *mut c_void,
+            c_type: i32,
+            ldc: i32,
+            stride_c: i64,
+            batch_count: i32,
+            compute_type: i32,
+            algo: i32,
+        ) -> i32;
     }
 
     // hipblasOperation_t (hipblas-common.h)

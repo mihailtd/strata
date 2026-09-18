@@ -18,20 +18,7 @@
 // own bf16 rounding (not truncation, which would be a different, less
 // accurate operation than what the Python reference actually does).
 
-#include <hip/hip_runtime.h>
-
-__device__ __forceinline__ float bf16_bits_to_f32(unsigned short bits) {
-    return __uint_as_float(((unsigned int)bits) << 16);
-}
-
-__device__ __forceinline__ unsigned short f32_to_bf16_bits(float v) {
-    unsigned int bits = __float_as_uint(v);
-    // Round-to-nearest-even: add 0x7FFF plus the low bit of the retained
-    // 16 bits before truncating, the standard bf16 rounding formula.
-    unsigned int lsb = (bits >> 16) & 1u;
-    unsigned int rounded = bits + 0x7fffu + lsb;
-    return (unsigned short)(rounded >> 16);
-}
+#include "bf16_utils.hip"
 
 extern "C" __global__ void rmsnorm_bf16_kernel(
     const unsigned short* __restrict__ x,

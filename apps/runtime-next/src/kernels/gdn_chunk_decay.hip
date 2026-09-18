@@ -36,18 +36,7 @@
 // scheme with `beta`'s own `[T, num_heads]` layout, instead of juggling
 // two different layouts across the pipeline.
 
-#include <hip/hip_runtime.h>
-
-__device__ __forceinline__ float bf16_bits_to_f32(unsigned short bits) {
-    return __uint_as_float(((unsigned int)bits) << 16);
-}
-
-__device__ __forceinline__ unsigned short f32_to_bf16_bits(float v) {
-    unsigned int bits = __float_as_uint(v);
-    unsigned int lsb = (bits >> 16) & 1u;
-    unsigned int rounded = bits + 0x7fffu + lsb;
-    return (unsigned short)(rounded >> 16);
-}
+#include "bf16_utils.hip"
 
 extern "C" __global__ void gdn_chunk_decay_bf16_kernel(
     const float* __restrict__ g,               // [num_chunks, chunk_size, num_heads], log-decay

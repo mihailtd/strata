@@ -438,7 +438,7 @@ pub(crate) mod raw {
     /// that function's own doc comment for the full derivation. Used for
     /// the delta-rule's real state update (`state = state*chunk_decay +
     /// key^T@v_new`, `beta = chunk_decay`).
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, dead_code)]
     pub unsafe fn gemm_atb(handle: blas_ffi::HipblasHandle, a: *const c_void, a_ld: i32, b: *const c_void, b_ld: i32, y: *mut c_void, y_ld: i32, m: i32, k: i32, n: i32, beta: f32) {
         let alpha: f32 = 1.0;
         unsafe {
@@ -464,6 +464,109 @@ pub(crate) mod raw {
                 blas_ffi::HIPBLAS_GEMM_DEFAULT,
             );
         }
+    }
+
+    /// §119: strided batched P@V for GDN Phase 2 -- collapses 32 per-head
+    /// `gemm_pv` calls into 1 launch. Hot path: no sync, but debug-asserts
+    /// the return status to catch silent hipBLAS failures.
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn gemm_strided_batched_pv(
+        handle: blas_ffi::HipblasHandle,
+        p: *const c_void,
+        p_ld: i32,
+        p_stride: i64,
+        v: *const c_void,
+        v_stride: i64,
+        o: *mut c_void,
+        o_ld: i32,
+        o_stride: i64,
+        t: i32,
+        kv_len: i32,
+        head_dim: i32,
+        batch_count: i32,
+        alpha: f32,
+        beta: f32,
+    ) {
+        let status = unsafe {
+            blas_ffi::hipblasGemmStridedBatchedEx(
+                handle,
+                blas_ffi::HIPBLAS_OP_N,
+                blas_ffi::HIPBLAS_OP_N,
+                head_dim,
+                t,
+                kv_len,
+                &alpha as *const f32 as *const c_void,
+                v,
+                blas_ffi::HIP_R_16BF,
+                head_dim,
+                v_stride,
+                p,
+                blas_ffi::HIP_R_16BF,
+                p_ld,
+                p_stride,
+                &beta as *const f32 as *const c_void,
+                o,
+                blas_ffi::HIP_R_16BF,
+                o_ld,
+                o_stride,
+                batch_count,
+                blas_ffi::HIPBLAS_COMPUTE_32F,
+                blas_ffi::HIPBLAS_GEMM_DEFAULT,
+            )
+        };
+        debug_assert_eq!(status, blas_ffi::HIPBLAS_STATUS_SUCCESS, "gemm_strided_batched_pv: hipBLAS returned error {status}");
+    }
+
+    /// §119: strided batched A^T@B for GDN Phase 2 -- collapses 32 per-head
+    /// `gemm_atb` calls into 1 launch. Hot path: no sync, but debug-asserts
+    /// the return status.
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn gemm_strided_batched_atb(
+        handle: blas_ffi::HipblasHandle,
+        a: *const c_void,
+        a_ld: i32,
+        a_stride: i64,
+        b: *const c_void,
+        b_ld: i32,
+        b_stride: i64,
+        y: *mut c_void,
+        y_ld: i32,
+        y_stride: i64,
+        m: i32,
+        k: i32,
+        n: i32,
+        batch_count: i32,
+        beta: f32,
+    ) {
+        let alpha: f32 = 1.0;
+        let status = unsafe {
+            blas_ffi::hipblasGemmStridedBatchedEx(
+                handle,
+                blas_ffi::HIPBLAS_OP_N,
+                blas_ffi::HIPBLAS_OP_T,
+                n,
+                k,
+                m,
+                &alpha as *const f32 as *const c_void,
+                b,
+                blas_ffi::HIP_R_16BF,
+                b_ld,
+                b_stride,
+                a,
+                blas_ffi::HIP_R_16BF,
+                a_ld,
+                a_stride,
+                &beta as *const f32 as *const c_void,
+                y,
+                blas_ffi::HIP_R_16BF,
+                y_ld,
+                y_stride,
+                batch_count,
+                blas_ffi::HIPBLAS_COMPUTE_32F,
+                blas_ffi::HIPBLAS_GEMM_DEFAULT,
+            )
+        };
+        debug_assert_eq!(status, blas_ffi::HIPBLAS_STATUS_SUCCESS, "gemm_strided_batched_atb: hipBLAS returned error {status}");
     }
 
     /// §100: raw (unsynced) hot-path counterpart of `kernels::gdn_chunk_decay_bf16`.
@@ -650,8 +753,13 @@ pub(crate) mod raw {
 
     /// §116: real, unsynced in-place `buf *= *scalar_ptr` -- see
     /// `kernels::scale_bf16_by_device_scalar`'s own doc comment.
+    #[allow(dead_code)]
     pub unsafe fn scale_bf16_by_device_scalar(buf: *mut c_void, scalar_ptr: *const c_void, n: i32, stream: *mut c_void) {
         unsafe { kernels_ffi::launch_scale_bf16_by_device_scalar(buf, scalar_ptr, n, stream) };
+    }
+
+    pub unsafe fn scale_bf16_by_device_scalars_batched(buf: *mut c_void, scalars: *const c_void, n_per_head: i32, h: i32, stream: *mut c_void) {
+        unsafe { kernels_ffi::launch_scale_bf16_by_device_scalars_batched(buf, scalars, n_per_head, h, stream) };
     }
 
     pub unsafe fn split_last_dim(x: *const c_void, first: *mut c_void, second: *mut c_void, rows: i32, half: i32, stream: *mut c_void) {
@@ -710,6 +818,83 @@ pub(crate) mod raw {
     #[allow(clippy::too_many_arguments)]
     pub unsafe fn attention_decode_split(q: *const c_void, k: *const c_void, v: *const c_void, out: *mut c_void, num_q_heads: i32, num_kv_heads: i32, position: *const i32, kv_stride: i32, head_dim: i32, scaling: f32, stream: *mut c_void) {
         unsafe { kernels_ffi::launch_attention_decode_split_bf16(q, k, v, out, num_q_heads, num_kv_heads, position, kv_stride, head_dim, super::ATTENTION_DECODE_KV_SPLIT as i32, scaling, stream) };
+    }
+
+    /// §119: 2D batched causal attention for prefill (T < 128)
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn attention_causal_prefill(
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        out: *mut c_void,
+        num_tokens: i32,
+        num_q_heads: i32,
+        num_kv_heads: i32,
+        positions: *const i32,
+        kv_stride: i32,
+        head_dim: i32,
+        scaling: f32,
+        max_chunk_kv_len: i32,
+        stream: *mut c_void,
+    ) {
+        debug_assert!(
+            max_chunk_kv_len <= 256,
+            "attention_causal_prefill max_chunk_kv_len ({max_chunk_kv_len}) exceeds LDS sizing regime (<= 256); use batched GEMM attention instead"
+        );
+        unsafe {
+            kernels_ffi::launch_attention_causal_prefill_bf16(
+                q,
+                k,
+                v,
+                out,
+                num_tokens,
+                num_q_heads,
+                num_kv_heads,
+                positions,
+                kv_stride,
+                head_dim,
+                super::ATTENTION_DECODE_KV_SPLIT as i32,
+                scaling,
+                max_chunk_kv_len,
+                stream,
+            )
+        };
+    }
+
+    /// §119: Fused attention QKV prep for prefill
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn fused_attn_qkv_prep(
+        qkv_in: *const c_void,
+        q_weight: *const c_void,
+        k_weight: *const c_void,
+        q_normed_out: *mut c_void,
+        gate_out: *mut c_void,
+        k_normed_out: *mut c_void,
+        v_out: *mut c_void,
+        num_tokens: i32,
+        num_q_heads: i32,
+        num_kv_heads: i32,
+        head_dim: i32,
+        eps: f32,
+        stream: *mut c_void,
+    ) {
+        unsafe {
+            kernels_ffi::launch_fused_attn_qkv_prep_bf16(
+                qkv_in,
+                q_weight,
+                k_weight,
+                q_normed_out,
+                gate_out,
+                k_normed_out,
+                v_out,
+                num_tokens,
+                num_q_heads,
+                num_kv_heads,
+                head_dim,
+                eps,
+                stream,
+            )
+        };
     }
 
     /// §93: advances the on-device position by 1 -- see
@@ -1269,10 +1454,7 @@ pub struct PrefillScratch {
     gdnc_state_bf16: DeviceBuffer<u16>,
 
     attn_qkv_out: DeviceBuffer<u16>,
-    attn_q_raw: DeviceBuffer<u16>,
-    attn_k_raw: DeviceBuffer<u16>,
     attn_v_raw: DeviceBuffer<u16>,
-    attn_query: DeviceBuffer<u16>,
     attn_gate: DeviceBuffer<u16>,
     attn_query_normed: DeviceBuffer<u16>,
     attn_key_normed: DeviceBuffer<u16>,
@@ -1349,10 +1531,7 @@ impl PrefillScratch {
             gdnc_state_bf16: DeviceBuffer::alloc(GDN_NUM_V_HEADS * GDN_HEAD_DIM * GDN_HEAD_DIM)?,
 
             attn_qkv_out: DeviceBuffer::alloc(t * ATTN_QKV_COMBINED_DIM)?,
-            attn_q_raw: DeviceBuffer::alloc(t * ATTN_NUM_HEADS * ATTN_HEAD_DIM * 2)?,
-            attn_k_raw: DeviceBuffer::alloc(t * ATTN_NUM_KV_HEADS * ATTN_HEAD_DIM)?,
             attn_v_raw: DeviceBuffer::alloc(t * ATTN_NUM_KV_HEADS * ATTN_HEAD_DIM)?,
-            attn_query: DeviceBuffer::alloc(t * ATTN_NUM_HEADS * ATTN_HEAD_DIM)?,
             attn_gate: DeviceBuffer::alloc(t * ATTN_NUM_HEADS * ATTN_HEAD_DIM)?,
             attn_query_normed: DeviceBuffer::alloc(t * ATTN_NUM_HEADS * ATTN_HEAD_DIM)?,
             attn_key_normed: DeviceBuffer::alloc(t * ATTN_NUM_KV_HEADS * ATTN_HEAD_DIM)?,
@@ -1479,7 +1658,6 @@ impl DecodeState {
 /// fresh allocation -- see this module's doc comment).
 #[allow(clippy::too_many_arguments)]
 fn gdn_layer_forward(
-    handle_raw: blas_ffi::HipblasHandle,
     hidden_states: &DeviceBuffer<u16>,
     hidden_out: &mut DeviceBuffer<u16>,
     w: &GdnLayerWeights,
@@ -1585,7 +1763,6 @@ fn gdn_layer_forward(
 /// add. Writes the final result into `hidden_out`.
 #[allow(clippy::too_many_arguments)]
 fn attn_layer_forward(
-    handle_raw: blas_ffi::HipblasHandle,
     hidden_states: &DeviceBuffer<u16>,
     hidden_out: &mut DeviceBuffer<u16>,
     w: &AttnLayerWeights,
@@ -1769,7 +1946,6 @@ fn attn_layer_forward_prefill(
 ) {
     let t = num_tokens as i32;
     let q_row_len = ATTN_NUM_HEADS * ATTN_HEAD_DIM; // per-token query length (pre-split from q_raw's 2x-wide query|gate)
-    let kv_row_len = ATTN_NUM_KV_HEADS * ATTN_HEAD_DIM;
     let kv_len = start_position + num_tokens;
     let n_rep = ATTN_NUM_HEADS / ATTN_NUM_KV_HEADS; // GQA: n_rep query heads share each KV head
     unsafe {
@@ -1777,29 +1953,24 @@ fn attn_layer_forward_prefill(
 
         w.qkv_proj.apply_prefill(handle_raw, s.normed.as_device_ptr(), s.attn_qkv_out.as_device_ptr_mut(), t, HIDDEN_SIZE as i32, ATTN_QKV_COMBINED_DIM as i32, stream);
 
-        // Un-fuse q_raw|k_raw|v_raw out of each row's real (wider) stride
-        // into their own tightly-packed [T, len] buffers -- see
-        // `extract_range.hip`.
-        raw::extract_range(s.attn_qkv_out.as_device_ptr(), s.attn_q_raw.as_device_ptr_mut(), t, ATTN_QKV_COMBINED_DIM as i32, 0, (q_row_len * 2) as i32, stream);
-        raw::extract_range(s.attn_qkv_out.as_device_ptr(), s.attn_k_raw.as_device_ptr_mut(), t, ATTN_QKV_COMBINED_DIM as i32, (q_row_len * 2) as i32, kv_row_len as i32, stream);
-        raw::extract_range(s.attn_qkv_out.as_device_ptr(), s.attn_v_raw.as_device_ptr_mut(), t, ATTN_QKV_COMBINED_DIM as i32, (q_row_len * 2 + kv_row_len) as i32, kv_row_len as i32, stream);
-
-        // q_raw's real per-token layout is [num_heads, 2*head_dim] (query
-        // and gate interleaved PER HEAD, matching `split_last_dim`'s own
-        // decode-path call: `rows=ATTN_NUM_HEADS, half=ATTN_HEAD_DIM`, NOT
-        // `rows=1, half=num_heads*head_dim`). Now that q_raw is tightly
-        // packed as [T, num_heads*2*head_dim], reinterpreting it as
-        // [T*num_heads, 2*head_dim] is the same "no stride mismatch"
-        // trick used for q/k-norm below -- exactly matches the per-head
-        // split every real token already goes through in the decode path.
-        raw::split_last_dim(s.attn_q_raw.as_device_ptr(), s.attn_query.as_device_ptr_mut(), s.attn_gate.as_device_ptr_mut(), (num_tokens * ATTN_NUM_HEADS) as i32, ATTN_HEAD_DIM as i32, stream);
-
-        // Per-head RMSNorm over ALL (token, head) pairs in ONE call --
-        // [T, num_heads*head_dim] reinterpreted as [T*num_heads, head_dim]
-        // is exactly the same bytes, and rmsnorm has no cross-row
-        // dependency (see `mlp_block_prefill`'s own comment on this trick).
-        raw::rmsnorm(s.attn_query.as_device_ptr(), w.q_norm.as_device_ptr(), s.attn_query_normed.as_device_ptr_mut(), (num_tokens * ATTN_NUM_HEADS) as i32, ATTN_HEAD_DIM as i32, RMS_EPS, stream);
-        raw::rmsnorm(s.attn_k_raw.as_device_ptr(), w.k_norm.as_device_ptr(), s.attn_key_normed.as_device_ptr_mut(), (num_tokens * ATTN_NUM_KV_HEADS) as i32, ATTN_HEAD_DIM as i32, RMS_EPS, stream);
+        // §119: Fused attention QKV prep -- replaces 6 separate small kernel launches
+        // (3 extract_range, split_last_dim, 2 rmsnorm) with 1 unified launch,
+        // eliminating intermediate DRAM round-trips for q_raw, k_raw, query.
+        raw::fused_attn_qkv_prep(
+            s.attn_qkv_out.as_device_ptr(),
+            w.q_norm.as_device_ptr(),
+            w.k_norm.as_device_ptr(),
+            s.attn_query_normed.as_device_ptr_mut(),
+            s.attn_gate.as_device_ptr_mut(),
+            s.attn_key_normed.as_device_ptr_mut(),
+            s.attn_v_raw.as_device_ptr_mut(),
+            t,
+            ATTN_NUM_HEADS as i32,
+            ATTN_NUM_KV_HEADS as i32,
+            ATTN_HEAD_DIM as i32,
+            RMS_EPS,
+            stream,
+        );
 
         // §103: RoPE and KV-cache append have NO cross-token dependency
         // at all (RoPE's angle depends only on that token's own real
@@ -1817,19 +1988,11 @@ fn attn_layer_forward_prefill(
         // comment); this is the same fix applied to attention's own
         // remaining per-token ops.
         //
-        // §99: attention itself is STILL dispatched on `kv_len`, the same
-        // threshold-based pattern `raw::gemm` already uses for `rows==1`
-        // vs `rows>1` -- see `ATTENTION_GEMM_KV_LEN_THRESHOLD`'s own doc
-        // comment for the real measurements behind this (the naive scalar
-        // kernel genuinely wins below the threshold; real matrix-core GEMM
-        // genuinely wins above it -- neither is a strict improvement on
-        // its own). Below threshold, `attention_decode` stays a real
-        // per-token loop (unchanged from §96) -- its own real recurrence
-        // (each row must read the FULL KV cache up to and including its
-        // own just-appended slot) isn't part of the batching this pass
-        // targets. Above threshold, it's skipped here and replaced by the
-        // batched per-head GEMM block below, once the whole chunk's K/V
-        // is written.
+        // §99/§119: attention itself is dispatched on `kv_len`:
+        // Below threshold: §119 2D batched causal attention kernel (`raw::attention_causal_prefill`),
+        // executing all heads and prompt tokens in ONE GPU launch, replacing the OLD
+        // per-token host loop of `attention_decode_split` launches.
+        // Above threshold: batched per-head GEMM block below.
         let use_gemm_attention = kv_len > ATTENTION_GEMM_KV_LEN_THRESHOLD;
         let scaling = (ATTN_HEAD_DIM as f32).powf(-0.5);
         let position_buf_ptr = s.position_buf.as_device_ptr() as *const i32;
@@ -1870,22 +2033,29 @@ fn attn_layer_forward_prefill(
         );
 
         if !use_gemm_attention {
-            for i in 0..num_tokens {
-                let position_ptr = s.position_buf.as_device_ptr_at(i) as *const i32;
-                raw::attention_decode_split(
-                    s.attn_query_roped.as_device_ptr_at(i * q_row_len),
-                    layer_state.k_cache.as_device_ptr(),
-                    layer_state.v_cache.as_device_ptr(),
-                    s.attn_out.as_device_ptr_at_mut(i * q_row_len),
-                    ATTN_NUM_HEADS as i32,
-                    ATTN_NUM_KV_HEADS as i32,
-                    position_ptr,
-                    max_seq_len as i32,
-                    ATTN_HEAD_DIM as i32,
-                    scaling,
-                    stream,
-                );
-            }
+            // kv_len ≤ ATTENTION_GEMM_KV_LEN_THRESHOLD (128) here.
+            // This bounds the causal prefill kernel's dynamic shared memory to
+            // ~4 KB per block (head_dim + kv_len + threads + head_dim*kv_split
+            // = 128 + 128 + 512 + 256 = 1024 floats = 4 KB), well within
+            // RDNA3's 64 KB LDS limit and allowing high occupancy.
+            // WARNING: Do NOT raise ATTENTION_GEMM_KV_LEN_THRESHOLD above ~256
+            // without verifying LDS pressure and occupancy impact.
+            let max_chunk_kv_len = kv_len as i32;
+            raw::attention_causal_prefill(
+                s.attn_query_roped.as_device_ptr(),
+                layer_state.k_cache.as_device_ptr(),
+                layer_state.v_cache.as_device_ptr(),
+                s.attn_out.as_device_ptr_mut(),
+                t,
+                ATTN_NUM_HEADS as i32,
+                ATTN_NUM_KV_HEADS as i32,
+                position_buf_ptr,
+                max_seq_len as i32,
+                ATTN_HEAD_DIM as i32,
+                scaling,
+                max_chunk_kv_len,
+                stream,
+            );
         }
 
         if use_gemm_attention {
@@ -2150,48 +2320,80 @@ fn gdn_chunk_forward_prefill(handle_raw: blas_ffi::HipblasHandle, layer_state: &
     // order on the same stream, matching hipBLAS's own in-order-per-
     // stream execution guarantee (no explicit sync needed between them).
     unsafe {
+        let hm_d_stride = (num_chunks * c * d) as i64;
+        let hm_c_stride = (num_chunks * c * c) as i64;
+        let state_stride = (d * d) as i64;
+        let out_head_stride = d as i64;
+
         for chunk in 0..num_chunks {
-            for head in 0..h {
-                let hm_d_off = (head * num_chunks + chunk) * c * d;
-                let hm_c_off = (head * num_chunks + chunk) * c * c;
-                let state_off = head * d * d;
+            let hm_d_chunk_off = chunk * c * d;
+            let hm_c_chunk_off = chunk * c * c;
+            let out_chunk_off = chunk * c * GDN_VALUE_DIM;
 
-                let k_cumdecay_ptr = s.gdnc_k_cumdecay.as_device_ptr_at(hm_d_off);
-                let state_ptr = s.gdnc_state_bf16.as_device_ptr_at(state_off);
-                let v_new_ptr = s.gdnc_new_values.as_device_ptr_at_mut(hm_d_off);
-                raw::gemm_pv(handle_raw, k_cumdecay_ptr, d as i32, state_ptr, v_new_ptr, d as i32, c as i32, d as i32, d as i32, -1.0, 1.0);
+            // Step 1: v_new = new_values - k_cumdecay @ state (across all h heads)
+            let k_cumdecay_ptr = s.gdnc_k_cumdecay.as_device_ptr_at(hm_d_chunk_off);
+            let state_ptr = s.gdnc_state_bf16.as_device_ptr();
+            let v_new_ptr = s.gdnc_new_values.as_device_ptr_at_mut(hm_d_chunk_off);
+            raw::gemm_strided_batched_pv(
+                handle_raw,
+                k_cumdecay_ptr, d as i32, hm_d_stride,
+                state_ptr, state_stride,
+                v_new_ptr, d as i32, hm_d_stride,
+                c as i32, d as i32, d as i32,
+                h as i32,
+                -1.0, 1.0,
+            );
 
-                let out_off = chunk * c * GDN_VALUE_DIM + head * d;
-                let query_final_ptr = s.gdnc_query_final_hm.as_device_ptr_at(hm_d_off);
-                let out_ptr = s.gdn_out.as_device_ptr_at_mut(out_off);
-                raw::gemm_pv(handle_raw, query_final_ptr, d as i32, state_ptr, out_ptr, GDN_VALUE_DIM as i32, c as i32, d as i32, d as i32, 1.0, 0.0);
+            // Step 2: out = query_final @ state (across all h heads)
+            let query_final_ptr = s.gdnc_query_final_hm.as_device_ptr_at(hm_d_chunk_off);
+            let out_ptr = s.gdn_out.as_device_ptr_at_mut(out_chunk_off);
+            raw::gemm_strided_batched_pv(
+                handle_raw,
+                query_final_ptr, d as i32, hm_d_stride,
+                state_ptr, state_stride,
+                out_ptr, GDN_VALUE_DIM as i32, out_head_stride,
+                c as i32, d as i32, d as i32,
+                h as i32,
+                1.0, 0.0,
+            );
 
-                let intra_ptr = s.gdnc_intra_attn.as_device_ptr_at(hm_c_off);
-                let v_new_ptr_ro = s.gdnc_new_values.as_device_ptr_at(hm_d_off);
-                let out_ptr2 = s.gdn_out.as_device_ptr_at_mut(out_off);
-                raw::gemm_pv(handle_raw, intra_ptr, c as i32, v_new_ptr_ro, out_ptr2, GDN_VALUE_DIM as i32, c as i32, c as i32, d as i32, 1.0, 1.0);
+            // Step 3: out += intra_chunk_attn @ v_new (across all h heads)
+            let intra_ptr = s.gdnc_intra_attn.as_device_ptr_at(hm_c_chunk_off);
+            let v_new_ro_ptr = s.gdnc_new_values.as_device_ptr_at(hm_d_chunk_off);
+            let out_ptr2 = s.gdn_out.as_device_ptr_at_mut(out_chunk_off);
+            raw::gemm_strided_batched_pv(
+                handle_raw,
+                intra_ptr, c as i32, hm_c_stride,
+                v_new_ro_ptr, hm_d_stride,
+                out_ptr2, GDN_VALUE_DIM as i32, out_head_stride,
+                c as i32, c as i32, d as i32,
+                h as i32,
+                1.0, 1.0,
+            );
 
-                let key_final_ptr = s.gdnc_key_final_hm.as_device_ptr_at(hm_d_off);
-                let v_new_ptr_ro2 = s.gdnc_new_values.as_device_ptr_at(hm_d_off);
-                // §116: `state = state*chunk_decay + key_final^T@v_new`
-                // used to be ONE fused hipBLAS call (`gemm_atb`'s own
-                // `beta=chunk_decay_scalar`, a real HOST f32 -- the one
-                // remaining reason this function needed a host sync at
-                // all, per its own §115 doc comment). Now two real
-                // on-device steps: pre-scale `state` in place by
-                // `chunk_decay`, read directly off the ALREADY-COMPUTED
-                // device buffer (no host copy), then accumulate via
-                // `gemm_atb` with a FIXED host literal `beta=1.0` -- safe,
-                // the same convention every other real call in this file
-                // already uses. See `scale_by_device_scalar.hip`'s own
-                // header for the one real, disclosed precision note this
-                // introduces (an extra bf16 rounding step) and how it was
-                // checked, not assumed, to be safe.
-                let chunk_decay_idx = chunk * h + head;
-                raw::scale_bf16_by_device_scalar(s.gdnc_state_bf16.as_device_ptr_at_mut(state_off), s.gdnc_chunk_decay.as_device_ptr_at(chunk_decay_idx), (d * d) as i32, stream);
-                let state_ptr_mut = s.gdnc_state_bf16.as_device_ptr_at_mut(state_off);
-                raw::gemm_atb(handle_raw, key_final_ptr, d as i32, v_new_ptr_ro2, d as i32, state_ptr_mut, d as i32, c as i32, d as i32, d as i32, 1.0);
-            }
+            // Step 4: state = state * chunk_decay (all h heads batched in 1 launch)
+            let chunk_decay_ptr = s.gdnc_chunk_decay.as_device_ptr_at(chunk * h);
+            raw::scale_bf16_by_device_scalars_batched(
+                s.gdnc_state_bf16.as_device_ptr_mut(),
+                chunk_decay_ptr as *const c_void,
+                (d * d) as i32,
+                h as i32,
+                stream,
+            );
+
+            // Step 5: state += key_final^T @ v_new (across all h heads)
+            let key_final_ptr = s.gdnc_key_final_hm.as_device_ptr_at(hm_d_chunk_off);
+            let v_new_ro2_ptr = s.gdnc_new_values.as_device_ptr_at(hm_d_chunk_off);
+            let state_ptr_mut = s.gdnc_state_bf16.as_device_ptr_mut();
+            raw::gemm_strided_batched_atb(
+                handle_raw,
+                key_final_ptr, d as i32, hm_d_stride,
+                v_new_ro2_ptr, d as i32, hm_d_stride,
+                state_ptr_mut, d as i32, state_stride,
+                c as i32, d as i32, d as i32,
+                h as i32,
+                1.0,
+            );
         }
     }
 
@@ -2520,7 +2722,6 @@ pub fn forward_prefill(
 /// caller's job, since a graphed replay's position advance happens
 /// on-device instead, inside the captured region itself).
 fn run_decode_body(
-    handle_raw: blas_ffi::HipblasHandle,
     weights: &ModelWeights,
     state: &mut DecodeState,
     position_ptr: *const i32,
@@ -2554,10 +2755,9 @@ fn run_decode_body(
         };
         match (layer_weights, layer_state) {
             (LayerWeights::Gdn(w), LayerState::Gdn(gs)) => {
-                gdn_layer_forward(handle_raw, hidden_in, hidden_out, w, gs, &mut state.scratch, stream)
+                gdn_layer_forward(hidden_in, hidden_out, w, gs, &mut state.scratch, stream)
             }
             (LayerWeights::Attn(w), LayerState::Attn(as_)) => attn_layer_forward(
-                handle_raw,
                 hidden_in,
                 hidden_out,
                 w,
@@ -2594,13 +2794,12 @@ fn run_decode_body(
 /// by one on success. Synchronizes with the GPU exactly once (after the
 /// layer loop) -- see this module's doc comment.
 pub fn forward_one_token(
-    handle: &BlasHandle,
+    _handle: &BlasHandle,
     weights: &ModelWeights,
     state: &mut DecodeState,
     token_id: i32,
     logits_out: &mut DeviceBuffer<u16>,
 ) -> Result<(), HipError> {
-    let handle_raw = handle.raw();
     let token_ids_host = [token_id];
     state.scratch.token_ids_dev.copy_from_host(&token_ids_host)?;
     // §93: written once per token, read by rope/kv_cache_append/
@@ -2612,7 +2811,7 @@ pub fn forward_one_token(
         .copy_from_host(&[state.position as i32])?;
     let position_ptr = state.scratch.position_buf.as_device_ptr() as *const i32;
 
-    run_decode_body(handle_raw, weights, state, position_ptr, logits_out, std::ptr::null_mut());
+    run_decode_body(weights, state, position_ptr, logits_out, std::ptr::null_mut());
 
     // The ONE sync point per token: everything above was queued on the
     // default stream without the host waiting between calls.
@@ -2630,7 +2829,7 @@ pub fn forward_one_token(
 /// for the full real-benchmark comparison against the eager path.
 pub struct GraphedDecodeState {
     stream: hip::Stream,
-    handle: BlasHandle,
+    _handle: BlasHandle,
     graph_exec: Option<hip::GraphExec>,
 }
 
@@ -2641,7 +2840,7 @@ impl GraphedDecodeState {
         handle.set_stream(&stream).map_err(|_| HipError { code: -1 })?;
         Ok(GraphedDecodeState {
             stream,
-            handle,
+            _handle: handle,
             graph_exec: None,
         })
     }
@@ -2669,7 +2868,7 @@ impl GraphedDecodeState {
 
         if self.graph_exec.is_none() {
             hip::begin_capture(&self.stream)?;
-            run_decode_body(self.handle.raw(), weights, state, position_ptr, logits_out, self.stream.raw());
+            run_decode_body(weights, state, position_ptr, logits_out, self.stream.raw());
             // On-device position advance -- the last captured node, so a
             // replay needs no host-side position write to stay correct
             // (see `Scratch::position_buf`'s doc comment).
@@ -3791,7 +3990,6 @@ mod tests {
         let snapshot = locate_model_snapshot().expect("no real Qwen3.5-4B snapshot found on this machine");
         let weights = ModelWeights::load(&snapshot).expect("real weight loading failed");
         let handle = BlasHandle::create().expect("real hipblasCreate failed");
-        let handle_raw = handle.raw();
 
         let max_seq_len = 64usize;
         let mut state = DecodeState::new(max_seq_len).expect("DecodeState allocation failed");
@@ -3848,13 +4046,13 @@ mod tests {
                 let t_layer = std::time::Instant::now();
                 match (layer_weights, layer_state) {
                     (LayerWeights::Gdn(w), LayerState::Gdn(gs)) => {
-                        gdn_layer_forward(handle_raw, hidden_in, hidden_out, w, gs, &mut state.scratch, std::ptr::null_mut());
+                        gdn_layer_forward(hidden_in, hidden_out, w, gs, &mut state.scratch, std::ptr::null_mut());
                         hip::device_synchronize().unwrap();
                         gdn_total += t_layer.elapsed();
                         gdn_count += 1;
                     }
                     (LayerWeights::Attn(w), LayerState::Attn(as_)) => {
-                        attn_layer_forward(handle_raw, hidden_in, hidden_out, w, as_, position_ptr, state.max_seq_len, &mut state.scratch, std::ptr::null_mut());
+                        attn_layer_forward(hidden_in, hidden_out, w, as_, position_ptr, state.max_seq_len, &mut state.scratch, std::ptr::null_mut());
                         hip::device_synchronize().unwrap();
                         attn_total += t_layer.elapsed();
                         attn_count += 1;

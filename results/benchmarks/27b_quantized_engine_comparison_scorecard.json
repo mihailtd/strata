@@ -3,13 +3,13 @@
   "model": "Qwen3.8-27B, quantized (llama.cpp/Ollama: real Q4_K_M GGUF; runtime-next: real W4A16 via quantize_w4a16.py)",
   "avg_llamacpp_tok_s": 33.57,
   "avg_ollama_tok_s": 36.1,
-  "avg_runtime_next_tok_s": 36.05,
-  "runtime_next_speedup_vs_llamacpp": 1.074,
-  "runtime_next_speedup_vs_ollama": 0.999,
+  "avg_runtime_next_tok_s": 36.78,
+  "runtime_next_speedup_vs_llamacpp": 1.096,
+  "runtime_next_speedup_vs_ollama": 1.019,
   "avg_ttft_ms": {
     "llamacpp": 371.3,
     "ollama": 344.0,
-    "runtime_next": 995.8
+    "runtime_next": 582.0
   },
   "memory_footprint": {
     "llamacpp": {
@@ -33,14 +33,14 @@
       "n_samples": 74
     },
     "runtime_next": {
-      "vram_peak_mb": 19579,
-      "vram_min_mb": 2477,
-      "gtt_peak_mb": 1240,
-      "gtt_min_mb": 1185,
-      "gtt_grew": 55,
-      "sys_used_peak_mb": 27860,
-      "sys_used_min_mb": 21524,
-      "n_samples": 85
+      "vram_peak_mb": 20152,
+      "vram_min_mb": 3453,
+      "gtt_peak_mb": 1117,
+      "gtt_min_mb": 1093,
+      "gtt_grew": 24,
+      "sys_used_peak_mb": 30904,
+      "sys_used_min_mb": 26173,
+      "n_samples": 74
     }
   },
   "tasks": {
@@ -94,23 +94,23 @@
       {
         "task_id": "fastapi_pgvector_crud",
         "name": "FastAPI Asyncpg & pgvector CRUD Service",
-        "tokens": 342,
-        "ttft_ms": 792.0,
-        "tok_per_sec": 35.3
+        "tokens": 350,
+        "ttft_ms": 482.3,
+        "tok_per_sec": 36.97
       },
       {
         "task_id": "postgres_hnsw_migration",
         "name": "PostgreSQL 17 HNSW Migration & Tuning",
         "tokens": 350,
-        "ttft_ms": 1105.1,
-        "tok_per_sec": 36.29
+        "ttft_ms": 636.7,
+        "tok_per_sec": 36.86
       },
       {
         "task_id": "duckdb_parquet_analytics",
         "name": "DuckDB Parquet Window Analytics Pipeline",
         "tokens": 350,
-        "ttft_ms": 1090.4,
-        "tok_per_sec": 36.57
+        "ttft_ms": 627.0,
+        "tok_per_sec": 36.5
       }
     ]
   }

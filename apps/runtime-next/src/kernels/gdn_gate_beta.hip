@@ -12,18 +12,7 @@
 // softplus(x) is indistinguishable from x in fp32, so return x directly
 // rather than risking overflow in exp(x).
 
-#include <hip/hip_runtime.h>
-
-__device__ __forceinline__ float bf16_bits_to_f32(unsigned short bits) {
-    return __uint_as_float(((unsigned int)bits) << 16);
-}
-
-__device__ __forceinline__ unsigned short f32_to_bf16_bits(float v) {
-    unsigned int bits = __float_as_uint(v);
-    unsigned int lsb = (bits >> 16) & 1u;
-    unsigned int rounded = bits + 0x7fffu + lsb;
-    return (unsigned short)(rounded >> 16);
-}
+#include "bf16_utils.hip"
 
 __device__ __forceinline__ float softplus_f32(float x) {
     return x > 20.0f ? x : log1pf(expf(x));
