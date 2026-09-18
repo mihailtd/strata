@@ -939,7 +939,14 @@ mod tests {
     /// same real weight and the same input formula (see
     /// `scratchpad/gen_gemm_reference.py` -- an independent process, not
     /// this code's own path).
+    ///
+    /// Real, deliberate scope: `[2560, 9216]` and the reference values below
+    /// are real for Qwen3.5-4B's real `down_proj` specifically -- gated to
+    /// the one feature they were actually verified against (see
+    /// `model_loader::tests::real_index_lists_embed_tokens_with_correct_shape`
+    /// for the same reasoning).
     #[test]
+    #[cfg(feature = "qwen35_4b")]
     fn real_gemm_matches_real_down_proj_weight() {
         if hip::device_count().unwrap_or(0) == 0 {
             eprintln!("skipping: no HIP device visible on this machine");

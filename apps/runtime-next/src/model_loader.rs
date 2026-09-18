@@ -408,7 +408,17 @@ mod tests {
     /// model's own config.json implies (vocab_size=248320, hidden_size=2560
     /// -- read directly from the real config.json alongside the weights,
     /// not hardcoded from memory).
+    ///
+    /// Real, deliberate scope: `hidden_size=2560` is real for Qwen3.5-4B
+    /// specifically, not a general invariant -- `locate_model_snapshot()`
+    /// resolves a DIFFERENT real checkpoint under other size features
+    /// (e.g. `qwen35_27b` -> `hidden_size=5120`), which would make this
+    /// assertion fail for a real, expected reason (a different real file),
+    /// not a bug. Gated to the one feature these real numbers were
+    /// actually verified against, rather than silently failing (or being
+    /// loosened into a check that no longer proves anything) under others.
     #[test]
+    #[cfg(feature = "qwen35_4b")]
     fn real_index_lists_embed_tokens_with_correct_shape() {
         let snapshot =
             locate_model_snapshot().expect("no real Qwen3.5-4B snapshot found on this machine");
@@ -425,7 +435,12 @@ mod tests {
     /// hand, not via this same Rust code) -- proving the offset math and
     /// the bf16 decode are both actually correct, not just internally
     /// self-consistent.
+    ///
+    /// Real, deliberate scope: same reasoning as the sibling test above --
+    /// these bytes were independently verified against Qwen3.5-4B's real
+    /// checkpoint file specifically.
     #[test]
+    #[cfg(feature = "qwen35_4b")]
     fn real_tensor_bytes_match_independently_computed_python_values() {
         let snapshot =
             locate_model_snapshot().expect("no real Qwen3.5-4B snapshot found on this machine");

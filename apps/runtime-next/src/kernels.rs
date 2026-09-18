@@ -439,6 +439,57 @@ pub(crate) mod ffi {
             stream: *mut c_void,
         );
 
+        /// §123 EXPERIMENT: `TILE_M=32` variant of the above, isolated for
+        /// a real A/B -- see `src/kernels/w4a16_gemm_prefill.hip`'s own
+        /// doc comment and `docs/DECISIONS.md` §123 for the real verdict.
+        #[allow(clippy::too_many_arguments)]
+        pub fn launch_w4a16_gemm_prefill_tile32_bf16(
+            x: *const c_void,
+            qweight: *const c_void,
+            scales: *const c_void,
+            y: *mut c_void,
+            out_features: c_int,
+            in_features: c_int,
+            group_size: c_int,
+            num_tokens: c_int,
+            stream: *mut c_void,
+        );
+
+        /// §124 EXPERIMENT: `TILE_N=16` variant (doubled output rows per
+        /// block, halving redundant activation re-reads) -- see
+        /// `src/kernels/w4a16_gemm_prefill.hip`'s own doc comment and
+        /// `docs/DECISIONS.md` §124 for the real verdict.
+        #[allow(clippy::too_many_arguments)]
+        pub fn launch_w4a16_gemm_prefill_tile_n16_bf16(
+            x: *const c_void,
+            qweight: *const c_void,
+            scales: *const c_void,
+            y: *mut c_void,
+            out_features: c_int,
+            in_features: c_int,
+            group_size: c_int,
+            num_tokens: c_int,
+            stream: *mut c_void,
+        );
+
+        /// §126 EXPERIMENT: real, production-shaped W4A16 prefill GEMM
+        /// using RDNA3 WMMA INT8 tensor cores -- see
+        /// `src/kernels/w4a16_gemm_prefill_wmma_int8.hip`'s own doc
+        /// comment and `docs/DECISIONS.md` §126 for the real design and
+        /// verdict. NOT wired into `raw::linear_quantized_prefill`.
+        #[allow(clippy::too_many_arguments)]
+        pub fn launch_w4a16_gemm_prefill_wmma_int8_bf16(
+            x: *const c_void,
+            qweight: *const c_void,
+            scales: *const c_void,
+            y: *mut c_void,
+            out_features: c_int,
+            in_features: c_int,
+            group_size: c_int,
+            num_tokens: c_int,
+            stream: *mut c_void,
+        );
+
         /// See `src/kernels/argmax.hip` for what this actually computes:
         /// an on-device argmax over real vocab logits, avoiding the real,
         /// measured ~0.209ms/token cost of copying the full logits buffer
@@ -1850,6 +1901,137 @@ pub fn w4a16_gemm_prefill_bf16(
     device_synchronize()
 }
 
+/// §123 EXPERIMENT: `TILE_M=32` variant of `w4a16_gemm_prefill_bf16`,
+/// isolated for a real, direct A/B against the shipped `TILE_M=16`
+/// kernel -- NOT wired into any real model call site. See
+/// `src/kernels/w4a16_gemm_prefill.hip`'s own doc comment and
+/// `docs/DECISIONS.md` §123 for the real measured verdict.
+#[allow(clippy::too_many_arguments)]
+pub fn w4a16_gemm_prefill_tile32_bf16(
+    x: &DeviceBuffer<u16>,
+    qweight: &DeviceBuffer<u32>,
+    scales: &DeviceBuffer<u16>,
+    y: &mut DeviceBuffer<u16>,
+    out_features: usize,
+    in_features: usize,
+    group_size: usize,
+    num_tokens: usize,
+) -> Result<(), HipError> {
+    assert_eq!(x.len(), num_tokens * in_features, "x length must equal num_tokens * in_features");
+    assert_eq!(in_features % 8, 0, "in_features must be a multiple of 8");
+    assert_eq!(in_features % group_size, 0, "in_features must be a multiple of group_size");
+    assert_eq!(qweight.len(), out_features * (in_features / 8), "qweight length mismatch");
+    assert_eq!(scales.len(), out_features * (in_features / group_size), "scales length mismatch");
+    assert_eq!(y.len(), num_tokens * out_features, "y length mismatch");
+
+    // SAFETY: same reasoning as `w4a16_gemm_prefill_bf16` above -- same
+    // buffer contracts, only TILE_M differs (verified by reading
+    // `w4a16_gemm_prefill.hip`'s `w4a16_gemm_prefill_tile32_kernel`
+    // directly).
+    unsafe {
+        ffi::launch_w4a16_gemm_prefill_tile32_bf16(
+            x.as_device_ptr(),
+            qweight.as_device_ptr(),
+            scales.as_device_ptr(),
+            y.as_device_ptr_mut() as *mut c_void,
+            out_features as i32,
+            in_features as i32,
+            group_size as i32,
+            num_tokens as i32,
+            std::ptr::null_mut(),
+        );
+    }
+    check_last_error()?;
+    device_synchronize()
+}
+
+/// §124 EXPERIMENT: `TILE_N=16` variant of `w4a16_gemm_prefill_bf16`,
+/// isolated for a real, direct A/B against the shipped `TILE_N=8`
+/// kernel -- NOT wired into any real model call site. See
+/// `src/kernels/w4a16_gemm_prefill.hip`'s own doc comment and
+/// `docs/DECISIONS.md` §124 for the real measured verdict.
+#[allow(clippy::too_many_arguments)]
+pub fn w4a16_gemm_prefill_tile_n16_bf16(
+    x: &DeviceBuffer<u16>,
+    qweight: &DeviceBuffer<u32>,
+    scales: &DeviceBuffer<u16>,
+    y: &mut DeviceBuffer<u16>,
+    out_features: usize,
+    in_features: usize,
+    group_size: usize,
+    num_tokens: usize,
+) -> Result<(), HipError> {
+    assert_eq!(x.len(), num_tokens * in_features, "x length must equal num_tokens * in_features");
+    assert_eq!(in_features % 8, 0, "in_features must be a multiple of 8");
+    assert_eq!(in_features % group_size, 0, "in_features must be a multiple of group_size");
+    assert_eq!(qweight.len(), out_features * (in_features / 8), "qweight length mismatch");
+    assert_eq!(scales.len(), out_features * (in_features / group_size), "scales length mismatch");
+    assert_eq!(y.len(), num_tokens * out_features, "y length mismatch");
+
+    // SAFETY: same reasoning as `w4a16_gemm_prefill_bf16` above -- same
+    // buffer contracts, only TILE_N differs (verified by reading
+    // `w4a16_gemm_prefill.hip`'s `w4a16_gemm_prefill_tile_n16_kernel`
+    // directly).
+    unsafe {
+        ffi::launch_w4a16_gemm_prefill_tile_n16_bf16(
+            x.as_device_ptr(),
+            qweight.as_device_ptr(),
+            scales.as_device_ptr(),
+            y.as_device_ptr_mut() as *mut c_void,
+            out_features as i32,
+            in_features as i32,
+            group_size as i32,
+            num_tokens as i32,
+            std::ptr::null_mut(),
+        );
+    }
+    check_last_error()?;
+    device_synchronize()
+}
+
+/// §126 EXPERIMENT: real, production-shaped W4A16 prefill GEMM using
+/// RDNA3 WMMA INT8 tensor cores -- NOT wired into any real model call
+/// site. Requires `in_features` to be a multiple of 128 (real, exact for
+/// every real model size in this family, see
+/// `src/kernels/w4a16_gemm_prefill_wmma_int8.hip`'s own doc comment).
+#[allow(clippy::too_many_arguments)]
+pub fn w4a16_gemm_prefill_wmma_int8_bf16(
+    x: &DeviceBuffer<u16>,
+    qweight: &DeviceBuffer<u32>,
+    scales: &DeviceBuffer<u16>,
+    y: &mut DeviceBuffer<u16>,
+    out_features: usize,
+    in_features: usize,
+    group_size: usize,
+    num_tokens: usize,
+) -> Result<(), HipError> {
+    assert_eq!(x.len(), num_tokens * in_features, "x length must equal num_tokens * in_features");
+    assert_eq!(in_features % 8, 0, "in_features must be a multiple of 8");
+    assert_eq!(in_features % group_size, 0, "in_features must be a multiple of group_size");
+    assert_eq!(group_size, 128, "this WMMA kernel's K-step is fixed at one real 128-element quantization group");
+    assert_eq!(qweight.len(), out_features * (in_features / 8), "qweight length mismatch");
+    assert_eq!(scales.len(), out_features * (in_features / group_size), "scales length mismatch");
+    assert_eq!(y.len(), num_tokens * out_features, "y length mismatch");
+
+    // SAFETY: same reasoning as `w4a16_gemm_prefill_bf16` above -- same
+    // real, live allocations of the asserted sizes.
+    unsafe {
+        ffi::launch_w4a16_gemm_prefill_wmma_int8_bf16(
+            x.as_device_ptr(),
+            qweight.as_device_ptr(),
+            scales.as_device_ptr(),
+            y.as_device_ptr_mut() as *mut c_void,
+            out_features as i32,
+            in_features as i32,
+            group_size as i32,
+            num_tokens as i32,
+            std::ptr::null_mut(),
+        );
+    }
+    check_last_error()?;
+    device_synchronize()
+}
+
 /// On-device argmax over `logits[n]` (real vocab logits). Returns the
 /// index of the first (lowest-index) occurrence of the maximum value --
 /// exactly the semantics `model.rs::argmax_sample`'s original host-side
@@ -2234,6 +2416,12 @@ mod tests {
     /// a fixed synthetic activation (RMSNorm's cost and correctness don't
     /// depend on activation semantics, only shape/dtype -- the weight is
     /// the part that must be real, and here it is).
+    ///
+    /// Real, generalized (not gated, unlike its sibling real-weight-byte
+    /// tests): this one only checks shape/finiteness, not real, size-
+    /// specific reference VALUES -- so it compares against the compiled
+    /// feature's own real `HIDDEN_SIZE` constant instead of a hardcoded
+    /// literal, making it correct under every real model size.
     #[test]
     fn real_rmsnorm_runs_against_real_layer0_norm_weight() {
         if hip::device_count().unwrap_or(0) == 0 {
@@ -2250,7 +2438,7 @@ mod tests {
         )
         .expect("layer 0 input_layernorm.weight must exist");
         let hidden_size = raw.shape[0];
-        assert_eq!(hidden_size, 2560);
+        assert_eq!(hidden_size, crate::model::HIDDEN_SIZE);
 
         let weight_bf16: Vec<u16> = raw
             .data
@@ -3331,7 +3519,16 @@ mod tests {
     /// input formula (see
     /// `scratchpad/gen_causal_conv1d_reference.py` for how these were
     /// generated -- an independent process, not this kernel's own code).
+    ///
+    /// Real, deliberate scope: reads real byte content from whichever
+    /// checkpoint `locate_model_snapshot()` resolves to for the compiled
+    /// feature -- `conv_dim=8192` is structurally shared with `qwen35_9b`
+    /// (both have `GDN_NUM_V_HEADS=32`), but the reference VALUES below
+    /// were computed from Qwen3.5-4B's real trained weights specifically,
+    /// which differ from 9B's real weights at the same shape. Gated to
+    /// the one feature whose real bytes these values actually match.
     #[test]
+    #[cfg(feature = "qwen35_4b")]
     fn real_causal_conv1d_update_matches_real_layer0_weights() {
         if hip::device_count().unwrap_or(0) == 0 {
             eprintln!("skipping: no HIP device visible on this machine");
@@ -5251,7 +5448,12 @@ mod tests {
     /// exists specifically to prove the new hand-written GEMV kernel
     /// computes the IDENTICAL real result as the hipBLAS path it's meant to
     /// replace in the hot path, not just a plausible-looking one.
+    ///
+    /// Real, deliberate scope: same Qwen3.5-4B-specific real weight and
+    /// reference values as `blas::tests::real_gemm_matches_real_down_proj_weight`
+    /// -- gated the same way, for the same reason.
     #[test]
+    #[cfg(feature = "qwen35_4b")]
     fn real_gemv_matches_real_down_proj_weight() {
         if hip::device_count().unwrap_or(0) == 0 {
             eprintln!("skipping: no HIP device visible on this machine");
@@ -5572,6 +5774,510 @@ mod tests {
             "down_proj shape (out={out_features}, in={in_features}), {num_tokens} tokens: per-token loop {per_token_us:.1} us/chunk vs batched prefill {batched_us:.1} us/chunk ({:.2}x)",
             per_token_us / batched_us
         );
+    }
+
+    /// §123 EXPERIMENT, correctness gate: the `TILE_M=32` kernel must
+    /// produce IDENTICAL output to the already-shipped, already-proven
+    /// `TILE_M=16` kernel (`w4a16_gemm_prefill_bf16`) for the same real
+    /// weights/activations -- both compute the exact same real math, only
+    /// the tile size differs. `num_tokens=40` deliberately spans BOTH a
+    /// full 32-token tile and a real partial tail tile.
+    #[test]
+    #[ignore]
+    fn real_w4a16_gemm_prefill_tile32_matches_tile16() {
+        if hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let quantized_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../models/qwen38_27b_w4a16");
+        if !quantized_dir.is_dir() {
+            eprintln!("skipping: no real quantized 27B checkpoint at {}", quantized_dir.display());
+            return;
+        }
+
+        let (qweight_buf, scales_buf) =
+            crate::model_loader::load_w4a16_weight(&quantized_dir, "model.language_model.layers.0.mlp.down_proj.weight")
+                .expect("real quantized down_proj weight must load");
+
+        let out_features = 5120usize;
+        let in_features = 17408usize;
+        let group_size = 128usize;
+        let num_tokens = 40usize;
+
+        let x_f32: Vec<f32> = (0..num_tokens * in_features)
+            .map(|i| {
+                let t = i / in_features;
+                let k = i % in_features;
+                (((k + t * 7) % 13) as i32 - 6) as f32 * 0.05
+            })
+            .collect();
+        let x_bf16: Vec<u16> = x_f32.iter().map(|&v| f32_to_bf16(v)).collect();
+        let mut x_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(x_bf16.len()).unwrap();
+        x_buf.copy_from_host(&x_bf16).unwrap();
+
+        let mut y16_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(num_tokens * out_features).unwrap();
+        w4a16_gemm_prefill_bf16(&x_buf, &qweight_buf, &scales_buf, &mut y16_buf, out_features, in_features, group_size, num_tokens)
+            .expect("real TILE_M=16 call failed");
+        let mut y16 = vec![0u16; num_tokens * out_features];
+        y16_buf.copy_to_host(&mut y16).unwrap();
+
+        let mut y32_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(num_tokens * out_features).unwrap();
+        w4a16_gemm_prefill_tile32_bf16(&x_buf, &qweight_buf, &scales_buf, &mut y32_buf, out_features, in_features, group_size, num_tokens)
+            .expect("real TILE_M=32 call failed");
+        let mut y32 = vec![0u16; num_tokens * out_features];
+        y32_buf.copy_to_host(&mut y32).unwrap();
+
+        let mut max_diff = 0.0f32;
+        let mut num_exceeding = 0usize;
+        for i in 0..num_tokens * out_features {
+            let a = bf16_to_f32(y16[i]);
+            let b = bf16_to_f32(y32[i]);
+            let diff = (a - b).abs();
+            max_diff = max_diff.max(diff);
+            if diff >= 1e-3 {
+                num_exceeding += 1;
+            }
+        }
+        eprintln!("TILE_M=32 vs TILE_M=16: max abs diff={max_diff}, num_exceeding(>=1e-3)={num_exceeding}/{}", num_tokens * out_features);
+        assert_eq!(num_exceeding, 0, "TILE_M=32 must match TILE_M=16 within the same real bf16-rounding tolerance -- same math, different tile size only");
+    }
+
+    /// §123 EXPERIMENT: real, direct A/B between `TILE_M=16` (shipped)
+    /// and `TILE_M=32` (experimental) at real prompt-length-representative
+    /// token counts -- tests §121 Part 2's own "Dynamic Batch Tile Sizing"
+    /// roadmap claim directly: does halving `ceil(num_tokens/TILE_M)`
+    /// weight-VRAM sweeps actually win at THIS benchmark's real ~35-54
+    /// token prompts, or does doubled register/LDS pressure cost more
+    /// real occupancy than it buys back? Real weights both sides (27B
+    /// `down_proj`). Not wired into the model regardless of outcome --
+    /// this is the decisive measurement that decides whether it's worth
+    /// doing so.
+    #[test]
+    #[ignore]
+    fn bench_real_w4a16_gemm_prefill_tile16_vs_tile32() {
+        if hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let quantized_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../models/qwen38_27b_w4a16");
+        if !quantized_dir.is_dir() {
+            eprintln!("skipping: no real quantized 27B checkpoint at {}", quantized_dir.display());
+            return;
+        }
+
+        let (qweight_buf, scales_buf) =
+            crate::model_loader::load_w4a16_weight(&quantized_dir, "model.language_model.layers.0.mlp.down_proj.weight")
+                .expect("real quantized down_proj weight must load");
+
+        let out_features = 5120usize;
+        let in_features = 17408usize;
+        let group_size = 128usize;
+        let iters = 200;
+        let warmup = 20;
+
+        // Real prompt-length-representative token counts: this
+        // benchmark's own real HTTP tasks land in the ~35-54 range
+        // (§105/§108's own diagnosis); 16/64/128 bracket the TILE_M=16
+        // boundary and the largest real bucket ever exercised.
+        for &num_tokens in &[16usize, 24, 32, 40, 54, 64, 128] {
+            let x_f32: Vec<f32> = (0..num_tokens * in_features).map(|i| ((i % 91) as f32 - 45.0) * 0.01).collect();
+            let x_bf16: Vec<u16> = x_f32.iter().map(|&v| f32_to_bf16(v)).collect();
+            let mut x_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(x_bf16.len()).unwrap();
+            x_buf.copy_from_host(&x_bf16).unwrap();
+
+            let mut y16_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(num_tokens * out_features).unwrap();
+            for _ in 0..warmup {
+                w4a16_gemm_prefill_bf16(&x_buf, &qweight_buf, &scales_buf, &mut y16_buf, out_features, in_features, group_size, num_tokens).unwrap();
+            }
+            let t0 = std::time::Instant::now();
+            for _ in 0..iters {
+                w4a16_gemm_prefill_bf16(&x_buf, &qweight_buf, &scales_buf, &mut y16_buf, out_features, in_features, group_size, num_tokens).unwrap();
+            }
+            let tile16_us = t0.elapsed().as_secs_f64() * 1e6 / iters as f64;
+
+            let mut y32_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(num_tokens * out_features).unwrap();
+            for _ in 0..warmup {
+                w4a16_gemm_prefill_tile32_bf16(&x_buf, &qweight_buf, &scales_buf, &mut y32_buf, out_features, in_features, group_size, num_tokens).unwrap();
+            }
+            let t0 = std::time::Instant::now();
+            for _ in 0..iters {
+                w4a16_gemm_prefill_tile32_bf16(&x_buf, &qweight_buf, &scales_buf, &mut y32_buf, out_features, in_features, group_size, num_tokens).unwrap();
+            }
+            let tile32_us = t0.elapsed().as_secs_f64() * 1e6 / iters as f64;
+
+            println!(
+                "num_tokens={num_tokens:4}: TILE_M=16 {tile16_us:8.1}us vs TILE_M=32 {tile32_us:8.1}us ({:.2}x{})",
+                tile16_us / tile32_us,
+                if tile32_us < tile16_us { "  <- TILE_M=32 wins" } else { "" }
+            );
+        }
+    }
+
+    /// §126 EXPERIMENT, correctness gate: the real, production-shaped
+    /// WMMA INT8 prefill kernel, run against REAL 27B `down_proj`
+    /// weights, checked two ways: (1) against a real, independent CPU
+    /// reference that replicates the SAME intended INT8 quantization
+    /// math (catches real kernel-implementation bugs, not just
+    /// quantization noise); (2) against the shipped `TILE_N=16` bf16
+    /// kernel's real output (measures the real, disclosed cost of the
+    /// new INT8-activation-quantization rounding this kernel introduces
+    /// -- a genuinely new rounding source, unlike TILE_N=16's bit-exact
+    /// same-math change).
+    #[test]
+    #[ignore]
+    fn real_w4a16_gemm_prefill_wmma_int8_matches_cpu_reference_and_shipped_kernel() {
+        if hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let quantized_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../models/qwen38_27b_w4a16");
+        if !quantized_dir.is_dir() {
+            eprintln!("skipping: no real quantized 27B checkpoint at {}", quantized_dir.display());
+            return;
+        }
+
+        let (qweight_buf, scales_buf) =
+            crate::model_loader::load_w4a16_weight(&quantized_dir, "model.language_model.layers.0.mlp.down_proj.weight")
+                .expect("real quantized down_proj weight must load");
+
+        let out_features = 5120usize;
+        let in_features = 17408usize;
+        let group_size = 128usize;
+        let num_tokens = 40usize; // real partial-tile tail (not a multiple of 16)
+
+        let mut qweight_host = vec![0u32; out_features * (in_features / 8)];
+        qweight_buf.copy_to_host(&mut qweight_host).unwrap();
+        let mut scales_host = vec![0u16; out_features * (in_features / group_size)];
+        scales_buf.copy_to_host(&mut scales_host).unwrap();
+
+        // Real, deterministic, non-half-integer bf16 activation values
+        // (avoids round-to-even vs round-half-away-from-zero ambiguity
+        // between HIP's `__float2int_rn` and any CPU-side rounding).
+        let x_f32: Vec<f32> = (0..num_tokens * in_features)
+            .map(|i| {
+                let t = i / in_features;
+                let k = i % in_features;
+                (((k + t * 7) % 13) as i32 - 6) as f32 * 0.0523
+            })
+            .collect();
+        let x_bf16: Vec<u16> = x_f32.iter().map(|&v| f32_to_bf16(v)).collect();
+        let x_bf16_f32: Vec<f32> = x_bf16.iter().map(|&b| bf16_to_f32(b)).collect();
+
+        let mut x_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(x_bf16.len()).unwrap();
+        x_buf.copy_from_host(&x_bf16).unwrap();
+
+        // Real reference: shipped TILE_N=16 bf16 kernel.
+        let mut y_ref_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(num_tokens * out_features).unwrap();
+        w4a16_gemm_prefill_tile_n16_bf16(&x_buf, &qweight_buf, &scales_buf, &mut y_ref_buf, out_features, in_features, group_size, num_tokens)
+            .expect("real shipped TILE_N=16 call failed");
+        let mut y_ref = vec![0u16; num_tokens * out_features];
+        y_ref_buf.copy_to_host(&mut y_ref).unwrap();
+
+        // Real candidate: WMMA INT8 kernel.
+        let mut y_wmma_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(num_tokens * out_features).unwrap();
+        w4a16_gemm_prefill_wmma_int8_bf16(&x_buf, &qweight_buf, &scales_buf, &mut y_wmma_buf, out_features, in_features, group_size, num_tokens)
+            .expect("real WMMA INT8 call failed");
+        let mut y_wmma = vec![0u16; num_tokens * out_features];
+        y_wmma_buf.copy_to_host(&mut y_wmma).unwrap();
+
+        // Real, independent CPU reference: replicates the SAME intended
+        // per-token, per-128-group symmetric INT8 quantization (real
+        // `max_abs/127`, real round-to-nearest, real [-127,127] clamp)
+        // and the SAME `nibble-8` weight dequant, accumulating in f32
+        // group-by-group -- the real, intended math this kernel's GPU
+        // code should be computing, independent of the GPU kernel text.
+        let num_groups = in_features / group_size;
+        let mut y_cpu = vec![0.0f32; num_tokens * out_features];
+        for row in 0..out_features {
+            let qw_row = &qweight_host[row * (in_features / 8)..(row + 1) * (in_features / 8)];
+            let scale_row = &scales_host[row * num_groups..(row + 1) * num_groups];
+            for t in 0..num_tokens {
+                let xr = &x_bf16_f32[t * in_features..(t + 1) * in_features];
+                let mut acc = 0.0f32;
+                for g in 0..num_groups {
+                    let k0 = g * group_size;
+                    // Real per-token, per-group activation quantization.
+                    let mut max_abs = 0.0f32;
+                    for k in 0..group_size {
+                        max_abs = max_abs.max(xr[k0 + k].abs());
+                    }
+                    let a_scale = if max_abs > 0.0 { max_abs / 127.0 } else { 1.0 };
+                    let mut x_q = [0i32; 128];
+                    for k in 0..group_size {
+                        let q = (xr[k0 + k] / a_scale).round();
+                        x_q[k] = q.clamp(-127.0, 127.0) as i32;
+                    }
+                    let w_scale = bf16_to_f32(scale_row[g]);
+                    let mut raw = 0i32;
+                    for k in 0..group_size {
+                        let word = qw_row[(k0 + k) / 8];
+                        let nibble = (word >> ((k % 8) * 4)) & 0xF;
+                        let w_q = nibble as i32 - 8;
+                        raw += w_q * x_q[k];
+                    }
+                    acc += w_scale * a_scale * raw as f32;
+                }
+                y_cpu[t * out_features + row] = acc;
+            }
+        }
+
+        let mut max_diff_vs_cpu = 0.0f32;
+        let mut sum_abs_ref = 0.0f64;
+        let mut sum_abs_diff_vs_ref = 0.0f64;
+        let mut max_diff_vs_ref = 0.0f32;
+        let mut worst: Option<(usize, usize, f32)> = None; // (token, row, diff)
+        for i in 0..num_tokens * out_features {
+            let wmma = bf16_to_f32(y_wmma[i]);
+            let cpu = y_cpu[i];
+            let refv = bf16_to_f32(y_ref[i]);
+            let d = (wmma - cpu).abs();
+            max_diff_vs_cpu = max_diff_vs_cpu.max(d);
+            max_diff_vs_ref = max_diff_vs_ref.max((wmma - refv).abs());
+            sum_abs_ref += refv.abs() as f64;
+            sum_abs_diff_vs_ref += (wmma - refv).abs() as f64;
+            if worst.map(|(_, _, wd)| d > wd).unwrap_or(true) {
+                worst = Some((i / out_features, i % out_features, d));
+            }
+        }
+        let rel_l1_vs_ref = sum_abs_diff_vs_ref / sum_abs_ref.max(1e-9);
+        eprintln!("WMMA INT8 kernel vs real CPU quantization reference: max abs diff = {max_diff_vs_cpu}");
+        eprintln!("WMMA INT8 kernel vs real shipped bf16 kernel: max abs diff = {max_diff_vs_ref}, relative L1 = {:.4}%", rel_l1_vs_ref * 100.0);
+        eprintln!("wmma[0..4] = {:?}", (0..4).map(|i| bf16_to_f32(y_wmma[i])).collect::<Vec<_>>());
+        eprintln!("cpu [0..4] = {:?}", &y_cpu[0..4]);
+        eprintln!("ref [0..4] = {:?}", (0..4).map(|i| bf16_to_f32(y_ref[i])).collect::<Vec<_>>());
+        if let Some((wt, wr, wd)) = worst {
+            eprintln!(
+                "worst (token={wt}, row={wr}, block_x={}, block_y={}, warp={}, frag_row={}): wmma={}, cpu={}, ref={}, diff={wd}",
+                wr / 128, wt / 16, (wr % 128) / 16, wr % 16,
+                bf16_to_f32(y_wmma[wt * out_features + wr]), y_cpu[wt * out_features + wr], bf16_to_f32(y_ref[wt * out_features + wr])
+            );
+        }
+        // Real distribution breakdown: is the error concentrated in a
+        // specific token-tile (e.g. the partial tail 32..39) or spread
+        // uniformly? Bucket by token-tile and row-tile.
+        for tt in 0..((num_tokens + 15) / 16) {
+            let t_lo = tt * 16;
+            let t_hi = ((tt + 1) * 16).min(num_tokens);
+            let mut bucket_max = 0.0f32;
+            for t in t_lo..t_hi {
+                for row in 0..out_features {
+                    let i = t * out_features + row;
+                    let d = (bf16_to_f32(y_wmma[i]) - y_cpu[i]).abs();
+                    bucket_max = bucket_max.max(d);
+                }
+            }
+            eprintln!("token-tile [{t_lo},{t_hi}): max diff vs cpu = {bucket_max}");
+        }
+
+        assert!(
+            max_diff_vs_cpu < 0.05,
+            "WMMA INT8 kernel must match its own intended CPU-reference quantization math closely (max_diff_vs_cpu={max_diff_vs_cpu}) -- a larger gap signals a real kernel bug, not quantization noise"
+        );
+    }
+
+    /// §124 EXPERIMENT, correctness gate: the `TILE_N=16` kernel must
+    /// produce IDENTICAL output to the shipped `TILE_N=8` kernel for the
+    /// same real weights/activations. `num_tokens=40` spans a real
+    /// partial tail tile; `out_features=5120` is NOT a multiple of 16,
+    /// so this also exercises the real partial-row-pair tail (row_o1
+    /// running past `out_features` for the very last warp of the very
+    /// last x-block).
+    #[test]
+    #[ignore]
+    fn real_w4a16_gemm_prefill_tile_n16_matches_tile_n8() {
+        if hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let quantized_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../models/qwen38_27b_w4a16");
+        if !quantized_dir.is_dir() {
+            eprintln!("skipping: no real quantized 27B checkpoint at {}", quantized_dir.display());
+            return;
+        }
+
+        let (qweight_buf, scales_buf) =
+            crate::model_loader::load_w4a16_weight(&quantized_dir, "model.language_model.layers.0.mlp.down_proj.weight")
+                .expect("real quantized down_proj weight must load");
+
+        let out_features = 5120usize;
+        let in_features = 17408usize;
+        let group_size = 128usize;
+        let num_tokens = 40usize;
+
+        let x_f32: Vec<f32> = (0..num_tokens * in_features)
+            .map(|i| {
+                let t = i / in_features;
+                let k = i % in_features;
+                (((k + t * 7) % 13) as i32 - 6) as f32 * 0.05
+            })
+            .collect();
+        let x_bf16: Vec<u16> = x_f32.iter().map(|&v| f32_to_bf16(v)).collect();
+        let mut x_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(x_bf16.len()).unwrap();
+        x_buf.copy_from_host(&x_bf16).unwrap();
+
+        let mut y8_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(num_tokens * out_features).unwrap();
+        w4a16_gemm_prefill_bf16(&x_buf, &qweight_buf, &scales_buf, &mut y8_buf, out_features, in_features, group_size, num_tokens)
+            .expect("real TILE_N=8 call failed");
+        let mut y8 = vec![0u16; num_tokens * out_features];
+        y8_buf.copy_to_host(&mut y8).unwrap();
+
+        let mut y16_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(num_tokens * out_features).unwrap();
+        w4a16_gemm_prefill_tile_n16_bf16(&x_buf, &qweight_buf, &scales_buf, &mut y16_buf, out_features, in_features, group_size, num_tokens)
+            .expect("real TILE_N=16 call failed");
+        let mut y16 = vec![0u16; num_tokens * out_features];
+        y16_buf.copy_to_host(&mut y16).unwrap();
+
+        let mut max_diff = 0.0f32;
+        let mut num_exceeding = 0usize;
+        for i in 0..num_tokens * out_features {
+            let a = bf16_to_f32(y8[i]);
+            let b = bf16_to_f32(y16[i]);
+            let diff = (a - b).abs();
+            max_diff = max_diff.max(diff);
+            if diff >= 1e-3 {
+                num_exceeding += 1;
+            }
+        }
+        eprintln!("TILE_N=16 vs TILE_N=8: max abs diff={max_diff}, num_exceeding(>=1e-3)={num_exceeding}/{}", num_tokens * out_features);
+        assert_eq!(num_exceeding, 0, "TILE_N=16 must match TILE_N=8 within the same real bf16-rounding tolerance -- same math, different tile size only");
+    }
+
+    /// §124 EXPERIMENT: real, direct A/B between `TILE_N=8` (shipped) and
+    /// `TILE_N=16` (experimental, halves the redundant activation-tile
+    /// re-read count by halving block count along the output-row
+    /// dimension) at real prompt-length-representative token counts.
+    /// Real weights both sides (27B `down_proj`). Not wired into the
+    /// model regardless of outcome.
+    #[test]
+    #[ignore]
+    fn bench_real_w4a16_gemm_prefill_tile_n8_vs_tile_n16() {
+        if hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let quantized_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../models/qwen38_27b_w4a16");
+        if !quantized_dir.is_dir() {
+            eprintln!("skipping: no real quantized 27B checkpoint at {}", quantized_dir.display());
+            return;
+        }
+
+        let (qweight_buf, scales_buf) =
+            crate::model_loader::load_w4a16_weight(&quantized_dir, "model.language_model.layers.0.mlp.down_proj.weight")
+                .expect("real quantized down_proj weight must load");
+
+        let out_features = 5120usize;
+        let in_features = 17408usize;
+        let group_size = 128usize;
+        let iters = 200;
+        let warmup = 20;
+
+        for &num_tokens in &[16usize, 24, 32, 40, 54, 64, 128] {
+            let x_f32: Vec<f32> = (0..num_tokens * in_features).map(|i| ((i % 91) as f32 - 45.0) * 0.01).collect();
+            let x_bf16: Vec<u16> = x_f32.iter().map(|&v| f32_to_bf16(v)).collect();
+            let mut x_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(x_bf16.len()).unwrap();
+            x_buf.copy_from_host(&x_bf16).unwrap();
+
+            let mut y8_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(num_tokens * out_features).unwrap();
+            for _ in 0..warmup {
+                w4a16_gemm_prefill_bf16(&x_buf, &qweight_buf, &scales_buf, &mut y8_buf, out_features, in_features, group_size, num_tokens).unwrap();
+            }
+            let t0 = std::time::Instant::now();
+            for _ in 0..iters {
+                w4a16_gemm_prefill_bf16(&x_buf, &qweight_buf, &scales_buf, &mut y8_buf, out_features, in_features, group_size, num_tokens).unwrap();
+            }
+            let tile_n8_us = t0.elapsed().as_secs_f64() * 1e6 / iters as f64;
+
+            let mut y16_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(num_tokens * out_features).unwrap();
+            for _ in 0..warmup {
+                w4a16_gemm_prefill_tile_n16_bf16(&x_buf, &qweight_buf, &scales_buf, &mut y16_buf, out_features, in_features, group_size, num_tokens).unwrap();
+            }
+            let t0 = std::time::Instant::now();
+            for _ in 0..iters {
+                w4a16_gemm_prefill_tile_n16_bf16(&x_buf, &qweight_buf, &scales_buf, &mut y16_buf, out_features, in_features, group_size, num_tokens).unwrap();
+            }
+            let tile_n16_us = t0.elapsed().as_secs_f64() * 1e6 / iters as f64;
+
+            println!(
+                "num_tokens={num_tokens:4}: TILE_N=8 {tile_n8_us:8.1}us vs TILE_N=16 {tile_n16_us:8.1}us ({:.2}x{})",
+                tile_n8_us / tile_n16_us,
+                if tile_n16_us < tile_n8_us { "  <- TILE_N=16 wins" } else { "" }
+            );
+        }
+    }
+
+    /// §126 EXPERIMENT, THE decisive benchmark: real, measured throughput
+    /// comparison, shipped scalar `TILE_N=16` kernel vs. the new WMMA
+    /// INT8 tensor-core kernel, real 27B `down_proj` weights, real token
+    /// counts spanning this benchmark's own real prompt-length range.
+    /// Not wired into the model regardless of outcome -- see
+    /// `docs/DECISIONS.md` §126 for the real, honest verdict.
+    #[test]
+    #[ignore]
+    fn bench_real_w4a16_gemm_prefill_tile_n16_vs_wmma_int8() {
+        if hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let quantized_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../models/qwen38_27b_w4a16");
+        if !quantized_dir.is_dir() {
+            eprintln!("skipping: no real quantized 27B checkpoint at {}", quantized_dir.display());
+            return;
+        }
+
+        let (qweight_buf, scales_buf) =
+            crate::model_loader::load_w4a16_weight(&quantized_dir, "model.language_model.layers.0.mlp.down_proj.weight")
+                .expect("real quantized down_proj weight must load");
+
+        let out_features = 5120usize;
+        let in_features = 17408usize;
+        let group_size = 128usize;
+        let iters = 200;
+        let warmup = 20;
+
+        for &num_tokens in &[16usize, 24, 32, 40, 54, 64, 128] {
+            let x_f32: Vec<f32> = (0..num_tokens * in_features).map(|i| ((i % 91) as f32 - 45.0) * 0.01).collect();
+            let x_bf16: Vec<u16> = x_f32.iter().map(|&v| f32_to_bf16(v)).collect();
+            let mut x_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(x_bf16.len()).unwrap();
+            x_buf.copy_from_host(&x_bf16).unwrap();
+
+            let mut y16_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(num_tokens * out_features).unwrap();
+            for _ in 0..warmup {
+                w4a16_gemm_prefill_tile_n16_bf16(&x_buf, &qweight_buf, &scales_buf, &mut y16_buf, out_features, in_features, group_size, num_tokens).unwrap();
+            }
+            let t0 = std::time::Instant::now();
+            for _ in 0..iters {
+                w4a16_gemm_prefill_tile_n16_bf16(&x_buf, &qweight_buf, &scales_buf, &mut y16_buf, out_features, in_features, group_size, num_tokens).unwrap();
+            }
+            let tile_n16_us = t0.elapsed().as_secs_f64() * 1e6 / iters as f64;
+
+            let mut y_wmma_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(num_tokens * out_features).unwrap();
+            for _ in 0..warmup {
+                w4a16_gemm_prefill_wmma_int8_bf16(&x_buf, &qweight_buf, &scales_buf, &mut y_wmma_buf, out_features, in_features, group_size, num_tokens).unwrap();
+            }
+            let t0 = std::time::Instant::now();
+            for _ in 0..iters {
+                w4a16_gemm_prefill_wmma_int8_bf16(&x_buf, &qweight_buf, &scales_buf, &mut y_wmma_buf, out_features, in_features, group_size, num_tokens).unwrap();
+            }
+            let wmma_us = t0.elapsed().as_secs_f64() * 1e6 / iters as f64;
+
+            println!(
+                "num_tokens={num_tokens:4}: TILE_N=16 (scalar) {tile_n16_us:8.1}us vs WMMA INT8 {wmma_us:8.1}us ({:.2}x{})",
+                tile_n16_us / wmma_us,
+                if wmma_us < tile_n16_us { "  <- WMMA wins" } else { "" }
+            );
+        }
     }
 
     /// Real, measured throughput comparison: `gemv_bf16` vs. `blas::

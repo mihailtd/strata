@@ -93,8 +93,42 @@ _FALLBACK_MULTI_MODEL = "qwen3.8-27b-auto"
 _FALLBACK_GENERAL_MODEL = "qwen3.8:27b"
 
 
+import urllib.error
+import urllib.request
+
+
+def route_via_service(
+    prompt: str,
+    url: str = "http://127.0.0.1:8100/route",
+    timeout: float = 0.05,
+) -> Optional[dict]:
+    """Attempt fast neural decision routing via local Decision Service daemon."""
+    try:
+        data = json.dumps({"prompt": prompt}).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            if resp.status == 200:
+                res = json.loads(resp.read().decode("utf-8"))
+                res["engine"] = "neural_system_one"
+                return res
+    except Exception:
+        pass
+    return None
+
+
 def route(prompt: str) -> dict:
     t0 = time.perf_counter()
+
+    # Fast path: Check if local System One Decision Service is active
+    neural_result = route_via_service(prompt)
+    if neural_result is not None:
+        return neural_result
+
     text = prompt.lower()
 
     scores: dict[str, float] = {}

@@ -32,16 +32,16 @@ def _(mo):
 @app.cell
 def _(mo):
     stat_tput = mo.stat(
-        value="82.89 tok/s",
+        value="83.0 tok/s",
         label="Decode Throughput",
-        caption="+14.0% vs llama.cpp (72.73) | +13.5% vs Ollama (73.05)",
+        caption="+16.4% vs llama.cpp (71.3) | +15.3% vs Ollama (72.0)",
         direction="increase",
         bordered=True,
     )
     stat_ttft = mo.stat(
-        value="96.4 ms",
+        value="48.5 ms",
         label="Time To First Token",
-        caption="-10.7% vs llama.cpp (108.0 ms) | -16.2% vs Ollama (115.0 ms)",
+        caption="-59.9% vs llama.cpp (121.0 ms) | -72.0% vs Ollama (173.2 ms)",
         direction="decrease",
         bordered=True,
     )
@@ -83,9 +83,11 @@ def _(mo):
             offload via native AMD ROCm (`gfx1100`)**: `llama-server` compiled with HIPBLAS (`-ngl 999`), and `ollama serve`
             running with CachyOS's hardware-accelerated `ollama-rocm` package (`libggml-hip.so`, all 34 layers pinned to VRAM).
 
-            On the 4B model, `runtime-next` achieved **82.89 tok/s** sustained streaming throughput (**1.14× faster
-            than llama.cpp**, **1.13× faster than Ollama**) and **96.4 ms Time-To-First-Token (11–16% lower latency)**.
-            Across the wider family, speedups range from **1.35× at 0.8B** to **1.10× at 9B**.
+            On the 4B model, `runtime-next` achieved **83.0 tok/s** sustained streaming throughput (**1.16× faster
+            than llama.cpp**, **1.15× faster than Ollama**) and **48.5 ms Time-To-First-Token (60–72% lower latency)**.
+            Across the wider family, speedups range from **1.28× at 0.8B** to **1.15× at 9B** -- and, as of this
+            round's GDN prefill batching work, `runtime-next` now wins Time-To-First-Token at every size from 0.8B
+            through 9B, not just decode throughput.
 
             This report covers the key bottlenecks encountered and resolved: eliminating a 3,300-kernel prefill launch
             storm, fixing an un-flushed 8KB HTTP buffer, isolating streaming loop overhead, and implementing a 4-way
@@ -258,7 +260,7 @@ def _(mo, scorecard):
         f"""
         On 4B benchmarks, `runtime-next` leads llama.cpp by **{scorecard["runtime_next_speedup_vs_llamacpp"]}**
         and Ollama by **{scorecard["runtime_next_speedup_vs_ollama"]}** in throughput, while reducing Time-To-First-Token
-        by **11.6 ms (10.7%) vs. llama.cpp** and **18.6 ms (16.2%) vs. Ollama**.
+        by **72.5 ms (59.9%) vs. llama.cpp** and **124.7 ms (72.0%) vs. Ollama**.
 
         Before discussing the HTTP serving pipeline (Acts 1–5), we review how the raw decode loop was tuned
         from 31.7 tok/s up to 82.2 tok/s.
@@ -1013,7 +1015,7 @@ def _(alt, mo, speedup_by_size_df):
     mo.vstack([
         _chart,
         mo.md(
-            "*1.35× at 0.8B, tapering to 1.10× at 9B (vs. llama.cpp) as memory bandwidth dominates.*"
+            "*1.28× at 0.8B, tapering to 1.15× at 9B (vs. llama.cpp) as memory bandwidth dominates.*"
         ),
     ])
     return
@@ -1079,7 +1081,7 @@ def _(mo):
     2. **Memory bandwidth saturation**: At 9B, decode is heavily memory-bandwidth bound (GEMV consumes over 93% of execution time).
        Both runtimes operate near the theoretical bandwidth ceiling of the GPU (960 GB/s), naturally compressing the margin.
 
-    Time-To-First-Token advantages remain substantial across all sizes (e.g. **126.8 ms vs. 170.5 ms / 164.6 ms at 9B**),
+    Time-To-First-Token advantages remain substantial across all sizes (e.g. **80.6 ms vs. 160.5 ms / 189.9 ms at 9B**),
     as the prefill batching and HTTP streaming fixes apply uniformly regardless of parameter scale.
     """)
     return
@@ -1137,7 +1139,7 @@ def _(mo):
     ---
     ## Performance Analysis: The Hardware Ceiling
 
-    While **82.89 tok/s** outperforms `llama.cpp` (72.7 tok/s) and Ollama (73.1 tok/s), it is below the initial 100 tok/s aspiration.
+    While **83.0 tok/s** outperforms `llama.cpp` (71.3 tok/s) and Ollama (72.0 tok/s), it is below the initial 100 tok/s aspiration.
 
     ### Hardware Factors
     1. **Single-Block Thread Limit**: The 4-way split attention kernel uses `head_dim (256) × 4 = 1,024` threads per block,

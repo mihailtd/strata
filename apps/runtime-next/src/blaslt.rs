@@ -454,7 +454,12 @@ mod tests {
     /// reference values `blas.rs`'s own `real_gemm_matches_real_down_proj_weight`
     /// test already established (`scratchpad/gen_gemm_reference.py`) --
     /// same real weight, same oracle, different GEMM library underneath.
+    ///
+    /// Real, deliberate scope: same Qwen3.5-4B-specific real weight and
+    /// reference values as `blas::tests::real_gemm_matches_real_down_proj_weight`
+    /// -- gated the same way, for the same reason.
     #[test]
+    #[cfg(feature = "qwen35_4b")]
     fn real_gemm_plans_matches_real_down_proj_weight() {
         if hip::device_count().unwrap_or(0) == 0 {
             eprintln!("skipping: no HIP device visible on this machine");

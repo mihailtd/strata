@@ -1,53 +1,53 @@
 {
   "0.8B": {
-    "avg_llamacpp_tok_s": 264.28,
-    "avg_ollama_tok_s": 284.74,
-    "avg_runtime_next_tok_s": 354.39,
-    "runtime_next_speedup_vs_llamacpp": 1.341,
-    "runtime_next_speedup_vs_ollama": 1.245,
+    "avg_llamacpp_tok_s": 274.97,
+    "avg_ollama_tok_s": 292.35,
+    "avg_runtime_next_tok_s": 366.2,
+    "runtime_next_speedup_vs_llamacpp": 1.332,
+    "runtime_next_speedup_vs_ollama": 1.253,
     "avg_ttft_ms": {
-      "llamacpp": 39.6,
-      "ollama": 47.4,
-      "runtime_next": 23.0
+      "llamacpp": 36.8,
+      "ollama": 43.5,
+      "runtime_next": 16.1
     },
     "memory_footprint": {
       "llamacpp": {
-        "vram_peak_mb": 4581,
-        "vram_min_mb": 3471,
-        "vram_baseline_mb": 3729,
-        "vram_delta_mb": 852,
-        "gtt_peak_mb": 1097,
-        "gtt_min_mb": 1085,
-        "gtt_baseline_mb": 1085,
-        "gtt_grew": 12,
-        "sys_used_peak_mb": 24558,
-        "sys_used_min_mb": 24134,
+        "vram_peak_mb": 3676,
+        "vram_min_mb": 2590,
+        "vram_baseline_mb": 2594,
+        "vram_delta_mb": 1082,
+        "gtt_peak_mb": 2113,
+        "gtt_min_mb": 2091,
+        "gtt_baseline_mb": 2109,
+        "gtt_grew": 4,
+        "sys_used_peak_mb": 25761,
+        "sys_used_min_mb": 25001,
         "n_samples": 13
       },
       "ollama": {
-        "vram_peak_mb": 5049,
-        "vram_min_mb": 3466,
-        "vram_baseline_mb": 3493,
-        "vram_delta_mb": 1556,
-        "gtt_peak_mb": 1095,
-        "gtt_min_mb": 1085,
-        "gtt_baseline_mb": 1085,
-        "gtt_grew": 10,
-        "sys_used_peak_mb": 24655,
-        "sys_used_min_mb": 24148,
+        "vram_peak_mb": 4392,
+        "vram_min_mb": 2427,
+        "vram_baseline_mb": 2672,
+        "vram_delta_mb": 1720,
+        "gtt_peak_mb": 2113,
+        "gtt_min_mb": 2093,
+        "gtt_baseline_mb": 2093,
+        "gtt_grew": 20,
+        "sys_used_peak_mb": 25479,
+        "sys_used_min_mb": 24858,
         "n_samples": 13
       },
       "runtime_next": {
-        "vram_peak_mb": 4733,
-        "vram_min_mb": 3448,
-        "vram_baseline_mb": 3449,
-        "vram_delta_mb": 1284,
-        "gtt_peak_mb": 1091,
-        "gtt_min_mb": 1083,
-        "gtt_baseline_mb": 1087,
+        "vram_peak_mb": 3864,
+        "vram_min_mb": 2582,
+        "vram_baseline_mb": 2576,
+        "vram_delta_mb": 1288,
+        "gtt_peak_mb": 2113,
+        "gtt_min_mb": 2093,
+        "gtt_baseline_mb": 2109,
         "gtt_grew": 4,
-        "sys_used_peak_mb": 24633,
-        "sys_used_min_mb": 24273,
+        "sys_used_peak_mb": 25033,
+        "sys_used_min_mb": 24720,
         "n_samples": 11
       }
     },
@@ -57,22 +57,22 @@
           "task_id": "fastapi_pgvector_crud",
           "name": "FastAPI Asyncpg & pgvector CRUD Service",
           "tokens": 348,
-          "ttft_ms": 41.5,
-          "tok_per_sec": 260.91
+          "ttft_ms": 39.5,
+          "tok_per_sec": 273.32
         },
         {
           "task_id": "postgres_hnsw_migration",
           "name": "PostgreSQL 17 HNSW Migration & Tuning",
           "tokens": 350,
-          "ttft_ms": 36.0,
-          "tok_per_sec": 265.33
+          "ttft_ms": 35.2,
+          "tok_per_sec": 275.67
         },
         {
           "task_id": "duckdb_parquet_analytics",
           "name": "DuckDB Parquet Window Analytics Pipeline",
           "tokens": 350,
-          "ttft_ms": 41.2,
-          "tok_per_sec": 266.59
+          "ttft_ms": 35.7,
+          "tok_per_sec": 275.93
         }
       ],
       "ollama": [
@@ -80,222 +80,222 @@
           "task_id": "fastapi_pgvector_crud",
           "name": "FastAPI Asyncpg & pgvector CRUD Service",
           "tokens": 348,
-          "ttft_ms": 54.3,
-          "tok_per_sec": 286.47
+          "ttft_ms": 44.2,
+          "tok_per_sec": 290.55
         },
         {
           "task_id": "postgres_hnsw_migration",
           "name": "PostgreSQL 17 HNSW Migration & Tuning",
           "tokens": 350,
-          "ttft_ms": 43.4,
-          "tok_per_sec": 283.1
+          "ttft_ms": 41.9,
+          "tok_per_sec": 292.86
         },
         {
           "task_id": "duckdb_parquet_analytics",
           "name": "DuckDB Parquet Window Analytics Pipeline",
           "tokens": 348,
           "ttft_ms": 44.4,
-          "tok_per_sec": 284.66
+          "tok_per_sec": 293.63
         }
       ],
       "runtime_next": [
         {
           "task_id": "fastapi_pgvector_crud",
           "name": "FastAPI Asyncpg & pgvector CRUD Service",
-          "tokens": 340,
-          "ttft_ms": 20.4,
-          "tok_per_sec": 347.64
+          "tokens": 350,
+          "ttft_ms": 15.0,
+          "tok_per_sec": 368.33
+        },
+        {
+          "task_id": "postgres_hnsw_migration",
+          "name": "PostgreSQL 17 HNSW Migration & Tuning",
+          "tokens": 350,
+          "ttft_ms": 15.8,
+          "tok_per_sec": 365.49
+        },
+        {
+          "task_id": "duckdb_parquet_analytics",
+          "name": "DuckDB Parquet Window Analytics Pipeline",
+          "tokens": 350,
+          "ttft_ms": 17.4,
+          "tok_per_sec": 364.78
+        }
+      ]
+    }
+  },
+  "2B": {
+    "avg_llamacpp_tok_s": 209.12,
+    "avg_ollama_tok_s": 220.34,
+    "avg_runtime_next_tok_s": 247.88,
+    "runtime_next_speedup_vs_llamacpp": 1.185,
+    "runtime_next_speedup_vs_ollama": 1.125,
+    "avg_ttft_ms": {
+      "llamacpp": 43.8,
+      "ollama": 48.2,
+      "runtime_next": 24.5
+    },
+    "memory_footprint": {
+      "llamacpp": {
+        "vram_peak_mb": 4289,
+        "vram_min_mb": 2552,
+        "vram_baseline_mb": 2619,
+        "vram_delta_mb": 1670,
+        "gtt_peak_mb": 2109,
+        "gtt_min_mb": 2095,
+        "gtt_baseline_mb": 2103,
+        "gtt_grew": 6,
+        "sys_used_peak_mb": 25625,
+        "sys_used_min_mb": 24766,
+        "n_samples": 15
+      },
+      "ollama": {
+        "vram_peak_mb": 5000,
+        "vram_min_mb": 2564,
+        "vram_baseline_mb": 2564,
+        "vram_delta_mb": 2436,
+        "gtt_peak_mb": 2115,
+        "gtt_min_mb": 2095,
+        "gtt_baseline_mb": 2095,
+        "gtt_grew": 20,
+        "sys_used_peak_mb": 25783,
+        "sys_used_min_mb": 24884,
+        "n_samples": 16
+      },
+      "runtime_next": {
+        "vram_peak_mb": 5146,
+        "vram_min_mb": 2807,
+        "vram_baseline_mb": 2809,
+        "vram_delta_mb": 2337,
+        "gtt_peak_mb": 2147,
+        "gtt_min_mb": 2089,
+        "gtt_baseline_mb": 2119,
+        "gtt_grew": 28,
+        "sys_used_peak_mb": 26277,
+        "sys_used_min_mb": 25230,
+        "n_samples": 15
+      }
+    },
+    "tasks": {
+      "llamacpp": [
+        {
+          "task_id": "fastapi_pgvector_crud",
+          "name": "FastAPI Asyncpg & pgvector CRUD Service",
+          "tokens": 344,
+          "ttft_ms": 45.3,
+          "tok_per_sec": 206.76
+        },
+        {
+          "task_id": "postgres_hnsw_migration",
+          "name": "PostgreSQL 17 HNSW Migration & Tuning",
+          "tokens": 348,
+          "ttft_ms": 43.0,
+          "tok_per_sec": 210.62
+        },
+        {
+          "task_id": "duckdb_parquet_analytics",
+          "name": "DuckDB Parquet Window Analytics Pipeline",
+          "tokens": 348,
+          "ttft_ms": 43.0,
+          "tok_per_sec": 209.97
+        }
+      ],
+      "ollama": [
+        {
+          "task_id": "fastapi_pgvector_crud",
+          "name": "FastAPI Asyncpg & pgvector CRUD Service",
+          "tokens": 344,
+          "ttft_ms": 46.5,
+          "tok_per_sec": 218.73
+        },
+        {
+          "task_id": "postgres_hnsw_migration",
+          "name": "PostgreSQL 17 HNSW Migration & Tuning",
+          "tokens": 348,
+          "ttft_ms": 47.5,
+          "tok_per_sec": 219.18
+        },
+        {
+          "task_id": "duckdb_parquet_analytics",
+          "name": "DuckDB Parquet Window Analytics Pipeline",
+          "tokens": 348,
+          "ttft_ms": 50.6,
+          "tok_per_sec": 223.1
+        }
+      ],
+      "runtime_next": [
+        {
+          "task_id": "fastapi_pgvector_crud",
+          "name": "FastAPI Asyncpg & pgvector CRUD Service",
+          "tokens": 350,
+          "ttft_ms": 24.3,
+          "tok_per_sec": 247.58
         },
         {
           "task_id": "postgres_hnsw_migration",
           "name": "PostgreSQL 17 HNSW Migration & Tuning",
           "tokens": 350,
           "ttft_ms": 24.7,
-          "tok_per_sec": 357.68
+          "tok_per_sec": 249.04
         },
         {
           "task_id": "duckdb_parquet_analytics",
           "name": "DuckDB Parquet Window Analytics Pipeline",
           "tokens": 350,
-          "ttft_ms": 24.0,
-          "tok_per_sec": 357.84
-        }
-      ]
-    }
-  },
-  "2B": {
-    "avg_llamacpp_tok_s": 204.0,
-    "avg_ollama_tok_s": 215.7,
-    "avg_runtime_next_tok_s": 246.21,
-    "runtime_next_speedup_vs_llamacpp": 1.207,
-    "runtime_next_speedup_vs_ollama": 1.141,
-    "avg_ttft_ms": {
-      "llamacpp": 44.5,
-      "ollama": 44.9,
-      "runtime_next": 43.1
-    },
-    "memory_footprint": {
-      "llamacpp": {
-        "vram_peak_mb": 5190,
-        "vram_min_mb": 3446,
-        "vram_baseline_mb": 3444,
-        "vram_delta_mb": 1746,
-        "gtt_peak_mb": 1103,
-        "gtt_min_mb": 1087,
-        "gtt_baseline_mb": 1083,
-        "gtt_grew": 20,
-        "sys_used_peak_mb": 25093,
-        "sys_used_min_mb": 24519,
-        "n_samples": 15
-      },
-      "ollama": {
-        "vram_peak_mb": 5816,
-        "vram_min_mb": 3479,
-        "vram_baseline_mb": 3519,
-        "vram_delta_mb": 2297,
-        "gtt_peak_mb": 1101,
-        "gtt_min_mb": 1087,
-        "gtt_baseline_mb": 1087,
-        "gtt_grew": 14,
-        "sys_used_peak_mb": 25138,
-        "sys_used_min_mb": 24602,
-        "n_samples": 16
-      },
-      "runtime_next": {
-        "vram_peak_mb": 5764,
-        "vram_min_mb": 3533,
-        "vram_baseline_mb": 3531,
-        "vram_delta_mb": 2233,
-        "gtt_peak_mb": 1123,
-        "gtt_min_mb": 1091,
-        "gtt_baseline_mb": 1093,
-        "gtt_grew": 30,
-        "sys_used_peak_mb": 24983,
-        "sys_used_min_mb": 24571,
-        "n_samples": 16
-      }
-    },
-    "tasks": {
-      "llamacpp": [
-        {
-          "task_id": "fastapi_pgvector_crud",
-          "name": "FastAPI Asyncpg & pgvector CRUD Service",
-          "tokens": 344,
-          "ttft_ms": 45.1,
-          "tok_per_sec": 200.33
-        },
-        {
-          "task_id": "postgres_hnsw_migration",
-          "name": "PostgreSQL 17 HNSW Migration & Tuning",
-          "tokens": 348,
-          "ttft_ms": 43.2,
-          "tok_per_sec": 206.32
-        },
-        {
-          "task_id": "duckdb_parquet_analytics",
-          "name": "DuckDB Parquet Window Analytics Pipeline",
-          "tokens": 348,
-          "ttft_ms": 45.1,
-          "tok_per_sec": 205.35
-        }
-      ],
-      "ollama": [
-        {
-          "task_id": "fastapi_pgvector_crud",
-          "name": "FastAPI Asyncpg & pgvector CRUD Service",
-          "tokens": 344,
-          "ttft_ms": 46.3,
-          "tok_per_sec": 210.58
-        },
-        {
-          "task_id": "postgres_hnsw_migration",
-          "name": "PostgreSQL 17 HNSW Migration & Tuning",
-          "tokens": 348,
-          "ttft_ms": 43.9,
-          "tok_per_sec": 216.96
-        },
-        {
-          "task_id": "duckdb_parquet_analytics",
-          "name": "DuckDB Parquet Window Analytics Pipeline",
-          "tokens": 348,
-          "ttft_ms": 44.5,
-          "tok_per_sec": 219.56
-        }
-      ],
-      "runtime_next": [
-        {
-          "task_id": "fastapi_pgvector_crud",
-          "name": "FastAPI Asyncpg & pgvector CRUD Service",
-          "tokens": 350,
-          "ttft_ms": 37.9,
-          "tok_per_sec": 246.62
-        },
-        {
-          "task_id": "postgres_hnsw_migration",
-          "name": "PostgreSQL 17 HNSW Migration & Tuning",
-          "tokens": 350,
-          "ttft_ms": 45.8,
-          "tok_per_sec": 245.04
-        },
-        {
-          "task_id": "duckdb_parquet_analytics",
-          "name": "DuckDB Parquet Window Analytics Pipeline",
-          "tokens": 350,
-          "ttft_ms": 45.7,
-          "tok_per_sec": 246.96
+          "ttft_ms": 24.6,
+          "tok_per_sec": 247.03
         }
       ]
     }
   },
   "4B": {
-    "avg_llamacpp_tok_s": 127.43,
-    "avg_ollama_tok_s": 135.83,
-    "avg_runtime_next_tok_s": 146.02,
-    "runtime_next_speedup_vs_llamacpp": 1.146,
-    "runtime_next_speedup_vs_ollama": 1.075,
+    "avg_llamacpp_tok_s": 125.45,
+    "avg_ollama_tok_s": 130.5,
+    "avg_runtime_next_tok_s": 141.74,
+    "runtime_next_speedup_vs_llamacpp": 1.13,
+    "runtime_next_speedup_vs_ollama": 1.086,
     "avg_ttft_ms": {
-      "llamacpp": 82.6,
-      "ollama": 111.7,
-      "runtime_next": 96.5
+      "llamacpp": 83.5,
+      "ollama": 94.2,
+      "runtime_next": 47.4
     },
     "memory_footprint": {
       "llamacpp": {
-        "vram_peak_mb": 7027,
-        "vram_min_mb": 3439,
-        "vram_baseline_mb": 3846,
-        "vram_delta_mb": 3181,
-        "gtt_peak_mb": 1105,
-        "gtt_min_mb": 1093,
-        "gtt_baseline_mb": 1099,
-        "gtt_grew": 6,
-        "sys_used_peak_mb": 25493,
-        "sys_used_min_mb": 24619,
+        "vram_peak_mb": 8031,
+        "vram_min_mb": 2761,
+        "vram_baseline_mb": 2761,
+        "vram_delta_mb": 5270,
+        "gtt_peak_mb": 2137,
+        "gtt_min_mb": 2097,
+        "gtt_baseline_mb": 2097,
+        "gtt_grew": 40,
+        "sys_used_peak_mb": 27305,
+        "sys_used_min_mb": 25350,
         "n_samples": 23
       },
       "ollama": {
-        "vram_peak_mb": 8097,
-        "vram_min_mb": 3432,
-        "vram_baseline_mb": 3542,
-        "vram_delta_mb": 4555,
-        "gtt_peak_mb": 1127,
-        "gtt_min_mb": 1091,
-        "gtt_baseline_mb": 1107,
-        "gtt_grew": 20,
-        "sys_used_peak_mb": 25666,
-        "sys_used_min_mb": 24514,
+        "vram_peak_mb": 8366,
+        "vram_min_mb": 2708,
+        "vram_baseline_mb": 3050,
+        "vram_delta_mb": 5316,
+        "gtt_peak_mb": 2123,
+        "gtt_min_mb": 2091,
+        "gtt_baseline_mb": 2121,
+        "gtt_grew": 2,
+        "sys_used_peak_mb": 27102,
+        "sys_used_min_mb": 26048,
         "n_samples": 23
       },
       "runtime_next": {
-        "vram_peak_mb": 6767,
-        "vram_min_mb": 2936,
-        "vram_baseline_mb": 3371,
-        "vram_delta_mb": 3396,
-        "gtt_peak_mb": 1101,
-        "gtt_min_mb": 1091,
-        "gtt_baseline_mb": 1095,
-        "gtt_grew": 6,
-        "sys_used_peak_mb": 26270,
-        "sys_used_min_mb": 24407,
+        "vram_peak_mb": 7189,
+        "vram_min_mb": 2738,
+        "vram_baseline_mb": 3056,
+        "vram_delta_mb": 4133,
+        "gtt_peak_mb": 2123,
+        "gtt_min_mb": 2089,
+        "gtt_baseline_mb": 2085,
+        "gtt_grew": 38,
+        "sys_used_peak_mb": 27006,
+        "sys_used_min_mb": 24742,
         "n_samples": 23
       }
     },
@@ -305,22 +305,22 @@
           "task_id": "fastapi_pgvector_crud",
           "name": "FastAPI Asyncpg & pgvector CRUD Service",
           "tokens": 350,
-          "ttft_ms": 78.2,
-          "tok_per_sec": 127.05
+          "ttft_ms": 79.0,
+          "tok_per_sec": 125.49
         },
         {
           "task_id": "postgres_hnsw_migration",
           "name": "PostgreSQL 17 HNSW Migration & Tuning",
           "tokens": 350,
-          "ttft_ms": 84.8,
-          "tok_per_sec": 127.07
+          "ttft_ms": 86.2,
+          "tok_per_sec": 124.42
         },
         {
           "task_id": "duckdb_parquet_analytics",
           "name": "DuckDB Parquet Window Analytics Pipeline",
           "tokens": 348,
-          "ttft_ms": 84.9,
-          "tok_per_sec": 128.18
+          "ttft_ms": 85.3,
+          "tok_per_sec": 126.44
         }
       ],
       "ollama": [
@@ -328,22 +328,22 @@
           "task_id": "fastapi_pgvector_crud",
           "name": "FastAPI Asyncpg & pgvector CRUD Service",
           "tokens": 350,
-          "ttft_ms": 104.2,
-          "tok_per_sec": 135.3
+          "ttft_ms": 88.6,
+          "tok_per_sec": 128.34
         },
         {
           "task_id": "postgres_hnsw_migration",
           "name": "PostgreSQL 17 HNSW Migration & Tuning",
           "tokens": 350,
-          "ttft_ms": 127.1,
-          "tok_per_sec": 136.23
+          "ttft_ms": 88.6,
+          "tok_per_sec": 130.85
         },
         {
           "task_id": "duckdb_parquet_analytics",
           "name": "DuckDB Parquet Window Analytics Pipeline",
           "tokens": 348,
-          "ttft_ms": 103.9,
-          "tok_per_sec": 135.97
+          "ttft_ms": 105.5,
+          "tok_per_sec": 132.31
         }
       ],
       "runtime_next": [
@@ -351,76 +351,76 @@
           "task_id": "fastapi_pgvector_crud",
           "name": "FastAPI Asyncpg & pgvector CRUD Service",
           "tokens": 342,
-          "ttft_ms": 83.0,
-          "tok_per_sec": 144.47
+          "ttft_ms": 43.4,
+          "tok_per_sec": 140.25
         },
         {
           "task_id": "postgres_hnsw_migration",
           "name": "PostgreSQL 17 HNSW Migration & Tuning",
           "tokens": 350,
-          "ttft_ms": 104.3,
-          "tok_per_sec": 147.03
+          "ttft_ms": 49.3,
+          "tok_per_sec": 143.06
         },
         {
           "task_id": "duckdb_parquet_analytics",
           "name": "DuckDB Parquet Window Analytics Pipeline",
           "tokens": 350,
-          "ttft_ms": 102.2,
-          "tok_per_sec": 146.56
+          "ttft_ms": 49.4,
+          "tok_per_sec": 141.9
         }
       ]
     }
   },
   "9B": {
-    "avg_llamacpp_tok_s": 89.95,
-    "avg_ollama_tok_s": 94.34,
-    "avg_runtime_next_tok_s": 111.73,
-    "runtime_next_speedup_vs_llamacpp": 1.242,
-    "runtime_next_speedup_vs_ollama": 1.184,
+    "avg_llamacpp_tok_s": 88.24,
+    "avg_ollama_tok_s": 93.8,
+    "avg_runtime_next_tok_s": 110.99,
+    "runtime_next_speedup_vs_llamacpp": 1.258,
+    "runtime_next_speedup_vs_ollama": 1.183,
     "avg_ttft_ms": {
-      "llamacpp": 128.9,
-      "ollama": 133.5,
-      "runtime_next": 165.8
+      "llamacpp": 113.1,
+      "ollama": 137.8,
+      "runtime_next": 86.2
     },
     "memory_footprint": {
       "llamacpp": {
-        "vram_peak_mb": 8345,
-        "vram_min_mb": 2936,
-        "vram_baseline_mb": 2936,
-        "vram_delta_mb": 5409,
-        "gtt_peak_mb": 1099,
-        "gtt_min_mb": 1093,
-        "gtt_baseline_mb": 1091,
-        "gtt_grew": 8,
-        "sys_used_peak_mb": 25465,
-        "sys_used_min_mb": 24681,
+        "vram_peak_mb": 8113,
+        "vram_min_mb": 2603,
+        "vram_baseline_mb": 2735,
+        "vram_delta_mb": 5378,
+        "gtt_peak_mb": 2117,
+        "gtt_min_mb": 2087,
+        "gtt_baseline_mb": 2095,
+        "gtt_grew": 22,
+        "sys_used_peak_mb": 25857,
+        "sys_used_min_mb": 24990,
         "n_samples": 29
       },
       "ollama": {
-        "vram_peak_mb": 9800,
-        "vram_min_mb": 3022,
-        "vram_baseline_mb": 3068,
-        "vram_delta_mb": 6732,
-        "gtt_peak_mb": 1105,
-        "gtt_min_mb": 1077,
-        "gtt_baseline_mb": 1097,
-        "gtt_grew": 8,
-        "sys_used_peak_mb": 24952,
-        "sys_used_min_mb": 24084,
-        "n_samples": 34
+        "vram_peak_mb": 9697,
+        "vram_min_mb": 2643,
+        "vram_baseline_mb": 2661,
+        "vram_delta_mb": 7036,
+        "gtt_peak_mb": 2123,
+        "gtt_min_mb": 2097,
+        "gtt_baseline_mb": 2101,
+        "gtt_grew": 22,
+        "sys_used_peak_mb": 25843,
+        "sys_used_min_mb": 24948,
+        "n_samples": 33
       },
       "runtime_next": {
-        "vram_peak_mb": 9604,
-        "vram_min_mb": 3025,
-        "vram_baseline_mb": 3032,
-        "vram_delta_mb": 6572,
-        "gtt_peak_mb": 1089,
-        "gtt_min_mb": 1075,
-        "gtt_baseline_mb": 1077,
-        "gtt_grew": 12,
-        "sys_used_peak_mb": 26404,
-        "sys_used_min_mb": 22396,
-        "n_samples": 34
+        "vram_peak_mb": 9343,
+        "vram_min_mb": 2710,
+        "vram_baseline_mb": 2795,
+        "vram_delta_mb": 6548,
+        "gtt_peak_mb": 2125,
+        "gtt_min_mb": 2099,
+        "gtt_baseline_mb": 2099,
+        "gtt_grew": 26,
+        "sys_used_peak_mb": 27511,
+        "sys_used_min_mb": 25046,
+        "n_samples": 28
       }
     },
     "tasks": {
@@ -429,22 +429,22 @@
           "task_id": "fastapi_pgvector_crud",
           "name": "FastAPI Asyncpg & pgvector CRUD Service",
           "tokens": 338,
-          "ttft_ms": 122.3,
-          "tok_per_sec": 87.9
+          "ttft_ms": 104.7,
+          "tok_per_sec": 86.13
         },
         {
           "task_id": "postgres_hnsw_migration",
           "name": "PostgreSQL 17 HNSW Migration & Tuning",
           "tokens": 350,
-          "ttft_ms": 129.4,
-          "tok_per_sec": 91.07
+          "ttft_ms": 121.9,
+          "tok_per_sec": 89.37
         },
         {
           "task_id": "duckdb_parquet_analytics",
           "name": "DuckDB Parquet Window Analytics Pipeline",
           "tokens": 350,
-          "ttft_ms": 135.1,
-          "tok_per_sec": 90.87
+          "ttft_ms": 112.8,
+          "tok_per_sec": 89.21
         }
       ],
       "ollama": [
@@ -452,45 +452,45 @@
           "task_id": "fastapi_pgvector_crud",
           "name": "FastAPI Asyncpg & pgvector CRUD Service",
           "tokens": 339,
-          "ttft_ms": 127.1,
-          "tok_per_sec": 92.36
+          "ttft_ms": 129.2,
+          "tok_per_sec": 91.31
         },
         {
           "task_id": "postgres_hnsw_migration",
           "name": "PostgreSQL 17 HNSW Migration & Tuning",
           "tokens": 350,
-          "ttft_ms": 127.8,
-          "tok_per_sec": 95.65
+          "ttft_ms": 134.6,
+          "tok_per_sec": 94.79
         },
         {
           "task_id": "duckdb_parquet_analytics",
           "name": "DuckDB Parquet Window Analytics Pipeline",
           "tokens": 350,
-          "ttft_ms": 145.6,
-          "tok_per_sec": 95.0
+          "ttft_ms": 149.7,
+          "tok_per_sec": 95.29
         }
       ],
       "runtime_next": [
         {
           "task_id": "fastapi_pgvector_crud",
           "name": "FastAPI Asyncpg & pgvector CRUD Service",
-          "tokens": 338,
-          "ttft_ms": 139.9,
-          "tok_per_sec": 108.95
+          "tokens": 336,
+          "ttft_ms": 78.6,
+          "tok_per_sec": 108.46
         },
         {
           "task_id": "postgres_hnsw_migration",
           "name": "PostgreSQL 17 HNSW Migration & Tuning",
           "tokens": 350,
-          "ttft_ms": 180.2,
-          "tok_per_sec": 112.66
+          "ttft_ms": 89.6,
+          "tok_per_sec": 112.46
         },
         {
           "task_id": "duckdb_parquet_analytics",
           "name": "DuckDB Parquet Window Analytics Pipeline",
           "tokens": 350,
-          "ttft_ms": 177.2,
-          "tok_per_sec": 113.59
+          "ttft_ms": 90.5,
+          "tok_per_sec": 112.05
         }
       ]
     }
