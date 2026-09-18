@@ -781,4 +781,82 @@ mod tests {
         eprintln!("open-ended seed=2: {run_seed2:?}");
         assert_ne!(run_seed1, run_seed2, "a real, different seed on a real open-ended prompt must produce a different real generation -- the sampling RNG must not be a silent no-op end-to-end");
     }
+
+    /// Real, direct measurement of WHERE `Engine::load()`'s own real VRAM
+    /// footprint goes, step by step -- motivated by a real, found (not
+    /// guessed) discrepancy: the real 3-way HTTP benchmark's own memory
+    /// monitor shows runtime-next's real `vram_min_mb` sitting ~800MB
+    /// above llama.cpp's/Ollama's own baseline, CONSISTENTLY across all 4
+    /// smaller real sizes (0.8B: 3158MB, 2B: 3164MB, 4B: 3166MB, 9B:
+    /// 3162MB -- essentially model-size-INDEPENDENT), with a real, larger
+    /// jump at 27B (3453MB). Real hypothesis, not yet confirmed: a
+    /// model-size-independent ~800MB is far more consistent with a FIXED
+    /// per-process allocation (hipBLAS/HIP context/workspace overhead)
+    /// than with anything that scales with model weights -- this test
+    /// measures `hip::mem_info()` directly after each real step of
+    /// `Engine::load()`'s own sequence to find out which one actually
+    /// accounts for it, rather than guessing from `llama.cpp`'s own
+    /// source code first.
+    #[test]
+    #[ignore]
+    fn diagnose_real_engine_load_vram_breakdown() {
+        if crate::hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        crate::hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let used_mb = |label: &str, prev_free: &mut usize| {
+            let (free, total) = crate::hip::mem_info().expect("real hipMemGetInfo failed");
+            let used = (total - free) / (1024 * 1024);
+            let delta = if *prev_free == 0 { 0 } else { (*prev_free - free) as i64 / (1024 * 1024) };
+            eprintln!("[{label}] real VRAM used: {used}MB (delta since last checkpoint: {delta:+}MB)");
+            *prev_free = free;
+        };
+
+        let mut prev_free = 0usize;
+        used_mb("0. process start (before any real HIP allocation)", &mut prev_free);
+
+        let snapshot = crate::model_loader::locate_model_snapshot().expect("real snapshot must be found");
+        let weights = ModelWeights::load(&snapshot).expect("real weight loading failed");
+        used_mb("1. after ModelWeights::load (real weights on device)", &mut prev_free);
+
+        let tokenizer = ChatTokenizer::load(&snapshot).expect("real tokenizer load failed");
+        let _ = &tokenizer;
+        used_mb("2. after ChatTokenizer::load (real, host-only -- expect ~0 VRAM delta)", &mut prev_free);
+
+        let graphed = GraphedDecodeState::new().expect("real GraphedDecodeState::new failed");
+        used_mb("3. after GraphedDecodeState::new (real 2nd hipBLAS handle + real stream, NO graph captured yet -- lazy)", &mut prev_free);
+
+        let blas_handle = BlasHandle::create().expect("real BlasHandle::create failed");
+        used_mb("4. after Engine's own BlasHandle::create (real 3rd-ish hipBLAS handle)", &mut prev_free);
+
+        let state = DecodeState::new(MAX_SEQ_LEN).expect("real DecodeState::new failed");
+        used_mb("5. after DecodeState::new (real KV caches + Scratch/PrefillScratch buffers)", &mut prev_free);
+
+        let logits: DeviceBuffer<u16> = DeviceBuffer::alloc(VOCAB_SIZE).expect("real logits alloc failed");
+        used_mb("6. after logits DeviceBuffer::alloc (real, tiny -- VOCAB_SIZE bf16 elements)", &mut prev_free);
+
+        // Real, decisive: the FIRST real `forward_one_token` call is what
+        // actually triggers real HIP Graph capture (lazy, per
+        // `GraphedDecodeState::forward_one_token`'s own doc comment) --
+        // measuring around it directly answers whether real graph capture
+        // itself has a real, non-trivial VRAM cost, separate from the
+        // handle/stream creation already measured at step 3.
+        let mut graphed = graphed;
+        let mut state = state;
+        let mut logits = logits;
+        // Minimal real prefill so decode has a real position to start from.
+        let handle_for_prefill = BlasHandle::create().expect("real temp handle failed");
+        forward_prefill(&handle_for_prefill, &weights, &mut state, &[1i32], &mut logits).expect("real forward_prefill failed");
+        used_mb("7. after one real forward_prefill call (eager, ungraphed)", &mut prev_free);
+
+        graphed.forward_one_token(&weights, &mut state, 1, &mut logits).expect("real forward_one_token (first, captures graph) failed");
+        used_mb("8. after FIRST real forward_one_token (this is where real HIP Graph capture actually happens)", &mut prev_free);
+
+        graphed.forward_one_token(&weights, &mut state, 1, &mut logits).expect("real forward_one_token (second, replay) failed");
+        used_mb("9. after SECOND real forward_one_token (real replay, no new capture -- expect ~0 delta)", &mut prev_free);
+
+        let _ = (blas_handle, tokenizer);
+    }
 }

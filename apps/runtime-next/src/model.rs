@@ -466,6 +466,65 @@ pub(crate) mod raw {
         }
     }
 
+    /// §122: strided batched `S = scale*(Q@K^T)` for GDN Phase 1b --
+    /// collapses `h` (32) per-head `gemm_qkt` calls into 1 launch,
+    /// batched over the HEAD dimension for one FIXED chunk (see Phase
+    /// 1b's own call site doc comment for why chunk, not head, stays the
+    /// host-side loop variable: `gdnc_k_beta_token` is token-major, not
+    /// head-chunk-major like `gdnc_key_bcast_hm`/`gdnc_query_intra_hm`,
+    /// so only a fixed-chunk/batched-head grouping gives every one of
+    /// Q/K/output a real, uniform per-batch-element stride).  Same
+    /// `HIPBLAS_OP_T`/`HIPBLAS_OP_N` math as `gemm_qkt`, just batched.
+    /// Hot path: no sync, but debug-asserts the return status.
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn gemm_strided_batched_qkt(
+        handle: blas_ffi::HipblasHandle,
+        q: *const c_void,
+        q_ld: i32,
+        q_stride: i64,
+        k: *const c_void,
+        k_stride: i64,
+        s: *mut c_void,
+        s_ld: i32,
+        s_stride: i64,
+        t: i32,
+        head_dim: i32,
+        kv_len: i32,
+        batch_count: i32,
+        scale: f32,
+    ) {
+        let alpha: f32 = scale;
+        let beta: f32 = 0.0;
+        let status = unsafe {
+            blas_ffi::hipblasGemmStridedBatchedEx(
+                handle,
+                blas_ffi::HIPBLAS_OP_T,
+                blas_ffi::HIPBLAS_OP_N,
+                kv_len,
+                t,
+                head_dim,
+                &alpha as *const f32 as *const c_void,
+                k,
+                blas_ffi::HIP_R_16BF,
+                head_dim,
+                k_stride,
+                q,
+                blas_ffi::HIP_R_16BF,
+                q_ld,
+                q_stride,
+                &beta as *const f32 as *const c_void,
+                s,
+                blas_ffi::HIP_R_16BF,
+                s_ld,
+                s_stride,
+                batch_count,
+                blas_ffi::HIPBLAS_COMPUTE_32F,
+                blas_ffi::HIPBLAS_GEMM_DEFAULT,
+            )
+        };
+        debug_assert_eq!(status, blas_ffi::HIPBLAS_STATUS_SUCCESS, "gemm_strided_batched_qkt: hipBLAS returned error {status}");
+    }
+
     /// §119: strided batched P@V for GDN Phase 2 -- collapses 32 per-head
     /// `gemm_pv` calls into 1 launch. Hot path: no sync, but debug-asserts
     /// the return status to catch silent hipBLAS failures.
@@ -2226,28 +2285,44 @@ fn gdn_chunk_forward_prefill(handle_raw: blas_ffi::HipblasHandle, layer_state: &
         let beta_ptr = s.gdn_beta.as_device_ptr() as *const f32;
         raw::gdn_chunk_broadcast_scale(s.gdnc_key_normed.as_device_ptr(), beta_ptr, s.gdnc_k_beta_token.as_device_ptr_mut(), t_pad as i32, kh as i32, h as i32, d as i32, n_rep, c as i32, false, stream);
 
-        // Phase 1b: `ut_system = k_beta @ key^T`, `intra_chunk_attn =
-        // query @ key^T` -- one real matrix-core GEMM per (head, chunk)
-        // block (see `blas::gemm_qkt_bf16`'s own doc comment for the
-        // derivation; identical shape, just applied per-chunk-block
-        // instead of per-whole-kv-cache). Both write into head-major
-        // `[H, num_chunks, C, C]` score buffers, decay-masked IN PLACE by
-        // `gdn_chunk_decay_bf16` right after.
-        for head in 0..h {
-            for chunk in 0..num_chunks {
-                let hm_d_off = (head * num_chunks + chunk) * c * d;
-                let hm_c_off = (head * num_chunks + chunk) * c * c;
-                let k_ptr = s.gdnc_key_bcast_hm.as_device_ptr_at(hm_d_off);
+        // §122: Phase 1b: `ut_system = k_beta @ key^T`, `intra_chunk_attn
+        // = query @ key^T` -- real matrix-core GEMMs, now STRIDED
+        // BATCHED over all `h` (32) heads at once per chunk (was: one
+        // `raw::gemm_qkt` launch per (head, chunk) pair -- 64 launches
+        // for a real single-chunk prefill, 1,536 across 24 GDN layers at
+        // 27B -- see `docs/DECISIONS.md` §122).
+        //
+        // Real, found-not-assumed reason `chunk` stays the host loop
+        // variable (not `head`, which P1's own Phase 2 batching uses):
+        // `gdnc_key_bcast_hm`/`gdnc_query_intra_hm`/`gdnc_ut_system`/
+        // `gdnc_intra_attn` are all real head-major-then-chunk `[H,
+        // num_chunks, C, *]` buffers, so for a FIXED chunk, striding
+        // over `head` gives each a real, uniform per-batch-element
+        // stride (`num_chunks*c*d` or `num_chunks*c*c`). But
+        // `gdnc_k_beta_token` is real TOKEN-major `[T_pad, h, d]` (kept
+        // that way because it's also reused elsewhere as a token-major
+        // broadcast source) -- for a FIXED chunk, striding over `head`
+        // still gives it a real, uniform stride (`d`), but striding over
+        // `chunk` for a fixed head would NOT (its per-chunk stride is
+        // `c*(h*d)`, unrelated to `head`'s own `d` stride) -- so batching
+        // over head-for-fixed-chunk is the only grouping under which
+        // EVERY real operand (Q, K, and the token-major k_beta) gets one
+        // consistent stride, which `hipblasGemmStridedBatchedEx` requires.
+        for chunk in 0..num_chunks {
+            let hm_d_off = chunk * c * d;
+            let hm_d_stride = (num_chunks * c * d) as i64;
+            let hm_c_off = chunk * c * c;
+            let hm_c_stride = (num_chunks * c * c) as i64;
+            let k_ptr = s.gdnc_key_bcast_hm.as_device_ptr_at(hm_d_off);
 
-                let kbeta_off = chunk * c * (h * d) + head * d;
-                let kbeta_ptr = s.gdnc_k_beta_token.as_device_ptr_at(kbeta_off);
-                let ut_ptr = s.gdnc_ut_system.as_device_ptr_at_mut(hm_c_off);
-                raw::gemm_qkt(handle_raw, kbeta_ptr, (h * d) as i32, k_ptr, ut_ptr, c as i32, c as i32, d as i32, c as i32, 1.0);
+            let kbeta_off = chunk * c * (h * d);
+            let kbeta_ptr = s.gdnc_k_beta_token.as_device_ptr_at(kbeta_off);
+            let ut_ptr = s.gdnc_ut_system.as_device_ptr_at_mut(hm_c_off);
+            raw::gemm_strided_batched_qkt(handle_raw, kbeta_ptr, (h * d) as i32, d as i64, k_ptr, hm_d_stride, ut_ptr, c as i32, hm_c_stride, c as i32, d as i32, c as i32, h as i32, 1.0);
 
-                let q_ptr = s.gdnc_query_intra_hm.as_device_ptr_at(hm_d_off);
-                let intra_ptr = s.gdnc_intra_attn.as_device_ptr_at_mut(hm_c_off);
-                raw::gemm_qkt(handle_raw, q_ptr, d as i32, k_ptr, intra_ptr, c as i32, c as i32, d as i32, c as i32, 1.0);
-            }
+            let q_ptr = s.gdnc_query_intra_hm.as_device_ptr_at(hm_d_off);
+            let intra_ptr = s.gdnc_intra_attn.as_device_ptr_at_mut(hm_c_off);
+            raw::gemm_strided_batched_qkt(handle_raw, q_ptr, d as i32, hm_d_stride, k_ptr, hm_d_stride, intra_ptr, c as i32, hm_c_stride, c as i32, d as i32, c as i32, h as i32, 1.0);
         }
 
         // Phase 1c: real per-chunk decay bookkeeping + causal masking of

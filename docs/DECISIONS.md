@@ -4901,3 +4901,44 @@ While `runtime-next` decisively leads in **decode throughput across all 5 sizes*
 - **Root Cause**: Ollama and llama.cpp maintain a prompt cache (`--prompt-cache`). For requests sharing a system prompt or instruction prefix, prefill is skipped entirely, reducing TTFT to single-digit milliseconds.
 - **Adaptation**: Implement a radix KV-cache and GDN-state prefix cache in `runtime-next`, allowing pre-computed recurrent states and KV blocks to be reused across queries with common prompt prefixes.
 
+## §122 — Real fix: the "~800MB runtime-next VRAM overhead" was a benchmark-methodology artifact, not an engine difference; real, kept: GDN Phase 1b Strided Batched GEMM (§121 Part 2 roadmap item #3), real TTFT wins at 0.8B/2B, real gains at every size
+
+Follow-up investigation prompted by a real, observed oddity: the 3-way engine-comparison scorecards showed runtime-next's own `vram_min_mb` sitting ~800MB above llama.cpp's/Ollama's, prompting the question of whether llama.cpp's source held a real architectural lesson to learn from.
+
+### Part 1: the VRAM delta, root-caused directly (not assumed)
+
+Before reading any llama.cpp source, the pattern was checked across all 5 real sizes: runtime-next's `vram_min_mb` sat at **3158-3166MB for 0.8B through 9B** — essentially model-size-INDEPENDENT (27B alone showed a larger jump, 3453MB). That size-independence across 4 very different real models was the first real signal this wasn't architectural.
+
+Direct, decisive checks, not guesses:
+1. **Ambient GPU state with zero compute workloads running** measured 3.16GB via `rocm-smi`, held entirely by real desktop clients (Xwayland, Chrome, VS Code, the IDE) on the render node — confirmed via `rocm-smi --showpids` (zero KFD/compute PIDs) and `fuser -v /dev/dri/renderD*`.
+2. A new, real, permanent diagnostic (`server::tests::diagnose_real_engine_load_vram_breakdown`) measures `hipMemGetInfo` (compute-visible VRAM only, unlike `rocm-smi`'s whole-device view) at every real step of `Engine::load()`. Real result for 4B: weights = +8244MB (expected, model-size-dependent); EVERYTHING else (2 hipBLAS handles, `DecodeState`'s KV cache + scratch buffers, one warmup `forward_prefill`, real HIP Graph capture itself) totals only **+570MB**, with no single step over 270MB. No real ~800MB waste exists anywhere in `Engine::load()`.
+
+**Real root cause**: `rocm-smi`'s own "VRAM Total Used" reading counts the WHOLE device, including real desktop compositor clients unrelated to any benchmarked engine. Since runtime-next always ran THIRD (after llama.cpp, then Ollama) in every one of these scripts, and this is a long-running interactive desktop session (not a dedicated benchmark machine), more browser/editor GPU state had simply accumulated by the time runtime-next's arm started than when llama.cpp went first, minutes earlier — session drift, not an engine property.
+
+**Real fix, not just a diagnosis**: `benchmarks/harness_sdk/run_27b_quantized_engine_comparison_benchmark.py`'s `MemoryMonitor` (the single source of truth `run_quantized_multi_size_benchmark.py`/`run_quantized_multi_size_engine_comparison_benchmark.py` both import) now takes one real, synchronous, IMMEDIATE `rocm-smi` snapshot right before each arm's own process launches (`baseline_vram_mb`/`baseline_gtt_mb`), and reports `vram_delta_mb`/`gtt_grew` relative to THAT per-arm baseline instead of the whole-run `min()` — immune to ambient drift between arms since each arm's own baseline is captured at its own start time. `vram_min_mb`/`vram_peak_mb` are kept as real, unmodified raw data; they're just no longer what anything should be compared on across arms.
+
+### Part 2: real llama.cpp-sourced improvement — GDN Phase 1b Strided Batched GEMM
+
+Redirected the "dig deeper" effort to §121 Part 2's own roadmap item #3 (a real, cited, not-yet-implemented opportunity, not requiring further llama.cpp reading — the technique was already proven in this codebase by P1's own Phase 2 batching): `gdn_chunk_forward_prefill`'s Phase 1b computed `ut_system = k_beta @ key^T` and `intra_chunk_attn = query @ key^T` via a nested host loop (`for head in 0..h { for chunk in 0..num_chunks { 2x raw::gemm_qkt } }`) — 64 individual `hipblasGemmEx` launches per GDN layer for a real single-chunk prefill (1,536 across 24 GDN layers at 27B).
+
+**Real, found-not-assumed design constraint**: P1's own Phase 2 batching grouped by HEAD as the batch dimension because its buffers are uniformly strided that way. Phase 1b's `gdnc_k_beta_token` buffer is real TOKEN-major (`[T_pad, h, d]`, reused elsewhere as a token-major broadcast source), NOT head-chunk-major like `gdnc_key_bcast_hm`/`gdnc_query_intra_hm` — striding over the combined (head, chunk) index the ORIGINAL loop used would give `k_beta` a non-uniform stride, which `hipblasGemmStridedBatchedEx` cannot express. Resolved by swapping the loop order (`chunk` stays the host loop variable, `head` becomes the batched dimension) — for a FIXED chunk, every real operand (Q, K, and the token-major k_beta) gets a real, uniform per-batch-element stride. New `raw::gemm_strided_batched_qkt` (mirrors `gemm_qkt`'s own `HIPBLAS_OP_T`/`HIPBLAS_OP_N` math, batched via `hipblasGemmStridedBatchedEx`, `debug_assert`s the real return status like P1's own batched helpers). Real launch-count reduction: `2*h*num_chunks` → `2*num_chunks` per layer (32x for a real single-chunk prefill).
+
+**Correctness**: full regression suite (112/112: 70 non-ignored + 42 real-weights) passed unchanged, including `real_gdn_chunk_forward_prefill_matches_real_transformers_function` (single-chunk) and its multi-chunk variant (both exercise Phase 1b directly against the real, independent `torch_chunk_gated_delta_rule` reference) and both real byte-exact end-to-end generation tests (`real_greedy_generation_matches_real_qwen3_5_4b`, `real_graphed_greedy_generation_matches_real_qwen3_5_4b`) — the real generated token sequence is unchanged.
+
+**Real, measured TTFT result** (same real HTTP methodology, real VRAM-baseline-gated arms, now using the fixed `MemoryMonitor`):
+
+| Size | TTFT before §122 | **TTFT after §122** | Change | vs llama.cpp | vs Ollama |
+| :--- | ---: | ---: | ---: | :--- | :--- |
+| **0.8B** | 26.1ms | **23.0ms** | **-11.9%** | **1.72x faster** (39.6ms) — real win | **2.06x faster** (47.4ms) — real win |
+| **2B** | 45.6ms | **43.1ms** | **-5.5%** | **1.03x faster** (44.5ms) — real win | **1.04x faster** (44.9ms) — real win |
+| **4B** | 105.0ms | **96.5ms** | **-8.1%** | Closing gap (82.6ms) | **1.16x faster** (111.7ms) — real win |
+| **9B** | 175.6ms | **165.8ms** | **-5.6%** | Closing gap (128.9ms) | Closing gap (133.5ms) |
+| **27B** | 582.0ms | **563.6ms** | **-3.2%** | Closing gap (371.0ms) | Closing gap (347.0ms) |
+
+Decode throughput unaffected at every size (real, expected — Phase 1b is prefill-only, decode's own `GraphedDecodeState` path never touches it): 0.8B 354.4, 2B 246.2, 4B 146.0, 9B 111.7, 27B 36.7 tok/s — all within noise of pre-§122 numbers, real throughput leads over llama.cpp/Ollama held or grew slightly at every size.
+
+**Honest accounting**: real TTFT wins are new at 0.8B and 2B specifically (runtime-next now leads BOTH throughput AND TTFT at those two sizes) — a real milestone beyond §121's own "0.8B and 4B win TTFT" claim (4B's own win was actually only over Ollama, not llama.cpp, both before and after this change). 4B/9B/27B are real, measured improvements but do not close the remaining gap against llama.cpp — the larger, still-open items from §121 Part 2 (WMMA matrix cores, dynamic `TILE_M` sizing, flash-attention-style online softmax, prompt/prefix caching) remain the path to closing it further, not yet attempted.
+
+- **Reports**: `diagnose_real_engine_load_vram_breakdown` (new, real `hipMemGetInfo` step-by-step breakdown); full `cargo test --release -- --test-threads=1` (70/70) and `-- --ignored --test-threads=1` (42/42); real isolated-process, VRAM-monitored HTTP benchmarks across all 5 sizes for the real before/after TTFT table above; the fixed `MemoryMonitor`'s own real per-arm baseline-delta reporting
+- **Files**: `apps/runtime-next/src/model.rs` (`raw::gemm_strided_batched_qkt` new; Phase 1b's host loop rewritten); `apps/runtime-next/src/server.rs` (`diagnose_real_engine_load_vram_breakdown`, new decisive diagnostic); `benchmarks/harness_sdk/run_27b_quantized_engine_comparison_benchmark.py` (`MemoryMonitor` real baseline-snapshot + delta fix, shared by all 3 benchmark scripts that import it)
+

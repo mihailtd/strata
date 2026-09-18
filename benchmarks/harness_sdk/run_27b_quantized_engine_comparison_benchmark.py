@@ -37,18 +37,64 @@ RUNTIME_NEXT_BIN = REPO_ROOT / "apps/runtime-next/target/release/runtime-next"
 OLLAMA_MODEL_NAME = "qwen3.8:27b-q4km-bench"
 
 
+def _snapshot_vram_gtt_mb() -> tuple[int | None, int | None]:
+    """One real, synchronous `rocm-smi` read -- used to capture a real,
+    IMMEDIATE pre-launch baseline (see `MemoryMonitor`'s own doc comment
+    for why the arm's own running `min()` is NOT a safe baseline)."""
+    vram_mb = gtt_mb = None
+    try:
+        out = subprocess.run(["rocm-smi", "--showmeminfo", "all"], capture_output=True, text=True, timeout=5).stdout
+        for line in out.splitlines():
+            if "GPU[0]" in line and "VRAM Total Used" in line:
+                vram_mb = int(line.split(":")[-1].strip()) // (1024 * 1024)
+            elif "GPU[0]" in line and "GTT Total Used" in line:
+                gtt_mb = int(line.split(":")[-1].strip()) // (1024 * 1024)
+    except Exception:  # noqa: BLE001
+        pass
+    return vram_mb, gtt_mb
+
+
 class MemoryMonitor:
     """Real-time VRAM/GTT/system-RAM sampler (rocm-smi + free, every
     0.5s) wrapped around one benchmark arm's real run. Reports PEAK usage,
     not a single snapshot -- a transient spike during model load is
     exactly what matters here, and a single before/after check would
-    miss it."""
+    miss it.
+
+    Real, found-not-assumed fix: this class used to report the arm's own
+    running `min()` as if it were a clean "baseline" -- and every derived
+    "how much VRAM did this engine use" comparison implicitly assumed
+    that min was close to zero/ambient. On a real, long-running,
+    interactive desktop session (NOT a clean dedicated benchmark
+    machine), that assumption is false: `rocm-smi`'s own "VRAM Total
+    Used" figure counts the WHOLE device, including real desktop
+    compositor clients (Xwayland, browser tabs, the IDE, etc.) that have
+    nothing to do with any benchmarked engine and drift upward over the
+    course of a session. Caught directly (not guessed): the runtime-next
+    arm -- which always ran LAST in these scripts' own real arm order --
+    consistently showed a `vram_min_mb` ~800MB above llama.cpp's/
+    Ollama's own, essentially independent of real model size (0.8B
+    through 9B all showed ~3160MB); a real, live check of `hipMemGetInfo`
+    (compute-visible VRAM only) at each step of this engine's own
+    `Engine::load()` found no such gap. The `rocm-smi`-visible ~800MB was
+    real desktop-session drift, not an engine difference.
+
+    Real fix: take ONE real, synchronous, IMMEDIATE snapshot right before
+    the arm's own process is launched (`baseline_vram_mb`/
+    `baseline_gtt_mb`), and report `vram_delta_mb`/`gtt_delta_mb` (peak
+    minus THIS baseline) as the real, comparable "how much did this
+    specific engine add" metric -- immune to ambient drift between arms,
+    since each arm's own baseline is captured at ITS OWN start time, not
+    shared across the whole script's runtime. `vram_min_mb`/`gtt_min_mb`
+    are kept (still real, still occasionally useful raw data) but are no
+    longer the metric anything should be COMPARED on across arms."""
 
     def __init__(self, label: str):
         self.label = label
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self.samples: list[dict] = []
+        self.baseline_vram_mb, self.baseline_gtt_mb = _snapshot_vram_gtt_mb()
 
     def _sample_loop(self) -> None:
         while not self._stop.is_set():
@@ -87,12 +133,22 @@ class MemoryMonitor:
         vram = [s["vram_mb"] for s in self.samples if "vram_mb" in s]
         gtt = [s["gtt_mb"] for s in self.samples if "gtt_mb" in s]
         sys_used = [s["sys_used_mb"] for s in self.samples if "sys_used_mb" in s]
+        vram_peak = max(vram) if vram else None
+        gtt_peak = max(gtt) if gtt else None
         return {
-            "vram_peak_mb": max(vram) if vram else None,
+            "vram_peak_mb": vram_peak,
             "vram_min_mb": min(vram) if vram else None,
-            "gtt_peak_mb": max(gtt) if gtt else None,
+            # Real, comparable "how much VRAM did THIS engine add" --
+            # peak minus a real, immediate pre-launch snapshot, immune to
+            # ambient desktop-session drift between arms (see this
+            # class's own doc comment for the real, found-not-assumed
+            # reason `vram_min_mb` is NOT safe to compare across arms).
+            "vram_baseline_mb": self.baseline_vram_mb,
+            "vram_delta_mb": (vram_peak - self.baseline_vram_mb) if (vram_peak is not None and self.baseline_vram_mb is not None) else None,
+            "gtt_peak_mb": gtt_peak,
             "gtt_min_mb": min(gtt) if gtt else None,
-            "gtt_grew": (max(gtt) - min(gtt)) if gtt else 0,
+            "gtt_baseline_mb": self.baseline_gtt_mb,
+            "gtt_grew": (gtt_peak - self.baseline_gtt_mb) if (gtt_peak is not None and self.baseline_gtt_mb is not None) else ((gtt_peak - min(gtt)) if gtt else 0),
             "sys_used_peak_mb": max(sys_used) if sys_used else None,
             "sys_used_min_mb": min(sys_used) if sys_used else None,
             "n_samples": len(self.samples),
@@ -100,11 +156,11 @@ class MemoryMonitor:
 
     def report(self) -> None:
         s = self.summary()
-        print(f"  [mem/{self.label}] VRAM peak={s['vram_peak_mb']}MB (min={s['vram_min_mb']}MB) | "
-              f"GTT peak={s['gtt_peak_mb']}MB grew={s['gtt_grew']}MB | "
+        print(f"  [mem/{self.label}] VRAM peak={s['vram_peak_mb']}MB, delta over pre-launch baseline={s['vram_delta_mb']}MB (baseline={s['vram_baseline_mb']}MB) | "
+              f"GTT peak={s['gtt_peak_mb']}MB grew={s['gtt_grew']}MB (baseline={s['gtt_baseline_mb']}MB) | "
               f"sys RAM peak={s['sys_used_peak_mb']}MB (min={s['sys_used_min_mb']}MB) | {s['n_samples']} samples")
         if s["gtt_grew"] and s["gtt_grew"] > 512:
-            print(f"  [mem/{self.label}] !!! GTT grew by {s['gtt_grew']}MB during this arm -- "
+            print(f"  [mem/{self.label}] !!! GTT grew by {s['gtt_grew']}MB during this arm (over its own real pre-launch baseline) -- "
                   f"real VRAM-to-system-RAM spillover, NOT pure VRAM residency. Disclose this, don't hide it.")
 
 
