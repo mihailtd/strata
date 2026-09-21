@@ -1,0 +1,132 @@
+{
+  "timestamp": "2026-09-21 21:36:23",
+  "config": {
+    "mode": "direct",
+    "base_url": "http://127.0.0.1:8003/v1",
+    "model": "qwen3.5:0.8b-rust",
+    "adapter": "m2_python_modern_r8a128_v7_0_8b@0.25",
+    "edit_format": "whole",
+    "max_turns": 5,
+    "container": false
+  },
+  "summary": {
+    "total_tasks": 10,
+    "passed": 2,
+    "pass_rate_pct": 20.0,
+    "pass_at_1": 2,
+    "pass_at_1_pct": 20.0,
+    "total_duration_s": 97.3
+  },
+  "tasks": [
+    {
+      "task": "bank_account",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 2528,
+      "avg_ttft_ms": 309.39,
+      "avg_tok_s": 205.75,
+      "duration_s": 15.07,
+      "error": null
+    },
+    {
+      "task": "binary_search",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 2281,
+      "avg_ttft_ms": 404.67,
+      "avg_tok_s": 192.67,
+      "duration_s": 15.34,
+      "error": null
+    },
+    {
+      "task": "grains",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 2246,
+      "avg_ttft_ms": 223.14,
+      "avg_tok_s": 220.64,
+      "duration_s": 12.22,
+      "error": null
+    },
+    {
+      "task": "hello_world",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 755,
+      "avg_ttft_ms": 132.1,
+      "avg_tok_s": 246.4,
+      "duration_s": 4.42,
+      "error": null
+    },
+    {
+      "task": "leap",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 253,
+      "avg_ttft_ms": 25.07,
+      "avg_tok_s": 278.13,
+      "duration_s": 1.07,
+      "error": null
+    },
+    {
+      "task": "matching_brackets",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 2560,
+      "avg_ttft_ms": 332.77,
+      "avg_tok_s": 200.22,
+      "duration_s": 15.68,
+      "error": null
+    },
+    {
+      "task": "reverse_string",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 163,
+      "avg_ttft_ms": 30.32,
+      "avg_tok_s": 269.02,
+      "duration_s": 0.77,
+      "error": null
+    },
+    {
+      "task": "robot_simulator",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 2560,
+      "avg_ttft_ms": 352.52,
+      "avg_tok_s": 197.71,
+      "duration_s": 16.07,
+      "error": null
+    },
+    {
+      "task": "two_fer",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 1360,
+      "avg_ttft_ms": 164.57,
+      "avg_tok_s": 234.49,
+      "duration_s": 7.21,
+      "error": null
+    },
+    {
+      "task": "word_count",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 1337,
+      "avg_ttft_ms": 0.0,
+      "avg_tok_s": 0.0,
+      "duration_s": 9.46,
+      "error": "HTTP Error on turn 5: HTTP Error 500: Internal Server Error"
+    }
+  ]
+}

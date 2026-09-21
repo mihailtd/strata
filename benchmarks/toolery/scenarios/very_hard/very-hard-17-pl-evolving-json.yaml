@@ -1,0 +1,49 @@
+id: very-hard-17-pl-evolving-json
+title: "PL: schema JSON ewoluuje — zachowaj poprzednie pola"
+tier: medium  # re-tiering kwantylowy 2026-06-11 (kwoty 40/45/34/24, empiryczna trudnosc): oryg very_hard, pass-rate 93.3% (3 modele)
+category: structured_output
+domain: generic
+description: |
+  Single-turn accumulating JSON construction (model receives all 3 turns
+  at once). Must produce a final JSON containing all three fields
+  (name, age, city) — i.e. carry the earlier "turns" forward and extend
+  rather than overwrite.
+tags: [polish, json, multi_turn]
+ranking_dimensions: [overall, localization, structured_output, context_state_tracking]
+prompt: |
+  Turn 1: "Zwróć JSON z polem `name`: Ania Kowalska. Tylko JSON."
+  Turn 2: "Dodaj pole `age` = 31."
+  Turn 3: "Dodaj pole `city` = Wrocław."
+tools: []
+budget:
+  max_tool_calls: 0
+  max_turns: 4
+  timeout_seconds: 60
+tool_responses: {}
+scoring:
+  required:
+    - check: response_matches_schema
+      schema:
+        type: object
+        required: [name, age, city]
+        additionalProperties: false
+        properties:
+          name: { type: string, const: "Ania Kowalska" }
+          age: { type: integer, const: 31 }
+          city:
+            type: string
+            anyOf:
+              - { const: "Wrocław" }
+              - { const: "Wroclaw" }
+  forbidden: []
+  partial:
+    - check: response_matches_schema
+      schema:
+        type: object
+        required: [name]
+        properties:
+          name: { type: string }
+  weights:
+    pass: 1.0
+    partial: 0.5
+    fail: 0.0

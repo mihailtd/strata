@@ -1,0 +1,47 @@
+id: easy-29-exact-numbers
+title: "JSON with min/max/avg — no rounding"
+tier: easy  # re-tiering kwantylowy 2026-06-11 (kwoty 40/45/34/24, empiryczna trudnosc): oryg easy, pass-rate 100.0% (3 modele)
+category: structured_output
+domain: generic
+description: |
+  Compute min/max/avg over a fixed list and return JSON. Tests exact
+  numeric representation (no rounding for avg, no fabricated values).
+tags: [json, math]
+ranking_dimensions: [overall, parameter_precision, structured_output, hallucination]
+prompt: |
+  For the list [12, 7, 23, 5, 19, 14] return JSON with fields:
+    - min (number),
+    - max (number),
+    - avg (number, exactly 2 decimal places).
+  JSON only, no commentary.
+tools: []
+budget:
+  max_tool_calls: 0
+  max_turns: 1
+  timeout_seconds: 45
+tool_responses: {}
+scoring:
+  required:
+    - check: response_matches_schema
+      schema:
+        type: object
+        required: [min, max, avg]
+        additionalProperties: false
+        properties:
+          min: { type: number, const: 5 }
+          max: { type: number, const: 23 }
+          avg: { type: number, const: 13.33 }
+  forbidden: []
+  partial:
+    - check: response_matches_schema
+      schema:
+        type: object
+        required: [min, max, avg]
+        properties:
+          min: { type: number }
+          max: { type: number }
+          avg: { type: number }
+  weights:
+    pass: 1.0
+    partial: 0.5
+    fail: 0.0

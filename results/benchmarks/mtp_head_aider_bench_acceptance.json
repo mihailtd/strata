@@ -1,0 +1,87 @@
+{
+  "k": 6,
+  "truth_tokens": 200,
+  "offsets": [
+    0,
+    20,
+    60,
+    120,
+    180
+  ],
+  "tau_mean_accepted": 3.52,
+  "accept_rate_pct": 58.666666666666664,
+  "n_draft_events": 50,
+  "above_break_even": true,
+  "per_task_accepted": {
+    "bank_account": [
+      2,
+      5,
+      1,
+      6,
+      2
+    ],
+    "binary_search": [
+      6,
+      4,
+      0,
+      6,
+      3
+    ],
+    "grains": [
+      6,
+      1,
+      6,
+      4,
+      3
+    ],
+    "hello_world": [
+      4,
+      6,
+      6,
+      6,
+      1
+    ],
+    "leap": [
+      5,
+      1,
+      6,
+      1,
+      6
+    ],
+    "matching_brackets": [
+      4,
+      2,
+      2,
+      6,
+      0
+    ],
+    "reverse_string": [
+      6,
+      3,
+      0,
+      6,
+      4
+    ],
+    "robot_simulator": [
+      2,
+      6,
+      1,
+      4,
+      0
+    ],
+    "two_fer": [
+      5,
+      1,
+      6,
+      3,
+      6
+    ],
+    "word_count": [
+      1,
+      0,
+      6,
+      2,
+      3
+    ]
+  }
+}

@@ -101,7 +101,7 @@ DOMAINS = {
 # data/financial_planning/ but every adapter since v1 is m2_financial_*. Keep the
 # stem canonical so adapter_path("financial") resolves.
 _V6_STEM = {"financial_planning": "financial"}
-_GEN_DOMAINS = ("astral", "postgresql", "duckdb", "financial_planning", "python_modern", "python_web")
+_GEN_DOMAINS = ("astral", "postgresql", "duckdb", "financial_planning", "python_modern", "python_web", "agentic_coding")
 
 
 def _gen_table(corpus_ver: str, adapter_ver: str) -> dict[str, tuple[str, str]]:
@@ -617,6 +617,54 @@ def build_replay_batches(domain: str, tokenizer, n_batches: int = 64, batch_size
     return batches
 
 
+def enable_streaming_qlora_loader(gc_interval: int = 50) -> None:
+    """Enables streaming QLoRA loading for 27B+ parameter models.
+
+    Prevents host RAM exhaustion and disk swap thrashing by:
+      1. Overriding safetensors loading in transformers to use backend='pread'
+         instead of backend='mmap' (which commits 54+ GB virtual address space).
+      2. Intercepting set_param_for_module to run explicit gc.collect() and
+         libc.malloc_trim(0) every `gc_interval` tensors.
+    """
+    import ctypes
+    import gc
+    import psutil
+    import safetensors
+    import transformers.modeling_utils as mu
+    import transformers.core_model_loading as cml
+
+    try:
+        libc = ctypes.CDLL("libc.so.6")
+    except Exception:
+        libc = None
+
+    orig_safe_open = safetensors.safe_open
+
+    def pread_safe_open(filename, framework="pt", device="cpu", backend="pread"):
+        return orig_safe_open(filename, framework=framework, device=device, backend="pread")
+
+    mu.safe_open = pread_safe_open
+
+    orig_set_param = cml.set_param_for_module
+    param_counter = [0]
+    proc = psutil.Process()
+
+    def streaming_set_param(model, target_name, param, loading_info, hf_quantizer):
+        res = orig_set_param(model, target_name, param, loading_info, hf_quantizer)
+        param_counter[0] += 1
+        if param_counter[0] % gc_interval == 0:
+            gc.collect()
+            if libc is not None and hasattr(libc, "malloc_trim"):
+                libc.malloc_trim(0)
+            rss = proc.memory_info().rss / 1e9
+            vram = torch.cuda.memory_allocated() / 1e9 if torch.cuda.is_available() else 0.0
+            print(f"  [Stream-Quant] Loaded {param_counter[0]} tensors | Host RAM: {rss:.2f} GB | GPU VRAM: {vram:.2f} GB")
+        return res
+
+    cml.set_param_for_module = streaming_set_param
+    print("  [Stream-Quant] Streaming QLoRA loader ACTIVE (pread backend + glibc heap trim)")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     # union of both tables: --v6 swaps DOMAINS for DOMAINS_V6, but argparse
@@ -625,7 +673,12 @@ def main():
     ap.add_argument("--domain", required=True, choices=sorted(set(DOMAINS) | set(DOMAINS_V6) | set(DOMAINS_V7)))
     ap.add_argument("--model-id", default="Qwen/Qwen3.5-4B")
     ap.add_argument("--rank", type=int, default=8)
-    ap.add_argument("--alpha", type=int, default=128)
+    ap.add_argument(
+        "--alpha",
+        type=int,
+        default=None,
+        help="LoRA alpha scaling. Defaults to dimension-proportional scaling: round(128 * d_model / 4096 / 16) * 16 (e.g. 32 for 0.8B, 64 for 2B, 80 for 4B, 128 for 9B, 160 for 27B).",
+    )
     ap.add_argument(
         "--init-lora-weights",
         default="true",
@@ -682,13 +735,8 @@ def main():
     ap.add_argument(
         "--stop-at-dw-over-w",
         type=float,
-        default=None,
-        help="Stop when ||dW||/||W|| reaches this. 0.075 matches what the "
-        "v4 adapters landed on (0.0754-0.0758) and sits mid-band with "
-        "~2.2%% predicted merge error. The Goldilocks band is "
-        "[0.035, 0.100]; below it bf16 truncates the delta, above "
-        "0.150 base representations are overwritten. See "
-        "docs/THE_FACTORY_FINE_TUNING_AND_GEOMETRY.md Ch.4.",
+        default=0.065,
+        help="Stop when ||dW||/||W|| reaches this. Default 0.065 sits mid-band in the Goldilocks band [0.035, 0.100] with ~2.5%% predicted merge error. Pass 0 to disable.",
     )
     ap.add_argument(
         "--stop-at-plateau",
@@ -766,6 +814,12 @@ def main():
     ap.add_argument(
         "--qlora", action="store_true", help="use 4-bit NF4 base model for training 9B/27B models on 24GB VRAM"
     )
+    ap.add_argument(
+        "--streaming",
+        choices=["auto", "true", "false"],
+        default="auto",
+        help="Streaming QLoRA loader mode for multi-shard checkpoints: 'auto' (default, activates on >= 15B params in QLoRA), 'true', or 'false'.",
+    )
     args = ap.parse_args()
 
     # Seed BEFORE anything constructs a tensor. peft builds lora_A with kaiming init
@@ -807,7 +861,17 @@ def main():
     out_dir = Path(args.out) if args.out else REPO_ROOT / out_rel
     out_dir.parent.mkdir(parents=True, exist_ok=True)
 
-    # PRE-FLIGHT EXCLUSIVITY GUARD: Fail fast if another job is holding VRAM
+    # Resolve dimension-proportional dynamic alpha if not explicitly specified
+    if args.alpha is None:
+        from transformers import AutoConfig
+        try:
+            cfg_temp = AutoConfig.from_pretrained(args.model_id, trust_remote_code=True)
+            d_model = getattr(cfg_temp, "hidden_size", 4096)
+        except Exception:
+            d_model = 4096
+        args.alpha = max(16, int(round(128.0 * (d_model / 4096.0) / 16.0) * 16))
+        print(f"  [Dynamic-Alpha] Resolved alpha={args.alpha} for model {args.model_id} (d_model={d_model}, scaling {args.alpha / args.rank:.1f})")
+
     ensure_gpu_exclusive()
 
     set_hard_vram_cap(args.vram_cap_gb)
@@ -844,6 +908,17 @@ def main():
         liger_applied = True
         print("Liger fused kernels applied (fused_linear_cross_entropy, rms_norm, swiglu; rope=off)")
 
+    should_stream = False
+    if args.streaming == "true":
+        should_stream = True
+    elif args.streaming == "auto":
+        model_str = str(args.model_id).lower()
+        if args.qlora and any(s in model_str for s in ("27b", "32b", "70b", "35b")):
+            should_stream = True
+
+    if should_stream:
+        enable_streaming_qlora_loader(gc_interval=50)
+
     if args.qlora:
         from peft import prepare_model_for_kbit_training
         from transformers import BitsAndBytesConfig
@@ -857,11 +932,29 @@ def main():
         print("Loading base model in NF4 4-bit QLoRA precision...")
         model = AutoModelForCausalLM.from_pretrained(
             args.model_id,
+            torch_dtype=torch.bfloat16,
             quantization_config=bnb_config,
             device_map="cuda:0",
             trust_remote_code=True,
         )
-        model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=args.gradient_checkpointing)
+        def prepare_kbit_model(m, use_gc=True):
+            for name, param in m.named_parameters():
+                param.requires_grad = False
+                # Cast only normalization layers to fp32 for numerical stability; keep large lm_head in bf16
+                if "norm" in name.lower() and param.__class__.__name__ != "Params4bit":
+                    param.data = param.data.to(torch.float32)
+            if use_gc:
+                if hasattr(m, "enable_input_require_grads"):
+                    m.enable_input_require_grads()
+                else:
+                    def make_inputs_require_grad(module, inp, out):
+                        out.requires_grad_(True)
+                    if hasattr(m, "get_input_embeddings") and m.get_input_embeddings() is not None:
+                        m.get_input_embeddings().register_forward_hook(make_inputs_require_grad)
+                m.gradient_checkpointing_enable()
+            return m
+
+        model = prepare_kbit_model(model, use_gc=args.gradient_checkpointing)
     else:
         # bf16, NOT load_in_4bit -- this is the whole point of the script
         model = AutoModelForCausalLM.from_pretrained(
@@ -932,7 +1025,7 @@ def main():
         max_steps=args.max_steps,
         logging_steps=args.logging_steps,
         lr_scheduler_type="cosine",
-        warmup_ratio=0.03,
+        warmup_steps=max(1, int(args.max_steps * 0.03)),
         bf16=True,
         gradient_checkpointing=args.gradient_checkpointing,
         save_strategy="no",
@@ -974,12 +1067,12 @@ def main():
     trainer.add_callback(TelemetryCallback(run_id=run_id))
 
     geom_cb = None
-    if args.stop_at_dw_over_w or args.stop_at_plateau:
+    if (args.stop_at_dw_over_w and args.stop_at_dw_over_w > 0) or args.stop_at_plateau:
         geom_cb = GoldilocksStoppingCallback(
             model,
             args.alpha,
             args.rank,
-            args.stop_at_dw_over_w,
+            args.stop_at_dw_over_w if (args.stop_at_dw_over_w and args.stop_at_dw_over_w > 0) else None,
             every=args.geometry_every,
             plateau=args.stop_at_plateau,
             run_id=run_id,
@@ -1175,6 +1268,19 @@ def main():
         model.save_pretrained(str(out_dir))
     tokenizer.save_pretrained(str(out_dir))
 
+    # AUTOMATIC POST-TRAIN ALPHA CALIBRATION
+    # Calibrate alpha dynamically based on actual learned B@A perturbation magnitude
+    try:
+        from runtime.alpha_calibration import calibrate_adapter_alpha
+        calib = calibrate_adapter_alpha(out_dir, base_model=model, apply=True)
+        print(
+            f"  [Auto-Calibration] Post-train alpha calibrated: {calib['trained_alpha']} -> {calib['alpha_opt']} "
+            f"(scaling {calib['optimal_point']['scaling']:.1f}, |dW|/|W|={calib['optimal_point']['dw_over_w']:.4f}, "
+            f"merge_err~{calib['optimal_point']['merge_err_pct']:.2f}%)"
+        )
+    except Exception as ex:
+        print(f"  [Auto-Calibration] Notice: post-train calibration skipped ({type(ex).__name__}: {ex})")
+
     # The ASR trace lives NEXT TO THE ADAPTER. An adapter trained with L_inert is
     # not interchangeable with one trained without it, and "did selectivity
     # actually move?" must be answerable from the artifact rather than from a log
@@ -1233,7 +1339,8 @@ def main():
             {
                 "methodology": METHODOLOGY,
                 "precision": "bfloat16",
-                "quantization": None,
+                "quantization": "4bit-nf4" if args.qlora else None,
+                "streaming_loader": should_stream,
                 "liger_fused_kernels": liger_applied,
                 "gradient_checkpointing": args.gradient_checkpointing,
                 "completion_only_loss": completion_only,

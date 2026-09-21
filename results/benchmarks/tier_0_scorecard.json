@@ -1,0 +1,64 @@
+{
+  "T0-1_pristine_weights_vram_overhead_mb": {
+    "0.8B": 588.0,
+    "2B": 1896.0,
+    "4B": 4880.0,
+    "9B": 10112.0,
+    "27B": 35000.0,
+    "unit": "MB",
+    "precision": "BF16",
+    "notes": "Exact byte count of PristineWeights GPU buffers duplicating fold targets"
+  },
+  "T0-2_quant_lora_slots_vram_overhead_mb": {
+    "0.8B": 24.38,
+    "2B": 41.63,
+    "4B": 81.01,
+    "9B": 111.01,
+    "27B": 304.02,
+    "unit": "MB",
+    "precision": "W4A16",
+    "notes": "Exact byte count of static QuantLoraSlot buffers (MAX_LORA_RANK=32)"
+  },
+  "T0-3_ipwf_swap_latency": {
+    "4B": {
+      "latency_ms": 33.595,
+      "cycles": 20,
+      "engine": "runtime-next",
+      "method": "hipblasGemm restore + fold across 32 layers",
+      "status": "PASS"
+    },
+    "9B": {
+      "status": "OOM_IN_BF16",
+      "required_vram_gb": 26.83,
+      "card_capacity_gb": 24.0,
+      "hip_error": 2,
+      "notes": "16.5GB base + 10.11GB pristine exceeds 24GB VRAM capacity",
+      "w4a16_quantized_alternative": {
+        "status": "PASS",
+        "latency_ms": 6.150,
+        "vram_total_gb": 6.6,
+        "slot_overhead_mb": 111.01
+      }
+    }
+  },
+  "T0-4_ipwf_decode_overhead": {
+    "4B": {
+      "without_adapter_tok_s": 83.83,
+      "with_adapter_tok_s": 83.72,
+      "overhead_pct": 0.13,
+      "status": "PASS",
+      "notes": "Verifies Section 3 0% decode tax claim within timer jitter"
+    },
+    "9B": {
+      "status": "OOM_IN_BF16",
+      "notes": "Blocked by PristineWeights VRAM allocation in BF16",
+      "w4a16_quantized_alternative": {
+        "status": "PASS",
+        "without_adapter_tok_s": 115.44,
+        "with_adapter_tok_s": 103.24,
+        "overhead_pct_when_active": 10.57,
+        "overhead_pct_when_unadapted": 0.0
+      }
+    }
+  }
+}

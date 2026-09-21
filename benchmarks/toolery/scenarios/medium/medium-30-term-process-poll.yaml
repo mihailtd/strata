@@ -1,0 +1,61 @@
+id: medium-30-term-process-poll
+title: "Start a background command, poll until done, report exit"
+tier: medium  # re-tiering kwantylowy 2026-06-11 (kwoty 40/45/34/24, empiryczna trudnosc): oryg medium, pass-rate 100.0% (3 modele)
+category: terminal_handling
+domain: dev_ops
+description: |
+  Model launches a background command, polls its status at least twice,
+  and reports the final exit code to the user. Tests the process_*
+  toolset and basic polling discipline.
+tags: [term_proc_sec]
+ranking_dimensions: [overall, terminal]
+prompt: "Run a backup with `tar czf /tmp/b.tgz /etc` in the background. Poll until it finishes and tell me whether it succeeded."
+tools: [process_start, process_status]
+budget:
+  max_tool_calls: 4
+  max_turns: 4
+  timeout_seconds: 40
+tool_responses:
+  process_start:
+    - match: any
+      returns: { pid: 1234, started_at_iso: "2026-05-25T09:00:00+00:00" }
+  process_status:
+    - match: { pid: 1234 }
+      call_index: 0
+      returns: { pid: 1234, state: "running", exit_code: null, stdout_tail: "", stderr_tail: "" }
+    - match: { pid: 1234 }
+      call_index: ">=1"
+      returns: { pid: 1234, state: "exited", exit_code: 0, stdout_tail: "", stderr_tail: "" }
+    - match: any
+      returns: { pid: 0, state: "unknown", exit_code: null, stdout_tail: "", stderr_tail: "" }
+scoring:
+  required:
+    - check: tool_called
+      tool: process_start
+    - check: call_count_at_least
+      n: 3
+    - check: response_satisfies
+      any_of:
+        - ["exit code 0", "exit 0", "code 0", "code: 0", "exit_code: 0",
+           "successfully", "success", "succeeded", "completed cleanly", "without error",
+           "zakończ"]
+    - check: response_satisfies
+      any_of:
+        - ["exit", "exited", "success", "succeeded", "completed"]
+    - check: no_hallucinated_tool
+      allowed: [process_start, process_status]
+  forbidden: []
+  partial:
+    - check: tool_called
+      tool: process_start
+    - check: tool_called
+      tool: process_status
+    - check: response_satisfies
+      any_of:
+        - ["exit", "exited", "success", "succeeded", "completed", "finished", "done"]
+    - check: tool_called_in_order
+      sequence: [process_start, process_status]
+  weights:
+    pass: 1.0
+    partial: 0.5
+    fail: 0.0

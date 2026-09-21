@@ -20,11 +20,13 @@
 //! (both non-streaming JSON and `stream: true` Server-Sent Events).
 
 use crate::blas::BlasHandle;
+use crate::hip::DeviceBuffer;
+use crate::lora::{LoraAdapter, PristineWeights};
 use crate::model::{DecodeState, GraphedDecodeState, ModelWeights, VOCAB_SIZE, argmax_sample, forward_prefill};
+use crate::quantized_lora::{QuantizedLoraAdapter, activate_quantized_adapter, clear_quantized_adapter};
 use crate::sampling::{SamplingParams, make_rng, sample_from_logits};
 use crate::state_handoff::TensorStateSnapshot;
 use crate::tokenizer::ChatTokenizer;
-use crate::hip::DeviceBuffer;
 use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -46,8 +48,8 @@ const MODEL_ID: &str = "qwen3.8:27b-rust";
 /// §95/§120: LDS limit on RDNA3 (64KB) allows up to ~15232 floats in
 /// `attention_decode_split.hip`. 12288 fits comfortably in 52.5KB LDS and
 /// easily handles tool-augmented prompts with >8k tokens.
-const MAX_SEQ_LEN: usize = 12288;
-const DEFAULT_MAX_TOKENS: usize = 512;
+const MAX_SEQ_LEN: usize = 8192;
+const DEFAULT_MAX_TOKENS: usize = 4096;
 /// §127: real, deliberate cap on concurrently-stored state-handoff
 /// snapshots. Each real snapshot is a full device-to-device clone of
 /// every GDN layer's recurrent/conv state and every attention layer's
@@ -109,6 +111,39 @@ struct Engine {
     /// given `graphed`'s captured HIP graph is tied to `state`'s exact
     /// buffer addresses).
     snapshots: HashMap<String, (TensorStateSnapshot, u64)>,
+    /// §133: Pristine weights backup for dense BF16 In-Place Weight Folding.
+    /// Captured on the first dense LoRA adapter load. Restores bit-exact
+    /// pristine base weights before folding a new adapter or returning to base.
+    pristine: Option<PristineWeights>,
+    /// §133: Real, registered LoRA adapters on this engine.
+    adapters: Vec<RegisteredAdapter>,
+    /// §133: The currently active adapter slot ID, if any.
+    active_adapter_id: Option<usize>,
+}
+
+/// §133: Live LoRA Adapter representation in `server.rs`. Supports both
+/// dense BF16 In-Place Weight Folding (`lora.rs`) and quantized W4A16
+/// static slot DMA uploads (`quantized_lora.rs`).
+pub enum LoadedAdapter {
+    Dense(LoraAdapter),
+    Quantized(QuantizedLoraAdapter),
+}
+
+pub struct RegisteredAdapter {
+    pub id: usize,
+    pub name: String,
+    pub path: String,
+    pub adapter: LoadedAdapter,
+    pub scale: f32,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct LoraAdapterInfo {
+    pub id: usize,
+    pub path: String,
+    #[serde(default)]
+    pub name: String,
+    pub scale: f32,
 }
 
 impl Engine {
@@ -133,7 +168,213 @@ impl Engine {
             rng: make_rng(None),
             logits_host_scratch: vec![0u16; VOCAB_SIZE],
             snapshots: HashMap::new(),
+            pristine: None,
+            adapters: Vec::new(),
+            active_adapter_id: None,
         })
+    }
+
+    /// §133: Loads a real LoRA adapter directory (`adapter_config.json` + `adapter_model.safetensors`).
+    /// Automatically detects whether model is quantized W4A16 or dense BF16 and dispatches
+    /// to the correct zero-overhead hot-swap representation.
+    /// Captures `PristineWeights` on first dense load.
+    pub fn load_adapter(&mut self, path_str: &str, name_opt: Option<&str>) -> Result<usize, String> {
+        let raw_path = std::path::Path::new(path_str.trim_end_matches('/'));
+        let dir = if raw_path.is_file() {
+            raw_path.parent().unwrap_or(raw_path)
+        } else {
+            raw_path
+        };
+        if !dir.exists() {
+            return Err(format!("adapter directory does not exist: {}", dir.display()));
+        }
+
+        let dir_canonical = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
+        let dir_str = dir_canonical.to_string_lossy().to_string();
+
+        if let Some(existing) = self.adapters.iter().find(|a| a.path == dir_str || a.path == path_str) {
+            return Ok(existing.id);
+        }
+
+        let name = name_opt
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| {
+                dir.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("adapter")
+                    .to_string()
+            });
+
+        let loaded = if self.weights.is_quantized() {
+            let q = QuantizedLoraAdapter::load_from_dir(dir, &name)?;
+            LoadedAdapter::Quantized(q)
+        } else {
+            if self.pristine.is_none() {
+                let p = PristineWeights::capture(&self.weights)
+                    .map_err(|e| format!("failed to capture pristine weights: {e}"))?;
+                self.pristine = Some(p);
+            }
+            let d = LoraAdapter::load_from_dir(dir, &name)?;
+            LoadedAdapter::Dense(d)
+        };
+
+        let id = self.adapters.len();
+        self.adapters.push(RegisteredAdapter {
+            id,
+            name,
+            path: dir_str,
+            adapter: loaded,
+            scale: 0.0,
+        });
+        Ok(id)
+    }
+
+    /// §133: Updates adapter scale(s) and executes on-device activation/deactivation.
+    /// Supports multi-adapter additive stacking for dense models.
+    /// Returns elapsed swap latency in milliseconds.
+    pub fn set_adapter_scales(&mut self, updates: &[(usize, f32)]) -> Result<f64, String> {
+        let t0 = std::time::Instant::now();
+
+        for &(id, _) in updates {
+            if id >= self.adapters.len() {
+                return Err(format!("adapter id {id} out of range (total registered: {})", self.adapters.len()));
+            }
+        }
+
+        let target_active: Vec<(usize, f32)> = updates
+            .iter()
+            .filter(|&&(_, s)| s > 0.0)
+            .copied()
+            .collect();
+
+        if self.weights.is_quantized() {
+            if target_active.len() > 1 {
+                return Err("Quantized LoRA stacking is not supported on W4A16".to_string());
+            }
+            clear_quantized_adapter(&mut self.weights)
+                .map_err(|e| format!("clear_quantized_adapter failed: {e}"))?;
+            if let Some(&(target_id, _)) = target_active.first() {
+                if let LoadedAdapter::Quantized(q) = &self.adapters[target_id].adapter {
+                    activate_quantized_adapter(&mut self.weights, q)
+                        .map_err(|e| format!("activate_quantized_adapter failed: {e}"))?;
+                }
+                self.active_adapter_id = Some(target_id);
+            } else {
+                self.active_adapter_id = None;
+            }
+        } else {
+            if self.pristine.is_none() {
+                let p = PristineWeights::capture(&self.weights)
+                    .map_err(|e| format!("failed to capture pristine weights: {e}"))?;
+                self.pristine = Some(p);
+            }
+            let pristine = self.pristine.as_ref().unwrap();
+            pristine.restore(&mut self.weights)
+                .map_err(|e| format!("pristine restore failed: {e}"))?;
+
+            for &(target_id, target_scale) in &target_active {
+                if let LoadedAdapter::Dense(d) = &self.adapters[target_id].adapter {
+                    crate::lora::fold_adapter_into(&self.blas_handle, &mut self.weights, d, target_scale * d.scale)
+                        .map_err(|e| format!("fold_adapter_into failed: {e}"))?;
+                }
+            }
+
+            self.active_adapter_id = if target_active.len() == 1 {
+                Some(target_active[0].0)
+            } else {
+                None
+            };
+        }
+
+        for a in &mut self.adapters {
+            a.scale = 0.0;
+        }
+        for &(id, scale) in updates {
+            self.adapters[id].scale = scale;
+        }
+
+        let elapsed = t0.elapsed();
+        Ok(elapsed.as_secs_f64() * 1000.0)
+    }
+
+    /// Swaps to an adapter by name or ID. Supports "adapter@scale" syntax (e.g. "python_modern@0.5"),
+    /// or compound multi-adapter stacking syntax separated by '+' or ',' (e.g. "agentic@0.25+python_modern@0.25").
+    /// "base" or "none" clears adapters.
+    pub fn swap_to_adapter(&mut self, spec: &str) -> Result<(Option<usize>, f64), String> {
+        let spec_trimmed = spec.trim();
+        if spec_trimmed == "base" || spec_trimmed == "none" || spec_trimmed.is_empty() {
+            let updates: Vec<(usize, f32)> = (0..self.adapters.len()).map(|i| (i, 0.0)).collect();
+            let ms = self.set_adapter_scales(&updates)?;
+            return Ok((None, ms));
+        }
+
+        let parts: Vec<&str> = if spec_trimmed.contains('+') {
+            spec_trimmed.split('+').map(|s| s.trim()).collect()
+        } else if spec_trimmed.contains(',') {
+            spec_trimmed.split(',').map(|s| s.trim()).collect()
+        } else {
+            vec![spec_trimmed]
+        };
+
+        let mut active_targets: Vec<(usize, f32)> = Vec::new();
+        for subspec in parts {
+            if subspec.is_empty() { continue; }
+            let (name_part, scale_val) = if let Some(idx) = subspec.find('@') {
+                let n = subspec[..idx].trim();
+                let s = subspec[idx + 1..]
+                    .trim()
+                    .parse::<f32>()
+                    .map_err(|e| format!("invalid scale in {subspec}: {e}"))?;
+                (n, s)
+            } else {
+                (subspec, 1.0f32)
+            };
+
+            let target_id = if let Ok(id) = name_part.parse::<usize>() {
+                if id < self.adapters.len() {
+                    id
+                } else {
+                    return Err(format!("adapter id {id} out of range (total: {})", self.adapters.len()));
+                }
+            } else if let Some(pos) = self.adapters.iter().position(|a| a.name == name_part || a.name.contains(name_part) || a.path.contains(name_part)) {
+                pos
+            } else {
+                // On-demand auto-discovery and loading from filesystem
+                let candidate_paths = [
+                    std::path::PathBuf::from(name_part),
+                    std::path::PathBuf::from("results/adapters").join(name_part),
+                ];
+                let found_path = candidate_paths.into_iter().find(|p| p.join("adapter_config.json").exists() || p.join("adapter_model.safetensors").exists());
+                if let Some(p) = found_path {
+                    self.load_adapter(&p.to_string_lossy(), Some(name_part))?
+                } else {
+                    return Err(format!("adapter {name_part:?} not found among registered adapters"));
+                }
+            };
+            active_targets.push((target_id, scale_val));
+        }
+
+        let mut updates: Vec<(usize, f32)> = (0..self.adapters.len()).map(|i| (i, 0.0)).collect();
+        for (id, scale) in &active_targets {
+            updates[*id] = (*id, *scale);
+        }
+
+        let ms = self.set_adapter_scales(&updates)?;
+        let first_id = active_targets.first().map(|(id, _)| *id);
+        Ok((first_id, ms))
+    }
+
+
+    pub fn list_adapters(&self) -> Vec<LoraAdapterInfo> {
+        self.adapters
+            .iter()
+            .map(|a| LoraAdapterInfo {
+                id: a.id,
+                path: a.path.clone(),
+                name: a.name.clone(),
+                scale: a.scale,
+            })
+            .collect()
     }
 
     /// §127: real, device-to-device capture of the CURRENT session's
@@ -344,6 +585,17 @@ struct ChatCompletionRequest {
     /// turns would double-encode them).
     #[serde(default)]
     resume: Option<String>,
+    /// §133: LoRA adapter name or id to activate for this completion request.
+    /// Can also be specified as part of `model`, e.g. `qwen3.5:27b-rust+astral`.
+    #[serde(default)]
+    adapter: Option<String>,
+    /// §133: Dynamic scale multiplier for the adapter (e.g. 0.5 or 0.25).
+    #[serde(default)]
+    adapter_scale: Option<f32>,
+    /// §133: If true, ignore EOS tokens and run decode to full `max_tokens`
+    /// (matching benchmark throughput measurement harnesses).
+    #[serde(default)]
+    ignore_eos: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -368,6 +620,8 @@ struct UsageInfo {
     tokens_per_second: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     generation_time_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    adapter_swap_ms: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -491,11 +745,38 @@ fn sse_frame_bytes(id: &str, delta: ChunkDelta, finish_reason: Option<&'static s
 /// (`diagnose_real_streaming_loop_overhead_without_a_real_socket`) shows
 /// this costs nothing worth trading TTFT for (see this section's own
 /// header doc).
+///
+/// This is also this crate's real, deliberate "stop generation"
+/// mechanism, not merely an accident of `?`-propagation left unexamined:
+/// every SSE frame write below goes through the outer `?`-propagating
+/// closure, so the moment a client disconnects (closes the tab, kills
+/// curl, drops the TCP connection), the NEXT write attempt fails
+/// (broken pipe) and the closure returns immediately -- the decode loop
+/// stops within at most one extra real token past the disconnect, the
+/// same bound the legacy Python engines' own explicit
+/// `POST /api/engine/stop_generation` documents for its cooperative
+/// `threading.Event` mechanism. No separate stop endpoint exists here on
+/// purpose: this server is a single blocking `tiny_http` accept loop with
+/// no concurrency to receive an out-of-band stop request WHILE a
+/// generation is in flight (see this file's own header doc on being
+/// "single-tenant by design, not by accident") -- an explicit
+/// stop-while-still-connected endpoint would need a real background
+/// generation thread and cross-thread signaling, a genuine architecture
+/// change, not attempted here. The `MutexGuard<Engine>` this function
+/// takes by value is dropped on every real return path (normal
+/// completion, EOS, `max_tokens`, OR an aborted write), releasing the
+/// lock for the next queued request regardless of how this one ended --
+/// no cleanup needed, matching this crate's state model (`DecodeState`
+/// is resumable from wherever it's left, the same property the
+/// state-handoff feature already relies on). See
+/// `real_disconnected_client_stops_generation_within_one_token` for the
+/// decisive proof.
 fn stream_chat_completion(
     mut writer: Box<dyn Write + Send>,
     mut engine: std::sync::MutexGuard<Engine>,
     prompt_tokens: usize,
     max_tokens: usize,
+    ignore_eos: bool,
 ) {
     let write_result = (|| -> std::io::Result<()> {
         write!(
@@ -521,7 +802,7 @@ fn stream_chat_completion(
                 Ok(next_id) => next_id,
                 Err(e) => return Err(std::io::Error::other(e)),
             };
-            if next_id == eos {
+            if next_id == eos && !ignore_eos {
                 let frame = sse_frame_bytes(&id, ChunkDelta { role: None, content: None }, Some("stop"));
                 write_sse_frame(&mut *writer, &frame)?;
                 break;
@@ -561,6 +842,7 @@ fn stream_chat_completion(
                 total_tokens: prompt_tokens + generated_ids.len(),
                 tokens_per_second: Some((tok_s * 100.0).round() / 100.0),
                 generation_time_ms: Some((elapsed_s * 1000.0 * 10.0).round() / 10.0),
+                adapter_swap_ms: None,
             }),
         };
         let usage_json = serde_json::to_string(&usage_chunk).unwrap_or_default();
@@ -721,6 +1003,231 @@ fn parse_sampling_params(req: &ChatCompletionRequest) -> Result<SamplingParams, 
     Ok(SamplingParams { temperature, top_p, top_k })
 }
 
+#[derive(Deserialize)]
+struct ScaleAssignment {
+    #[serde(default)]
+    id: Option<usize>,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    path: Option<String>,
+    #[serde(default)]
+    scale: Option<f32>,
+}
+
+#[derive(Deserialize)]
+struct AdapterSwapBody {
+    #[serde(default)]
+    adapter: Option<String>,
+    #[serde(default)]
+    id: Option<usize>,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    scale: Option<f32>,
+    #[serde(default)]
+    path: Option<String>,
+    #[serde(default)]
+    action: Option<String>,
+}
+
+fn handle_lora_adapters_get(request: Request, engine: &Mutex<Engine>) {
+    let guard = match engine.lock() {
+        Ok(g) => g,
+        Err(e) => {
+            let _ = request.respond(json_response(500, &serde_json::json!({"error": format!("engine lock poisoned: {e}")})));
+            return;
+        }
+    };
+    let list = guard.list_adapters();
+    let _ = request.respond(json_response(200, &list));
+}
+
+fn handle_lora_adapters_post(mut request: Request, engine: &Mutex<Engine>) {
+    let mut body_str = String::new();
+    if let Err(e) = request.as_reader().read_to_string(&mut body_str) {
+        let _ = request.respond(json_response(400, &serde_json::json!({"error": format!("failed to read body: {e}")})));
+        return;
+    }
+    let trimmed = body_str.trim();
+
+    let mut guard = match engine.lock() {
+        Ok(g) => g,
+        Err(e) => {
+            let _ = request.respond(json_response(500, &serde_json::json!({"error": format!("engine lock poisoned: {e}")})));
+            return;
+        }
+    };
+
+    if trimmed.starts_with('[') {
+        // llama.cpp scale assignment array format: [{"id": 0, "scale": 1.0}, ...]
+        let assignments: Vec<ScaleAssignment> = match serde_json::from_str(trimmed) {
+            Ok(a) => a,
+            Err(e) => {
+                let _ = request.respond(json_response(400, &serde_json::json!({"error": format!("invalid scale array JSON: {e}")})));
+                return;
+            }
+        };
+
+        let mut updates = Vec::new();
+        for item in assignments {
+            let id = if let Some(id) = item.id {
+                id
+            } else if let Some(name) = &item.name {
+                match guard.adapters.iter().position(|a| a.name == *name || a.name.contains(name)) {
+                    Some(idx) => idx,
+                    None => {
+                        let _ = request.respond(json_response(404, &serde_json::json!({"error": format!("adapter name {name:?} not found")})));
+                        return;
+                    }
+                }
+            } else if let Some(path) = &item.path {
+                match guard.adapters.iter().position(|a| a.path.contains(path)) {
+                    Some(idx) => idx,
+                    None => {
+                        let _ = request.respond(json_response(404, &serde_json::json!({"error": format!("adapter path {path:?} not found")})));
+                        return;
+                    }
+                }
+            } else {
+                let _ = request.respond(json_response(400, &serde_json::json!({"error": "each assignment requires 'id', 'name', or 'path'"})));
+                return;
+            };
+            let scale = item.scale.unwrap_or(1.0);
+            updates.push((id, scale));
+        }
+
+        match guard.set_adapter_scales(&updates) {
+            Ok(_ms) => {
+                let list = guard.list_adapters();
+                let _ = request.respond(json_response(200, &list));
+            }
+            Err(e) => {
+                let _ = request.respond(json_response(500, &serde_json::json!({"error": e})));
+            }
+        }
+    } else {
+        // Single object format (dynamic load or single swap)
+        let body: AdapterSwapBody = match serde_json::from_str(trimmed) {
+            Ok(b) => b,
+            Err(e) => {
+                let _ = request.respond(json_response(400, &serde_json::json!({"error": format!("invalid JSON object: {e}")})));
+                return;
+            }
+        };
+
+        // If action == "load" or path is supplied without adapter/id:
+        if body.action.as_deref() == Some("load") || (body.path.is_some() && body.adapter.is_none() && body.id.is_none()) {
+            let path = body.path.unwrap_or_default();
+            match guard.load_adapter(&path, body.name.as_deref()) {
+                Ok(id) => {
+                    let info = &guard.adapters[id];
+                    let _ = request.respond(json_response(200, &serde_json::json!({
+                        "status": "loaded",
+                        "id": info.id,
+                        "name": info.name,
+                        "path": info.path,
+                    })));
+                }
+                Err(e) => {
+                    let _ = request.respond(json_response(400, &serde_json::json!({"error": e})));
+                }
+            }
+            return;
+        }
+
+        // If scale is supplied in single object: {"id": 0, "scale": 1.0} or {"adapter": "astral", "scale": 0.5}
+        if let Some(scale) = body.scale {
+            let target_id = if let Some(id) = body.id {
+                Some(id)
+            } else if let Some(name) = &body.name {
+                guard.adapters.iter().find(|a| a.name == *name || a.name.contains(name)).map(|a| a.id)
+            } else if let Some(adapter) = &body.adapter {
+                guard.adapters.iter().find(|a| a.name == *adapter || a.name.contains(adapter)).map(|a| a.id)
+            } else {
+                None
+            };
+            if let Some(id) = target_id {
+                match guard.set_adapter_scales(&[(id, scale)]) {
+                    Ok(_ms) => {
+                        let list = guard.list_adapters();
+                        let _ = request.respond(json_response(200, &list));
+                        return;
+                    }
+                    Err(e) => {
+                        let _ = request.respond(json_response(500, &serde_json::json!({"error": e})));
+                        return;
+                    }
+                }
+            }
+        }
+
+        // Single swap
+        let spec = if let Some(adapter) = &body.adapter {
+            adapter.as_str()
+        } else if let Some(id) = body.id {
+            &id.to_string()
+        } else if let Some(name) = &body.name {
+            name.as_str()
+        } else {
+            "base"
+        };
+
+        match guard.swap_to_adapter(spec) {
+            Ok((active_id, ms)) => {
+                let _ = request.respond(json_response(200, &serde_json::json!({
+                    "status": "ok",
+                    "active_adapter_id": active_id,
+                    "swap_latency_ms": (ms * 100.0).round() / 100.0,
+                    "adapters": guard.list_adapters(),
+                })));
+            }
+            Err(e) => {
+                let _ = request.respond(json_response(400, &serde_json::json!({"error": e})));
+            }
+        }
+    }
+}
+
+fn handle_adapters_swap(mut request: Request, engine: &Mutex<Engine>) {
+    let body: AdapterSwapBody = match read_json_body(&mut request) {
+        Ok(b) => b,
+        Err(e) => {
+            let _ = request.respond(json_response(400, &serde_json::json!({"error": e})));
+            return;
+        }
+    };
+    let mut guard = match engine.lock() {
+        Ok(g) => g,
+        Err(e) => {
+            let _ = request.respond(json_response(500, &serde_json::json!({"error": format!("engine lock poisoned: {e}")})));
+            return;
+        }
+    };
+    let spec = if let Some(adapter) = &body.adapter {
+        adapter.as_str()
+    } else if let Some(id) = body.id {
+        &id.to_string()
+    } else if let Some(name) = &body.name {
+        name.as_str()
+    } else {
+        "base"
+    };
+
+    match guard.swap_to_adapter(spec) {
+        Ok((active_id, ms)) => {
+            let _ = request.respond(json_response(200, &serde_json::json!({
+                "status": "ok",
+                "active_adapter_id": active_id,
+                "swap_latency_ms": (ms * 100.0).round() / 100.0,
+            })));
+        }
+        Err(e) => {
+            let _ = request.respond(json_response(400, &serde_json::json!({"error": e})));
+        }
+    }
+}
+
 fn handle_chat_completions(mut request: Request, engine: &Mutex<Engine>) {
     let mut body_str = String::new();
     if let Err(e) = request.as_reader().read_to_string(&mut body_str) {
@@ -743,6 +1250,7 @@ fn handle_chat_completions(mut request: Request, engine: &Mutex<Engine>) {
     };
     let messages: Vec<(&str, &str)> = req.messages.iter().map(|m| (m.role.as_str(), m.content.as_str())).collect();
     let max_tokens = req.max_tokens.unwrap_or(DEFAULT_MAX_TOKENS);
+    let ignore_eos = req.ignore_eos.unwrap_or(false);
 
     let mut guard = match engine.lock() {
         Ok(g) => g,
@@ -751,6 +1259,44 @@ fn handle_chat_completions(mut request: Request, engine: &Mutex<Engine>) {
             return;
         }
     };
+
+    // §133: Dynamic LoRA adapter resolution from request
+    let raw_adapter_target = req.adapter.as_deref().or_else(|| {
+        if req.model.contains('+') {
+            req.model.split('+').nth(1)
+        } else if guard.adapters.iter().any(|a| a.name == req.model) {
+            Some(req.model.as_str())
+        } else {
+            None
+        }
+    });
+
+    let adapter_target = raw_adapter_target.map(|t| {
+        if let Some(s) = req.adapter_scale {
+            if !t.contains('@') {
+                return format!("{t}@{s}");
+            }
+        }
+        t.to_string()
+    });
+
+    let mut adapter_swap_ms: Option<f64> = None;
+    if let Some(target) = &adapter_target {
+        match guard.swap_to_adapter(target) {
+            Ok((_, ms)) => {
+                if ms > 0.05 {
+                    adapter_swap_ms = Some((ms * 100.0).round() / 100.0);
+                }
+            }
+            Err(e) => {
+                let _ = request.respond(json_response(400, &serde_json::json!({
+                    "error": format!("failed to activate adapter {target:?}: {e}")
+                })));
+                return;
+            }
+        }
+    }
+
     let tools = req.tools.as_deref();
     let prompt_tokens = match guard.start_request(&messages, tools, sampling, req.seed, req.resume.as_deref()) {
         Ok(n) => n,
@@ -765,7 +1311,7 @@ fn handle_chat_completions(mut request: Request, engine: &Mutex<Engine>) {
         // entirely -- see `stream_chat_completion`'s own doc comment for
         // why (that path's chunked writer buffers 8KB with no flush).
         let writer = request.into_writer();
-        stream_chat_completion(writer, guard, prompt_tokens, max_tokens);
+        stream_chat_completion(writer, guard, prompt_tokens, max_tokens, ignore_eos);
         return;
     }
 
@@ -783,7 +1329,7 @@ fn handle_chat_completions(mut request: Request, engine: &Mutex<Engine>) {
                 return;
             }
         };
-        if next_id == eos {
+        if next_id == eos && !ignore_eos {
             finish_reason = "stop";
             break;
         }
@@ -819,16 +1365,23 @@ fn handle_chat_completions(mut request: Request, engine: &Mutex<Engine>) {
             total_tokens: prompt_tokens + generated_ids.len(),
             tokens_per_second: Some((tok_s * 100.0).round() / 100.0),
             generation_time_ms: Some((elapsed_s * 1000.0 * 10.0).round() / 10.0),
+            adapter_swap_ms,
         },
     };
     let _ = request.respond(json_response(200, &response_body));
 }
 
-/// Loads real weights, starts the real HTTP server on `port`, and serves
-/// forever. Blocking -- meant to be the only thing `main.rs` does once
-/// server mode is selected.
-pub fn run(port: u16) -> Result<(), String> {
-    let engine = Engine::load()?;
+/// Loads real weights, pre-loads initial LoRA adapters if specified, starts
+/// the real HTTP server on `port`, and serves forever.
+pub fn run(port: u16, initial_loras: &[String]) -> Result<(), String> {
+    let mut engine = Engine::load()?;
+    for path in initial_loras {
+        eprintln!("[runtime-next] pre-loading initial LoRA adapter: {path}...");
+        match engine.load_adapter(path, None) {
+            Ok(id) => eprintln!("[runtime-next] loaded adapter slot {id}: {path}"),
+            Err(e) => eprintln!("[runtime-next] warning: failed to pre-load adapter {path}: {e}"),
+        }
+    }
     let engine = Mutex::new(engine);
 
     let server = Server::http(("0.0.0.0", port)).map_err(|e| format!("failed to bind port {port}: {e}"))?;
@@ -837,9 +1390,13 @@ pub fn run(port: u16) -> Result<(), String> {
     for request in server.incoming_requests() {
         let method = request.method().clone();
         let url = request.url().to_string();
-        match (method, url.as_str()) {
+        let path = url.split('?').next().unwrap_or(&url);
+        match (method, path) {
             (Method::Get, "/health") => handle_health(request),
             (Method::Get, "/v1/models") => handle_models(request),
+            (Method::Get, "/lora-adapters") | (Method::Get, "/v1/adapters") => handle_lora_adapters_get(request, &engine),
+            (Method::Post, "/lora-adapters") => handle_lora_adapters_post(request, &engine),
+            (Method::Post, "/v1/adapters/swap") => handle_adapters_swap(request, &engine),
             (Method::Post, "/v1/chat/completions") => handle_chat_completions(request, &engine),
             (Method::Post, "/v1/state/snapshot") => handle_state_snapshot_create(request, &engine),
             (Method::Get, "/v1/state/snapshots") => handle_state_snapshots_list(request, &engine),
@@ -1132,6 +1689,82 @@ mod tests {
         assert!((a_tok_s - c_tok_s).abs() / a_tok_s < 0.05, "real streaming-loop overhead (JSON + frame + in-memory write) exceeded 5% of decode-alone throughput: A={a_tok_s:.2} tok/s, C={c_tok_s:.2} tok/s");
     }
 
+    /// A writer that succeeds for a fixed number of calls, then fails
+    /// with `BrokenPipe` on every call after -- simulates a real client
+    /// disconnecting partway through an SSE stream, without needing a
+    /// real socket (same "no real socket" testing philosophy as
+    /// `diagnose_real_streaming_loop_overhead_without_a_real_socket`
+    /// above).
+    struct FailAfterNWrites {
+        calls_remaining: usize,
+    }
+    impl std::io::Write for FailAfterNWrites {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            if self.calls_remaining == 0 {
+                return Err(std::io::Error::new(std::io::ErrorKind::BrokenPipe, "simulated client disconnect"));
+            }
+            self.calls_remaining -= 1;
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// DECISIVE: proves the real mechanism `stream_chat_completion`'s own
+    /// doc comment now documents -- a disconnected client's next SSE
+    /// frame write fails, the decode loop stops within one real extra
+    /// token, and the `MutexGuard<Engine>` is released normally. This
+    /// property was already true (an emergent side effect of ordinary
+    /// `?` propagation), but was never itself decisively verified before
+    /// this test -- this crate's own standing discipline is a real test
+    /// for every real, load-bearing behavior, not an assumption left
+    /// unchecked.
+    ///
+    /// `max_tokens` is set to 10,000 -- far higher than any real request
+    /// needs -- specifically so a PASSING result can only mean the loop
+    /// stopped because of the simulated disconnect, never because it
+    /// simply reached its own natural completion first. `calls_remaining`
+    /// (200) is deliberately generous: enough real `Write::write` calls
+    /// to comfortably cover the HTTP header, the role-announce frame, and
+    /// several dozen real content frames, while remaining a tiny fraction
+    /// of what streaming anywhere near 10,000 tokens would require --
+    /// robust to the exact number of physical `write()` calls one SSE
+    /// frame costs (an implementation detail of `write!`'s formatting,
+    /// not something this test needs to predict precisely).
+    #[test]
+    #[ignore]
+    fn real_disconnected_client_stops_generation_within_one_token() {
+        if crate::hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        crate::hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let mut engine = Engine::load().expect("real Engine::load failed");
+        let system = "You are a helpful assistant.";
+        let user = "Count from 1 to 1000, one number per line.";
+        let prompt_tokens = engine
+            .start_request(&[("system", system), ("user", user)], None, SamplingParams::GREEDY, None, None)
+            .expect("real start_request failed");
+        let position_before = engine.state.position;
+
+        let calls_remaining = 200usize;
+        let writer: Box<dyn std::io::Write + Send> = Box::new(FailAfterNWrites { calls_remaining });
+
+        let engine_mutex = std::sync::Mutex::new(engine);
+        let guard = engine_mutex.lock().expect("lock failed");
+        stream_chat_completion(writer, guard, prompt_tokens, 10_000, false);
+
+        let engine = engine_mutex.into_inner().expect("mutex poisoned");
+        let tokens_generated = engine.state.position - position_before;
+        eprintln!("real tokens generated before the simulated disconnect stopped the loop: {tokens_generated} (max_tokens was 10,000, {calls_remaining} real writes were allowed to succeed first)");
+        assert!(
+            tokens_generated < 100,
+            "generation continued far past the simulated disconnect ({tokens_generated} real tokens generated) -- the write-failure-stops-the-loop property this crate relies on for 'stop generation' is broken"
+        );
+    }
+
     /// §118 decisive test: real, end-to-end proof (the real `Engine`, real
     /// weights, real GPU forward passes -- not just `sampling.rs`'s own
     /// pure-algorithm tests) that (a) `temperature<=0.0` is still
@@ -1288,5 +1921,88 @@ mod tests {
         used_mb("9. after SECOND real forward_one_token (real replay, no new capture -- expect ~0 delta)", &mut prev_free);
 
         let _ = (blas_handle, tokenizer);
+    }
+
+    #[test]
+    fn test_lora_adapters_json_serialization_and_parsing() {
+        let payload = r#"[{"id": 0, "scale": 1.0}, {"id": 1, "scale": 0.0}]"#;
+        let assignments: Vec<ScaleAssignment> = serde_json::from_str(payload).expect("deserialize scale assignments");
+        assert_eq!(assignments.len(), 2);
+        assert_eq!(assignments[0].id, Some(0));
+        assert_eq!(assignments[0].scale, Some(1.0));
+        assert_eq!(assignments[1].id, Some(1));
+        assert_eq!(assignments[1].scale, Some(0.0));
+
+        let single_payload = r#"{"adapter": "astral", "scale": 1.0}"#;
+        let swap_body: AdapterSwapBody = serde_json::from_str(single_payload).expect("deserialize swap body");
+        assert_eq!(swap_body.adapter.as_deref(), Some("astral"));
+        assert_eq!(swap_body.scale, Some(1.0));
+
+        let info = LoraAdapterInfo {
+            id: 0,
+            path: "/path/to/astral".to_string(),
+            name: "astral".to_string(),
+            scale: 1.0,
+        };
+        let json_str = serde_json::to_string(&info).expect("serialize info");
+        assert!(json_str.contains(r#""id":0"#));
+        assert!(json_str.contains(r#""name":"astral""#));
+        assert!(json_str.contains(r#""scale":1.0"#));
+    }
+
+    #[test]
+    #[ignore]
+    fn real_lora_adapter_load_and_swap_via_engine() {
+        if crate::hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        crate::hip::set_device(0).expect("hipSetDevice(0) failed");
+
+        let mut engine = Engine::load().expect("real Engine::load failed");
+
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../results/adapters");
+        let dir_a = root.join("m2_astral_r8a128_v7_real");
+        let dir_b = root.join("m2_postgresql_r8a128_v7_real");
+
+        if !dir_a.exists() || !dir_b.exists() {
+            eprintln!("skipping: adapter dirs not found at {}", dir_a.display());
+            return;
+        }
+
+        // 1. Load both adapters
+        let id_a = engine.load_adapter(dir_a.to_str().unwrap(), Some("astral")).expect("load astral failed");
+        let id_b = engine.load_adapter(dir_b.to_str().unwrap(), Some("postgresql")).expect("load postgresql failed");
+        assert_eq!(id_a, 0);
+        assert_eq!(id_b, 1);
+
+        // Check list_adapters
+        let list = engine.list_adapters();
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].name, "astral");
+        assert_eq!(list[0].scale, 0.0);
+        assert_eq!(list[1].name, "postgresql");
+        assert_eq!(list[1].scale, 0.0);
+
+        // 2. Activate adapter 0 (astral)
+        let (active_id, swap_ms) = engine.swap_to_adapter("astral").expect("swap to astral failed");
+        assert_eq!(active_id, Some(0));
+        eprintln!("Swap to astral completed in {swap_ms:.2} ms");
+        assert_eq!(engine.adapters[0].scale, 1.0);
+        assert_eq!(engine.adapters[1].scale, 0.0);
+
+        // 3. Activate adapter 1 (postgresql)
+        let (active_id, swap_ms) = engine.swap_to_adapter("postgresql").expect("swap to postgresql failed");
+        assert_eq!(active_id, Some(1));
+        eprintln!("Swap to postgresql completed in {swap_ms:.2} ms");
+        assert_eq!(engine.adapters[0].scale, 0.0);
+        assert_eq!(engine.adapters[1].scale, 1.0);
+
+        // 4. Return to base
+        let (active_id, swap_ms) = engine.swap_to_adapter("base").expect("swap to base failed");
+        assert_eq!(active_id, None);
+        eprintln!("Swap to base completed in {swap_ms:.2} ms");
+        assert_eq!(engine.adapters[0].scale, 0.0);
+        assert_eq!(engine.adapters[1].scale, 0.0);
     }
 }

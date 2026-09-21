@@ -1,0 +1,76 @@
+{
+  "adapter": "m2_agentic_coding_r8a128_v7",
+  "measured": {
+    "r": 8,
+    "alpha": 128,
+    "pairs": 128,
+    "dw_over_w": 0.07514546051848205
+  },
+  "curve": [
+    {
+      "alpha": 16,
+      "scaling": 2.0,
+      "dw_over_w": 0.009393182564810256,
+      "merge_err_pct": 17.778851720143635,
+      "below_floor": true,
+      "heldout_oracle": null
+    },
+    {
+      "alpha": 32,
+      "scaling": 4.0,
+      "dw_over_w": 0.01878636512962051,
+      "merge_err_pct": 8.889425860071817,
+      "below_floor": true,
+      "heldout_oracle": null
+    },
+    {
+      "alpha": 48,
+      "scaling": 6.0,
+      "dw_over_w": 0.02817954769443077,
+      "merge_err_pct": 5.926283906714544,
+      "below_floor": true,
+      "heldout_oracle": null
+    },
+    {
+      "alpha": 64,
+      "scaling": 8.0,
+      "dw_over_w": 0.03757273025924102,
+      "merge_err_pct": 4.444712930035909,
+      "below_floor": false,
+      "heldout_oracle": null
+    },
+    {
+      "alpha": 80,
+      "scaling": 10.0,
+      "dw_over_w": 0.04696591282405128,
+      "merge_err_pct": 3.555770344028727,
+      "below_floor": false,
+      "heldout_oracle": null
+    },
+    {
+      "alpha": 96,
+      "scaling": 12.0,
+      "dw_over_w": 0.05635909538886154,
+      "merge_err_pct": 2.963141953357272,
+      "below_floor": false,
+      "heldout_oracle": null
+    },
+    {
+      "alpha": 112,
+      "scaling": 14.0,
+      "dw_over_w": 0.06575227795367179,
+      "merge_err_pct": 2.539835960020519,
+      "below_floor": false,
+      "heldout_oracle": null
+    },
+    {
+      "alpha": 128,
+      "scaling": 16.0,
+      "dw_over_w": 0.07514546051848205,
+      "merge_err_pct": 2.2223564650179544,
+      "below_floor": false,
+      "heldout_oracle": null
+    }
+  ],
+  "alpha_opt": null
+}

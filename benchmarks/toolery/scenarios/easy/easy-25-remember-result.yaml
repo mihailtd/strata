@@ -1,0 +1,38 @@
+id: easy-25-remember-result
+title: "Remember the result from previous turn — no re-call"
+tier: medium  # re-tiering kwantylowy 2026-06-11 (kwoty 40/45/34/24, empiryczna trudnosc): oryg easy, pass-rate 86.7% (3 modele)
+category: context_state_tracking
+domain: generic
+description: |
+  Tests single-turn instruction following (the harness presents both turns as
+  one message). Turn 1: fetch a value via tool. Turn 2: user references "that
+  value" and asks for a derived computation. Model must use the in-context
+  value, NOT call the tool again. Budget=1 enforces this.
+tags: [multi_turn, memoize]
+ranking_dimensions: [overall, context_state_tracking, budget_efficiency]
+prompt: |
+  Turn 1: "Check the current USD/PLN rate." Turn 2: "How much is 250 USD in PLN at that rate?"
+tools: [get_exchange_rate]
+budget:
+  max_tool_calls: 1
+  max_turns: 3
+  timeout_seconds: 40
+tool_responses:
+  get_exchange_rate:
+    - match: any
+      returns: { pair: "USDPLN", rate: 4.10 }
+scoring:
+  required:
+    - check: call_count_at_most
+      n: 1
+    # Accept integer, decimal-zero (1025.00), and comma-grouped renderings.
+    - check: response_satisfies
+      any_of: [["1025", "1,025", "1 025", "1025.00", "1,025.00", "1025.0"]]
+  forbidden: []
+  partial:
+    - check: response_satisfies
+      any_of: [["4.10", "4,10", "PLN"]]
+  weights:
+    pass: 1.0
+    partial: 0.5
+    fail: 0.0

@@ -1,0 +1,45 @@
+id: medium-09-localization-de
+title: "German weather query — respond in German"
+tier: easy  # re-tiering kwantylowy 2026-06-11 (kwoty 40/45/34/24, empiryczna trudnosc): oryg medium, pass-rate 100.0% (3 modele)
+category: tool_selection
+domain: generic
+description: "German prompt — model must call get_weather AND answer in German."
+tags: [localization, single_turn]
+ranking_dimensions: [overall, localization]
+prompt: "Wie ist das Wetter in Berlin?"
+tools: [get_weather]
+budget:
+  max_tool_calls: 1
+  max_turns: 2
+  timeout_seconds: 60
+tool_responses:
+  get_weather:
+    - match: { location: "Berlin" }
+      returns: { temp_c: 10, condition: "bewoelkt" }
+    - match: any
+      returns: { error: "Stadt nicht gefunden" }
+scoring:
+  required:
+    - check: tool_called
+      tool: get_weather
+    - check: tool_args_contain
+      tool: get_weather
+      args: { location: "Berlin" }
+    - check: response_language
+      language: de
+  forbidden: []
+  partial:
+    - check: response_contains
+      patterns: ["10"]
+    - check: tool_called
+      tool: get_weather
+    - check: response_satisfies
+      any_of:
+        - ["Wetter", "Berlin", "Grad", "Celsius", "bewölkt", "bewoelkt"]
+    - check: response_satisfies
+      any_of:
+        - ["bewölkt", "Berlin", "Grad", "Wetter"]
+  weights:
+    pass: 1.0
+    partial: 0.5
+    fail: 0.0

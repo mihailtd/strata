@@ -1,0 +1,67 @@
+id: medium-33-budget-pressure-doc
+title: "Two queries against the same section of a 2k-token document"
+tier: medium  # re-tiering kwantylowy 2026-06-11 (kwoty 40/45/34/24, empiryczna trudnosc): oryg medium, pass-rate 93.3% (3 modele)
+category: context_state_tracking
+domain: generic
+description: |
+  Single-turn over a ~2k-token policy document containing both questions
+  inline (Turn 1 + Turn 2 framing in one prompt). Both answers depend on the
+  same section; model must reuse the in-context document rather than re-fetch
+  via read_file. Budget = 2 total toolcalls but ideally zero.
+tags: [multi_turn, long_context, budget]
+ranking_dimensions: [overall, budget_efficiency, long_context, context_state_tracking]
+prompt: |
+  Document: ACME PRIME loyalty program terms (see sections 1-8 below).
+
+  §1 (Overview) ACME PRIME is a paid loyalty program. Annual fee: 199 PLN.
+    Activated in the customer panel. Cancellable within 14 days of payment
+    (full refund).
+
+  §2 (Benefits) Free delivery from 50 PLN, 10% discount on ACME ORIGINS
+    products, early access to sales (24h before the standard customer base),
+    dedicated 24/7 phone support.
+
+  §3 (Returns) Standard 14 days. PRIME: 30 days. ACME covers the return cost.
+
+  §4 (Points redemption) PRIME customers earn 2x points on every purchase.
+    Points are redeemable for bonuses in the customer panel or for a 50 PLN
+    bonus voucher once 1000 points are collected.
+
+  §5 (Cancellation) Cancel the program from the customer panel. After the end
+    date no refunds are issued for unused months.
+
+  §6 (Complaints) Complaints are handled with priority within 24h for PRIME.
+
+  §7 (Privacy policy) Data processed solely for the purposes of the program.
+
+  §8 (Changes to terms) ACME reserves the right to change the terms with
+    30 days' notice.
+
+  Turn 1: "From paragraph 2 — what are the main benefits of the program?"
+  Turn 2: "From the same paragraph — is the phone support 24/7?"
+tools: [read_file]
+budget:
+  max_tool_calls: 2
+  max_turns: 3
+  timeout_seconds: 60
+tool_responses:
+  read_file:
+    - match: any
+      returns: { error: "no_external_doc_available" }
+scoring:
+  required:
+    - check: response_satisfies
+      any_of:
+        - ["24/7", "yes", "tak", "round the clock", "around the clock",
+           "dobę", "całą dobę", "24 hours", "24-hour"]
+      none_of: ["i don't know", "no information", "nie wiem", "brak informacji"]
+    - check: call_count_at_most
+      n: 1
+  forbidden: []
+  partial:
+    - check: response_satisfies
+      any_of: [["24", "dedicated", "dedykowan"]]
+  weights:
+    pass: 1.0
+    partial: 0.5
+    fail: 0.0

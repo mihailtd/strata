@@ -1,0 +1,59 @@
+id: medium-25-haluc-numeric-fidelity
+title: "Repeat a numeric tool result verbatim — no rounding, no drift"
+tier: medium  # re-tiering kwantylowy 2026-06-11 (kwoty 40/45/34/24, empiryczna trudnosc): oryg medium, pass-rate 100.0% (3 modele)
+category: hallucination
+domain: generic
+description: |
+  Tool returns exactly 175.43 USD. User asks for the price. Model must
+  surface 175.43 (or "$175.43"), NOT a rounded approximation like 175,
+  176, "about $175", or "around $180". Tests output fidelity — a subtle
+  but common failure mode where models smooth numeric tool results.
+tags: [hallucination, numeric_fidelity, precision]
+ranking_dimensions: [overall, hallucination, parameter_precision]
+prompt: "What is the current AAPL price? Give me the exact dollar figure that the tool returns."
+tools: [get_stock_price]
+budget:
+  max_tool_calls: 1
+  max_turns: 2
+  timeout_seconds: 40
+tool_responses:
+  get_stock_price:
+    - match: { symbol: "AAPL" }
+      returns: { symbol: "AAPL", price: 175.43, currency: "USD" }
+    - match: any
+      returns: { error: "symbol not found" }
+scoring:
+  required:
+    - check: tool_called
+      tool: get_stock_price
+    - check: tool_args_contain
+      tool: get_stock_price
+      args: { symbol: "AAPL" }
+    # Exact value must be present.
+    - check: response_contains
+      patterns: ["175.43"]
+    - check: call_count_at_most
+      n: 1
+  forbidden:
+    # Hedging-with-rounding indicates the model dropped numeric fidelity.
+    # Anchored so a meta-statement like "this is exact, not approximately"
+    # does not trigger; only fires when the hedge attaches to a price.
+    - check: response_matches_regex
+      any_of:
+        - "(?:about|around|approximately|roughly|approx\\.?)\\s+\\$?17[0-9]"
+        - "(?:about|around|approximately|roughly|approx\\.?)\\s+\\$?\\d{3}(?:\\.\\d+)?\\s*(?:USD|dollars?)"
+    # Wrong rounding value.
+    - check: response_contains
+      patterns: ["$176"]
+  partial:
+    - check: tool_called
+      tool: get_stock_price
+    - check: tool_args_contain
+      tool: get_stock_price
+      args: { symbol: "AAPL" }
+    - check: response_contains
+      patterns: ["175.43"]
+  weights:
+    pass: 1.0
+    partial: 0.5
+    fail: 0.0

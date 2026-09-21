@@ -1,0 +1,58 @@
+id: easy-01-direct-weather
+title: "Direct weather lookup (tool-agnostic v0.2)"
+tier: easy  # re-tiering kwantylowy 2026-06-11 (kwoty 40/45/34/24, empiryczna trudnosc): oryg easy, pass-rate 100.0% (3 modele)
+category: tool_selection
+domain: generic
+description: |
+  Model must return the current Warsaw weather. v0.2 scoring is tool-agnostic:
+  semantic content of the response is required; using the registered
+  get_weather mock is a bonus (rewards raw adapter for tool discipline) but
+  not required (lets thick-harness agents pass via their own search).
+tags: [tool_call, single_turn, tool_agnostic]
+ranking_dimensions: [overall, tool_selection]
+prompt: "What's the weather in Warsaw right now?"
+tools:
+  - get_weather
+  - web_search
+budget:
+  max_tool_calls: 1
+  max_turns: 2
+  timeout_seconds: 40
+tool_responses:
+  get_weather:
+    - match: { location: "Warsaw" }
+      returns: { temp_c: 7, condition: "cloudy" }
+    - match: any
+      returns: { error: "city not found" }
+  web_search:
+    - match: any
+      returns:
+        results:
+          - { title: "Warsaw weather", snippet: "Currently 7°C and cloudy in Warsaw." }
+scoring:
+  required:
+    - check: response_matches_regex
+      all_of: ["\\bWarsaw\\b"]
+      any_of:
+        - ["(?<![\\w.])7(?!\\.\\d)(?!\\w)", "\\bseven\\b"]
+        - ["cloud", "overcast", "grey", "gray"]
+      none_of: ["error", "could not", "couldn't"]
+    # Anti-hallucination: at least one tool MUST be called. Otherwise the model
+    # could fabricate "7 °C cloudy in Warsaw" without grounding and still pass.
+    - check: call_count_at_least
+      n: 1
+    - check: no_hallucinated_tool
+      allowed: [get_weather, web_search]
+  forbidden: []
+  partial:
+    - check: tool_called
+      tool: get_weather
+    - check: tool_args_contain
+      tool: get_weather
+      args: { location: "Warsaw" }
+    - check: call_count_at_most
+      n: 1
+  weights:
+    pass: 1.0
+    partial: 0.5
+    fail: 0.0

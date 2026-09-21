@@ -1,0 +1,46 @@
+id: easy-10-unit-handling
+title: "Pass requested units parameter"
+tier: easy  # re-tiering kwantylowy 2026-06-11 (kwoty 40/45/34/24, empiryczna trudnosc): oryg easy, pass-rate 100.0% (3 modele)
+category: parameter_precision
+domain: generic
+description: "User explicitly asks for Fahrenheit — model must pass units=fahrenheit to the tool."
+tags: [parameter_precision, single_turn]
+ranking_dimensions: [overall, tool_selection]
+prompt: "What's the temperature in New York in Fahrenheit?"
+tools: [get_weather]
+budget:
+  max_tool_calls: 1
+  max_turns: 2
+  timeout_seconds: 40
+tool_responses:
+  get_weather:
+    - match: { location: "New York", units: "fahrenheit" }
+      returns: { temp: 52, units: "fahrenheit", condition: "clear" }
+    - match: { location: "New York" }
+      returns: { temp: 11, units: "celsius", condition: "clear" }
+    - match: any
+      returns: { error: "city not found" }
+scoring:
+  required:
+    - check: tool_called
+      tool: get_weather
+    - check: tool_args_contain
+      tool: get_weather
+      args: { location: "New York" }
+    - check: tool_args_match_regex
+      tool: get_weather
+      arg: units
+      pattern: "(?i)^f(ahrenheit)?$"
+  forbidden: []
+  partial:
+    - check: response_contains
+      patterns: ["52"]
+    - check: tool_called
+      tool: get_weather
+    - check: tool_args_contain
+      tool: get_weather
+      args: { location: "New York" }
+  weights:
+    pass: 1.0
+    partial: 0.5
+    fail: 0.0

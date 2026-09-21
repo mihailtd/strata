@@ -420,6 +420,19 @@ pub(crate) mod ffi {
             stream: *mut c_void,
         );
 
+        /// Quantized-path LoRA additive accumulation -- see
+        /// `src/kernels/lora_delta_accumulate.hip` for the real math and
+        /// why this is a separate kernel from the base W4A16 GEMV above
+        /// rather than a fused variant of it.
+        pub fn launch_lora_delta_accumulate_bf16(
+            mid: *const c_void,
+            b: *const c_void,
+            y: *mut c_void,
+            out_features: c_int,
+            rank: c_int,
+            stream: *mut c_void,
+        );
+
         /// §108: batched W4A16 prefill -- see
         /// `src/kernels/w4a16_gemm_prefill.hip` for the real tiling scheme
         /// (reuses each dequantized weight nibble across `TILE_T=8`
@@ -1851,6 +1864,30 @@ pub fn w4a16_gemv_bf16(
     device_synchronize()
 }
 
+/// Quantized-path LoRA additive accumulation: `y[row] += sum_r b[row,r] *
+/// mid[r]`, in place -- the real, tested counterpart of
+/// `lora_delta_accumulate.hip`'s `launch_lora_delta_accumulate_bf16`. `y`
+/// must already hold the base W4A16 GEMV's real output (from a prior,
+/// separate `w4a16_gemv_bf16` call) -- this function only adds to it,
+/// never overwrites.
+#[allow(dead_code)]
+pub fn lora_delta_accumulate_bf16(mid: &DeviceBuffer<u16>, b: &DeviceBuffer<u16>, y: &mut DeviceBuffer<u16>, out_features: usize, rank: usize) -> Result<(), HipError> {
+    assert_eq!(mid.len(), rank, "mid length must equal rank");
+    assert_eq!(b.len(), out_features * rank, "b length must equal out_features * rank");
+    assert_eq!(y.len(), out_features, "y length must equal out_features");
+
+    // SAFETY: `mid`/`b`/`y` are real, live `hipMalloc` allocations of at
+    // least the asserted element counts; the kernel indexes strictly
+    // within `[0, out_features)` threads (grid-stride guarded by an
+    // explicit bounds check in the kernel itself) and `[0, rank)` per
+    // thread (verified by reading `lora_delta_accumulate.hip` directly).
+    unsafe {
+        ffi::launch_lora_delta_accumulate_bf16(mid.as_device_ptr(), b.as_device_ptr(), y.as_device_ptr_mut() as *mut c_void, out_features as i32, rank as i32, std::ptr::null_mut());
+    }
+    check_last_error()?;
+    device_synchronize()
+}
+
 /// §108: `y[num_tokens, out_features] = dequant(qweight, scales) @
 /// x[num_tokens, in_features]^T` -- batched W4A16 prefill, real drop-in
 /// replacement for `w4a16_gemv_bf16` at a prefill (`num_tokens > 1`) call
@@ -2038,19 +2075,28 @@ pub fn w4a16_gemm_prefill_wmma_int8_bf16(
 /// scan had, just computed on the GPU (see `src/kernels/argmax.hip` for
 /// the real motivation and the tie-breaking discipline).
 pub fn argmax_bf16(logits: &DeviceBuffer<u16>) -> Result<i32, HipError> {
-    let n = logits.len();
+    argmax_bf16_row(logits, 0, logits.len())
+}
+
+/// §137: real argmax over ONE row of a `[num_rows, row_len]` logits
+/// buffer (e.g. a speculative-decode verify chunk's real per-position
+/// logits, `[k, VOCAB_SIZE]`) -- `argmax_bf16` itself only ever reads a
+/// whole buffer as one flat vector, so this is the same real kernel
+/// parameterized by a real row offset instead.
+pub fn argmax_bf16_row(logits: &DeviceBuffer<u16>, row: usize, row_len: usize) -> Result<i32, HipError> {
     let threads: i32 = 1024;
     let mut out_idx: DeviceBuffer<i32> = DeviceBuffer::alloc(1)?;
 
-    // SAFETY: `logits` is a real, live `hipMalloc` allocation of `n`
-    // elements; the kernel indexes strictly within `[0, n)` (verified by
-    // reading `argmax.hip` directly). `out_idx` is a real, live `hipMalloc`
-    // allocation of exactly one `i32`.
+    // SAFETY: `logits` is a real, live `hipMalloc` allocation; the caller
+    // guarantees `(row+1)*row_len <= logits.len()`. The kernel indexes
+    // strictly within `[0, row_len)` from the given offset (verified by
+    // reading `argmax.hip` directly). `out_idx` is a real, live
+    // `hipMalloc` allocation of exactly one `i32`.
     unsafe {
         ffi::launch_argmax_bf16(
-            logits.as_device_ptr(),
+            logits.as_device_ptr_at(row * row_len),
             out_idx.as_device_ptr_mut() as *mut c_int,
-            n as i32,
+            row_len as i32,
             threads,
             std::ptr::null_mut(),
         );
@@ -6542,6 +6588,97 @@ mod tests {
                 let v = got[r * kv_len + j];
                 assert_eq!(v, 0.0, "row {r} col {j}: masked column must be exactly zero probability, got {v}");
             }
+        }
+    }
+
+    /// §136 root-cause: isolates whether `causal_softmax_bf16` ITSELF is
+    /// the source of the real divergence found when a verify-chunk's
+    /// `kv_len` is padded past a threshold between 184-192
+    /// (`docs/DECISIONS.md` §136) -- `gemm_qkt_bf16`/`gemm_pv_bf16` were
+    /// already independently swept across the exact same shape/kv_len
+    /// range and found clean (`blas::tests::real_gemm_{qkt,pv}_at_real_
+    /// attention_shape_matches_reference_across_kv_len_sweep`), leaving
+    /// this kernel as the one remaining untested link in the real
+    /// GEMM-attention chain. REAL production shape (`t=6`, matching a K=6
+    /// verify chunk); scores constructed to match what `gemm_qkt_bf16`
+    /// ACTUALLY produces in the real pipeline (small, real values for
+    /// `[0, real_len=132)`, near-zero for `[real_len, kv_len)` since
+    /// that's `Q . 0 * scale = 0` against a zero-padded K-cache -- not
+    /// artificial huge sentinels, the existing tiny toy test already
+    /// covers that masking-overrides-large-values property).
+    #[test]
+    fn real_causal_softmax_at_real_attention_shape_matches_reference_across_kv_len_sweep() {
+        if hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let t = 6usize;
+        let real_len = 132usize;
+        let start_position = 126i32; // matches §136's real round-3 position
+
+        // Deterministic pseudo-random REAL scores for [0, real_len);
+        // small, realistic magnitude (matches real Q.K*scale output).
+        let scores_real: Vec<f32> = (0..t * real_len).map(|i| ((((i * 2654435761u64.wrapping_add(1) as usize) % 1009) as f32 / 504.5) - 1.0) * 0.1).collect();
+
+        for &kv_len in &[176usize, 184, 188, 190, 191, 192, 193, 196, 200, 256] {
+            let mut scores_full = vec![0f32; t * kv_len];
+            for r in 0..t {
+                scores_full[r * kv_len..r * kv_len + real_len].copy_from_slice(&scores_real[r * real_len..(r + 1) * real_len]);
+                // [real_len, kv_len) stays exactly 0.0 -- matching what a
+                // real zero-padded K-cache produces through gemm_qkt_bf16.
+            }
+
+            // Independent reference: row r's TRUE valid range is
+            // [0, start_position + r + 1) (may extend past real_len for
+            // large r, but real_len=132 + t=6 = 138 < kv_len for every
+            // value swept here, so valid_len is always <= real_len... no
+            // wait: valid_len = start_position + r + 1 = 126+r+1, for
+            // r in [0,6) that's [127,132] -- always <= real_len=132, so
+            // every "valid" column per the causal mask has REAL (not
+            // zero-padded) score data, matching the real pipeline exactly.
+            let mut expected = vec![0f32; t * kv_len];
+            for r in 0..t {
+                let valid_len = (start_position as usize) + r + 1;
+                let row = &scores_full[r * kv_len..r * kv_len + valid_len];
+                let max_v = row.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+                let exps: Vec<f32> = row.iter().map(|&v| (v - max_v).exp()).collect();
+                let sum: f32 = exps.iter().sum();
+                for (j, &e) in exps.iter().enumerate() {
+                    expected[r * kv_len + j] = e / sum;
+                }
+            }
+
+            let scores_bf16: Vec<u16> = scores_full.iter().map(|&v| f32_to_bf16(v)).collect();
+            let mut scores_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(scores_bf16.len()).unwrap();
+            scores_buf.copy_from_host(&scores_bf16).unwrap();
+
+            causal_softmax_bf16(&mut scores_buf, kv_len, start_position, t).expect("real causal_softmax_bf16 call failed");
+
+            let mut got_bf16 = vec![0u16; t * kv_len];
+            scores_buf.copy_to_host(&mut got_bf16).unwrap();
+            let got: Vec<f32> = got_bf16.iter().map(|&b| bf16_to_f32(b)).collect();
+
+            let mut max_diff = 0f32;
+            let mut num_exceeding = 0usize;
+            for r in 0..t {
+                let valid_len = (start_position as usize) + r + 1;
+                for j in 0..kv_len {
+                    let diff = (got[r * kv_len + j] - expected[r * kv_len + j]).abs();
+                    if diff > max_diff {
+                        max_diff = diff;
+                    }
+                    if diff > 0.05 {
+                        num_exceeding += 1;
+                    }
+                    if j >= valid_len {
+                        assert_eq!(got[r * kv_len + j], 0.0, "kv_len={kv_len} row {r} col {j}: masked column must be exactly zero, got {}", got[r * kv_len + j]);
+                    }
+                }
+            }
+            eprintln!("causal_softmax_bf16 at kv_len={kv_len}: max_diff={max_diff}, {num_exceeding}/{} elements exceed tolerance=0.05", t * kv_len);
+            assert_eq!(num_exceeding, 0, "causal_softmax_bf16 at kv_len={kv_len} (real_len={real_len}) diverged from an independent CPU reference -- max_diff={max_diff}");
         }
     }
 

@@ -1,0 +1,106 @@
+id: hard-02-multi-file-rename
+title: "Rename function across multiple files"
+tier: very_hard  # re-tiering kwantylowy 2026-06-11 (kwoty 40/45/34/24, empiryczna trudnosc): oryg hard, pass-rate 0.0% (3 modele)
+category: coding
+domain: dev_ops
+description: |
+  Rename function compute_total → calculate_total across all CODE files
+  (not docs/CHANGELOG.md). Use grep to find call sites, then edit_file for each.
+  Budget 9 — allows one verification grep while still requiring the CHANGELOG
+  distractor to be skipped.
+tags: [coding, refactor, multi_file, distractor]
+ranking_dimensions: [overall, coding, agentic, budget_efficiency]
+prompt: |
+  Rename the function compute_total to calculate_total across the codebase.
+  Update all callers and the test that imports it. Do NOT modify docs/CHANGELOG.md
+  even if grep finds the old name there.
+tools: [grep, read_file, edit_file, list_files]
+budget:
+  max_tool_calls: 9
+  max_turns: 6
+  timeout_seconds: 120
+tool_responses:
+  grep:
+    - match: { pattern: "compute_total" }
+      returns: |
+        src/core/billing.py:42:def compute_total(items):
+        src/core/billing.py:87:    return compute_total(self.items)
+        src/api/handlers.py:15:    total = compute_total(order.items)
+        src/cli.py:103:    print(compute_total(parsed))
+        docs/CHANGELOG.md:12:- Added compute_total()
+        tests/test_billing.py:8:from src.core.billing import compute_total
+        tests/test_billing.py:34:    assert compute_total([{"amount": 100}]) == 100
+    - match: any
+      returns: ""
+  read_file:
+    # Real (abridged) contents — the old placeholder "(file content)" gave
+    # models nothing to base their edits on and provoked budget-burning probing.
+    - match: { path_regex: 'src/core/billing\.py$' }
+      returns: |
+        def compute_total(items):
+            return sum(i["amount"] for i in items)
+
+        class Invoice:
+            def total(self):
+                return compute_total(self.items)
+    - match: { path_regex: 'src/api/handlers\.py$' }
+      returns: |
+        from src.core.billing import compute_total
+
+        def order_summary(order):
+            total = compute_total(order.items)
+            return {"total": total}
+    - match: { path_regex: 'src/cli\.py$' }
+      returns: |
+        from src.core.billing import compute_total
+
+        def main(parsed):
+            print(compute_total(parsed))
+    - match: { path_regex: 'tests/test_billing\.py$' }
+      returns: |
+        from src.core.billing import compute_total
+
+        def test_total():
+            assert compute_total([{"amount": 100}]) == 100
+    - match: { path_regex: 'CHANGELOG' }
+      returns: |
+        # Changelog
+        - Added compute_total()
+    - match: any
+      returns: { error: "not found" }
+  edit_file:
+    - match: any
+      returns: { ok: true, lines_changed: 2 }
+  list_files:
+    - match: any
+      returns: ["src/core/billing.py", "src/api/handlers.py", "src/cli.py", "tests/test_billing.py", "docs/CHANGELOG.md"]
+scoring:
+  required:
+    - check: tool_called_in_order
+      sequence: [grep, edit_file]
+    - check: tool_called
+      tool: grep
+    - check: tool_called
+      tool: edit_file
+    - check: call_count_at_least
+      n: 5
+  forbidden:
+    - check: tool_args_match_regex
+      tool: edit_file
+      arg: path
+      pattern: "CHANGELOG"
+  partial:
+    - check: call_count_at_most
+      n: 9
+    - check: tool_args_match_regex
+      tool: edit_file
+      arg: path
+      pattern: "src/core/billing\\.py|src/api/handlers\\.py|src/cli\\.py|tests/test_billing\\.py"
+    - check: tool_args_match_regex
+      tool: edit_file
+      arg: replace
+      pattern: "calculate_total"
+  weights:
+    pass: 1.0
+    partial: 0.5
+    fail: 0.0

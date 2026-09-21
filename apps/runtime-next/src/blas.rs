@@ -760,6 +760,292 @@ mod tests {
         }
     }
 
+    /// §136 root-cause: isolates whether `gemm_qkt_bf16` ITSELF (not the
+    /// surrounding model/attention machinery, not `causal_softmax`, not
+    /// `gemm_pv_bf16`) is the source of the real, reproducible divergence
+    /// found when a verify-chunk's `kv_len` shape argument is padded past
+    /// a real threshold between 184 and 192 (`docs/DECISIONS.md` §136).
+    /// REAL production shapes throughout (`t=6` matching a K=6 speculative
+    /// verify chunk, `head_dim=256` matching this model's real
+    /// `ATTN_HEAD_DIM`), synthetic but deterministic Q/K data -- no model
+    /// weights needed, isolating the GEMM call itself from everything
+    /// else. `K`'s real content spans `[0, real_len=132)` (matching the
+    /// real position that broke); `[real_len, kv_len)` is ZERO, matching
+    /// `DecodeState::new`'s own real K-cache zero-initialization exactly
+    /// (ruling out "uninitialized garbage" as a confound). No causal
+    /// masking applied here -- `gemm_qkt_bf16` itself never masks
+    /// (`causal_softmax` does, separately, already independently verified
+    /// correct by reading its own kernel source) -- so the CPU reference
+    /// computes the FULL, unmasked `Q @ K^T` and expects a bit-close match
+    /// at every column, real or zero-padded alike.
+    #[test]
+    fn real_gemm_qkt_at_real_attention_shape_matches_reference_across_kv_len_sweep() {
+        if hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let t = 6usize;
+        let head_dim = 256usize;
+        let real_len = 132usize;
+        let scale = 1.0f32 / (head_dim as f32).sqrt();
+        let handle = BlasHandle::create().expect("real hipblasCreate failed");
+
+        // Deterministic pseudo-random Q (t rows) and K (real_len rows),
+        // small real range, no model weights involved.
+        let q_f32: Vec<f32> = (0..t * head_dim).map(|i| (((i * 2654435761u64.wrapping_add(1) as usize) % 1009) as f32 / 504.5) - 1.0).collect();
+        let k_real_f32: Vec<f32> = (0..real_len * head_dim).map(|i| (((i * 40503 + 17) % 997) as f32 / 498.5) - 1.0).collect();
+
+        let q_bf16: Vec<u16> = q_f32.iter().map(|&v| f32_to_bf16(v)).collect();
+        let mut q_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(q_bf16.len()).unwrap();
+        q_buf.copy_from_host(&q_bf16).unwrap();
+
+        for &kv_len in &[160usize, 176, 184, 188, 190, 191, 192, 193, 196, 200, 256] {
+            // K: real content [0, real_len), zero-padded [real_len, kv_len)
+            // -- allocated fresh per kv_len so the buffer's own real
+            // capacity always exactly matches this call's shape (never an
+            // over-read past a smaller allocation).
+            let mut k_full_f32 = vec![0f32; kv_len * head_dim];
+            k_full_f32[..real_len * head_dim].copy_from_slice(&k_real_f32);
+            let k_bf16: Vec<u16> = k_full_f32.iter().map(|&v| f32_to_bf16(v)).collect();
+            let mut k_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(k_bf16.len()).unwrap();
+            k_buf.copy_from_host(&k_bf16).unwrap();
+            let mut s_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(t * kv_len).unwrap();
+
+            gemm_qkt_bf16(&handle, &q_buf, 0, head_dim, &k_buf, 0, &mut s_buf, 0, kv_len, t, head_dim, kv_len, scale)
+                .expect("real gemm_qkt_bf16 call failed");
+
+            let mut s_bf16 = vec![0u16; t * kv_len];
+            s_buf.copy_to_host(&mut s_bf16).unwrap();
+            let got: Vec<f32> = s_bf16.iter().map(|&b| bf16_to_f32(b)).collect();
+
+            // Independent CPU f32 reference: full, unmasked Q @ K^T.
+            let mut max_diff = 0f32;
+            let mut num_exceeding = 0usize;
+            for r in 0..t {
+                for j in 0..kv_len {
+                    let mut acc = 0f32;
+                    for d in 0..head_dim {
+                        acc += q_f32[r * head_dim + d] * k_full_f32[j * head_dim + d];
+                    }
+                    let expected = acc * scale;
+                    let diff = (got[r * kv_len + j] - expected).abs();
+                    if diff > max_diff {
+                        max_diff = diff;
+                    }
+                    if diff > 0.5 {
+                        num_exceeding += 1;
+                    }
+                }
+            }
+            eprintln!("gemm_qkt_bf16 at kv_len={kv_len}: max_diff={max_diff}, {num_exceeding}/{} elements exceed tolerance=0.5", t * kv_len);
+            assert_eq!(num_exceeding, 0, "gemm_qkt_bf16 at kv_len={kv_len} (real_len={real_len}) diverged from an independent CPU reference -- max_diff={max_diff}");
+        }
+    }
+
+    /// §136 root-cause: same isolation as `real_gemm_qkt_at_real_
+    /// attention_shape_matches_reference_across_kv_len_sweep` above, for
+    /// `gemm_pv_bf16` (`O = P @ V`) instead. `P` (the post-softmax
+    /// attention weights) is REAL, non-trivial for `[0, real_len)` and
+    /// EXACTLY ZERO for `[real_len, kv_len)` -- matching exactly what
+    /// `causal_softmax`'s own, independently-verified-correct masking
+    /// writes there (see `causal_softmax.hip`'s Phase 2: masked columns
+    /// get an explicit `0.0f` write, never left unwritten). `V` is
+    /// zero-padded beyond `real_len` the same way `K` is above, matching
+    /// `DecodeState::new`'s real V-cache zero-initialization.
+    #[test]
+    fn real_gemm_pv_at_real_attention_shape_matches_reference_across_kv_len_sweep() {
+        if hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let t = 6usize;
+        let head_dim = 256usize;
+        let real_len = 132usize;
+        let handle = BlasHandle::create().expect("real hipblasCreate failed");
+
+        // Deterministic pseudo-random P (real, non-trivial, NOT
+        // normalized to sum-to-1 -- gemm_pv_bf16 doesn't care, it's a
+        // plain GEMM) for [0, real_len), V likewise for [0, real_len).
+        let p_real_f32: Vec<f32> = (0..t * real_len).map(|i| ((i * 2654435761u64.wrapping_add(1) as usize) % 1009) as f32 / 5045.0).collect();
+        let v_real_f32: Vec<f32> = (0..real_len * head_dim).map(|i| (((i * 40503 + 17) % 997) as f32 / 498.5) - 1.0).collect();
+
+        for &kv_len in &[160usize, 176, 184, 188, 190, 191, 192, 193, 196, 200, 256] {
+            let mut p_full_f32 = vec![0f32; t * kv_len];
+            for r in 0..t {
+                p_full_f32[r * kv_len..r * kv_len + real_len].copy_from_slice(&p_real_f32[r * real_len..(r + 1) * real_len]);
+            }
+            let mut v_full_f32 = vec![0f32; kv_len * head_dim];
+            v_full_f32[..real_len * head_dim].copy_from_slice(&v_real_f32);
+
+            let p_bf16: Vec<u16> = p_full_f32.iter().map(|&v| f32_to_bf16(v)).collect();
+            let v_bf16: Vec<u16> = v_full_f32.iter().map(|&v| f32_to_bf16(v)).collect();
+            let mut p_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(p_bf16.len()).unwrap();
+            let mut v_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(v_bf16.len()).unwrap();
+            p_buf.copy_from_host(&p_bf16).unwrap();
+            v_buf.copy_from_host(&v_bf16).unwrap();
+            let mut o_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(t * head_dim).unwrap();
+
+            gemm_pv_bf16(&handle, &p_buf, 0, kv_len, &v_buf, 0, &mut o_buf, 0, head_dim, t, kv_len, head_dim, 1.0, 0.0)
+                .expect("real gemm_pv_bf16 call failed");
+
+            let mut o_bf16 = vec![0u16; t * head_dim];
+            o_buf.copy_to_host(&mut o_bf16).unwrap();
+            let got: Vec<f32> = o_bf16.iter().map(|&b| bf16_to_f32(b)).collect();
+
+            let mut max_diff = 0f32;
+            let mut num_exceeding = 0usize;
+            for r in 0..t {
+                for d in 0..head_dim {
+                    let mut acc = 0f32;
+                    for j in 0..kv_len {
+                        acc += p_full_f32[r * kv_len + j] * v_full_f32[j * head_dim + d];
+                    }
+                    let diff = (got[r * head_dim + d] - acc).abs();
+                    if diff > max_diff {
+                        max_diff = diff;
+                    }
+                    if diff > 0.5 {
+                        num_exceeding += 1;
+                    }
+                }
+            }
+            eprintln!("gemm_pv_bf16 at kv_len={kv_len}: max_diff={max_diff}, {num_exceeding}/{} elements exceed tolerance=0.5", t * head_dim);
+            assert_eq!(num_exceeding, 0, "gemm_pv_bf16 at kv_len={kv_len} (real_len={real_len}) diverged from an independent CPU reference -- max_diff={max_diff}");
+        }
+    }
+
+    /// §136 root-cause, continued: `gemm_qkt_bf16`, `causal_softmax_bf16`,
+    /// and `gemm_pv_bf16` were EACH independently swept across the exact
+    /// real kv_len boundary (176-256) that broke in the full attention
+    /// layer and found bit-clean in isolation -- this test reproduces the
+    /// REAL usage pattern those isolated tests didn't: `attn_layer_
+    /// forward_prefill`'s own `for h in 0..ATTN_NUM_HEADS` loop, which
+    /// (a) reuses the SAME `attn_scores`/hipBLAS-handle across
+    /// `ATTN_NUM_HEADS` (16 for 4B) REPEATED calls per layer, not one
+    /// isolated call, and (b) reads K/V via an OFFSET into a LARGER,
+    /// multi-head-shaped cache buffer (`h_kv * max_seq_len * head_dim`),
+    /// not a tightly-packed buffer starting at address 0. Real
+    /// `ATTN_NUM_HEADS=16`, `ATTN_NUM_KV_HEADS=4` (this model's real 4B
+    /// GQA config, `n_rep=4`), `max_seq_len=512`, `head_dim=256`,
+    /// `real_len=132`, `t=6` -- every dimension matching the real §136
+    /// investigation exactly.
+    #[test]
+    fn real_multi_head_gqa_attention_loop_at_real_shape_matches_reference_across_kv_len_sweep() {
+        if hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let t = 6usize;
+        let head_dim = 256usize;
+        let real_len = 132usize;
+        let max_seq_len = 512usize;
+        let num_q_heads = 16usize;
+        let num_kv_heads = 4usize;
+        let n_rep = num_q_heads / num_kv_heads;
+        let q_row_len = num_q_heads * head_dim;
+        let start_position = 126i32;
+        let scale = 1.0f32 / (head_dim as f32).sqrt();
+        let handle = BlasHandle::create().expect("real hipblasCreate failed");
+
+        // Real, multi-head-wide Q buffer: [t, num_q_heads*head_dim].
+        let q_f32: Vec<f32> = (0..t * q_row_len).map(|i| (((i * 2654435761u64.wrapping_add(1) as usize) % 1009) as f32 / 504.5) - 1.0).collect();
+        let q_bf16: Vec<u16> = q_f32.iter().map(|&v| f32_to_bf16(v)).collect();
+        let mut q_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(q_bf16.len()).unwrap();
+        q_buf.copy_from_host(&q_bf16).unwrap();
+
+        for &kv_len in &[184usize, 192, 256] {
+            // Real, multi-KV-head-shaped K/V cache: [num_kv_heads, max_seq_len, head_dim],
+            // real content [0,real_len) per head, zero beyond -- matching
+            // DecodeState::new's real zero-initialization exactly.
+            let mut k_cache_f32 = vec![0f32; num_kv_heads * max_seq_len * head_dim];
+            let mut v_cache_f32 = vec![0f32; num_kv_heads * max_seq_len * head_dim];
+            for hk in 0..num_kv_heads {
+                for p in 0..real_len {
+                    for d in 0..head_dim {
+                        let seed = hk * 999331 + p * 7919 + d;
+                        k_cache_f32[hk * max_seq_len * head_dim + p * head_dim + d] = (((seed * 40503 + 17) % 997) as f32 / 498.5) - 1.0;
+                        v_cache_f32[hk * max_seq_len * head_dim + p * head_dim + d] = (((seed * 2654435761u64.wrapping_add(1) as usize) % 1009) as f32 / 504.5) - 1.0;
+                    }
+                }
+            }
+            let k_bf16: Vec<u16> = k_cache_f32.iter().map(|&v| f32_to_bf16(v)).collect();
+            let v_bf16: Vec<u16> = v_cache_f32.iter().map(|&v| f32_to_bf16(v)).collect();
+            let mut k_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(k_bf16.len()).unwrap();
+            let mut v_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(v_bf16.len()).unwrap();
+            k_buf.copy_from_host(&k_bf16).unwrap();
+            v_buf.copy_from_host(&v_bf16).unwrap();
+
+            let mut attn_scores: DeviceBuffer<u16> = DeviceBuffer::alloc(t * kv_len).unwrap();
+            let mut attn_out: DeviceBuffer<u16> = DeviceBuffer::alloc(t * q_row_len).unwrap();
+            attn_out.copy_from_host(&vec![0u16; t * q_row_len]).unwrap();
+
+            // The REAL loop: ATTN_NUM_HEADS repeated calls, reusing
+            // attn_scores/handle each time, exactly matching
+            // `attn_layer_forward_prefill`'s own structure.
+            for h in 0..num_q_heads {
+                let h_kv = h / n_rep;
+                gemm_qkt_bf16(&handle, &q_buf, h * head_dim, q_row_len, &k_buf, h_kv * max_seq_len * head_dim, &mut attn_scores, 0, kv_len, t, head_dim, kv_len, scale)
+                    .expect("real gemm_qkt_bf16 call failed");
+                crate::kernels::causal_softmax_bf16(&mut attn_scores, kv_len, start_position, t).expect("real causal_softmax_bf16 call failed");
+                gemm_pv_bf16(&handle, &attn_scores, 0, kv_len, &v_buf, h_kv * max_seq_len * head_dim, &mut attn_out, h * head_dim, q_row_len, t, kv_len, head_dim, 1.0, 0.0)
+                    .expect("real gemm_pv_bf16 call failed");
+            }
+
+            let mut got_bf16 = vec![0u16; t * q_row_len];
+            attn_out.copy_to_host(&mut got_bf16).unwrap();
+            let got: Vec<f32> = got_bf16.iter().map(|&b| bf16_to_f32(b)).collect();
+
+            // Independent CPU reference: real causal attention, per head,
+            // computed by hand (Q.K*scale -> masked softmax -> P@V).
+            let mut max_diff = 0f32;
+            let mut num_exceeding = 0usize;
+            for h in 0..num_q_heads {
+                let h_kv = h / n_rep;
+                for r in 0..t {
+                    let valid_len = (start_position as usize) + r + 1;
+                    let mut scores = vec![0f64; valid_len];
+                    for j in 0..valid_len {
+                        let mut acc = 0f64;
+                        for d in 0..head_dim {
+                            let qv = q_f32[r * q_row_len + h * head_dim + d] as f64;
+                            let kv = k_cache_f32[h_kv * max_seq_len * head_dim + j * head_dim + d] as f64;
+                            acc += qv * kv;
+                        }
+                        scores[j] = acc * scale as f64;
+                    }
+                    let max_s = scores.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+                    let exps: Vec<f64> = scores.iter().map(|&s| (s - max_s).exp()).collect();
+                    let sum: f64 = exps.iter().sum();
+                    let probs: Vec<f64> = exps.iter().map(|&e| e / sum).collect();
+                    for d in 0..head_dim {
+                        let mut acc = 0f64;
+                        for j in 0..valid_len {
+                            let vv = v_cache_f32[h_kv * max_seq_len * head_dim + j * head_dim + d] as f64;
+                            acc += probs[j] * vv;
+                        }
+                        let expected = acc as f32;
+                        let g = got[r * q_row_len + h * head_dim + d];
+                        let diff = (g - expected).abs();
+                        if diff > max_diff {
+                            max_diff = diff;
+                        }
+                        if diff > 0.5 {
+                            num_exceeding += 1;
+                        }
+                    }
+                }
+            }
+            eprintln!("real multi-head GQA attention loop at kv_len={kv_len}: max_diff={max_diff}, {num_exceeding}/{} elements exceed tolerance=0.5", t * q_row_len);
+            assert_eq!(num_exceeding, 0, "real multi-head GQA attention loop at kv_len={kv_len} diverged from an independent CPU reference -- max_diff={max_diff}");
+        }
+    }
+
     /// §100 decisive test: `gemm_atb_bf16` computing `Y = A^T @ B` (the
     /// THIRD real transpose pattern this crate needed, beyond
     /// `gemm_bf16_linear`/`gemm_qkt_bf16`'s `x@w^T` and `gemm_pv_bf16`'s

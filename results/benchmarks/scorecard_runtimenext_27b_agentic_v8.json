@@ -1,0 +1,132 @@
+{
+  "timestamp": "2026-09-21 15:36:22",
+  "config": {
+    "mode": "direct",
+    "base_url": "http://127.0.0.1:8003/v1",
+    "model": "qwen3.8:27b-rust",
+    "adapter": "m2_agentic_coding_r8a128_v8_27b",
+    "edit_format": "whole",
+    "max_turns": 3,
+    "container": false
+  },
+  "summary": {
+    "total_tasks": 10,
+    "passed": 10,
+    "pass_rate_pct": 100.0,
+    "pass_at_1": 8,
+    "pass_at_1_pct": 80.0,
+    "total_duration_s": 139.02
+  },
+  "tasks": [
+    {
+      "task": "bank_account",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 512,
+      "avg_ttft_ms": 976.95,
+      "avg_tok_s": 35.22,
+      "duration_s": 15.65,
+      "error": null
+    },
+    {
+      "task": "binary_search",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 456,
+      "avg_ttft_ms": 433.56,
+      "avg_tok_s": 35.2,
+      "duration_s": 13.52,
+      "error": null
+    },
+    {
+      "task": "grains",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 414,
+      "avg_ttft_ms": 895.81,
+      "avg_tok_s": 34.82,
+      "duration_s": 12.92,
+      "error": null
+    },
+    {
+      "task": "hello_world",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 71,
+      "avg_ttft_ms": 536.16,
+      "avg_tok_s": 35.12,
+      "duration_s": 2.68,
+      "error": null
+    },
+    {
+      "task": "leap",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 299,
+      "avg_ttft_ms": 707.21,
+      "avg_tok_s": 34.88,
+      "duration_s": 9.41,
+      "error": null
+    },
+    {
+      "task": "matching_brackets",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 443,
+      "avg_ttft_ms": 464.57,
+      "avg_tok_s": 34.83,
+      "duration_s": 13.31,
+      "error": null
+    },
+    {
+      "task": "reverse_string",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 99,
+      "avg_ttft_ms": 334.08,
+      "avg_tok_s": 35.16,
+      "duration_s": 3.28,
+      "error": null
+    },
+    {
+      "task": "robot_simulator",
+      "passed": true,
+      "pass_turn": 2,
+      "total_turns": 2,
+      "total_tokens": 824,
+      "avg_ttft_ms": 2009.26,
+      "avg_tok_s": 34.01,
+      "duration_s": 28.46,
+      "error": null
+    },
+    {
+      "task": "two_fer",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 150,
+      "avg_ttft_ms": 712.88,
+      "avg_tok_s": 34.84,
+      "duration_s": 5.15,
+      "error": null
+    },
+    {
+      "task": "word_count",
+      "passed": true,
+      "pass_turn": 2,
+      "total_turns": 2,
+      "total_tokens": 1024,
+      "avg_ttft_ms": 2067.87,
+      "avg_tok_s": 33.94,
+      "duration_s": 34.63,
+      "error": null
+    }
+  ]
+}

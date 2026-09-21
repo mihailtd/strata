@@ -1,0 +1,43 @@
+id: very-hard-20-near-twin-tools
+title: "Parameter precision: model must include date arg for forecast call"
+tier: very_hard  # re-tiering kwantylowy 2026-06-11 (kwoty 40/45/34/24, empiryczna trudnosc): oryg very_hard, pass-rate 0.0% (3 modele)
+category: parameter_precision
+domain: generic
+description: |
+  One tool with two valid call shapes: `get_weather_global(location)` for
+  current and `get_weather_global(location, date)` for forecast. Question
+  asks for a forecast (Friday 2026-08-14), so the model must include the
+  date arg. Tests parameter precision — not tool selection per se, since
+  only one tool is registered.
+tags: [near_twin, parameter_choice]
+ranking_dimensions: [overall, parameter_precision, tool_selection]
+prompt: "What will the weather be like in Berlin on Friday 2026-08-14?"
+tools: [get_weather_global]
+budget:
+  max_tool_calls: 1
+  max_turns: 2
+  timeout_seconds: 40
+tool_responses:
+  get_weather_global:
+    - match: { location: "Berlin", date: "2026-08-14" }
+      returns: { temp_c: 24, condition: "sunny" }
+    - match: { location: "Berlin" }
+      returns: { error: "missing_date_for_forecast" }
+    - match: any
+      returns: { error: "city_not_found" }
+scoring:
+  required:
+    - check: tool_args_match_regex
+      tool: get_weather_global
+      arg: date
+      pattern: "^2026-08-14(?:T.*)?$"
+    - check: response_number
+      equals: 24
+  forbidden: []
+  partial:
+    - check: tool_called
+      tool: get_weather_global
+  weights:
+    pass: 1.0
+    partial: 0.5
+    fail: 0.0

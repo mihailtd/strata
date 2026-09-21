@@ -1,0 +1,68 @@
+id: medium-17-so-markdown-table
+title: "Emit a markdown table with header, separator, and data rows"
+tier: medium  # re-tiering kwantylowy 2026-06-11 (kwoty 40/45/34/24, empiryczna trudnosc): oryg medium, pass-rate 100.0% (3 modele)
+category: structured_output
+domain: generic
+description: |
+  After fetching weather for 3 cities, model must produce a GitHub-flavoured
+  markdown table with header, separator row, and 3 data rows in the asked
+  order. Tests markdown table syntax discipline.
+tags: [structured_output, markdown, multi_tool]
+ranking_dimensions: [overall, structured_output, agentic]
+prompt: |
+  Look up current weather for Warsaw, Berlin, and Tokyo (parallel is fine)
+  and return ONE markdown table with these columns, in this order:
+
+      | City | Temperature (°C) | Condition |
+
+  Below the header include a separator row (|---|---|---|) and three data
+  rows, one per city. No prose outside the table.
+tools: [get_weather, get_weather_global]
+budget:
+  max_tool_calls: 3
+  max_turns: 2
+  timeout_seconds: 40
+tool_responses:
+  get_weather:
+    - match: { location: "Warsaw" }
+      returns: { temp_c: 7, condition: "cloudy" }
+    - match: { location: "Berlin" }
+      returns: { temp_c: 14, condition: "rainy" }
+    - match: { location: "Tokyo" }
+      returns: { temp_c: 22, condition: "sunny" }
+    - match: any
+      returns: { error: "city not found" }
+  get_weather_global:
+    - match: { location: "Tokyo" }
+      returns: { temp_c: 22, condition: "sunny" }
+    - match: any
+      returns: { error: "not supported" }
+scoring:
+  required:
+    - check: call_count_at_least
+      n: 3
+    - check: response_markdown_table
+      header: [City, "Temperature (°C)", Condition]
+      row_count: 3
+      contains_rows:
+        - [Warsaw, "7", cloudy]
+        - [Berlin, "14", rainy]
+        - [Tokyo, "22", sunny]
+    - check: call_count_at_most
+      n: 3
+  forbidden:
+    # Common failure: HTML table instead of markdown.
+    - check: response_contains
+      patterns: ["<table"]
+    - check: response_contains
+      patterns: ["<tr>"]
+  partial:
+    - check: response_satisfies
+      any_of:
+        - ["Warsaw", "Berlin", "Tokyo"]
+    - check: response_markdown_table
+      header: [City, "Temperature (°C)", Condition]
+  weights:
+    pass: 1.0
+    partial: 0.5
+    fail: 0.0

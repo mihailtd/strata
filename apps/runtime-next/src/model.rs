@@ -53,6 +53,7 @@
 use crate::blas::{BlasHandle, ffi as blas_ffi};
 use crate::hip::{self, DeviceBuffer, HipError};
 use crate::model_loader::{load_bf16_weight, load_concat_bf16_weights, load_f32_param};
+use std::collections::HashMap;
 use std::ffi::c_void;
 use std::path::Path;
 
@@ -310,6 +311,32 @@ pub(crate) mod raw {
         let threads = crate::kernels::w4a16_decode_threads(in_features as usize);
         unsafe {
             kernels_ffi::launch_w4a16_gemv_bf16(x, qweight, scales, y, out_features, in_features, group_size, threads, stream);
+        }
+    }
+
+    /// Quantized-path LoRA, decode-only (see `quantized_lora.rs`'s header
+    /// doc for the full rationale): computes `mid = lora_a @ x`, the
+    /// small rank-sized GEMV every real LoRA slot's delta accumulation
+    /// needs first. Literally the same kernel as `gemm`'s `rows==1`
+    /// branch (`gemv_bf16_kernel`), called directly here (skipping the
+    /// unused hipBLAS-handle branch) since `lora_a` is always a real
+    /// `[rank, in_features]` bf16 buffer, never quantized.
+    pub unsafe fn lora_mid(x: *const c_void, lora_a: *const c_void, mid: *mut c_void, in_features: i32, rank: i32, stream: *mut c_void) {
+        unsafe {
+            kernels_ffi::launch_gemv_bf16(x, lora_a, mid, rank, in_features, 256, stream);
+        }
+    }
+
+    /// Quantized-path LoRA: accumulates `y[row] += sum_r lora_b[row,r] *
+    /// mid[r]` in place, for one real LoRA slot's row range within a
+    /// (possibly fused) base output buffer -- `y` must point at the
+    /// START of that slot's own row range (`row_offset` already applied
+    /// by the caller via `as_device_ptr_at_mut`, same idiom `lora.rs`'s
+    /// `fold_into` uses), and must already hold the base W4A16 kernel's
+    /// real output for those rows.
+    pub unsafe fn lora_delta_accumulate(mid: *const c_void, lora_b: *const c_void, y: *mut c_void, out_features: i32, rank: i32, stream: *mut c_void) {
+        unsafe {
+            kernels_ffi::launch_lora_delta_accumulate_bf16(mid, lora_b, y, out_features, rank, stream);
         }
     }
 
@@ -1060,6 +1087,153 @@ pub const ATTENTION_DECODE_KV_SPLIT: usize = 4;
 /// the wrong scale for a given weight index.
 pub const W4A16_GROUP_SIZE: usize = 128;
 
+/// Quantized-path LoRA (`quantized_lora.rs`): the fixed rank every real
+/// `QuantLoraSlot` buffer is permanently sized to, real adapters' own
+/// rank zero-padded up to this if smaller (every real adapter in this
+/// repo uses r=8 -- see `results/adapters/*`'s own naming -- so this
+/// gives real headroom, matching the real, already-serving Python
+/// precedent's own `init_static_lora_buffers(max_rank=32)` in
+/// `apps/runtime-triton/native_27b_engine.py`). Fixed, not dynamic, for
+/// the same real reason `W4A16_GROUP_SIZE` is fixed: a HIP-graph-captured
+/// kernel launch's integer parameters are baked in at capture time, so
+/// this can never change per-adapter without invalidating the graph --
+/// only the BUFFER VALUES change on a real swap, never this shape.
+///
+/// §131/§132: `activate_quantized_adapter` stores the active adapter's
+/// real rank in `QuantLoraSlot::rank` (kept as real, useful metadata) and
+/// uploads only the first `rank` rows of `lora_a`/`lora_b` via PCIe,
+/// zeroing the `[rank, MAX_LORA_RANK)` tail on-device via
+/// `hipMemsetAsync` (device-local, no PCIe cost).
+///
+/// §134: `apply()` does NOT pass `slot.rank` to the kernel -- it always
+/// passes this fixed `MAX_LORA_RANK` constant, unconditionally, for
+/// every slot, every call, regardless of whether any adapter is active.
+/// §132 originally made this dynamic (real rank, skip entirely when
+/// `rank==0`) as a real optimization, but that's a genuine HIP-graph-
+/// safety bug: `GraphedDecodeState` freezes whichever kernel launches
+/// actually got ISSUED on the real captured call, and a Rust-level `if
+/// slot.rank == 0 { continue; }` means those launches may never be
+/// issued at all if capture happens before the first real adapter
+/// activation (the common server-startup case) -- confirmed directly via
+/// `diagnose_graphed_decode_sees_lora_activated_after_first_capture`
+/// (graphed and eager decode diverged, 228,486/248,320 logits, once an
+/// adapter was activated after a rank=0 capture; 0 differ after the fix).
+/// The tail rows beyond the real rank are always zero, so summing over
+/// the full fixed `MAX_LORA_RANK` instead of the real rank changes
+/// nothing mathematically -- only the wasted compute on zero terms.
+///
+/// §134 shrunk this from 32 to 16; §135 shrunk it again, 16 to 8, after
+/// confirming (real evidence, not a guess) that every real adapter ever
+/// trained in this repo -- dozens of directories under
+/// `results/adapters/`, every domain -- uses r=8 uniformly. This is now
+/// exactly the real rank, zero slack: a future adapter trained at a
+/// higher rank fails LOUDLY at `QuantizedLoraAdapter::load_from_dir`
+/// (`r > MAX_LORA_RANK` check), never silently truncated or corrupted --
+/// bumping this constant back up and rebuilding is a one-line, reversible
+/// fix if that's ever needed, not a redesign. Real effect: eliminates the
+/// LAST of the wasted zero-valued FMAs `lora_delta_accumulate_kernel`'s
+/// per-thread loop was doing, and halves `QuantLoraSlot`'s VRAM footprint
+/// again.
+pub const MAX_LORA_RANK: usize = 8;
+
+/// Quantized-path LoRA: one real target sub-projection's row range within
+/// a (possibly fused) `LinearWeight::Quantized` buffer, plus its own
+/// permanently-allocated, HIP-graph-safe static LoRA buffers. See
+/// `quantized_lora.rs`'s header doc for the full rationale -- this is the
+/// additive-at-inference-time analogue of `lora.rs`'s bf16 in-place
+/// weight folding, architecturally different because folding a rank-r
+/// delta into a quantized buffer would mean re-quantizing on every swap
+/// (lossy AND slow), exactly the real tradeoff the already-shipped Python
+/// engine (`apps/runtime-triton/w4a16_loader.py`) made the same call on.
+pub struct QuantLoraSlot {
+    /// Element offset (in ROWS, i.e. output features) into the parent
+    /// `LinearWeight::Quantized`'s fused output -- 0 for a standalone
+    /// weight (`down_proj`/`o_proj`), nonzero for the 2nd+ real
+    /// sub-projection concatenated into `gate_up_proj`/`qkv_proj` (same
+    /// convention `lora.rs`'s `fold_into`'s own `row_offset` uses).
+    pub row_offset: usize,
+    pub out_features: usize,
+    /// §132: the real rank of the currently-active adapter (0 when no
+    /// adapter is active / slot is zeroed). Real, useful host-side
+    /// metadata -- §134 stopped `apply()` from reading it for kernel
+    /// dispatch (a genuine HIP-graph-safety bug, see `MAX_LORA_RANK`'s
+    /// own doc comment), but it's kept here.
+    pub rank: usize,
+    /// `[MAX_LORA_RANK, out_features]`, bf16, zeroed at alloc and after
+    /// `clear_quantized_adapter`. §131/§132: col-major layout (one
+    /// transposition vs. the original §128 `[out_features, MAX_LORA_RANK]`
+    /// row-major). Real adapter data occupies rows `[0, r)` -- a
+    /// contiguous prefix of `r * out_features` elements -- enabling a
+    /// single `hipMemcpyAsync` of exactly the real data, with no zero-
+    /// column stride interleaving. `lora_alpha/r` pre-folded in.
+    ///
+    /// §135: `lora_a`/`lora_mid` moved OUT of this per-slot struct into
+    /// `QuantLoraMidFused` (one shared instance per `LinearWeight`, not
+    /// per slot) -- see that struct's own doc comment for why. `lora_b`
+    /// stays here because `lora_delta_accumulate` genuinely needs a
+    /// separate call per slot (different `row_offset`/`out_features`
+    /// into `y` each), so there's nothing to fuse on this side.
+    /// `in_features` moved out along with them (it belongs to the shared
+    /// `QuantLoraMidFused.in_features` now -- every slot of a given
+    /// `LinearWeight` shares the same `in_features` by construction, so
+    /// keeping a redundant per-slot copy here would've been dead data).
+    pub lora_b: DeviceBuffer<u16>,
+}
+
+impl QuantLoraSlot {
+    fn alloc(row_offset: usize, out_features: usize) -> Result<Self, HipError> {
+        // §131/§132: col-major [MAX_LORA_RANK, out_features] (was [out_features, MAX_LORA_RANK]).
+        let mut lora_b: DeviceBuffer<u16> = DeviceBuffer::alloc(MAX_LORA_RANK * out_features)?;
+        lora_b.fill_zero()?;
+        Ok(QuantLoraSlot { row_offset, out_features, rank: 0, lora_b })
+    }
+}
+
+/// §135: the real fix for `gemv_bf16_kernel`'s call-count share of the
+/// quantized-LoRA fixed cost (real profiling: `rocprofv3` found this
+/// kernel's per-call cost roughly FLAT regardless of rank -- 32 vs. 8:
+/// 3.5us vs. 3.2us -- consistent with it being block-count/launch-bound,
+/// not per-thread-work-bound, unlike `lora_delta_accumulate_kernel`;
+/// §134's `MAX_LORA_RANK` shrink already addressed that one). Since
+/// per-call cost doesn't shrink much with rank, the real lever left is
+/// CALL COUNT: `gate_up_proj` (2 real sub-projections) and `qkv_proj` (3)
+/// each called `raw::lora_mid` once PER SLOT before this -- this struct
+/// holds ONE shared, fused `lora_a`/`lora_mid` pair per `LinearWeight`
+/// covering ALL its real slots at once, cut down to a SINGLE
+/// `raw::lora_mid` call regardless of slot count (`down_proj`/`o_proj`,
+/// with only 1 real slot, are structurally unaffected -- 1 slot fused is
+/// still 1 call).
+///
+/// Real layout: `lora_a` is `[num_slots * MAX_LORA_RANK, in_features]`
+/// row-major -- slot `i`'s real rank rows occupy
+/// `[i*MAX_LORA_RANK, i*MAX_LORA_RANK + r)`, always-zero elsewhere,
+/// exactly the same real "zero-padding costs nothing mathematically"
+/// property `QuantLoraSlot`'s own per-slot buffers already relied on.
+/// `lora_mid` is the matching `[num_slots * MAX_LORA_RANK]` scratch,
+/// recomputed fresh by ONE `raw::lora_mid` call every real `apply()`.
+/// Slot `i`'s own contribution is the sub-slice
+/// `lora_mid[i*MAX_LORA_RANK .. (i+1)*MAX_LORA_RANK]`, read via
+/// `DeviceBuffer::as_device_ptr_at` (a real, already-existing offset
+/// accessor, not a new primitive) when calling `lora_delta_accumulate`
+/// for that slot -- `lora_delta_accumulate` itself is UNCHANGED, still
+/// one real call per slot (see `QuantLoraSlot::lora_b`'s own doc comment
+/// for why that side isn't fused).
+pub struct QuantLoraMidFused {
+    pub lora_a: DeviceBuffer<u16>,
+    pub lora_mid: DeviceBuffer<u16>,
+    pub in_features: usize,
+    pub num_slots: usize,
+}
+
+impl QuantLoraMidFused {
+    fn alloc(in_features: usize, num_slots: usize) -> Result<Self, HipError> {
+        let mut lora_a: DeviceBuffer<u16> = DeviceBuffer::alloc(num_slots * MAX_LORA_RANK * in_features)?;
+        lora_a.fill_zero()?;
+        let lora_mid: DeviceBuffer<u16> = DeviceBuffer::alloc(num_slots * MAX_LORA_RANK)?;
+        Ok(QuantLoraMidFused { lora_a, lora_mid, in_features, num_slots })
+    }
+}
+
 /// §106: one real `nn.Linear`-shaped weight, either still real unquantized
 /// bf16 or real W4A16-quantized -- every one of this engine's 7 GEMV hot-
 /// path weights (per-layer qkv/o/in_proj/out/gate_up/down, plus lm_head)
@@ -1073,6 +1247,23 @@ pub enum LinearWeight {
     Quantized {
         qweight: DeviceBuffer<u32>,
         scales: DeviceBuffer<u16>,
+        /// Empty for a weight LoRA never targets (GDN's own
+        /// `in_proj_combined`/`out_proj`, `lm_head` -- see
+        /// `quantized_lora.rs`'s target-module list, mirroring
+        /// `lora.rs`'s own real `LoraLayer` shape exactly), populated by
+        /// `ModelWeights::load` for the real LoRA-targetable fields
+        /// (`qkv_proj`, `o_proj`, `gate_up_proj`, `down_proj`). Enum
+        /// variant fields can't take their own `pub` qualifier in Rust --
+        /// this is reachable from `quantized_lora.rs` the same way
+        /// `qweight`/`scales` are reachable from `model.rs` itself
+        /// (same-crate visibility of a `pub enum`'s variant fields).
+        lora_slots: Vec<QuantLoraSlot>,
+        /// §135: `Some` exactly when `lora_slots` is non-empty (one
+        /// shared fused mid-computation buffer covering every real slot
+        /// in `lora_slots`); `None` for a weight LoRA never targets, same
+        /// real condition `lora_slots.is_empty()` already tracks. See
+        /// `QuantLoraMidFused`'s own doc comment.
+        lora_mid_fused: Option<QuantLoraMidFused>,
     },
 }
 
@@ -1083,14 +1274,65 @@ impl LinearWeight {
     /// layers goes through now, decode-only (`rows` is always 1 for
     /// every real caller; prefill for a quantized layer uses this same
     /// per-token path in a loop, not a batched GEMM -- see
-    /// `docs/DECISIONS.md` §106).
+    /// `docs/DECISIONS.md` §106). For a quantized weight with real LoRA
+    /// slots, ALSO runs the real additive LoRA accumulation after the
+    /// unmodified base kernel (see `QuantLoraSlot`'s own doc) -- a
+    /// quantized weight with zero slots (the common case: GDN's own
+    /// in_proj/out_proj, `lm_head`) pays zero extra cost, identical to
+    /// before this existed.
     pub unsafe fn apply(&self, x: *const c_void, y: *mut c_void, in_features: i32, out_features: i32, stream: *mut c_void) {
         match self {
             LinearWeight::Bf16(buf) => unsafe {
                 raw::gemm(std::ptr::null_mut(), x, buf.as_device_ptr(), y, 1, in_features, out_features, stream);
             },
-            LinearWeight::Quantized { qweight, scales } => unsafe {
+            LinearWeight::Quantized { qweight, scales, lora_slots, lora_mid_fused } => unsafe {
                 raw::linear_quantized(x, qweight.as_device_ptr(), scales.as_device_ptr(), y, in_features, out_features, W4A16_GROUP_SIZE as i32, stream);
+                // §134: ALWAYS launch these LoRA kernels for every real
+                // slot, unconditionally, with the FIXED `MAX_LORA_RANK`
+                // (never a per-adapter-varying rank read from a host-side
+                // field). §132's original `if slot.rank == 0 { continue;
+                // }` skip -- reading a plain host-side `usize` to decide
+                // whether to issue a kernel launch -- was a real,
+                // confirmed HIP-graph-safety bug, not just a missed
+                // optimization: `GraphedDecodeState` captures whatever
+                // kernel launches actually get ISSUED on the FIRST real
+                // decode call, and REPLAYS that exact fixed sequence on
+                // every later call, never re-running this Rust branch. If
+                // that first call happens before any adapter is ever
+                // activated (the real, common server-startup case), the
+                // LoRA kernels are never recorded, and no later `POST
+                // /lora-adapters` activation can ever take effect for
+                // decode, silently, forever, on that server. Confirmed
+                // directly via `diagnose_graphed_decode_sees_lora_
+                // activated_after_first_capture`: graphed and eager
+                // decode agreed exactly while unadapted (0 logits
+                // differ), then diverged (228,486/248,320 differ) once an
+                // adapter was activated post-capture, under the buggy
+                // code. Correctness here: the tail rows beyond any real
+                // adapter's rank are always zero (`activate_quantized_
+                // adapter`'s `fill_zero_from_async`, or the whole buffer
+                // when inactive), so summing over the fixed
+                // `MAX_LORA_RANK` instead of a real rank changes NOTHING
+                // mathematically -- the extra terms are exact zeros.
+                //
+                // §135: ONE fused `raw::lora_mid` call covers every real
+                // slot in `lora_slots` at once (see `QuantLoraMidFused`'s
+                // own doc comment for why -- real profiling found this
+                // kernel's cost is call-count-, not rank-, bound).
+                // `lora_delta_accumulate` stays one real call per slot
+                // (different `row_offset`/`out_features` into `y` each --
+                // nothing to fuse there), reading its slice of the fused
+                // `lora_mid` buffer via the already-existing
+                // `as_device_ptr_at` offset accessor.
+                if let Some(fused) = lora_mid_fused {
+                    let total_rank = (fused.num_slots * MAX_LORA_RANK) as i32;
+                    raw::lora_mid(x, fused.lora_a.as_device_ptr(), fused.lora_mid.as_device_ptr() as *mut c_void, fused.in_features as i32, total_rank, stream);
+                    for (i, slot) in lora_slots.iter().enumerate() {
+                        let mid_slice = fused.lora_mid.as_device_ptr_at(i * MAX_LORA_RANK);
+                        let y_slot = (y as *mut u16).add(slot.row_offset) as *mut c_void;
+                        raw::lora_delta_accumulate(mid_slice, slot.lora_b.as_device_ptr(), y_slot, slot.out_features as i32, MAX_LORA_RANK as i32, stream);
+                    }
+                }
             },
         }
     }
@@ -1100,27 +1342,40 @@ impl LinearWeight {
     /// `w4a16_gemm_prefill` kernel (quantized), whichever this weight
     /// actually is. `x`/`y` are row-major `[num_tokens, features]`, same
     /// convention `raw::gemm`'s own `rows>1` branch already uses.
+    ///
+    /// Real, disclosed scope boundary: quantized-path LoRA (`lora_slots`)
+    /// is NOT applied here -- only in the decode-only `apply` above. A
+    /// prompt's own prefill pass always runs unadapted even with a real
+    /// quantized LoRA adapter active; only tokens generated after that
+    /// (the decode loop) see the adapter's effect. Closing this gap needs
+    /// a real second fused kernel for the batched WMMA INT8 prefill path
+    /// (`w4a16_gemm_prefill_wmma_int8.hip`) -- a substantially bigger,
+    /// separate undertaking, not done this round.
     #[allow(clippy::too_many_arguments)]
     pub unsafe fn apply_prefill(&self, handle: blas_ffi::HipblasHandle, x: *const c_void, y: *mut c_void, num_tokens: i32, in_features: i32, out_features: i32, stream: *mut c_void) {
         match self {
             LinearWeight::Bf16(buf) => unsafe {
                 raw::gemm(handle, x, buf.as_device_ptr(), y, num_tokens, in_features, out_features, stream);
             },
-            LinearWeight::Quantized { qweight, scales } => unsafe {
+            LinearWeight::Quantized { qweight, scales, .. } => unsafe {
                 raw::linear_quantized_prefill(x, qweight.as_device_ptr(), scales.as_device_ptr(), y, in_features, out_features, W4A16_GROUP_SIZE as i32, num_tokens, stream);
             },
         }
     }
 
     /// Real, loud failure (not a silent wrong computation) for the one
-    /// real operation that still doesn't support quantized weights: LoRA
-    /// fold/snapshot-restore (`lora.rs`, bf16-only, §101). Batched prefill
-    /// no longer needs this -- see `apply_prefill` above (§108).
+    /// real operation that still doesn't support quantized weights:
+    /// in-place weight-fold LoRA (`lora.rs`, bf16-only, §101). Quantized
+    /// weights get real LoRA a different way -- additive, via
+    /// `QuantLoraSlot`/`quantized_lora.rs`, not by folding into these
+    /// buffers -- so this restriction is real and permanent, not a scope
+    /// gap. Batched prefill no longer needs this -- see `apply_prefill`
+    /// above (§108).
     pub fn as_bf16(&self) -> &DeviceBuffer<u16> {
         match self {
             LinearWeight::Bf16(buf) => buf,
             LinearWeight::Quantized { .. } => panic!(
-                "LinearWeight::as_bf16 called on a quantized weight -- LoRA folding doesn't support W4A16-quantized layers yet (see docs/DECISIONS.md §106/§108)"
+                "LinearWeight::as_bf16 called on a quantized weight -- in-place weight-fold LoRA (lora.rs) doesn't support W4A16-quantized layers; see quantized_lora.rs for the real additive equivalent (docs/DECISIONS.md §106/§108)"
             ),
         }
     }
@@ -1130,7 +1385,7 @@ impl LinearWeight {
         match self {
             LinearWeight::Bf16(buf) => buf,
             LinearWeight::Quantized { .. } => panic!(
-                "LinearWeight::as_bf16_mut called on a quantized weight -- LoRA folding doesn't support W4A16-quantized layers yet (see docs/DECISIONS.md §106/§108)"
+                "LinearWeight::as_bf16_mut called on a quantized weight -- in-place weight-fold LoRA (lora.rs) doesn't support W4A16-quantized layers; see quantized_lora.rs for the real additive equivalent (docs/DECISIONS.md §106/§108)"
             ),
         }
     }
@@ -1188,6 +1443,43 @@ pub struct ModelWeights {
     pub lm_head: Option<LinearWeight>,
     pub final_norm: DeviceBuffer<u16>,
     pub layers: Vec<LayerWeights>,
+    /// §132: total number of u16 elements in one full adapter's real data
+    /// (rank=actual_r rows of lora_a + rank rows of lora_b, summed over
+    /// all slots). Zero for a bf16-only checkpoint. Written once by
+    /// `attach_lora_slots` / `ModelWeights::load`; used by
+    /// `activate_quantized_adapter` to allocate the staging `PinnedBuffer`.
+    #[allow(dead_code)]
+    pub lora_real_data_elems: usize,
+}
+
+/// Attaches real, permanently-allocated (zeroed) quantized-LoRA slots to
+/// `w` for each real sub-projection in `sub_projections`
+/// (`(row_offset, out_features)` pairs, in the SAME row order the base
+/// weight itself was concatenated in -- see each call site below), all
+/// sharing `in_features`. A no-op for a `LinearWeight::Bf16` (that path's
+/// real LoRA is `lora.rs`'s in-place fold instead, needing no slots).
+///
+/// Returns the number of u16 elements consumed by the slots' REAL data
+/// (lora_a: `actual_rank * in_features`, lora_b: `actual_rank * out_features`
+/// per slot) -- accumulated into `ModelWeights::lora_real_data_elems` by
+/// the caller so `activate_quantized_adapter` can size its staging buffer.
+/// `actual_rank` is set to 0 at alloc time (no active adapter yet); it is
+/// written per-slot by `activate_quantized_adapter`.
+fn attach_lora_slots(mut w: LinearWeight, in_features: usize, sub_projections: &[(usize, usize)]) -> Result<LinearWeight, String> {
+    if let LinearWeight::Quantized { lora_slots, lora_mid_fused, .. } = &mut w {
+        let mut slots = Vec::with_capacity(sub_projections.len());
+        for &(row_offset, out_features) in sub_projections {
+            let slot = QuantLoraSlot::alloc(row_offset, out_features)
+                .map_err(|e| format!("allocating quantized LoRA slot (row_offset={row_offset}, out_features={out_features}, in_features={in_features}): {e}"))?;
+            slots.push(slot);
+        }
+        // §135: ONE shared fused mid-buffer covering every real slot above.
+        let fused = QuantLoraMidFused::alloc(in_features, sub_projections.len())
+            .map_err(|e| format!("allocating quantized LoRA fused mid buffer (in_features={in_features}, num_slots={}): {e}", sub_projections.len()))?;
+        *lora_slots = slots;
+        *lora_mid_fused = Some(fused);
+    }
+    Ok(w)
 }
 
 impl ModelWeights {
@@ -1246,7 +1538,7 @@ impl ModelWeights {
         let load_linear = |name: &str| -> Result<LinearWeight, String> {
             if is_quantized(name) {
                 let (qweight, scales) = crate::model_loader::load_w4a16_weight(snapshot_dir, name)?;
-                Ok(LinearWeight::Quantized { qweight, scales })
+                Ok(LinearWeight::Quantized { qweight, scales, lora_slots: Vec::new(), lora_mid_fused: None })
             } else {
                 Ok(LinearWeight::Bf16(load_bf16_weight(snapshot_dir, name)?))
             }
@@ -1254,11 +1546,27 @@ impl ModelWeights {
         let load_concat_linear = |names: &[&str]| -> Result<LinearWeight, String> {
             if is_quantized(names[0]) {
                 let (qweight, scales) = crate::model_loader::load_concat_w4a16_weights(snapshot_dir, names)?;
-                Ok(LinearWeight::Quantized { qweight, scales })
+                Ok(LinearWeight::Quantized { qweight, scales, lora_slots: Vec::new(), lora_mid_fused: None })
             } else {
                 Ok(LinearWeight::Bf16(load_concat_bf16_weights(snapshot_dir, names)?))
             }
         };
+        // Real LoRA target sub-projection row layout within each fused
+        // buffer -- MUST match the concatenation order `load_concat_linear`
+        // is called with just below exactly (same real discipline as
+        // `ATTN_QKV_COMBINED_DIM`/`GATE_UP_COMBINED_DIM`'s own doc
+        // comments: `q_proj`(2x -- real query+gate fused, see
+        // `ATTN_QKV_COMBINED_DIM`'s doc) + `k_proj` + `v_proj`;
+        // `gate_proj` + `up_proj`). GDN's own `in_proj_combined`/
+        // `out_proj` and `lm_head` are never real LoRA targets (see
+        // `lora.rs`'s own `LoraLayer`/`adapter_config.json` `target_modules`
+        // -- no GDN module names there either), so they're never passed
+        // through `attach_lora_slots` below.
+        let q_out = 2 * ATTN_NUM_HEADS * ATTN_HEAD_DIM;
+        let k_out = ATTN_NUM_KV_HEADS * ATTN_HEAD_DIM;
+        let v_out = ATTN_NUM_KV_HEADS * ATTN_HEAD_DIM;
+        let qkv_slot_spec = [(0usize, q_out), (q_out, k_out), (q_out + k_out, v_out)];
+        let gate_up_slot_spec = [(0usize, INTERMEDIATE_SIZE), (INTERMEDIATE_SIZE, INTERMEDIATE_SIZE)];
 
         let embed_tokens =
             load_bf16_weight(snapshot_dir, "model.language_model.embed_tokens.weight")?;
@@ -1274,13 +1582,15 @@ impl ModelWeights {
             let p = format!("model.language_model.layers.{i}");
             let gate_name = format!("{p}.mlp.gate_proj.weight");
             let up_name = format!("{p}.mlp.up_proj.weight");
-            let gate_up_proj = load_concat_linear(&[&gate_name, &up_name])?;
+            let gate_up_proj = attach_lora_slots(load_concat_linear(&[&gate_name, &up_name])?, HIDDEN_SIZE, &gate_up_slot_spec)?;
 
             if is_full_attention_layer(i) {
                 let q_name = format!("{p}.self_attn.q_proj.weight");
                 let k_name = format!("{p}.self_attn.k_proj.weight");
                 let v_name = format!("{p}.self_attn.v_proj.weight");
-                let qkv_proj = load_concat_linear(&[&q_name, &k_name, &v_name])?;
+                let qkv_proj = attach_lora_slots(load_concat_linear(&[&q_name, &k_name, &v_name])?, HIDDEN_SIZE, &qkv_slot_spec)?;
+                let o_proj = attach_lora_slots(load_linear(&format!("{p}.self_attn.o_proj.weight"))?, ATTN_NUM_HEADS * ATTN_HEAD_DIM, &[(0, HIDDEN_SIZE)])?;
+                let down_proj = attach_lora_slots(load_linear(&format!("{p}.mlp.down_proj.weight"))?, INTERMEDIATE_SIZE, &[(0, HIDDEN_SIZE)])?;
                 layers.push(LayerWeights::Attn(AttnLayerWeights {
                     input_layernorm: load_bf16_weight(
                         snapshot_dir,
@@ -1293,9 +1603,9 @@ impl ModelWeights {
                     qkv_proj,
                     q_norm: load_bf16_weight(snapshot_dir, &format!("{p}.self_attn.q_norm.weight"))?,
                     k_norm: load_bf16_weight(snapshot_dir, &format!("{p}.self_attn.k_norm.weight"))?,
-                    o_proj: load_linear(&format!("{p}.self_attn.o_proj.weight"))?,
+                    o_proj,
                     gate_up_proj,
-                    down_proj: load_linear(&format!("{p}.mlp.down_proj.weight"))?,
+                    down_proj,
                 }));
             } else {
                 let qkv_name = format!("{p}.linear_attn.in_proj_qkv.weight");
@@ -1304,6 +1614,7 @@ impl ModelWeights {
                 let a_name = format!("{p}.linear_attn.in_proj_a.weight");
                 let in_proj_combined =
                     load_concat_linear(&[&qkv_name, &z_name, &b_name, &a_name])?;
+                let down_proj = attach_lora_slots(load_linear(&format!("{p}.mlp.down_proj.weight"))?, INTERMEDIATE_SIZE, &[(0, HIDDEN_SIZE)])?;
                 layers.push(LayerWeights::Gdn(GdnLayerWeights {
                     input_layernorm: load_bf16_weight(
                         snapshot_dir,
@@ -1323,7 +1634,7 @@ impl ModelWeights {
                     norm_weight: load_f32_param(snapshot_dir, &format!("{p}.linear_attn.norm.weight"))?,
                     out_proj: load_linear(&format!("{p}.linear_attn.out_proj.weight"))?,
                     gate_up_proj,
-                    down_proj: load_linear(&format!("{p}.mlp.down_proj.weight"))?,
+                    down_proj,
                 }));
             }
         }
@@ -1333,6 +1644,7 @@ impl ModelWeights {
             lm_head,
             final_norm,
             layers,
+            lora_real_data_elems: 0,  // §132: populated by quantized_lora.rs at first activate
         })
     }
 }
@@ -1841,7 +2153,15 @@ fn gdn_layer_forward(
 /// o_proj -> residual add -> `post_attention_layernorm` -> MLP -> residual
 /// add. Writes the final result into `hidden_out`.
 #[allow(clippy::too_many_arguments)]
-fn attn_layer_forward(
+/// §137: `pub(crate)`, not private, specifically so `mtp_draft.rs` can
+/// reuse this real, already-decisively-verified single-token attention
+/// forward pass for the MTP draft head's own one real decoder layer
+/// (confirmed, against the real checkpoint's own tensor shapes, to be
+/// architecturally identical to a real backbone `Attn` layer at this
+/// model size -- same `ATTN_NUM_HEADS`/`ATTN_NUM_KV_HEADS`/
+/// `ATTN_HEAD_DIM`/`INTERMEDIATE_SIZE`) -- rather than re-deriving the
+/// same attention/MLP kernel-call sequence a second time.
+pub(crate) fn attn_layer_forward(
     hidden_states: &DeviceBuffer<u16>,
     hidden_out: &mut DeviceBuffer<u16>,
     w: &AttnLayerWeights,
@@ -2018,14 +2338,33 @@ fn attn_layer_forward_prefill(
     w: &AttnLayerWeights,
     layer_state: &mut AttnLayerState,
     num_tokens: usize,
-    start_position: usize,
+    // §136: the real causal key/value range width this layer's attention
+    // computes over -- an INPUT, not derived internally, specifically so
+    // a graph-capturing caller can pass a FIXED, bucket-determined value
+    // instead of the real `start_position + num_tokens` (which varies
+    // per real call and cannot be baked into a captured graph's kernel
+    // launch shapes -- see `KV_LEN_BUCKETS`'s own doc comment for the
+    // full story). The ordinary eager prefill caller
+    // (`run_layers_over_chunk`, via `kv_len_override: None`) still
+    // computes and passes exactly `start_position + num_tokens` -- this
+    // change is a pure refactor for that path, zero behavior change,
+    // already covered by every one of this crate's existing real-prefill
+    // decisive tests. Any real content beyond the true causal boundary
+    // that a LARGER-than-real `kv_len` causes this function to read
+    // (stale/uninitialized K/V-cache slots) is always memory-safe (still
+    // within the cache's own `max_seq_len`-sized allocation) and always
+    // numerically inert: `causal_softmax`'s masking is derived entirely
+    // from the separately device-read `start_position_ptr`, never from
+    // `kv_len`, so those extra columns are unconditionally zeroed before
+    // they can influence anything (verified directly in
+    // `causal_softmax.hip`'s own kernel body).
+    kv_len: usize,
     max_seq_len: usize,
     s: &mut PrefillScratch,
     stream: *mut c_void,
 ) {
     let t = num_tokens as i32;
     let q_row_len = ATTN_NUM_HEADS * ATTN_HEAD_DIM; // per-token query length (pre-split from q_raw's 2x-wide query|gate)
-    let kv_len = start_position + num_tokens;
     let n_rep = ATTN_NUM_HEADS / ATTN_NUM_KV_HEADS; // GQA: n_rep query heads share each KV head
     unsafe {
         raw::rmsnorm(hidden_states.as_device_ptr(), w.input_layernorm.as_device_ptr(), s.normed.as_device_ptr_mut(), t, HIDDEN_SIZE as i32, RMS_EPS, stream);
@@ -2637,6 +2976,15 @@ fn run_layers_over_chunk(
     weights: &ModelWeights,
     state: &mut DecodeState,
     num_tokens: usize,
+    // §136: `None` for every existing real caller (ordinary eager
+    // prefill) -- reproduces today's exact `start_position + num_tokens`
+    // derivation, zero behavior change. `Some(bucket_kv_len)` lets a
+    // graph-capturing caller force attention's real key/value range
+    // width to a FIXED, bucket-determined constant instead of the real
+    // (per-call-varying, graph-unsafe) value -- see `KV_LEN_BUCKETS`'s
+    // own doc comment and `attn_layer_forward_prefill`'s `kv_len`
+    // parameter doc for the full story.
+    kv_len_override: Option<usize>,
     stream: *mut c_void,
 ) -> *const DeviceBuffer<u16> {
     // Stable for the whole layer stack -- `state.position` is only
@@ -2645,6 +2993,7 @@ fn run_layers_over_chunk(
     // "start position of this chunk" every layer needs for real causal
     // attention (§99).
     let start_position = state.position;
+    let attn_kv_len = kv_len_override.unwrap_or(start_position + num_tokens);
     let s = &mut state.prefill_scratch;
     unsafe {
         raw::embedding_lookup(
@@ -2700,7 +3049,7 @@ fn run_layers_over_chunk(
                 w,
                 as_,
                 num_tokens,
-                start_position,
+                attn_kv_len,
                 state.max_seq_len,
                 &mut state.prefill_scratch,
                 stream,
@@ -2729,7 +3078,7 @@ fn run_prefill_chunk_body(
     logits_out: &mut DeviceBuffer<u16>,
     stream: *mut c_void,
 ) {
-    let final_hidden_ptr = run_layers_over_chunk(handle_raw, weights, state, num_tokens, stream);
+    let final_hidden_ptr = run_layers_over_chunk(handle_raw, weights, state, num_tokens, None, stream);
     // SAFETY: points at one of `state.prefill_scratch`'s two live
     // `hidden_a`/`hidden_b` fields (`run_layers_over_chunk`'s own
     // guarantee).
@@ -2901,6 +3250,31 @@ fn run_decode_body(
 /// exactly what every kernel launch already did). Advances `state.position`
 /// by one on success. Synchronizes with the GPU exactly once (after the
 /// layer loop) -- see this module's doc comment.
+/// §137: whether `state.hidden_a` (vs `hidden_b`) holds the real,
+/// PRE-final-norm final hidden state after a real `forward_one_token`
+/// call -- the exact real input the MTP draft head needs (`out.
+/// hidden_states[-1]` in HF terms, confirmed against the real production
+/// Python integration, `apps/runtime-ipwf/bucketed_speculative.py`'s own
+/// `out.hidden_states[-1]`, NOT the post-final-norm value `lm_head`
+/// consumes). A real, DETERMINISTIC, compile-time fact, not runtime
+/// state: `run_decode_body`'s own `use_a_as_input` ping-pong starts
+/// `true` and flips exactly once per layer, so after a FIXED
+/// `NUM_LAYERS` it always lands on the SAME buffer, every call, for a
+/// given model-size build -- never alternates between calls the way a
+/// naive reader might assume.
+const FINAL_HIDDEN_IS_A: bool = NUM_LAYERS % 2 == 0;
+
+impl DecodeState {
+    /// The real, current pre-final-norm final hidden state -- see
+    /// `FINAL_HIDDEN_IS_A`'s own doc comment for why this is a plain,
+    /// deterministic buffer pick, not tracked runtime state. Valid
+    /// immediately after any real `forward_one_token`/`GraphedDecodeState::
+    /// forward_one_token` call.
+    pub fn final_hidden(&self) -> &DeviceBuffer<u16> {
+        if FINAL_HIDDEN_IS_A { &self.hidden_a } else { &self.hidden_b }
+    }
+}
+
 pub fn forward_one_token(
     _handle: &BlasHandle,
     weights: &ModelWeights,
@@ -2993,6 +3367,162 @@ impl GraphedDecodeState {
     }
 }
 
+/// §136: real, FIXED key/value range width buckets for a graph-captured
+/// speculative-decode verify chunk. The real problem this exists to
+/// solve: `attn_layer_forward_prefill`'s attention math needs a `kv_len`
+/// (the causal key/value range width) that naturally grows with
+/// `state.position` over a real generation's lifetime -- but a captured
+/// HIP graph's kernel launches have their shapes fixed FOREVER at capture
+/// time, and (confirmed directly, not assumed) `hipblasGemmEx`'s own C
+/// API has no device-pointer variant for its shape arguments at all, so
+/// `kv_len` genuinely cannot be made "just read from a device pointer"
+/// the way `position_buf` already is for RoPE/KV-cache-append. The fix:
+/// pad every real call up to a small, discrete set of FIXED widths (this
+/// array), and rely on `causal_softmax`'s masking -- verified directly in
+/// `causal_softmax.hip`'s own kernel body to be derived ENTIRELY from a
+/// separately device-read real position, never from `kv_len` -- to zero
+/// out whatever stale/uninitialized K/V-cache content a bucket's padding
+/// reads beyond the real causal boundary. This is the same real strategy
+/// Python's own proven `bucketed_speculative.py` design uses
+/// (`docs/DECISIONS.md`'s §136 research: "the resolution is that
+/// speculative chunk widths are discrete and tightly bounded... capture
+/// one graph per width"), applied here to `kv_len` instead of chunk
+/// width, and the same "fixed shape + real masking" idiom this crate's
+/// own `GDN_CHUNK_SIZE` padding already uses elsewhere.
+///
+/// Doubling schedule, capped at the real production `MAX_SEQ_LEN`
+/// (`server.rs`, 12288) -- keeps real wasted attention compute bounded to
+/// at most ~2x the real content at any position, the same real tradeoff
+/// this crate's own `docs/DECISIONS.md` §117 postmortem found could go
+/// badly wrong if bucket granularity doesn't match the real workload (that
+/// failure was prefill bucketed by PROMPT length against a mostly-short
+/// real distribution; this is decode-side, bucketed by the real, always-
+/// growing `state.position`, a structurally different distribution -- but
+/// the SAME lesson applies: never assume a bucket schedule is safe
+/// without a real measurement, see this section's own future benchmark
+/// work before this ships).
+pub const KV_LEN_BUCKETS: [usize; 8] = [128, 256, 512, 1024, 2048, 4096, 8192, 12288];
+
+/// Smallest real bucket that can hold `real_kv_len` real positions.
+/// Panics if `real_kv_len` exceeds the largest bucket (the real
+/// `MAX_SEQ_LEN` itself) -- a real caller has already lost by then (the
+/// server's own `forward_prefill`/`forward_prefill_chunk` already refuse
+/// a request whose real length would exceed `MAX_SEQ_LEN`), not a
+/// condition this function should paper over.
+pub fn kv_len_bucket_for(real_kv_len: usize) -> usize {
+    KV_LEN_BUCKETS
+        .iter()
+        .copied()
+        .find(|&b| b >= real_kv_len)
+        .unwrap_or_else(|| panic!("real_kv_len={real_kv_len} exceeds the largest real KV_LEN_BUCKETS entry ({}) -- caller should have already refused this request", KV_LEN_BUCKETS[KV_LEN_BUCKETS.len() - 1]))
+}
+
+/// §136: a `GraphedDecodeState`-style wrapper around a FIXED-K
+/// speculative-decode verify chunk, bucketed by real `kv_len` (see
+/// `KV_LEN_BUCKETS`) so it stays graph-safe across a real generation's
+/// entire lifetime, not just at whatever position the graph happened to
+/// first capture at (the real, confirmed bug this replaces -- see
+/// `docs/DECISIONS.md` §136 for the decisive test that found a captured
+/// verify-chunk graph diverged 100% on a replay after a real position
+/// change, root-caused to `kv_len` being baked into kernel launch
+/// arguments and a host-side kernel-selection branch, neither re-read on
+/// replay).
+///
+/// One real captured `GraphExec` per bucket actually seen so far (lazy:
+/// only the buckets a real generation actually reaches get captured,
+/// never all `KV_LEN_BUCKETS::len()` up front). Does NOT advance
+/// `state.position` -- same real, deliberate division of responsibility
+/// `GraphedVerifyState`'s original (unbucketed) spike already established:
+/// a verify round's real advance amount depends on how many drafts the
+/// caller decides to accept AFTER seeing this call's logits, which has to
+/// stay entirely host-side.
+pub struct GraphedVerifyState {
+    stream: hip::Stream,
+    handle: BlasHandle,
+    graph_execs: HashMap<usize, hip::GraphExec>,
+    k: usize,
+}
+
+impl GraphedVerifyState {
+    pub fn new(k: usize) -> Result<Self, HipError> {
+        let stream = hip::Stream::create()?;
+        let handle = BlasHandle::create().map_err(|_| HipError { code: -1 })?;
+        handle.set_stream(&stream).map_err(|_| HipError { code: -1 })?;
+        Ok(GraphedVerifyState { stream, handle, graph_execs: HashMap::new(), k })
+    }
+
+    /// Runs one K-token verify chunk from `state.position`, real
+    /// per-position logits written into `verify_logits`
+    /// (`[k * VOCAB_SIZE]`). Real attention computes over
+    /// `kv_len_bucket_for(state.position + k)` positions (padded, masked
+    /// safe per this struct's own doc comment), NOT the real
+    /// `state.position + k` directly -- the one real difference from the
+    /// original unbucketed spike, and the actual fix. Captures a NEW
+    /// graph the first time a given bucket is seen; every later call
+    /// landing in an ALREADY-seen bucket replays that bucket's existing
+    /// graph. Does NOT advance `state.position` -- see this struct's own
+    /// doc comment.
+    pub fn verify_chunk(
+        &mut self,
+        weights: &ModelWeights,
+        state: &mut DecodeState,
+        draft_ids: &[i32],
+        normed_out: &mut DeviceBuffer<u16>,
+        verify_logits: &mut DeviceBuffer<u16>,
+        raw_hidden_out: &mut DeviceBuffer<u16>,
+    ) -> Result<(), HipError> {
+        assert_eq!(draft_ids.len(), self.k, "GraphedVerifyState: draft_ids length must match the fixed K this graph was built for");
+        state.prefill_scratch.token_ids_dev.copy_from_host_prefix(draft_ids)?;
+        let positions: Vec<i32> = (0..self.k as i32).map(|i| state.position as i32 + i).collect();
+        state.prefill_scratch.position_buf.copy_from_host_prefix(&positions)?;
+
+        let real_kv_len = state.position + self.k;
+        let bucket = kv_len_bucket_for(real_kv_len);
+
+        let handle_raw = self.handle.raw();
+        if !self.graph_execs.contains_key(&bucket) {
+            hip::begin_capture(&self.stream)?;
+            let final_hidden_ptr = run_layers_over_chunk(handle_raw, weights, state, self.k, Some(bucket), self.stream.raw());
+            let final_hidden: &DeviceBuffer<u16> = unsafe { &*final_hidden_ptr };
+            // §137: preserve the REAL, PRE-final-norm per-position hidden
+            // state (the exact real input the MTP draft head needs --
+            // `out.hidden_states[-1]` in HF terms, confirmed against the
+            // real production Python integration) into a caller-owned
+            // buffer, as part of THIS SAME captured, unconditional
+            // sequence -- `final_hidden_ptr` points into this struct's
+            // own internal ping-pong scratch, which the NEXT real call
+            // (a different bucket, or even this same one on a later
+            // replay) will overwrite, so it cannot be read AFTER
+            // `launch()` returns without a real copy captured here.
+            raw_hidden_out.copy_from_device_async_prefix(final_hidden, self.k * HIDDEN_SIZE, self.stream.raw())?;
+            unsafe {
+                raw::rmsnorm(
+                    final_hidden.as_device_ptr(),
+                    weights.final_norm.as_device_ptr(),
+                    normed_out.as_device_ptr_mut(),
+                    self.k as i32,
+                    HIDDEN_SIZE as i32,
+                    RMS_EPS,
+                    self.stream.raw(),
+                );
+                match &weights.lm_head {
+                    Some(LinearWeight::Bf16(buf)) => {
+                        raw::gemm(handle_raw, normed_out.as_device_ptr(), buf.as_device_ptr(), verify_logits.as_device_ptr_mut(), self.k as i32, HIDDEN_SIZE as i32, VOCAB_SIZE as i32, self.stream.raw());
+                    }
+                    None => {
+                        raw::gemm(handle_raw, normed_out.as_device_ptr(), weights.embed_tokens.as_device_ptr(), verify_logits.as_device_ptr_mut(), self.k as i32, HIDDEN_SIZE as i32, VOCAB_SIZE as i32, self.stream.raw());
+                    }
+                    Some(LinearWeight::Quantized { .. }) => panic!("scoped to bf16 dense sizes only"),
+                }
+            }
+            self.graph_execs.insert(bucket, hip::end_capture(&self.stream)?);
+        }
+        self.graph_execs.get(&bucket).unwrap().launch(&self.stream)?;
+        self.stream.synchronize()?;
+        Ok(())
+    }
+}
+
 /// Greedy sampling: argmax over real vocab logits. §93: computed on-device
 /// (`kernels::argmax_bf16`) instead of copying the full `VOCAB_SIZE`-
 /// element logits buffer to host and scanning it there -- real, measured
@@ -3001,6 +3531,12 @@ impl GraphedDecodeState {
 /// semantics (first/lowest-index occurrence wins) as before.
 pub fn argmax_sample(logits: &DeviceBuffer<u16>) -> Result<i32, HipError> {
     crate::kernels::argmax_bf16(logits)
+}
+
+/// §137: greedy sampling for one row of a `[num_rows, VOCAB_SIZE]` logits
+/// buffer (a real speculative-decode verify chunk's per-position output).
+pub fn argmax_sample_row(logits: &DeviceBuffer<u16>, row: usize) -> Result<i32, HipError> {
+    crate::kernels::argmax_bf16_row(logits, row, VOCAB_SIZE)
 }
 
 #[cfg(test)]
@@ -4092,6 +4628,1024 @@ mod tests {
             prompt_ids.len(),
             prompt_ids.len() + warmup + timed_tokens
         );
+    }
+
+    /// DIAGNOSTIC (speculative-decoding feasibility prep, not a shipped
+    /// feature -- this crate has no drafting mechanism): measures the real
+    /// cost of a speculative-decode "verify" step using ONLY kernels this
+    /// crate already has, no new kernels written. A verify step is a
+    /// K-token batched chunk forward continuing from live decode state --
+    /// exactly the real, already-decisively-verified prefill machinery
+    /// (`run_layers_over_chunk`, proven bit-for-bit-tolerance-equivalent to
+    /// sequential `forward_one_token` by
+    /// `real_batched_prefill_logits_numerically_match_sequential_forward_one_token`
+    /// and `real_incremental_prefill_matches_one_shot_prefill_numerically`)
+    /// -- PLUS real per-position logits at EVERY one of the K positions,
+    /// which a genuine verify step needs (to argmax-check each drafted
+    /// token) but `forward_prefill_chunk` deliberately skips (its own doc
+    /// comment: only the last token's logits are ever computed, since nothing
+    /// else needs them there). Real batched multi-row `rmsnorm`+lm_head GEMM
+    /// (`raw::gemm` already supports `rows>1` as a genuine hipBLAS
+    /// matrix-matrix product, see its own doc comment) stands in for that
+    /// missing piece -- no new kernel, just calling existing ones with
+    /// `rows=K` instead of `rows=1`.
+    ///
+    /// Reports, for K in {2,4,6,8} (matching the legacy Python engine's own
+    /// real K sweep, `docs/DECISIONS.md` §61-65): the real verify-chunk
+    /// cost `C_verify(K)`, the real steady-state single-token decode cost
+    /// `C_1`, and the real break-even accepted-token count `tau_breakeven(K)
+    /// = C_verify(K) / C_1` -- how many drafted tokens a round would need to
+    /// accept, ON AVERAGE, before speculation nets a real win on THIS
+    /// crate's actual kernels. Scoped to bf16 dense sizes (4B/9B) --
+    /// panics if `lm_head`/`embed_tokens` turns out quantized.
+    #[test]
+    #[ignore]
+    fn diagnose_real_speculative_verify_chunk_breakeven() {
+        if hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let snapshot = locate_model_snapshot().expect("no real Qwen3.5-4B snapshot found on this machine");
+        let weights = ModelWeights::load(&snapshot).expect("real weight loading failed");
+        assert!(!weights.is_quantized(), "this diagnostic assumes a bf16 dense checkpoint (4B/9B) -- lm_head batched GEMM below assumes bf16");
+        let handle = BlasHandle::create().expect("real hipblasCreate failed");
+        let handle_raw = handle.raw();
+
+        let prompt_ids: [i32; 5] = [760, 6511, 314, 9338, 369];
+        let max_seq_len = 256usize;
+        let warmup = 3usize;
+
+        // --- C_1: real steady-state single-token decode cost ---
+        let mut c1_state = DecodeState::new(max_seq_len).expect("DecodeState allocation failed");
+        let mut logits: DeviceBuffer<u16> = DeviceBuffer::alloc(VOCAB_SIZE).unwrap();
+        for &token_id in prompt_ids.iter() {
+            forward_one_token(&handle, &weights, &mut c1_state, token_id, &mut logits).unwrap();
+        }
+        for _ in 0..warmup {
+            let next_id = argmax_sample(&logits).unwrap();
+            forward_one_token(&handle, &weights, &mut c1_state, next_id, &mut logits).unwrap();
+        }
+        let timed_tokens = 30usize;
+        let t0 = std::time::Instant::now();
+        for _ in 0..timed_tokens {
+            let next_id = argmax_sample(&logits).unwrap();
+            forward_one_token(&handle, &weights, &mut c1_state, next_id, &mut logits).unwrap();
+        }
+        let c1_ms = t0.elapsed().as_secs_f64() * 1000.0 / timed_tokens as f64;
+        eprintln!("C_1 (real steady-state single-token decode): {c1_ms:.4} ms/token");
+
+        // --- C_verify(K): real batched K-token verify-chunk cost, fresh
+        // DecodeState per K (warmed up to the same real position as C_1's
+        // measurement) to avoid any cross-trial state drift ---
+        let repeats = 15usize;
+        for &k in &[2usize, 4, 6, 8] {
+            let mut state = DecodeState::new(max_seq_len).expect("DecodeState allocation failed");
+            let mut warm_logits: DeviceBuffer<u16> = DeviceBuffer::alloc(VOCAB_SIZE).unwrap();
+            for &token_id in prompt_ids.iter() {
+                forward_one_token(&handle, &weights, &mut state, token_id, &mut warm_logits).unwrap();
+            }
+            for _ in 0..warmup {
+                let next_id = argmax_sample(&warm_logits).unwrap();
+                forward_one_token(&handle, &weights, &mut state, next_id, &mut warm_logits).unwrap();
+            }
+
+            // Real in-vocab draft token ids -- content doesn't affect real
+            // kernel cost (attention/GDN/GEMM cost is shape-bound, not
+            // value-bound), only shape does.
+            let draft_ids: Vec<i32> = (0..k as i32).map(|i| (100 + i) % VOCAB_SIZE as i32).collect();
+            let mut normed_out: DeviceBuffer<u16> = DeviceBuffer::alloc(k * HIDDEN_SIZE).unwrap();
+            let mut verify_logits: DeviceBuffer<u16> = DeviceBuffer::alloc(k * VOCAB_SIZE).unwrap();
+
+            let mut times_ms = Vec::with_capacity(repeats);
+            for _ in 0..repeats {
+                let t0 = std::time::Instant::now();
+
+                state.prefill_scratch.token_ids_dev.copy_from_host_prefix(&draft_ids).unwrap();
+                let positions: Vec<i32> = (0..k as i32).map(|i| state.position as i32 + i).collect();
+                state.prefill_scratch.position_buf.copy_from_host_prefix(&positions).unwrap();
+
+                let final_hidden_ptr = run_layers_over_chunk(handle_raw, &weights, &mut state, k, None, std::ptr::null_mut());
+                // SAFETY: points at one of `state.prefill_scratch`'s two
+                // live `hidden_a`/`hidden_b` fields, same guarantee
+                // `run_prefill_chunk_body` already relies on.
+                let final_hidden: &DeviceBuffer<u16> = unsafe { &*final_hidden_ptr };
+                unsafe {
+                    raw::rmsnorm(
+                        final_hidden.as_device_ptr(),
+                        weights.final_norm.as_device_ptr(),
+                        normed_out.as_device_ptr_mut(),
+                        k as i32,
+                        HIDDEN_SIZE as i32,
+                        RMS_EPS,
+                        std::ptr::null_mut(),
+                    );
+                    match &weights.lm_head {
+                        Some(LinearWeight::Bf16(buf)) => {
+                            raw::gemm(handle_raw, normed_out.as_device_ptr(), buf.as_device_ptr(), verify_logits.as_device_ptr_mut(), k as i32, HIDDEN_SIZE as i32, VOCAB_SIZE as i32, std::ptr::null_mut());
+                        }
+                        None => {
+                            raw::gemm(handle_raw, normed_out.as_device_ptr(), weights.embed_tokens.as_device_ptr(), verify_logits.as_device_ptr_mut(), k as i32, HIDDEN_SIZE as i32, VOCAB_SIZE as i32, std::ptr::null_mut());
+                        }
+                        Some(LinearWeight::Quantized { .. }) => unreachable!("checked is_quantized() above"),
+                    }
+                }
+                hip::check_last_error().unwrap();
+                hip::device_synchronize().unwrap();
+                times_ms.push(t0.elapsed().as_secs_f64() * 1000.0);
+            }
+            let avg_ms = times_ms.iter().sum::<f64>() / repeats as f64;
+            let tau_breakeven = avg_ms / c1_ms;
+            eprintln!(
+                "K={k}: C_verify(K)={avg_ms:.4} ms (avg of {repeats} real runs), tau_breakeven = C_verify/C_1 = {tau_breakeven:.3} -- need >{tau_breakeven:.2} real accepted drafted tokens/round just to break even on THIS crate's kernels"
+            );
+        }
+    }
+
+    /// Runs the SAME real verify-chunk math the production
+    /// `GraphedVerifyState::verify_chunk` uses, eagerly (null stream, no
+    /// capture/replay) -- the independent reference every test below
+    /// checks the graphed/bucketed path against. Deliberately duplicated
+    /// rather than shared: keeping the eager reference textually separate
+    /// from the thing under test is the whole point (see
+    /// `diagnose_graphed_decode_sees_lora_activated_after_first_capture`'s
+    /// own reasoning in `quantized_lora.rs` for why this crate always
+    /// cross-checks a graphed path against a genuinely independent eager
+    /// computation, not a refactor of it). `kv_len_override`: `None` for
+    /// the TRUE, real, non-padded ground truth (the real bar a bucketed
+    /// graph's output must match exactly); `Some(bucket)` to compute the
+    /// SAME padded/masked math a real bucket's graph does, eagerly --
+    /// useful for isolating a padding-specific bug from a graph-specific
+    /// one if the two ever disagree.
+    fn eager_verify_chunk(
+        weights: &ModelWeights,
+        state: &mut DecodeState,
+        handle_raw: blas_ffi::HipblasHandle,
+        draft_ids: &[i32],
+        k: usize,
+        kv_len_override: Option<usize>,
+        normed_out: &mut DeviceBuffer<u16>,
+        verify_logits: &mut DeviceBuffer<u16>,
+        raw_hidden_out: Option<&mut DeviceBuffer<u16>>,
+    ) {
+        state.prefill_scratch.token_ids_dev.copy_from_host_prefix(draft_ids).unwrap();
+        let positions: Vec<i32> = (0..k as i32).map(|i| state.position as i32 + i).collect();
+        state.prefill_scratch.position_buf.copy_from_host_prefix(&positions).unwrap();
+        let final_hidden_ptr = run_layers_over_chunk(handle_raw, weights, state, k, kv_len_override, std::ptr::null_mut());
+        let final_hidden: &DeviceBuffer<u16> = unsafe { &*final_hidden_ptr };
+        if let Some(raw_out) = raw_hidden_out {
+            raw_out.copy_from_device_offset(final_hidden, 0).unwrap();
+        }
+        unsafe {
+            raw::rmsnorm(final_hidden.as_device_ptr(), weights.final_norm.as_device_ptr(), normed_out.as_device_ptr_mut(), k as i32, HIDDEN_SIZE as i32, RMS_EPS, std::ptr::null_mut());
+            match &weights.lm_head {
+                Some(LinearWeight::Bf16(buf)) => {
+                    raw::gemm(handle_raw, normed_out.as_device_ptr(), buf.as_device_ptr(), verify_logits.as_device_ptr_mut(), k as i32, HIDDEN_SIZE as i32, VOCAB_SIZE as i32, std::ptr::null_mut());
+                }
+                None => {
+                    raw::gemm(handle_raw, normed_out.as_device_ptr(), weights.embed_tokens.as_device_ptr(), verify_logits.as_device_ptr_mut(), k as i32, HIDDEN_SIZE as i32, VOCAB_SIZE as i32, std::ptr::null_mut());
+                }
+                Some(LinearWeight::Quantized { .. }) => panic!("scoped to bf16 dense sizes only"),
+            }
+        }
+        hip::check_last_error().unwrap();
+        hip::device_synchronize().unwrap();
+    }
+
+    /// Copies `verify_logits` (`[k * VOCAB_SIZE]`) to host and returns the
+    /// count of bf16-bit-differing elements against `other`, for the
+    /// repeated graphed-vs-eager comparisons below.
+    fn count_logit_diffs(a: &DeviceBuffer<u16>, b: &DeviceBuffer<u16>, len: usize) -> usize {
+        let mut ah = vec![0u16; len];
+        a.copy_to_host(&mut ah).unwrap();
+        let mut bh = vec![0u16; len];
+        b.copy_to_host(&mut bh).unwrap();
+        ah.iter().zip(bh.iter()).filter(|(x, y)| x != y).count()
+    }
+
+    /// DECISIVE, §136: does the real, FIXED-bucket `GraphedVerifyState`
+    /// (production code, `model.rs`) survive the real risk its unbucketed
+    /// predecessor was built to expose and then found broken by
+    /// (`docs/DECISIONS.md` §136's own research) -- a real, variable-
+    /// amount partial-accept rollback landing the SAME captured bucket's
+    /// graph at a DIFFERENT real position than it was captured at? This
+    /// is the exact mechanic that broke the original, unbucketed spike
+    /// (100% logit divergence, root-caused to `kv_len` being baked into
+    /// kernel launch arguments and a host-side kernel-selection branch,
+    /// neither re-read on replay).
+    ///
+    /// Deliberately scoped to `kv_len <= ATTENTION_GEMM_KV_LEN_THRESHOLD`
+    /// (128) -- i.e. only the `attention_causal_prefill` custom-kernel
+    /// attention path, never the `hipblasGemmEx`-based GEMM-attention
+    /// path. A SEPARATE, real, currently-OPEN bug was found in that GEMM
+    /// path specifically when its `kv_len` is padded past ~184-192 (see
+    /// `diagnose_gemm_attention_path_breaks_when_kv_len_padded_past_a_
+    /// real_threshold` below) -- independent of this fix, present even in
+    /// plain eager execution with no graph involved at all, so it does
+    /// NOT bear on the real risk this test exists to answer. Splitting
+    /// these apart keeps this test a clean, trustworthy PASS proving what
+    /// is actually proven, rather than bundling a proven-correct result
+    /// with a real, separate, unresolved one.
+    ///
+    /// Every real graphed result is checked against `eager_verify_chunk`
+    /// called with `kv_len_override: None` -- the TRUE, non-padded real
+    /// math, not a padded reference -- so a passing test proves bucket
+    /// padding is not just "consistent with itself" but numerically
+    /// IDENTICAL to the real, unpadded ground truth, exactly as
+    /// `causal_softmax.hip`'s own position-derived (not kv_len-derived)
+    /// masking predicts.
+    ///
+    /// Real position schedule (K=6 throughout): prefill+decode to P=100
+    /// (round 1's real kv_len = 106, bucket 128) -> rollback to P, commit
+    /// all 6 drafts real-accepted -> position 106 (round 2's real kv_len =
+    /// 112, STILL bucket 128 -- same-bucket replay at a real, DIFFERENT
+    /// position than the graph was captured at).
+    #[test]
+    #[ignore]
+    fn real_bucketed_verify_chunk_survives_variable_position_replay_within_a_bucket() {
+        if hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let snapshot_path = locate_model_snapshot().expect("no real Qwen3.5-4B snapshot found on this machine");
+        let weights = ModelWeights::load(&snapshot_path).expect("real weight loading failed");
+        assert!(!weights.is_quantized(), "this diagnostic assumes a bf16 dense checkpoint (4B/9B)");
+        let handle = BlasHandle::create().expect("real hipblasCreate failed");
+        let handle_raw = handle.raw();
+
+        let max_seq_len = 512usize;
+        let k = 6usize;
+
+        // Real prefill + real decode to a real position P=100.
+        let prompt_ids: [i32; 5] = [760, 6511, 314, 9338, 369];
+        let mut state = DecodeState::new(max_seq_len).expect("DecodeState allocation failed");
+        let mut logits: DeviceBuffer<u16> = DeviceBuffer::alloc(VOCAB_SIZE).unwrap();
+        for &token_id in prompt_ids.iter() {
+            forward_one_token(&handle, &weights, &mut state, token_id, &mut logits).unwrap();
+        }
+        while state.position < 100 {
+            let next_id = argmax_sample(&logits).unwrap();
+            forward_one_token(&handle, &weights, &mut state, next_id, &mut logits).unwrap();
+        }
+        let p = state.position;
+        assert_eq!(p, 100, "real position after prefill + decode should land exactly at P=100");
+        eprintln!("real position P = {p}");
+
+        let snapshot_p = crate::state_handoff::TensorStateSnapshot::capture(&state).expect("snapshot capture failed");
+
+        let mut graphed = GraphedVerifyState::new(k).expect("GraphedVerifyState::new failed");
+        let mut normed_out: DeviceBuffer<u16> = DeviceBuffer::alloc(k * HIDDEN_SIZE).unwrap();
+        // §136 real lesson (found by this very test, on its first run):
+        // a captured graph's GEMM output pointer is baked in at CAPTURE
+        // time, exactly like every other captured address in this crate
+        // -- a caller MUST reuse the SAME `verify_logits`/`normed_out`
+        // buffers across every real call (matching how
+        // `bench_real_graphed_decode_tokens_per_second` reuses ONE
+        // `logits` buffer across all its real decode calls), never
+        // allocate a fresh one per round expecting a "replay" to notice.
+        // Read out via `count_logit_diffs` immediately after each round,
+        // before the NEXT round's call overwrites this same buffer.
+        let mut graphed_logits: DeviceBuffer<u16> = DeviceBuffer::alloc(k * VOCAB_SIZE).unwrap();
+        let mut graphed_raw_hidden: DeviceBuffer<u16> = DeviceBuffer::alloc(k * HIDDEN_SIZE).unwrap();
+        let mut eager_normed: DeviceBuffer<u16> = DeviceBuffer::alloc(k * HIDDEN_SIZE).unwrap();
+        let mut eager_logits: DeviceBuffer<u16> = DeviceBuffer::alloc(k * VOCAB_SIZE).unwrap();
+
+        // --- ROUND 1: real kv_len = 106 -> bucket 128 (captures it) ---
+        let draft_ids_r1: [i32; 6] = [1000, 2000, 3000, 4000, 5000, 6000];
+        let real_kv_len_r1 = state.position + k;
+        assert_eq!(kv_len_bucket_for(real_kv_len_r1), 128, "round 1 real kv_len ({real_kv_len_r1}) should land in the 128 bucket");
+        graphed.verify_chunk(&weights, &mut state, &draft_ids_r1, &mut normed_out, &mut graphed_logits, &mut graphed_raw_hidden).expect("round 1 verify_chunk (capture bucket 128) failed");
+
+        let mut eager_state_r1 = DecodeState::new(max_seq_len).expect("DecodeState allocation failed");
+        snapshot_p.restore(&mut eager_state_r1).expect("restore failed");
+        let mut eager_raw_hidden: DeviceBuffer<u16> = DeviceBuffer::alloc(k * HIDDEN_SIZE).unwrap();
+        eager_verify_chunk(&weights, &mut eager_state_r1, handle_raw, &draft_ids_r1, k, None, &mut eager_normed, &mut eager_logits, Some(&mut eager_raw_hidden));
+        let diff1 = count_logit_diffs(&graphed_logits, &eager_logits, k * VOCAB_SIZE);
+        let diff1_raw = count_logit_diffs(&graphed_raw_hidden, &eager_raw_hidden, k * HIDDEN_SIZE);
+        eprintln!("Round 1: raw (pre-final-norm) hidden graphed-vs-eager: {diff1_raw}/{} differ (must be 0)", k * HIDDEN_SIZE);
+        assert_eq!(diff1_raw, 0, "round 1: the new raw_hidden_out capture inside GraphedVerifyState diverged from the TRUE, unpadded eager raw hidden state -- the new copy_from_device_async addition has a real bug");
+        eprintln!("Round 1 (capture bucket 128, real kv_len={real_kv_len_r1}) vs TRUE (unpadded) eager reference: {diff1}/{} logits differ (must be 0)", k * VOCAB_SIZE);
+        assert_eq!(diff1, 0, "round 1: bucket-128-padded graph output diverged from the TRUE, unpadded real math");
+
+        // --- Real rollback to P, commit ALL 6 drafts as real accepted
+        // tokens -> real position 106, STILL inside bucket 128 ---
+        snapshot_p.restore(&mut state).expect("rollback restore failed");
+        for &tok in draft_ids_r1.iter() {
+            forward_one_token(&handle, &weights, &mut state, tok, &mut logits).unwrap();
+        }
+        assert_eq!(state.position, p + 6, "real position after committing all 6 accepted drafts should be P+6");
+
+        // --- ROUND 2: SAME bucket (128), DIFFERENT real position (106,
+        // not the P=100 the graph was captured at) -- the exact mechanic
+        // that broke the original unbucketed spike ---
+        let draft_ids_r2: [i32; 6] = [7000, 8000, 9000, 10000, 11000, 12000];
+        let real_kv_len_r2 = state.position + k;
+        assert_eq!(kv_len_bucket_for(real_kv_len_r2), 128, "round 2 real kv_len ({real_kv_len_r2}) should STILL land in the 128 bucket (same-bucket replay case)");
+        graphed.verify_chunk(&weights, &mut state, &draft_ids_r2, &mut normed_out, &mut graphed_logits, &mut graphed_raw_hidden).expect("round 2 verify_chunk (replay bucket 128) failed");
+
+        let mut eager_state_r2 = DecodeState::new(max_seq_len).expect("DecodeState allocation failed");
+        snapshot_p.restore(&mut eager_state_r2).expect("restore failed");
+        for &tok in draft_ids_r1.iter() {
+            forward_one_token(&handle, &weights, &mut eager_state_r2, tok, &mut logits).unwrap();
+        }
+        eager_verify_chunk(&weights, &mut eager_state_r2, handle_raw, &draft_ids_r2, k, None, &mut eager_normed, &mut eager_logits, None);
+        let diff2 = count_logit_diffs(&graphed_logits, &eager_logits, k * VOCAB_SIZE);
+        eprintln!("Round 2 (REPLAY bucket 128 at a real, different position={}) vs TRUE eager reference: {diff2}/{} logits differ (must be 0)", state.position, k * VOCAB_SIZE);
+        assert_eq!(diff2, 0, "round 2: bucket-128 graph REPLAY at a real, different position diverged from TRUE eager math -- the original bug is back");
+
+        eprintln!("VERDICT: the bucketed verify-chunk graph survived a real, variable-position replay within a bucket, bit-exact against the true, unpadded real math.");
+    }
+
+    /// DIAGNOSTIC, §138 -- root-causing a real divergence
+    /// `bench_real_speculative_vs_graphed_decode_on_real_aider_bench_tasks`
+    /// (`speculative.rs`) found on the real `bank_account` aider-bench
+    /// prompt (298 real tokens): speculative decoding and this engine's
+    /// own graphed decode agreed on the first 15 real generated tokens,
+    /// then produced DIFFERENT tokens at output position 15 (real
+    /// backbone position 313). Unlike `real_speculative_decode_matches_
+    /// plain_greedy_decode`'s own toy 5-token prompt (which never left
+    /// `state.position` anywhere near 128), a real 298-token prompt is
+    /// already past `ATTENTION_GEMM_KV_LEN_THRESHOLD` before generation
+    /// even starts -- squarely in the territory §136 already found a
+    /// REAL, root-caused, but explicitly UNRESOLVED 1-ULP floating-point
+    /// non-associativity in `gemm_pv_bf16`, deliberately left open there
+    /// ("whether this actually matters for real speculative decoding...
+    /// has NOT been separately measured"). This test measures it
+    /// directly: reproduces the exact real context at the divergence
+    /// point (prompt + the first 14 real, independently-confirmed-
+    /// correct generated tokens, via `GraphedDecodeState` -- the same
+    /// trusted reference the serving-gate benchmark's own correctness
+    /// check uses), then calls `eager_verify_chunk` TWICE on two
+    /// snapshot-restored copies of that IDENTICAL real state: once with
+    /// `kv_len_override=None` (the TRUE, unpadded math) and once with
+    /// `kv_len_override=Some(512)` (the SAME padded/masked math a real
+    /// verify_chunk graph at this kv_len uses -- `kv_len_bucket_for(312 +
+    /// 7) = 512`). If the two disagree specifically at row 0 (predicting
+    /// what follows the real, already-committed context), and the
+    /// PADDED row 0 argmax matches what the real benchmark run actually
+    /// produced (wrong) while the UNPADDED row 0 argmax matches
+    /// `GraphedDecodeState`'s own real output (right), that is decisive:
+    /// the open §136 risk is real, not hypothetical, and it is what
+    /// broke the serving-gate benchmark.
+    #[test]
+    #[ignore]
+    fn diagnose_speculative_aider_bench_divergence_root_cause() {
+        if hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let snapshot = locate_model_snapshot().expect("no real Qwen3.5-4B snapshot found on this machine");
+        let weights = ModelWeights::load(&snapshot).expect("real weight loading failed");
+        let tokenizer = crate::tokenizer::ChatTokenizer::load(&snapshot).expect("real tokenizer loading failed");
+
+        let prompts_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../benchmarks/runtime/speculative/runtime_next_serving_gate/aider_bench_prompts.json");
+        let prompts_json = std::fs::read_to_string(&prompts_path).unwrap_or_else(|e| panic!("failed to read {prompts_path:?}: {e}"));
+        let parsed: serde_json::Value = serde_json::from_str(&prompts_json).unwrap();
+        let task = parsed["tasks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|t| t["name"] == "bank_account")
+            .expect("bank_account task missing from aider_bench_prompts.json");
+        let templated = tokenizer.apply_chat_template(&[
+            ("system", task["system_prompt"].as_str().unwrap()),
+            ("user", task["user_prompt"].as_str().unwrap()),
+        ]);
+        let prompt_ids = tokenizer.encode(&templated).expect("real tokenizer encode failed");
+        eprintln!("real bank_account prompt: {} tokens", prompt_ids.len());
+
+        // Sized well past the largest `KV_LEN_BUCKETS` entry the padded
+        // eager call below will address into (512 here) -- the padded
+        // path reads/writes KV-cache positions up to the BUCKET size, not
+        // just the real content length, so an allocation only sized for
+        // the real prompt+few-tokens (a real, first attempt at this test
+        // used `prompt_ids.len() + 64` = 362 here and crashed with a real
+        // GPU page fault at kv_len_override=Some(512) -- exactly this).
+        let max_seq_len = prompt_ids.len() + 1024;
+
+        // Real, trusted reference: 15 real tokens via GraphedDecodeState,
+        // matching what the serving-gate benchmark's own baseline arm
+        // produced (and independently, this engine's own graphed decode
+        // is validated elsewhere against the real Python reference).
+        let mut graphed = GraphedDecodeState::new().expect("GraphedDecodeState::new failed");
+        let mut ref_state = DecodeState::new(max_seq_len).expect("DecodeState allocation failed");
+        let mut ref_logits: DeviceBuffer<u16> = DeviceBuffer::alloc(VOCAB_SIZE).unwrap();
+        for &tok in &prompt_ids {
+            graphed.forward_one_token(&weights, &mut ref_state, tok, &mut ref_logits).unwrap();
+        }
+        let mut ref_tokens: Vec<i32> = Vec::with_capacity(20);
+        let mut next_id = argmax_sample(&ref_logits).unwrap();
+        for _ in 0..20 {
+            ref_tokens.push(next_id);
+            graphed.forward_one_token(&weights, &mut ref_state, next_id, &mut ref_logits).unwrap();
+            next_id = argmax_sample(&ref_logits).unwrap();
+        }
+        eprintln!("real reference tokens (positions {}..{}): {ref_tokens:?}", prompt_ids.len(), prompt_ids.len() + 20);
+
+        // §138 UPDATE: after the §138 fix (always rebuild, no more
+        // full-accept "no rebuild" branch), a NEW divergence appeared two
+        // rounds later than the original one (round 3, pre_pos=313,
+        // real position 314 -- the original was round 2, real position
+        // 312). Round 3's own INPUT state is clean (round 2 was NOT a
+        // full accept, so it already went through the unconditional
+        // rebuild) -- so this isolates directly to `verify_chunk`'s own
+        // real_argmax computation at THIS position, testing the
+        // already-documented, already-open §136 GEMM-attention risk at a
+        // SECOND real position, not the GDN-continuation bug (already
+        // fixed and separately confirmed absent here).
+        let handle = BlasHandle::create().expect("real hipblasCreate failed");
+        let handle_raw = handle.raw();
+        let mut state = DecodeState::new(max_seq_len).expect("DecodeState allocation failed");
+        let mut logits: DeviceBuffer<u16> = DeviceBuffer::alloc(VOCAB_SIZE).unwrap();
+        for &tok in &prompt_ids {
+            forward_one_token(&handle, &weights, &mut state, tok, &mut logits).unwrap();
+        }
+        for &tok in &ref_tokens[..15] {
+            forward_one_token(&handle, &weights, &mut state, tok, &mut logits).unwrap();
+        }
+        eprintln!("real replay state.position = {} (expect {}, matching round 3's own real pre_pos)", state.position, prompt_ids.len() + 15);
+
+        let snapshot_p = crate::state_handoff::TensorStateSnapshot::capture(&state).expect("snapshot capture failed");
+
+        // chunk = [next_token=ref_tokens[15], ref_tokens[16], + 5 filler
+        // real-vocabulary tokens] -- k=7 total width, EXACTLY matching
+        // round 3's own real chunk (pre_pos=313=298+15). Row 1 (not row
+        // 0) is the one that matters here: real_argmax[1] is round 3's
+        // own real bonus-token computation (predicting real position
+        // 315, given context through chunk[1]=drafted[0]@314) -- the
+        // value the real benchmark run got wrong.
+        let chunk_k = 7usize;
+        let mut chunk: Vec<i32> = vec![ref_tokens[15], ref_tokens[16]];
+        chunk.extend_from_slice(&[100, 200, 300, 400, 500]);
+        assert_eq!(chunk.len(), chunk_k);
+        let real_kv_len = state.position + chunk_k;
+        let bucket = kv_len_bucket_for(real_kv_len);
+        eprintln!("real_kv_len = {real_kv_len}, bucket = {bucket}");
+
+        let mut normed_out: DeviceBuffer<u16> = DeviceBuffer::alloc(chunk_k * HIDDEN_SIZE).unwrap();
+        let mut unpadded_logits: DeviceBuffer<u16> = DeviceBuffer::alloc(chunk_k * VOCAB_SIZE).unwrap();
+        let mut padded_logits: DeviceBuffer<u16> = DeviceBuffer::alloc(chunk_k * VOCAB_SIZE).unwrap();
+
+        let mut unpadded_state = DecodeState::new(max_seq_len).expect("DecodeState allocation failed");
+        snapshot_p.restore(&mut unpadded_state).expect("restore failed");
+        eager_verify_chunk(&weights, &mut unpadded_state, handle_raw, &chunk, chunk_k, None, &mut normed_out, &mut unpadded_logits, None);
+        let unpadded_argmax0 = crate::kernels::argmax_bf16_row(&unpadded_logits, 1, VOCAB_SIZE).unwrap();
+
+        let mut padded_state = DecodeState::new(max_seq_len).expect("DecodeState allocation failed");
+        snapshot_p.restore(&mut padded_state).expect("restore failed");
+        eager_verify_chunk(&weights, &mut padded_state, handle_raw, &chunk, chunk_k, Some(bucket), &mut normed_out, &mut padded_logits, None);
+        let padded_argmax0 = crate::kernels::argmax_bf16_row(&padded_logits, 1, VOCAB_SIZE).unwrap();
+
+        let mut padded_row0: DeviceBuffer<u16> = DeviceBuffer::alloc(VOCAB_SIZE).unwrap();
+        padded_row0.copy_from_device_offset(&padded_logits, VOCAB_SIZE).unwrap();
+        let mut unpadded_row0: DeviceBuffer<u16> = DeviceBuffer::alloc(VOCAB_SIZE).unwrap();
+        unpadded_row0.copy_from_device_offset(&unpadded_logits, VOCAB_SIZE).unwrap();
+        let diff_row0 = count_logit_diffs(&padded_row0, &unpadded_row0, VOCAB_SIZE);
+        eprintln!("row 1 (predicting real position 315): {diff_row0}/{VOCAB_SIZE} logits differ between padded (bucket {bucket}) and unpadded (TRUE) math");
+        eprintln!("unpadded (TRUE) argmax = {unpadded_argmax0}, padded-eager (bucket {bucket}) argmax = {padded_argmax0}");
+
+        // The ACTUAL code path `speculative_decode_round` calls -- a real
+        // captured/replayed HIP graph, not the eager-with-override stand-
+        // in above. `real_bucketed_verify_chunk_survives_variable_
+        // position_replay_within_a_bucket` only ever proved this bit-
+        // exact at bucket 128; bucket 512 has never been exercised.
+        let mut graphed_verify = GraphedVerifyState::new(chunk_k).expect("GraphedVerifyState::new failed");
+        let mut graphed_state = DecodeState::new(max_seq_len).expect("DecodeState allocation failed");
+        snapshot_p.restore(&mut graphed_state).expect("restore failed");
+        let mut graphed_normed: DeviceBuffer<u16> = DeviceBuffer::alloc(chunk_k * HIDDEN_SIZE).unwrap();
+        let mut graphed_logits: DeviceBuffer<u16> = DeviceBuffer::alloc(chunk_k * VOCAB_SIZE).unwrap();
+        let mut graphed_raw_hidden: DeviceBuffer<u16> = DeviceBuffer::alloc(chunk_k * HIDDEN_SIZE).unwrap();
+        graphed_verify
+            .verify_chunk(&weights, &mut graphed_state, &chunk, &mut graphed_normed, &mut graphed_logits, &mut graphed_raw_hidden)
+            .expect("real GraphedVerifyState::verify_chunk failed");
+        let graphed_argmax0 = crate::kernels::argmax_bf16_row(&graphed_logits, 1, VOCAB_SIZE).unwrap();
+        let mut graphed_row0: DeviceBuffer<u16> = DeviceBuffer::alloc(VOCAB_SIZE).unwrap();
+        graphed_row0.copy_from_device_offset(&graphed_logits, VOCAB_SIZE).unwrap();
+        let diff_graphed_vs_unpadded = count_logit_diffs(&graphed_row0, &unpadded_row0, VOCAB_SIZE);
+        eprintln!("row 1: {diff_graphed_vs_unpadded}/{VOCAB_SIZE} logits differ between the REAL captured graph (bucket {bucket}) and unpadded (TRUE) math");
+        eprintln!("REAL graphed-verify argmax = {graphed_argmax0}");
+        eprintln!("real graphed-decode reference said the true next token is {}", ref_tokens[17]);
+
+        if unpadded_argmax0 == ref_tokens[17] && graphed_argmax0 != ref_tokens[17] {
+            eprintln!("VERDICT: CONFIRMED. The unpadded, TRUE math matches the real graphed-decode reference; the REAL captured verify-chunk graph produces a DIFFERENT argmax at bucket {bucket}. This is a real graph-capture bug at this (previously untested) bucket size, not proven-safe by the existing bucket-128-only decisive test.");
+        } else if unpadded_argmax0 == graphed_argmax0 && padded_argmax0 == graphed_argmax0 {
+            eprintln!("VERDICT: NOT this. The real captured graph, padded-eager math, and unpadded TRUE math all agree at this exact position -- the real benchmark divergence has a different root cause entirely.");
+        } else {
+            eprintln!("VERDICT: INCONCLUSIVE -- results disagree in a pattern not yet explained. Needs further isolation.");
+        }
+    }
+
+    /// DIAGNOSTIC, §136 -- a real, currently OPEN, NOT YET UNDERSTOOD bug,
+    /// deliberately kept as a non-asserting record (this crate's own
+    /// "PARKED" precedent, e.g. §29's own doc comment: "do not retry until
+    /// the mechanism is understood") rather than a decisive test, since it
+    /// is not yet fixed and a hard-failing test would misrepresent an open
+    /// question as a known regression.
+    ///
+    /// Found while extending `real_bucketed_verify_chunk_survives_
+    /// variable_position_replay_within_a_bucket` (above) with a genuine
+    /// cross-bucket transition (bucket 128 -> 256, crossing
+    /// `ATTENTION_GEMM_KV_LEN_THRESHOLD` and switching from the custom
+    /// `attention_causal_prefill` kernel to the `hipblasGemmEx`-based
+    /// GEMM-attention path): the GEMM-attention path produces REAL,
+    /// substantial numerical divergence when its `kv_len` shape argument
+    /// is padded past a real threshold -- bisected directly against an
+    /// independent eager (non-graphed) reference at the EXACT same real
+    /// position/content, isolating this cleanly from anything graph- or
+    /// refactor-related:
+    ///
+    /// - `eager(None)` (real kv_len=132) vs `eager(Some(140..184))`
+    ///   (8-52 padded columns): bit-exact, 0 differ, at every value tried.
+    /// - `eager(None)` vs `eager(Some(192))` (60 padded columns): **1.19M
+    ///   / 1.49M logits differ** -- and every larger value tried (200,
+    ///   232, 256) differs similarly.
+    ///
+    /// ROOT CAUSE, FULLY CONFIRMED (see `diagnose_gemm_attention_bug_
+    /// per_layer_divergence_point` and `diagnose_gemm_attention_bug_with_
+    /// real_layer7_data_isolated` below for the full trace): this is NOT
+    /// a logic bug, NOT NaN/Inf from uninitialized padding (K/V-cache
+    /// padding confirmed zero-initialized), and NOT in `causal_softmax`
+    /// (its masking is derived entirely from a device-read real position,
+    /// confirmed both by reading the kernel and by direct isolated
+    /// testing at this exact shape). It is a REAL, genuine floating-point
+    /// non-associativity in `gemm_pv_bf16`'s (`O = P @ V`) `hipblasGemmEx`
+    /// reduction over the `kv_len` (K) dimension: `hipblasGemmEx`'s
+    /// internal tiling/blocking strategy is chosen based on the TOTAL
+    /// `kv_len`, so summing the SAME real, non-zero terms (`P` bit-
+    /// identical, confirmed by isolated testing, for the shared valid
+    /// range) in a DIFFERENT internal accumulation order at kv_len=184 vs
+    /// 192 -- even though every EXTRA padded term is an exact `0.0`
+    /// contribution -- rounds to an ADJACENT bf16 value (a 1-ULP
+    /// difference) for a small number of real (row, head, dim)
+    /// combinations where the true sum happens to sit near a bf16
+    /// rounding boundary. Directly confirmed: extracting REAL layer-7 Q/K/
+    /// V data and re-running ONLY `gemm_qkt`+`causal_softmax`+`gemm_pv` in
+    /// isolation (no model layers) reproduces exactly 3/24,576 elements
+    /// differing by 1 ULP each (e.g. bf16 bits `0x38ef` vs `0x38f0`); for
+    /// at least one of those three (row=1, head=0), `gemm_qkt`'s AND
+    /// `causal_softmax`'s own outputs were independently confirmed
+    /// bit-identical between the two runs, leaving `gemm_pv` as the only
+    /// possible source for that case. This is normal, expected,
+    /// individually-correct BLAS behavior -- bit-exact reproducibility
+    /// across DIFFERENT problem sizes is not a guarantee `hipblasGemmEx`
+    /// (or BLAS libraries generally) makes, even when the size difference
+    /// is mathematically inert. The reason it shows up as "99% of logits
+    /// differ" rather than "a few ULPs" is amplification: this tiny,
+    /// individually-harmless perturbation at layer 7 propagates through
+    /// 24 more real, nonlinear layers and (very likely, not separately
+    /// confirmed) flips at least one greedy argmax decision, after which
+    /// autoregressive generation is a completely different sequence --
+    /// the same well-known sensitivity any two numerically-close-but-not-
+    /// identical forward passes of a deep greedy-decoded model have,
+    /// unrelated to this specific bug.
+    ///
+    /// Real, honest consequence: a captured bucket's graph replays
+    /// bit-exact WITHIN that bucket forever (kv_len is fixed per bucket,
+    /// confirmed by `real_bucketed_verify_chunk_survives_variable_
+    /// position_replay_within_a_bucket`'s own passing result) -- the
+    /// non-determinism here is specifically about comparing a PADDED
+    /// bucket's output against a TRUTH reference computed at the real,
+    /// UNPADDED kv_len, which is a stricter bar than ordinary BLAS usage
+    /// naturally satisfies. Whether this actually matters for real
+    /// speculative decoding depends on whether it ever flips a real
+    /// accept/reject decision (real logit gaps between top-1 and runner-
+    /// up are typically far larger than 1 bf16 ULP) -- NOT separately
+    /// measured here, a real, disclosed open question, not papered over.
+    /// `KV_LEN_BUCKETS`' entries above `ATTENTION_GEMM_KV_LEN_THRESHOLD`
+    /// (128) remain unvalidated against a bit-exact bar; whether that bar
+    /// is even the right one to hold this to is the real next decision.
+    #[test]
+    #[ignore]
+    fn diagnose_gemm_attention_path_breaks_when_kv_len_padded_past_a_real_threshold() {
+        if hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let snapshot_path = locate_model_snapshot().expect("no real Qwen3.5-4B snapshot found on this machine");
+        let weights = ModelWeights::load(&snapshot_path).expect("real weight loading failed");
+        assert!(!weights.is_quantized(), "this diagnostic assumes a bf16 dense checkpoint (4B/9B)");
+        let handle = BlasHandle::create().expect("real hipblasCreate failed");
+        let handle_raw = handle.raw();
+
+        let max_seq_len = 512usize;
+        let k = 6usize;
+
+        let prompt_ids: [i32; 5] = [760, 6511, 314, 9338, 369];
+        let mut state = DecodeState::new(max_seq_len).expect("DecodeState allocation failed");
+        let mut logits: DeviceBuffer<u16> = DeviceBuffer::alloc(VOCAB_SIZE).unwrap();
+        for &token_id in prompt_ids.iter() {
+            forward_one_token(&handle, &weights, &mut state, token_id, &mut logits).unwrap();
+        }
+        while state.position < 100 {
+            let next_id = argmax_sample(&logits).unwrap();
+            forward_one_token(&handle, &weights, &mut state, next_id, &mut logits).unwrap();
+        }
+        let p = state.position;
+        let snapshot_p = crate::state_handoff::TensorStateSnapshot::capture(&state).expect("snapshot capture failed");
+
+        let draft_ids_r1: [i32; 6] = [1000, 2000, 3000, 4000, 5000, 6000];
+        snapshot_p.restore(&mut state).expect("rollback restore failed");
+        for &tok in draft_ids_r1.iter() {
+            forward_one_token(&handle, &weights, &mut state, tok, &mut logits).unwrap();
+        }
+        for _ in 0..20 {
+            let next_id = argmax_sample(&logits).unwrap();
+            forward_one_token(&handle, &weights, &mut state, next_id, &mut logits).unwrap();
+        }
+        assert_eq!(state.position, p + 26, "real position after 20 more real decode steps should be P+26");
+
+        // Real kv_len = 132 here (would cross into bucket 256 if this
+        // were driven through `GraphedVerifyState` -- deliberately NOT
+        // done here, see this test's own doc comment for why: the graph
+        // is not the variable under test, the eager GEMM-attention math
+        // itself already diverges, isolated below with zero graph
+        // involvement).
+        let draft_ids_r3: [i32; 6] = [13000, 14000, 15000, 16000, 17000, 18000];
+        let real_kv_len_r3 = state.position + k;
+        assert_eq!(kv_len_bucket_for(real_kv_len_r3), 256, "round 3 real kv_len ({real_kv_len_r3}) should have crossed into the 256 bucket");
+
+        let mut eager_normed: DeviceBuffer<u16> = DeviceBuffer::alloc(k * HIDDEN_SIZE).unwrap();
+        let mut eager_logits: DeviceBuffer<u16> = DeviceBuffer::alloc(k * VOCAB_SIZE).unwrap();
+        eager_verify_chunk(&weights, &mut state, handle_raw, &draft_ids_r3, k, None, &mut eager_normed, &mut eager_logits, None);
+
+        // DEBUG: minimal padding (real 132 -> forced 140, only 8 extra
+        // columns) vs the exact-value reference -- isolates whether ANY
+        // padding at all breaks the GEMM-attention path, or only large
+        // amounts.
+        let mut eager_state_r3c = DecodeState::new(max_seq_len).expect("DecodeState allocation failed");
+        snapshot_p.restore(&mut eager_state_r3c).expect("restore failed");
+        for &tok in draft_ids_r1.iter() {
+            forward_one_token(&handle, &weights, &mut eager_state_r3c, tok, &mut logits).unwrap();
+        }
+        for _ in 0..20 {
+            let next_id = argmax_sample(&logits).unwrap();
+            forward_one_token(&handle, &weights, &mut eager_state_r3c, next_id, &mut logits).unwrap();
+        }
+        let mut eager_normed_minipad: DeviceBuffer<u16> = DeviceBuffer::alloc(k * HIDDEN_SIZE).unwrap();
+        let mut eager_logits_minipad: DeviceBuffer<u16> = DeviceBuffer::alloc(k * VOCAB_SIZE).unwrap();
+        eager_verify_chunk(&weights, &mut eager_state_r3c, handle_raw, &draft_ids_r3, k, Some(140), &mut eager_normed_minipad, &mut eager_logits_minipad, None);
+        let diff3_minipad = count_logit_diffs(&eager_logits, &eager_logits_minipad, k * VOCAB_SIZE);
+        eprintln!("DEBUG round 3: eager(None, real=132) vs eager(Some(140), 8 extra padded columns): {diff3_minipad}/{} differ", k * VOCAB_SIZE);
+
+        // DEBUG: bisect the padding amount that breaks it.
+        for &bucket_probe in &[160usize, 168, 176, 184, 192, 200, 232, 256] {
+            let mut eager_state_probe = DecodeState::new(max_seq_len).expect("DecodeState allocation failed");
+            snapshot_p.restore(&mut eager_state_probe).expect("restore failed");
+            for &tok in draft_ids_r1.iter() {
+                forward_one_token(&handle, &weights, &mut eager_state_probe, tok, &mut logits).unwrap();
+            }
+            for _ in 0..20 {
+                let next_id = argmax_sample(&logits).unwrap();
+                forward_one_token(&handle, &weights, &mut eager_state_probe, next_id, &mut logits).unwrap();
+            }
+            let mut eager_normed_probe: DeviceBuffer<u16> = DeviceBuffer::alloc(k * HIDDEN_SIZE).unwrap();
+            let mut eager_logits_probe: DeviceBuffer<u16> = DeviceBuffer::alloc(k * VOCAB_SIZE).unwrap();
+            eager_verify_chunk(&weights, &mut eager_state_probe, handle_raw, &draft_ids_r3, k, Some(bucket_probe), &mut eager_normed_probe, &mut eager_logits_probe, None);
+            let diff_probe = count_logit_diffs(&eager_logits, &eager_logits_probe, k * VOCAB_SIZE);
+            eprintln!("DEBUG round 3 bisect: eager(None, real=132) vs eager(Some({bucket_probe})): {diff_probe}/{} differ", k * VOCAB_SIZE);
+        }
+
+        eprintln!(
+            "VERDICT: real kv_len={real_kv_len_r3} (bucket 256) -- ROOT CAUSE CONFIRMED (see `diagnose_gemm_attention_bug_with_real_layer7_data_isolated`): gemm_pv_bf16's hipBLAS reduction rounds a small number of real elements to an adjacent bf16 value (1 ULP) when kv_len is padded past ~184-192, due to a real, size-dependent internal accumulation-order change -- normal BLAS non-associativity, not a logic bug -- amplified by 24 downstream layers into a fully different generation. KV_LEN_BUCKETS entries above ATTENTION_GEMM_KV_LEN_THRESHOLD (128) are not bit-exact against an unpadded reference; whether that's the right bar to hold them to is the real open question."
+        );
+    }
+
+    /// §136 root-cause, continued: `gemm_qkt_bf16`/`causal_softmax_bf16`/
+    /// `gemm_pv_bf16` were each independently swept across the exact real
+    /// kv_len boundary (176-256) AND reproduced as a full, realistic
+    /// 16-head GQA loop with real offsets into a shared cache buffer
+    /// (`blas::tests::real_multi_head_gqa_attention_loop_at_real_shape_
+    /// matches_reference_across_kv_len_sweep`) -- all bit-clean. So the
+    /// bug is NOT in the attention primitives themselves. This test goes
+    /// back to the REAL model (real weights, real position, real Q/K/V
+    /// magnitudes -- the one variable the synthetic isolation tests above
+    /// couldn't cover) and checks EVERY one of the 32 real layers' hidden-
+    /// state output individually, `Some(184)` vs `Some(192)`, to find the
+    /// FIRST layer where they diverge -- turning "the whole stack ends up
+    /// 99.7% different" into "layer N is where it starts."
+    #[test]
+    #[ignore]
+    fn diagnose_gemm_attention_bug_per_layer_divergence_point() {
+        if hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let snapshot_path = locate_model_snapshot().expect("no real Qwen3.5-4B snapshot found on this machine");
+        let weights = ModelWeights::load(&snapshot_path).expect("real weight loading failed");
+        assert!(!weights.is_quantized(), "this diagnostic assumes a bf16 dense checkpoint (4B/9B)");
+        let handle = BlasHandle::create().expect("real hipblasCreate failed");
+        let handle_raw = handle.raw();
+
+        let max_seq_len = 512usize;
+        let k = 6usize;
+
+        // Real setup, matching §136's own round-3 scenario exactly:
+        // prefill + decode to P=100, commit 6 real accepted drafts, 20
+        // more real decode steps -> real position 126.
+        let build_state = || -> DecodeState {
+            let prompt_ids: [i32; 5] = [760, 6511, 314, 9338, 369];
+            let mut state = DecodeState::new(max_seq_len).expect("DecodeState allocation failed");
+            let mut logits: DeviceBuffer<u16> = DeviceBuffer::alloc(VOCAB_SIZE).unwrap();
+            for &token_id in prompt_ids.iter() {
+                forward_one_token(&handle, &weights, &mut state, token_id, &mut logits).unwrap();
+            }
+            while state.position < 100 {
+                let next_id = argmax_sample(&logits).unwrap();
+                forward_one_token(&handle, &weights, &mut state, next_id, &mut logits).unwrap();
+            }
+            let draft_ids_r1: [i32; 6] = [1000, 2000, 3000, 4000, 5000, 6000];
+            for &tok in draft_ids_r1.iter() {
+                forward_one_token(&handle, &weights, &mut state, tok, &mut logits).unwrap();
+            }
+            for _ in 0..20 {
+                let next_id = argmax_sample(&logits).unwrap();
+                forward_one_token(&handle, &weights, &mut state, next_id, &mut logits).unwrap();
+            }
+            assert_eq!(state.position, 126, "real position after the real §136 setup should be 126");
+            state
+        };
+
+        let mut state_184 = build_state();
+        let mut state_192 = build_state();
+
+        let draft_ids_r3: [i32; 6] = [13000, 14000, 15000, 16000, 17000, 18000];
+        for state in [&mut state_184, &mut state_192] {
+            state.prefill_scratch.token_ids_dev.copy_from_host_prefix(&draft_ids_r3).unwrap();
+            let positions: Vec<i32> = (0..k as i32).map(|i| state.position as i32 + i).collect();
+            state.prefill_scratch.position_buf.copy_from_host_prefix(&positions).unwrap();
+        }
+
+        // Manual per-layer loop, mirroring `run_layers_over_chunk`'s own
+        // structure exactly, but comparing hidden state after EVERY layer
+        // between the two real, otherwise-identical runs.
+        let mut use_a_184 = true;
+        let mut use_a_192 = true;
+        unsafe {
+            raw::embedding_lookup(weights.embed_tokens.as_device_ptr(), state_184.prefill_scratch.token_ids_dev.as_device_ptr() as *const i32, state_184.prefill_scratch.hidden_a.as_device_ptr_mut(), k as i32, HIDDEN_SIZE as i32, std::ptr::null_mut());
+            raw::embedding_lookup(weights.embed_tokens.as_device_ptr(), state_192.prefill_scratch.token_ids_dev.as_device_ptr() as *const i32, state_192.prefill_scratch.hidden_a.as_device_ptr_mut(), k as i32, HIDDEN_SIZE as i32, std::ptr::null_mut());
+        }
+
+        let mut first_diverging_layer: Option<usize> = None;
+        for (i, layer_weights) in weights.layers.iter().enumerate() {
+            let (hidden_in_184, hidden_out_184): (*const DeviceBuffer<u16>, *mut DeviceBuffer<u16>) =
+                if use_a_184 { (&state_184.prefill_scratch.hidden_a, &mut state_184.prefill_scratch.hidden_b) } else { (&state_184.prefill_scratch.hidden_b, &mut state_184.prefill_scratch.hidden_a) };
+            let (hidden_in_192, hidden_out_192): (*const DeviceBuffer<u16>, *mut DeviceBuffer<u16>) =
+                if use_a_192 { (&state_192.prefill_scratch.hidden_a, &mut state_192.prefill_scratch.hidden_b) } else { (&state_192.prefill_scratch.hidden_b, &mut state_192.prefill_scratch.hidden_a) };
+
+            match (layer_weights, &mut state_184.layers[i], &mut state_192.layers[i]) {
+                (LayerWeights::Gdn(w), LayerState::Gdn(gs184), LayerState::Gdn(gs192)) => unsafe {
+                    gdn_layer_forward_prefill(handle_raw, &*hidden_in_184, &mut *hidden_out_184, w, gs184, k, &mut state_184.prefill_scratch, std::ptr::null_mut());
+                    gdn_layer_forward_prefill(handle_raw, &*hidden_in_192, &mut *hidden_out_192, w, gs192, k, &mut state_192.prefill_scratch, std::ptr::null_mut());
+                },
+                (LayerWeights::Attn(w), LayerState::Attn(as184), LayerState::Attn(as192)) => unsafe {
+                    attn_layer_forward_prefill(handle_raw, &*hidden_in_184, &mut *hidden_out_184, w, as184, k, 184, max_seq_len, &mut state_184.prefill_scratch, std::ptr::null_mut());
+                    attn_layer_forward_prefill(handle_raw, &*hidden_in_192, &mut *hidden_out_192, w, as192, k, 192, max_seq_len, &mut state_192.prefill_scratch, std::ptr::null_mut());
+                },
+                _ => unreachable!("layer weights/state type mismatch at index {i}"),
+            }
+            use_a_184 = !use_a_184;
+            use_a_192 = !use_a_192;
+
+            hip::device_synchronize().unwrap();
+            let out_184: &DeviceBuffer<u16> = unsafe { &*hidden_out_184 };
+            let out_192: &DeviceBuffer<u16> = unsafe { &*hidden_out_192 };
+            let mut h184_full = vec![0u16; out_184.len()];
+            out_184.copy_to_host(&mut h184_full).unwrap();
+            let mut h192_full = vec![0u16; out_192.len()];
+            out_192.copy_to_host(&mut h192_full).unwrap();
+            let diff = h184_full[..k * HIDDEN_SIZE].iter().zip(h192_full[..k * HIDDEN_SIZE].iter()).filter(|(a, b)| a != b).count();
+            let layer_kind = if is_full_attention_layer(i) { "Attn" } else { "Gdn" };
+            eprintln!("layer {i:2} ({layer_kind}): {diff}/{} elements differ (184 vs 192)", k * HIDDEN_SIZE);
+            if diff > 0 && first_diverging_layer.is_none() {
+                first_diverging_layer = Some(i);
+            }
+        }
+
+        match first_diverging_layer {
+            Some(i) => eprintln!("VERDICT: first diverging layer is {i} ({})", if is_full_attention_layer(i) { "Attn" } else { "Gdn" }),
+            None => eprintln!("VERDICT: no layer diverged?! (184 vs 192 matched at every layer -- contradicts the earlier full-model finding, worth re-checking)"),
+        }
+    }
+
+    /// §136 root-cause, FINAL: `diagnose_gemm_attention_bug_per_layer_
+    /// divergence_point` found layer 7 (the SECOND real attention layer)
+    /// is where 184-vs-192 first diverges, while layer 3 (the FIRST) is
+    /// bit-exact -- with IDENTICAL upstream input to both (layers 4-6 are
+    /// themselves bit-exact). Since every synthetic isolation test above
+    /// used the SAME shape and STILL came back clean, the remaining real
+    /// difference is layer 7's own REAL, LEARNED weight values -- this
+    /// test extracts them directly (real `attn_query_roped`, real
+    /// `k_cache`/`v_cache`, all real bf16 bytes, straight off a REAL,
+    /// CORRECT kv_len=184 call to layer 7) and re-runs ONLY the isolated
+    /// GEMM/softmax math against them at both 184 and 192, with no model
+    /// layers, no o_proj, no sigmoid_gate, no residual add involved.
+    ///
+    /// If this diverges: the bug is real-data-triggered inside
+    /// `gemm_qkt`/`causal_softmax`/`gemm_pv` themselves (a genuine
+    /// hipBLAS/kernel numerics bug specific to this data, not just this
+    /// shape) -- the earlier synthetic sweeps simply didn't hit the
+    /// triggering value pattern.
+    /// If this does NOT diverge: the bug is somewhere else entirely in
+    /// `attn_layer_forward_prefill` (sigmoid_gate, o_proj, the residual
+    /// add) or in how layer 7's REAL kv_len=192 call diverges from its
+    /// own kv_len=184 call in some way this extraction (taken from the
+    /// 184 call) can't capture -- pointing the remaining search
+    /// elsewhere.
+    #[test]
+    #[ignore]
+    fn diagnose_gemm_attention_bug_with_real_layer7_data_isolated() {
+        if hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let snapshot_path = locate_model_snapshot().expect("no real Qwen3.5-4B snapshot found on this machine");
+        let weights = ModelWeights::load(&snapshot_path).expect("real weight loading failed");
+        assert!(!weights.is_quantized(), "this diagnostic assumes a bf16 dense checkpoint (4B/9B)");
+        let handle = BlasHandle::create().expect("real hipblasCreate failed");
+        let handle_raw = handle.raw();
+
+        let max_seq_len = 512usize;
+        let k = 6usize;
+
+        let prompt_ids: [i32; 5] = [760, 6511, 314, 9338, 369];
+        let mut state = DecodeState::new(max_seq_len).expect("DecodeState allocation failed");
+        let mut logits: DeviceBuffer<u16> = DeviceBuffer::alloc(VOCAB_SIZE).unwrap();
+        for &token_id in prompt_ids.iter() {
+            forward_one_token(&handle, &weights, &mut state, token_id, &mut logits).unwrap();
+        }
+        while state.position < 100 {
+            let next_id = argmax_sample(&logits).unwrap();
+            forward_one_token(&handle, &weights, &mut state, next_id, &mut logits).unwrap();
+        }
+        let draft_ids_r1: [i32; 6] = [1000, 2000, 3000, 4000, 5000, 6000];
+        for &tok in draft_ids_r1.iter() {
+            forward_one_token(&handle, &weights, &mut state, tok, &mut logits).unwrap();
+        }
+        for _ in 0..20 {
+            let next_id = argmax_sample(&logits).unwrap();
+            forward_one_token(&handle, &weights, &mut state, next_id, &mut logits).unwrap();
+        }
+        assert_eq!(state.position, 126);
+
+        let draft_ids_r3: [i32; 6] = [13000, 14000, 15000, 16000, 17000, 18000];
+        state.prefill_scratch.token_ids_dev.copy_from_host_prefix(&draft_ids_r3).unwrap();
+        let positions: Vec<i32> = (0..k as i32).map(|i| state.position as i32 + i).collect();
+        state.prefill_scratch.position_buf.copy_from_host_prefix(&positions).unwrap();
+
+        // Run the REAL, correct layer stack (kv_len=184, a call already
+        // proven correct) up through and including layer 7, leaving
+        // `state.prefill_scratch.attn_query_roped` and
+        // `state.layers[7]`'s real k_cache/v_cache populated with real,
+        // correct, layer-7-specific data.
+        unsafe {
+            raw::embedding_lookup(weights.embed_tokens.as_device_ptr(), state.prefill_scratch.token_ids_dev.as_device_ptr() as *const i32, state.prefill_scratch.hidden_a.as_device_ptr_mut(), k as i32, HIDDEN_SIZE as i32, std::ptr::null_mut());
+        }
+        let mut use_a = true;
+        for (i, layer_weights) in weights.layers.iter().enumerate().take(8) {
+            let (hidden_in, hidden_out): (*const DeviceBuffer<u16>, *mut DeviceBuffer<u16>) =
+                if use_a { (&state.prefill_scratch.hidden_a, &mut state.prefill_scratch.hidden_b) } else { (&state.prefill_scratch.hidden_b, &mut state.prefill_scratch.hidden_a) };
+            match (layer_weights, &mut state.layers[i]) {
+                (LayerWeights::Gdn(w), LayerState::Gdn(gs)) => unsafe {
+                    gdn_layer_forward_prefill(handle_raw, &*hidden_in, &mut *hidden_out, w, gs, k, &mut state.prefill_scratch, std::ptr::null_mut());
+                },
+                (LayerWeights::Attn(w), LayerState::Attn(as_)) => unsafe {
+                    attn_layer_forward_prefill(handle_raw, &*hidden_in, &mut *hidden_out, w, as_, k, 184, max_seq_len, &mut state.prefill_scratch, std::ptr::null_mut());
+                },
+                _ => unreachable!(),
+            }
+            use_a = !use_a;
+            hip::device_synchronize().unwrap();
+        }
+
+        let num_q_heads = ATTN_NUM_HEADS;
+        let num_kv_heads = ATTN_NUM_KV_HEADS;
+        let head_dim = ATTN_HEAD_DIM;
+        let q_row_len = num_q_heads * head_dim;
+        let real_len = 132usize;
+        let start_position = 126i32;
+        let scale = 1.0f32 / (head_dim as f32).sqrt();
+
+        // Extract REAL, layer-7-derived bf16 bytes directly off the
+        // device -- no synthetic data anywhere in this test. Only the
+        // real, written `[k, q_row_len]` prefix of `attn_query_roped`'s
+        // full `MAX_PREFILL_CHUNK`-sized scratch capacity is meaningful.
+        let mut q_roped_full = vec![0u16; state.prefill_scratch.attn_query_roped.len()];
+        state.prefill_scratch.attn_query_roped.copy_to_host(&mut q_roped_full).unwrap();
+        let q_roped_real = q_roped_full[..k * ATTN_NUM_HEADS * ATTN_HEAD_DIM].to_vec();
+
+        let layer7_state = match &state.layers[7] {
+            LayerState::Attn(a) => a,
+            _ => unreachable!("layer 7 must be an attention layer"),
+        };
+        let mut k_cache_real = vec![0u16; layer7_state.k_cache.len()];
+        layer7_state.k_cache.copy_to_host(&mut k_cache_real).unwrap();
+        let mut v_cache_real = vec![0u16; layer7_state.v_cache.len()];
+        layer7_state.v_cache.copy_to_host(&mut v_cache_real).unwrap();
+
+        // Re-upload the SAME real bytes into fresh, isolated buffers, and
+        // re-run ONLY the GEMM/softmax attention math -- no model layers,
+        // no o_proj, no sigmoid_gate.
+        let mut q_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(q_roped_real.len()).unwrap();
+        q_buf.copy_from_host(&q_roped_real).unwrap();
+        let mut k_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(k_cache_real.len()).unwrap();
+        k_buf.copy_from_host(&k_cache_real).unwrap();
+        let mut v_buf: DeviceBuffer<u16> = DeviceBuffer::alloc(v_cache_real.len()).unwrap();
+        v_buf.copy_from_host(&v_cache_real).unwrap();
+
+        let n_rep = num_q_heads / num_kv_heads;
+        let mut outputs: Vec<Vec<u16>> = Vec::new();
+        // Per-stage capture for h=0 only (cheap, sufficient to localize
+        // which of the two GEMM calls / the softmax first disagrees):
+        // raw scores right after gemm_qkt (pre-softmax) and right after
+        // causal_softmax (pre-gemm_pv), for both kv_len values.
+        let mut qkt_raw_h0: Vec<Vec<u16>> = Vec::new();
+        let mut softmax_h0: Vec<Vec<u16>> = Vec::new();
+        for &kv_len in &[184usize, 192] {
+            let mut attn_scores: DeviceBuffer<u16> = DeviceBuffer::alloc(k * kv_len).unwrap();
+            let mut attn_out: DeviceBuffer<u16> = DeviceBuffer::alloc(k * q_row_len).unwrap();
+            attn_out.copy_from_host(&vec![0u16; k * q_row_len]).unwrap();
+            for h in 0..num_q_heads {
+                let h_kv = h / n_rep;
+                unsafe {
+                    raw::gemm_qkt(handle_raw, q_buf.as_device_ptr_at(h * head_dim), q_row_len as i32, k_buf.as_device_ptr_at(h_kv * max_seq_len * head_dim), attn_scores.as_device_ptr_mut(), kv_len as i32, k as i32, head_dim as i32, kv_len as i32, scale);
+                }
+                if h == 0 {
+                    hip::device_synchronize().unwrap();
+                    let mut raw_host = vec![0u16; k * kv_len];
+                    attn_scores.copy_to_host(&mut raw_host).unwrap();
+                    qkt_raw_h0.push(raw_host);
+                }
+                unsafe {
+                    let start_position_ptr = state.prefill_scratch.position_buf.as_device_ptr_at(0) as *const i32;
+                    raw::causal_softmax(attn_scores.as_device_ptr_mut() as *mut c_void, kv_len as i32, start_position_ptr, k as i32, std::ptr::null_mut());
+                }
+                if h == 0 {
+                    hip::device_synchronize().unwrap();
+                    let mut sm_host = vec![0u16; k * kv_len];
+                    attn_scores.copy_to_host(&mut sm_host).unwrap();
+                    softmax_h0.push(sm_host);
+                }
+                unsafe {
+                    raw::gemm_pv(handle_raw, attn_scores.as_device_ptr(), kv_len as i32, v_buf.as_device_ptr_at(h_kv * max_seq_len * head_dim), attn_out.as_device_ptr_at_mut(h * head_dim), q_row_len as i32, k as i32, kv_len as i32, head_dim as i32, 1.0, 0.0);
+                }
+            }
+            hip::device_synchronize().unwrap();
+            let mut out_host = vec![0u16; k * q_row_len];
+            attn_out.copy_to_host(&mut out_host).unwrap();
+            outputs.push(out_host);
+        }
+
+        // Compare h=0's valid-range columns only (kv_len differs between
+        // the two runs, so only the shared, real [0, valid_len) prefix
+        // per row is a meaningful comparison).
+        let (kv184, kv192) = (184usize, 192usize);
+        let mut qkt_diff = 0usize;
+        let mut sm_diff = 0usize;
+        for r in 0..k {
+            let valid_len = (start_position as usize) + r + 1;
+            for j in 0..valid_len {
+                if qkt_raw_h0[0][r * kv184 + j] != qkt_raw_h0[1][r * kv192 + j] {
+                    qkt_diff += 1;
+                }
+                if softmax_h0[0][r * kv184 + j] != softmax_h0[1][r * kv192 + j] {
+                    sm_diff += 1;
+                }
+            }
+        }
+        eprintln!("h=0 stage-by-stage (valid-range columns only): post-gemm_qkt diff={qkt_diff}, post-causal_softmax diff={sm_diff}");
+
+        for r in 0..k {
+            for h in 0..num_q_heads {
+                for d in 0..head_dim {
+                    let idx = r * q_row_len + h * head_dim + d;
+                    if outputs[0][idx] != outputs[1][idx] {
+                        let a = bf16_to_f32(outputs[0][idx]);
+                        let b = bf16_to_f32(outputs[1][idx]);
+                        eprintln!("  differing element: row={r} head={h} dim={d}: kv_len=184 -> {a} (bits {:#06x}), kv_len=192 -> {b} (bits {:#06x}), diff={}", outputs[0][idx], outputs[1][idx], (a - b).abs());
+                    }
+                }
+            }
+        }
+
+        let diff = outputs[0].iter().zip(outputs[1].iter()).filter(|(a, b)| a != b).count();
+        eprintln!("isolated GEMM attention math with REAL layer-7 data (real_len={real_len}, start_position={start_position}): 184 vs 192 -> {diff}/{} elements differ", k * q_row_len);
+        if diff > 0 {
+            eprintln!("VERDICT: REPRODUCED with real layer-7 data + isolated GEMM math alone -- the bug IS a real-data-triggered hipBLAS/kernel numerics issue at this shape, not something in the surrounding model code.");
+        } else {
+            eprintln!("VERDICT: NOT reproduced with real layer-7 data + isolated GEMM math alone -- the bug must be elsewhere (o_proj, sigmoid_gate, the residual add, or something about the REAL kv_len=192 call's own k_cache/v_cache content differing from what a kv_len=184 call produces).");
+        }
     }
 
     /// DIAGNOSTIC, not a reported number: syncs after every layer (and

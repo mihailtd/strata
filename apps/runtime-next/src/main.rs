@@ -5,8 +5,11 @@ mod kernels;
 mod lora;
 mod model;
 mod model_loader;
+mod mtp_draft;
+mod quantized_lora;
 mod sampling;
 mod server;
+mod speculative;
 mod state_handoff;
 mod tokenizer;
 
@@ -47,11 +50,39 @@ fn main() {
         }
     }
 
-    // §95: the reserved port for this engine (see apps/RUNTIME.md's port
-    // table) -- real HTTP server, not a placeholder; loads real weights
-    // and serves real requests until killed.
-    let port: u16 = std::env::var("PORT").ok().and_then(|s| s.parse().ok()).unwrap_or(8003);
-    if let Err(e) = server::run(port) {
+    let args: Vec<String> = std::env::args().collect();
+    let mut port: u16 = std::env::var("PORT").ok().and_then(|s| s.parse().ok()).unwrap_or(8003);
+    let mut initial_loras: Vec<String> = Vec::new();
+
+    if let Ok(env_loras) = std::env::var("LORA_ADAPTERS") {
+        for p in env_loras.split(',') {
+            let p = p.trim();
+            if !p.is_empty() {
+                initial_loras.push(p.to_string());
+            }
+        }
+    }
+
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--port" if i + 1 < args.len() => {
+                if let Ok(p) = args[i + 1].parse::<u16>() {
+                    port = p;
+                }
+                i += 2;
+            }
+            "--lora" if i + 1 < args.len() => {
+                initial_loras.push(args[i + 1].clone());
+                i += 2;
+            }
+            _ => {
+                i += 1;
+            }
+        }
+    }
+
+    if let Err(e) = server::run(port, &initial_loras) {
         eprintln!("[runtime-next] server failed: {e}");
         std::process::exit(1);
     }

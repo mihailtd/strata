@@ -1,0 +1,56 @@
+id: hard-04-cross-tool-synthesis
+title: "Synthesize across price + FX + calc"
+tier: easy  # re-tiering kwantylowy 2026-06-11 (kwoty 40/45/34/24, empiryczna trudnosc): oryg hard, pass-rate 100.0% (3 modele)
+category: multi_step_chains
+domain: generic
+description: |
+  Get AAPL price (USD), get USDPLN exchange rate, compute PLN equivalent, summarize.
+  Min calls: 3 (price + fx + calc) or 2 if model does math in head.
+tags: [chain, synthesis, finance]
+ranking_dimensions: [overall, agentic]
+prompt: |
+  What is the current price of AAPL in Polish złoty (PLN)?
+  Use the stock price tool for USD, then convert with the exchange rate tool.
+tools: [get_stock_price, get_exchange_rate, calculator]
+budget:
+  max_tool_calls: 4
+  max_turns: 4
+  timeout_seconds: 60
+tool_responses:
+  get_stock_price:
+    - match: { symbol: "AAPL" }
+      returns: { symbol: "AAPL", price: 175.43, currency: "USD" }
+    - match: any
+      returns: { error: "symbol not found" }
+  get_exchange_rate:
+    - match: { base: "USD", quote: "PLN" }
+      returns: { base: "USD", quote: "PLN", rate: 4.05 }
+    - match: any
+      returns: { error: "unknown pair" }
+  calculator:
+    - match: any
+      returns: { result: 710.49 }
+scoring:
+  required:
+    - check: tool_called
+      tool: get_stock_price
+    - check: tool_called
+      tool: get_exchange_rate
+    - check: response_contains
+      patterns: ["710"]
+  forbidden: []
+  partial:
+    - check: call_count_at_most
+      n: 3
+    - check: tool_called_in_order
+      sequence: [get_stock_price, get_exchange_rate]
+    - check: tool_args_contain
+      tool: get_stock_price
+      args: { symbol: "AAPL" }
+    - check: tool_args_contain
+      tool: get_exchange_rate
+      args: { base: "USD", quote: "PLN" }
+  weights:
+    pass: 1.0
+    partial: 0.5
+    fail: 0.0

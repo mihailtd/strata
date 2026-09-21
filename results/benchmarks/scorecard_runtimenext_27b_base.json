@@ -1,0 +1,132 @@
+{
+  "timestamp": "2026-09-21 15:33:18",
+  "config": {
+    "mode": "direct",
+    "base_url": "http://127.0.0.1:8003/v1",
+    "model": "qwen3.8:27b-rust",
+    "adapter": null,
+    "edit_format": "whole",
+    "max_turns": 3,
+    "container": false
+  },
+  "summary": {
+    "total_tasks": 10,
+    "passed": 10,
+    "pass_rate_pct": 100.0,
+    "pass_at_1": 7,
+    "pass_at_1_pct": 70.0,
+    "total_duration_s": 160.47
+  },
+  "tasks": [
+    {
+      "task": "bank_account",
+      "passed": true,
+      "pass_turn": 2,
+      "total_turns": 2,
+      "total_tokens": 858,
+      "avg_ttft_ms": 2375.35,
+      "avg_tok_s": 34.5,
+      "duration_s": 29.86,
+      "error": null
+    },
+    {
+      "task": "binary_search",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 456,
+      "avg_ttft_ms": 434.74,
+      "avg_tok_s": 35.06,
+      "duration_s": 13.57,
+      "error": null
+    },
+    {
+      "task": "grains",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 283,
+      "avg_ttft_ms": 896.37,
+      "avg_tok_s": 34.87,
+      "duration_s": 9.14,
+      "error": null
+    },
+    {
+      "task": "hello_world",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 59,
+      "avg_ttft_ms": 536.78,
+      "avg_tok_s": 35.15,
+      "duration_s": 2.35,
+      "error": null
+    },
+    {
+      "task": "leap",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 366,
+      "avg_ttft_ms": 706.41,
+      "avg_tok_s": 34.87,
+      "duration_s": 11.34,
+      "error": null
+    },
+    {
+      "task": "matching_brackets",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 511,
+      "avg_ttft_ms": 464.81,
+      "avg_tok_s": 34.83,
+      "duration_s": 15.27,
+      "error": null
+    },
+    {
+      "task": "reverse_string",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 100,
+      "avg_ttft_ms": 333.33,
+      "avg_tok_s": 35.18,
+      "duration_s": 3.31,
+      "error": null
+    },
+    {
+      "task": "robot_simulator",
+      "passed": true,
+      "pass_turn": 2,
+      "total_turns": 2,
+      "total_tokens": 780,
+      "avg_ttft_ms": 2244.06,
+      "avg_tok_s": 33.96,
+      "duration_s": 27.64,
+      "error": null
+    },
+    {
+      "task": "two_fer",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 475,
+      "avg_ttft_ms": 712.53,
+      "avg_tok_s": 34.65,
+      "duration_s": 14.55,
+      "error": null
+    },
+    {
+      "task": "word_count",
+      "passed": true,
+      "pass_turn": 2,
+      "total_turns": 2,
+      "total_tokens": 986,
+      "avg_ttft_ms": 2048.24,
+      "avg_tok_s": 33.96,
+      "duration_s": 33.43,
+      "error": null
+    }
+  ]
+}

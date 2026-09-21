@@ -220,6 +220,16 @@ pub fn load_raw_tensor_from_file(file_path: &Path, tensor_name: &str) -> Result<
     let tensors = SafeTensors::deserialize(&mmap).map_err(|e| format!("parsing safetensors header in {}: {e}", file_path.display()))?;
     let view = tensors
         .tensor(tensor_name)
+        .or_else(|_| {
+            let alt1 = tensor_name.strip_prefix("base_model.model.").unwrap_or(tensor_name);
+            tensors.tensor(alt1).or_else(|_| {
+                let alt2 = format!("base_model.model.{tensor_name}");
+                tensors.tensor(&alt2).or_else(|_| {
+                    let alt3 = tensor_name.strip_prefix("base_model.model.model.").map(|s| format!("model.{s}")).unwrap_or_else(|| tensor_name.to_string());
+                    tensors.tensor(&alt3)
+                })
+            })
+        })
         .map_err(|e| format!("tensor {tensor_name:?} not found in {}: {e}", file_path.display()))?;
 
     Ok(RawTensor {

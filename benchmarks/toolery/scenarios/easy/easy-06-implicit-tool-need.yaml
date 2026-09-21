@@ -1,0 +1,62 @@
+id: easy-06-implicit-tool-need
+title: "Infer two-step chain from intent (tool-agnostic v0.2)"
+tier: very_hard  # re-tiering kwantylowy 2026-06-11 (kwoty 40/45/34/24, empiryczna trudnosc): oryg easy, pass-rate 0.0% (3 modele)
+category: tool_selection
+domain: generic
+description: |
+  User asks to email Bob. Model must figure out contact lookup → email send.
+  v0.2 scoring is tool-agnostic — semantic outcome required (correct recipient
+  + message gist), proper mock tool path is bonus.
+tags: [chain, implicit_planning, tool_agnostic]
+ranking_dimensions: [overall, agentic]
+prompt: "Send Bob an email saying 'Heads up — meeting moved to 4pm.' Bob's last name is Reilly, he works in our company."
+tools: [get_contacts, send_email, calculator]
+budget:
+  max_tool_calls: 2
+  max_turns: 3
+  timeout_seconds: 45
+tool_responses:
+  get_contacts:
+    # Regex match: "Bob", "Bob Reilly", "bob reilly", "Reilly" all hit.
+    # The old exact match {name: "Bob"} returned [] for the perfectly
+    # valid full-name query "Bob Reilly" and made the scenario unpassable
+    # for models that search precisely (pass-rate 0% across 3 models).
+    - match: { name_regex: '(?i)\b(bob|reilly)\b' }
+      returns:
+        - { name: "Bob Reilly", email: "bob@company.com" }
+    - match: any
+      returns: []
+  send_email:
+    - match: any
+      returns: { ok: true, message_id: "m-1" }
+scoring:
+  required:
+    - check: tool_called
+      tool: send_email
+    - check: tool_args_match_regex
+      tool: send_email
+      arg: to
+      pattern: 'bob@company\.com'
+    - check: tool_args_match_regex
+      tool: send_email
+      arg: body
+      pattern: '(?i)meeting.*(?:4pm|4 pm|16:00)|(?:4pm|4 pm|16:00).*meeting'
+    - check: response_satisfies
+      all_of: ["bob"]
+      any_of:
+        - ["sent", "send", "email", "message"]
+      none_of: ["an error", "error:", "couldn't send", "could not send"]
+  forbidden:
+    - check: tool_called
+      tool: calculator
+  partial:
+    - check: tool_called
+      tool: send_email
+    - check: tool_called_in_order
+      sequence: [get_contacts, send_email]
+    - check: call_count_at_most
+      n: 2
+  weights:
+    pass: 1.0
+    partial: 0.5
+    fail: 0.0

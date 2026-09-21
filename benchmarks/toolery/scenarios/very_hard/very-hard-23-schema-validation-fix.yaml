@@ -1,0 +1,54 @@
+id: very-hard-23-schema-validation-fix
+title: "Schema validator: missing id — fill it in and resubmit"
+tier: hard  # re-tiering kwantylowy 2026-06-11 (kwoty 40/45/34/24, empiryczna trudnosc): oryg very_hard, pass-rate 73.3% (3 modele)
+category: error_recovery
+domain: dev_ops
+description: |
+  Tool `http_post` validates payload against schema and rejects first attempt
+  missing required `id` field. Model must resubmit with the field correctly
+  populated (using value from context: "user-42").
+tags: [schema, validation, retry]
+ranking_dimensions: [overall, structured_output, error_recovery]
+prompt: |
+  Save a user profile via the API with id "user-42": name Marta, role admin.
+  Endpoint: https://api.acme.com/profiles (POST, JSON). If the API returns a
+  validation error, read the `missing` field and fix the payload.
+tools: [http_post]
+budget:
+  max_tool_calls: 2
+  max_turns: 2
+  timeout_seconds: 45
+tool_responses:
+  http_post:
+    - match: { url: "https://api.acme.com/profiles", json: { id: "user-42", name: "Marta", role: "admin" } }
+      returns: { status: 200, body: "{\"ok\": true, \"id\": \"user-42\"}" }
+    - match: { url: "https://api.acme.com/profiles" }
+      returns: { status: 400, body: "{\"error\": \"schema_validation_failed\", \"missing\": [\"id\"]}" }
+    - match: any
+      returns: { status: 404 }
+scoring:
+  required:
+    - check: tool_args_match_regex
+      tool: http_post
+      arg: json
+      pattern: "user-42"
+    - check: call_count_at_most
+      n: 2
+    - check: tool_args_match_regex
+      tool: http_post
+      arg: json
+      pattern: "Marta"
+    - check: tool_args_match_regex
+      tool: http_post
+      arg: json
+      pattern: "admin"
+    - check: response_satisfies
+      any_of: [["user-42"]]
+  forbidden: []
+  partial:
+    - check: tool_called
+      tool: http_post
+  weights:
+    pass: 1.0
+    partial: 0.5
+    fail: 0.0

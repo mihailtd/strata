@@ -1,0 +1,77 @@
+{
+  "timestamp": "2026-09-21 11:19:35",
+  "config": {
+    "mode": "direct",
+    "base_url": "http://127.0.0.1:8003/v1",
+    "model": "qwen3.5:4b-rust",
+    "adapter": null,
+    "edit_format": "whole",
+    "max_turns": 5,
+    "container": false
+  },
+  "summary": {
+    "total_tasks": 5,
+    "passed": 5,
+    "pass_rate_pct": 100.0,
+    "pass_at_1": 5,
+    "pass_at_1_pct": 100.0,
+    "total_duration_s": 17.1
+  },
+  "tasks": [
+    {
+      "task": "grains",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 396,
+      "avg_ttft_ms": 122.53,
+      "avg_tok_s": 79.44,
+      "duration_s": 5.24,
+      "error": null
+    },
+    {
+      "task": "hello_world",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 123,
+      "avg_ttft_ms": 83.61,
+      "avg_tok_s": 80.88,
+      "duration_s": 1.74,
+      "error": null
+    },
+    {
+      "task": "leap",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 406,
+      "avg_ttft_ms": 113.02,
+      "avg_tok_s": 79.81,
+      "duration_s": 5.34,
+      "error": null
+    },
+    {
+      "task": "reverse_string",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 151,
+      "avg_ttft_ms": 53.05,
+      "avg_tok_s": 80.46,
+      "duration_s": 2.07,
+      "error": null
+    },
+    {
+      "task": "two_fer",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 198,
+      "avg_ttft_ms": 114.39,
+      "avg_tok_s": 80.43,
+      "duration_s": 2.71,
+      "error": null
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+id: medium-16-so-yaml-config
+title: "Produce a valid YAML config block matching a spec"
+tier: easy  # re-tiering kwantylowy 2026-06-11 (kwoty 40/45/34/24, empiryczna trudnosc): oryg medium, pass-rate 100.0% (3 modele)
+category: structured_output
+domain: dev_ops
+description: |
+  Model must write a YAML snippet with two top-level keys (database + cache),
+  each with required sub-keys. Tests YAML indentation and key naming.
+  Scoring uses regex over the response, not schema (YAML parser not in
+  scorer). Indent rule: each sub-key indented with at least two spaces.
+tags: [structured_output, yaml, config]
+ranking_dimensions: [overall, structured_output]
+prompt: |
+  Produce a YAML config block with exactly these keys and values:
+
+    database:
+      host: db.prod.internal
+      port: 5432
+      pool_size: 20
+      ssl: true
+
+    cache:
+      host: redis.prod.internal
+      port: 6379
+      ttl_seconds: 300
+
+  Output only the YAML, nothing else — no code fences, no commentary.
+tools: []
+budget:
+  max_tool_calls: 0
+  max_turns: 1
+  timeout_seconds: 45
+tool_responses: {}
+scoring:
+  required:
+    - check: response_yaml
+      schema:
+        type: object
+        required: [database, cache]
+        additionalProperties: false
+        properties:
+          database:
+            type: object
+            required: [host, port, pool_size, ssl]
+            additionalProperties: false
+            properties:
+              host: { type: string, const: "db.prod.internal" }
+              port: { type: integer, const: 5432 }
+              pool_size: { type: integer, const: 20 }
+              ssl: { type: boolean, const: true }
+          cache:
+            type: object
+            required: [host, port, ttl_seconds]
+            additionalProperties: false
+            properties:
+              host: { type: string, const: "redis.prod.internal" }
+              port: { type: integer, const: 6379 }
+              ttl_seconds: { type: integer, const: 300 }
+    - check: call_count_at_most
+      n: 0
+  forbidden:
+    - check: response_contains
+      patterns: ["```"]
+    # JSON braces indicate the model emitted JSON instead of YAML.
+    - check: response_contains
+      patterns: ["{\"database"]
+  partial:
+    - check: response_contains
+      patterns: ["database:"]
+    - check: response_contains
+      patterns: ["cache:"]
+    - check: response_satisfies
+      any_of:
+        - ["host:", "port:", "ssl:", "ttl_seconds:"]
+  weights:
+    pass: 1.0
+    partial: 0.5
+    fail: 0.0

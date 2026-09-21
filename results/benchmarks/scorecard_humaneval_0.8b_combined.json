@@ -1,0 +1,121 @@
+{
+  "benchmark": "HumanEval",
+  "timestamp": "2026-09-21 21:50:24",
+  "config": {
+    "base_url": "http://127.0.0.1:8003/v1",
+    "model": "qwen3.5:0.8b-rust",
+    "adapter": "m2_agentic_coding_r8a128_v8_0_8b@0.25+m2_python_modern_r8a128_v7_0_8b@0.25",
+    "limit": 10,
+    "start_idx": 0,
+    "temperature": 0.0,
+    "timeout": 5.0
+  },
+  "summary": {
+    "total_problems": 10,
+    "passed": 4,
+    "pass_rate_pct": 40.0,
+    "total_duration_s": 15.07
+  },
+  "results": [
+    {
+      "task_id": "HumanEval/0",
+      "entry_point": "has_close_elements",
+      "passed": false,
+      "ttft_ms": 40.1,
+      "tok_s": 277.25,
+      "tokens": 512,
+      "exec_duration_s": 0.0192,
+      "error": "File \"/tmp/tmp8cqlp92e.py\", line 1\n    >>> has_close_elements([1.0, 2.8, 3.0, 4.0, 5.0, 2.0], 0.3)\n    ^^\nSyntaxError: invalid syntax"
+    },
+    {
+      "task_id": "HumanEval/1",
+      "entry_point": "separate_paren_groups",
+      "passed": false,
+      "ttft_ms": 33.99,
+      "tok_s": 278.63,
+      "tokens": 512,
+      "exec_duration_s": 0.0198,
+      "error": "Traceback (most recent call last):\n  File \"/tmp/tmpzi4bt8ga.py\", line 47, in <module>\n    check(separate_paren_groups)\n    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/tmpzi4bt8ga.py\", line 35, in check\n"
+    },
+    {
+      "task_id": "HumanEval/2",
+      "entry_point": "truncate_number",
+      "passed": true,
+      "ttft_ms": 32.33,
+      "tok_s": 282.54,
+      "tokens": 310,
+      "exec_duration_s": 0.0084,
+      "error": ""
+    },
+    {
+      "task_id": "HumanEval/3",
+      "entry_point": "below_zero",
+      "passed": true,
+      "ttft_ms": 32.37,
+      "tok_s": 279.63,
+      "tokens": 401,
+      "exec_duration_s": 0.0084,
+      "error": ""
+    },
+    {
+      "task_id": "HumanEval/4",
+      "entry_point": "mean_absolute_deviation",
+      "passed": true,
+      "ttft_ms": 32.51,
+      "tok_s": 280.94,
+      "tokens": 350,
+      "exec_duration_s": 0.0098,
+      "error": ""
+    },
+    {
+      "task_id": "HumanEval/5",
+      "entry_point": "intersperse",
+      "passed": false,
+      "ttft_ms": 30.9,
+      "tok_s": 279.22,
+      "tokens": 481,
+      "exec_duration_s": 0.0188,
+      "error": "Traceback (most recent call last):\n  File \"/tmp/tmpxght1x4d.py\", line 21, in <module>\n    check(intersperse)\n    ~~~~~^^^^^^^^^^^^^\n  File \"/tmp/tmpxght1x4d.py\", line 17, in check\n    assert candidate"
+    },
+    {
+      "task_id": "HumanEval/6",
+      "entry_point": "parse_nested_parens",
+      "passed": false,
+      "ttft_ms": 33.97,
+      "tok_s": 278.42,
+      "tokens": 512,
+      "exec_duration_s": 0.0194,
+      "error": "Traceback (most recent call last):\n  File \"/tmp/tmp7nz8cw32.py\", line 45, in <module>\n    check(parse_nested_parens)\n    ~~~~~^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/tmp7nz8cw32.py\", line 40, in check\n    "
+    },
+    {
+      "task_id": "HumanEval/7",
+      "entry_point": "filter_by_substring",
+      "passed": true,
+      "ttft_ms": 32.78,
+      "tok_s": 282.68,
+      "tokens": 238,
+      "exec_duration_s": 0.0084,
+      "error": ""
+    },
+    {
+      "task_id": "HumanEval/8",
+      "entry_point": "sum_product",
+      "passed": false,
+      "ttft_ms": 32.21,
+      "tok_s": 282.44,
+      "tokens": 250,
+      "exec_duration_s": 0.0192,
+      "error": "Traceback (most recent call last):\n  File \"/tmp/tmp6tx7uck1.py\", line 26, in <module>\n    check(sum_product)\n    ~~~~~^^^^^^^^^^^^^\n  File \"/tmp/tmp6tx7uck1.py\", line 20, in check\n    assert candidate"
+    },
+    {
+      "task_id": "HumanEval/9",
+      "entry_point": "rolling_max",
+      "passed": false,
+      "ttft_ms": 33.35,
+      "tok_s": 278.78,
+      "tokens": 512,
+      "exec_duration_s": 0.0196,
+      "error": "Traceback (most recent call last):\n  File \"/tmp/tmpahx8qof3.py\", line 37, in <module>\n    check(rolling_max)\n    ~~~~~^^^^^^^^^^^^^\n  File \"/tmp/tmpahx8qof3.py\", line 32, in check\n    assert candidate"
+    }
+  ]
+}

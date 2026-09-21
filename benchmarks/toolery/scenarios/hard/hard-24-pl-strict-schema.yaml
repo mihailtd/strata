@@ -1,0 +1,73 @@
+id: hard-24-pl-strict-schema
+title: "PL: profil klienta JSON wg schematu + wybór toolu"
+tier: easy  # re-tiering kwantylowy 2026-06-11 (kwoty 40/45/34/24, empiryczna trudnosc): oryg hard, pass-rate 100.0% (3 modele)
+category: structured_output
+domain: generic
+description: |
+  Polish prompt asks to build a customer profile JSON to an explicit schema,
+  pulling data from one of 3 tools (must pick `db_list_tables` first, then
+  `sql_query`). Output must be valid JSON with exact field names.
+tags: [polish, schema, multi_tool]
+ranking_dimensions: [overall, structured_output, localization, tool_selection]
+prompt: |
+  Zbuduj JSON `customer_profile` dla klienta o id 42 wg schematu:
+    {
+      "id": <int>,
+      "email": <string>,
+      "name": <string>,
+      "joined_at": <string ISO date>,
+      "tier": <"free"|"prime">
+    }
+  Wybierz odpowiednie narzędzie spośród dostępnych. Tylko JSON, bez prozy.
+tools: [db_list_tables, sql_query, http_get]
+budget:
+  max_tool_calls: 3
+  max_turns: 2
+  timeout_seconds: 60
+tool_responses:
+  db_list_tables:
+    - match: any
+      returns: ["customers", "orders", "products"]
+  sql_query:
+    - match: any
+      returns:
+        rows:
+          - { id: 42, email: "a.kowalski@example.com", name: "Anna Kowalska", joined_at: "2024-03-12", tier: "prime" }
+  http_get:
+    - match: any
+      returns: { error: "unrelated_tool" }
+scoring:
+  required:
+    - check: tool_called_in_order
+      sequence: [db_list_tables, sql_query]
+    - check: tool_called
+      tool: sql_query
+    - check: response_matches_schema
+      unwrap_key: customer_profile
+      schema:
+        type: object
+        required: [id, email, name, joined_at, tier]
+        additionalProperties: false
+        properties:
+          id: { type: integer, const: 42 }
+          email: { type: string, const: "a.kowalski@example.com" }
+          name: { type: string, const: "Anna Kowalska" }
+          joined_at: { type: string, const: "2024-03-12" }
+          tier: { type: string, enum: ["free", "prime"], const: "prime" }
+    - check: response_satisfies
+      none_of: ["unrelated"]
+  forbidden:
+    - check: tool_called
+      tool: http_get
+  partial:
+    - check: response_matches_schema
+      schema:
+        type: object
+        required: [id, email]
+        properties:
+          id: { type: integer }
+          email: { type: string }
+  weights:
+    pass: 1.0
+    partial: 0.5
+    fail: 0.0

@@ -103,6 +103,17 @@ mod ffi {
         // enough on this 24GB card that "try it and see" risks an opaque
         // mid-load OOM instead of a clear, actionable error).
         pub fn hipMemGetInfo(free: *mut usize, total: *mut usize) -> c_int;
+        // §130: pinned (page-locked) host memory -- required for truly async
+        // host→device DMA. `hipMemcpyAsync` from pageable host RAM silently
+        // falls back to a synchronous copy on ROCm because the DMA engine
+        // cannot directly address pageable pages. Allocating the source
+        // buffer via `hipHostMalloc` pins it: the driver registers it with
+        // the IOMMU, giving the DMA engine a stable physical address it can
+        // access without CPU involvement, so `hipMemcpyAsync` truly overlaps
+        // with other work on the stream. `hipHostFree` releases both the
+        // host VA and the IOMMU registration in one call.
+        pub fn hipHostMalloc(ptr: *mut *mut c_void, size: usize, flags: c_int) -> c_int;
+        pub fn hipHostFree(ptr: *mut c_void) -> c_int;
     }
 
     // hipMemcpyKind (driver_types.h) -- the two directions this crate uses.
@@ -111,6 +122,10 @@ mod ffi {
     // hipStreamCaptureMode (hip_runtime_api.h)
     pub const HIP_STREAM_CAPTURE_MODE_GLOBAL: c_int = 0;
     pub const HIP_MEMCPY_DEVICE_TO_DEVICE: c_int = 3;
+    // §130: hipHostMallocDefault -- standard pinned host memory, no special
+    // mapping flags. The DMA engine can address it directly; the host can
+    // read/write it normally. hipHostMalloc flags field (hip_runtime_api.h).
+    pub const HIP_HOST_MALLOC_DEFAULT: c_int = 0;
 }
 
 /// A HIP runtime error, carrying both the numeric code and the string HIP
@@ -277,6 +292,7 @@ impl<T: Copy> DeviceBuffer<T> {
         self.len
     }
 
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
@@ -416,6 +432,68 @@ impl<T: Copy> DeviceBuffer<T> {
         HipError::from_code(code)
     }
 
+    /// §137: like `copy_from_device`, but reads starting at `src_offset`
+    /// elements into `src` rather than `src`'s own start -- needed to
+    /// pull a single row (e.g. one chunk position's hidden state) out of
+    /// a larger, multi-row buffer (e.g. a preserved `[k, HIDDEN_SIZE]`
+    /// verify-chunk hidden-state buffer) into a single-row destination.
+    /// Ordinary blocking `hipMemcpy`: called from eager code between
+    /// rounds, never inside a captured graph region.
+    pub fn copy_from_device_offset(&mut self, src: &DeviceBuffer<T>, src_offset: usize) -> Result<(), HipError> {
+        assert!(
+            src_offset + self.len <= src.len,
+            "DeviceBuffer::copy_from_device_offset: offset {} + dst len {} exceeds src capacity {}",
+            src_offset, self.len, src.len
+        );
+        // SAFETY: `self.ptr` is a live allocation of at least
+        // `self.byte_len()` bytes; `src.ptr` offset by `src_offset`
+        // elements is a valid read start with at least `self.byte_len()`
+        // bytes remaining (checked above); `hipMemcpy` with
+        // `HIP_MEMCPY_DEVICE_TO_DEVICE` is well-defined for any `T: Copy`.
+        let src_ptr = unsafe { (src.ptr as *const u8).add(src_offset * std::mem::size_of::<T>()) as *const c_void };
+        let code = unsafe { ffi::hipMemcpy(self.ptr, src_ptr, self.byte_len(), ffi::HIP_MEMCPY_DEVICE_TO_DEVICE) };
+        HipError::from_code(code)
+    }
+
+    /// §137: real, STREAM-ORDERED async device-to-device copy -- the
+    /// async counterpart of `copy_from_device` (that one uses the
+    /// blocking `hipMemcpy`, safe for ordinary eager code but NOT
+    /// graph-capture-safe: a synchronous host-blocking call cannot be
+    /// recorded into a HIP graph). Needed so a graph-captured verify
+    /// step can preserve a real intermediate buffer (e.g. the PRE-final-
+    /// norm per-position hidden state a captured verify-chunk graph
+    /// would otherwise discard once it's done computing the POST-norm
+    /// logits) into a caller-provided output buffer, as part of the
+    /// SAME captured, unconditional kernel sequence -- not a follow-up
+    /// eager call after the graph replay. The `count`-limited variant
+    /// below is the one real call site actually needs (a bucket's real
+    /// row count is always `<=` the source's full allocated capacity):
+    /// same relationship as `copy_from_host_prefix` is to a full-buffer
+    /// host copy. Needed because a captured verify-chunk's own internal
+    /// hidden-state buffer (`PrefillScratch::hidden_a`/`hidden_b`) is
+    /// allocated once at the fixed `MAX_PREFILL_CHUNK` capacity, but a
+    /// given bucket's real captured sequence only ever produces `k` valid
+    /// rows (`k <= MAX_PREFILL_CHUNK`) -- the caller's own output buffer
+    /// is correctly sized to that real `k`, not the source's full
+    /// capacity, so an exact-length copy would over-read past what the
+    /// caller allocated (or under-specify what the source actually
+    /// holds). Copies `count` elements from the start of `src` into the
+    /// start of `self`; `count` must not exceed either buffer's capacity.
+    pub fn copy_from_device_async_prefix(&mut self, src: &DeviceBuffer<T>, count: usize, stream: *mut c_void) -> Result<(), HipError> {
+        assert!(
+            count <= src.len && count <= self.len,
+            "DeviceBuffer::copy_from_device_async_prefix: count {} exceeds src capacity {} or dst capacity {}",
+            count, src.len, self.len
+        );
+        let byte_len = count * std::mem::size_of::<T>();
+        // SAFETY: both `self.ptr`/`src.ptr` are live `hipMalloc`'d
+        // allocations of at least `count * size_of::<T>()` bytes (checked
+        // above); `hipMemcpyAsync` with `HIP_MEMCPY_DEVICE_TO_DEVICE` is a
+        // well-defined, stream-ordered GPU-to-GPU copy for any `T: Copy`.
+        let code = unsafe { ffi::hipMemcpyAsync(self.ptr, src.ptr as *const c_void, byte_len, ffi::HIP_MEMCPY_DEVICE_TO_DEVICE, stream) };
+        HipError::from_code(code)
+    }
+
     /// Copies this buffer's contents into `host_data`. `host_data.len()`
     /// must equal `self.len()`.
     pub fn copy_to_host(&self, host_data: &mut [T]) -> Result<(), HipError> {
@@ -462,6 +540,7 @@ impl<T: Copy> DeviceBuffer<T> {
     /// padding positions become pure no-op identity steps (zero
     /// key/value/beta, zero log-decay) instead of leaking stale data from
     /// a previous call into this call's real recurrent-state update.
+    #[allow(dead_code)]
     pub fn fill_zero_from(&mut self, elem_offset: usize) -> Result<(), HipError> {
         debug_assert!(
             elem_offset <= self.len,
@@ -493,6 +572,120 @@ impl<T: Copy> DeviceBuffer<T> {
         let remaining_bytes = self.byte_len() - byte_offset;
         // SAFETY: same reasoning as `fill_zero_from` above.
         let code = unsafe { ffi::hipMemsetAsync((self.ptr as *mut u8).add(byte_offset) as *mut c_void, 0, remaining_bytes, stream) };
+        HipError::from_code(code)
+    }
+
+    /// §130: real, STREAM-ORDERED async counterpart of `fill_zero` --
+    /// zeroes this entire buffer, queued on `stream` via `hipMemsetAsync`.
+    /// Same HIP-Graph-capturable invariant as `fill_zero_from_async`; unlike
+    /// `fill_zero`'s synchronous `hipMemset`, this returns immediately and
+    /// the GPU work proceeds in parallel with subsequent host operations
+    /// (or other async ops on the same stream).
+    pub fn fill_zero_async(&mut self, stream: *mut c_void) -> Result<(), HipError> {
+        // SAFETY: `self.ptr` is a live `hipMalloc`'d allocation of at least
+        // `self.byte_len()` bytes; `hipMemsetAsync` writes exactly that many
+        // zero bytes stream-ordered on `stream`, safe for any `T: Copy`.
+        let code = unsafe { ffi::hipMemsetAsync(self.ptr, 0, self.byte_len(), stream) };
+        HipError::from_code(code)
+    }
+
+    /// §130: real, STREAM-ORDERED async host→device copy -- the async
+    /// counterpart of `copy_from_host`. `host_data` MUST point into a
+    /// `PinnedBuffer` (page-locked host memory allocated via `hipHostMalloc`)
+    /// for this to be truly asynchronous on ROCm. Passing pageable host RAM
+    /// is not rejected by the runtime but silently serialises the copy (the
+    /// driver pins the pages internally, one synchronous bounce per call).
+    /// Callers are responsible for keeping `host_data` alive until the
+    /// stream's work has completed (i.e., until after `stream.synchronize()`).
+    pub fn copy_from_host_async(&mut self, host_data: &[T], stream: *mut c_void) -> Result<(), HipError> {
+        assert!(
+            host_data.len() <= self.len,
+            "DeviceBuffer::copy_from_host_async: host data exceeds device buffer capacity ({} host vs {} device)",
+            host_data.len(),
+            self.len
+        );
+        if host_data.is_empty() {
+            return Ok(());
+        }
+        let byte_len = host_data
+            .len()
+            .checked_mul(std::mem::size_of::<T>())
+            .expect("DeviceBuffer::copy_from_host_async: byte_len overflow");
+        // SAFETY: `self.ptr` is a live `hipMalloc`'d device allocation of at least `byte_len` bytes;
+        // `host_data` is a valid, readable slice for its lifetime (caller
+        // upholds liveness until stream sync -- documented in the fn doc);
+        // direction is host→device.
+        let code = unsafe {
+            ffi::hipMemcpyAsync(
+                self.ptr,
+                host_data.as_ptr() as *const c_void,
+                byte_len,
+                ffi::HIP_MEMCPY_HOST_TO_DEVICE,
+                stream,
+            )
+        };
+        HipError::from_code(code)
+    }
+
+    /// §135: real, STREAM-ORDERED async host→device copy, writing
+    /// starting at `elem_offset` instead of the start of the buffer --
+    /// the offset counterpart of `copy_from_host_async`, needed for
+    /// writing one real slot's data into its own sub-range of a larger,
+    /// shared fused buffer (`QuantLoraMidFused`) without disturbing any
+    /// other slot's data living in the rest of that same buffer.
+    pub fn copy_from_host_async_at(&mut self, host_data: &[T], elem_offset: usize, stream: *mut c_void) -> Result<(), HipError> {
+        assert!(
+            elem_offset + host_data.len() <= self.len,
+            "DeviceBuffer::copy_from_host_async_at: offset {elem_offset} + host data {} exceeds device buffer capacity {}",
+            host_data.len(),
+            self.len
+        );
+        if host_data.is_empty() {
+            return Ok(());
+        }
+        let byte_len = host_data
+            .len()
+            .checked_mul(std::mem::size_of::<T>())
+            .expect("DeviceBuffer::copy_from_host_async_at: byte_len overflow");
+        let byte_offset = elem_offset * std::mem::size_of::<T>();
+        // SAFETY: bounds-checked above (`elem_offset + host_data.len() <=
+        // self.len`); `self.ptr` is a live `hipMalloc`'d allocation of at
+        // least `self.byte_len()` bytes, so `self.ptr + byte_offset` for
+        // `byte_len` bytes stays within that allocation; `host_data` is a
+        // valid, readable slice for its lifetime (caller upholds liveness
+        // until stream sync, same contract as `copy_from_host_async`).
+        let code = unsafe {
+            ffi::hipMemcpyAsync(
+                (self.ptr as *mut u8).add(byte_offset) as *mut c_void,
+                host_data.as_ptr() as *const c_void,
+                byte_len,
+                ffi::HIP_MEMCPY_HOST_TO_DEVICE,
+                stream,
+            )
+        };
+        HipError::from_code(code)
+    }
+
+    /// §135: real, STREAM-ORDERED async zero-fill of a BOUNDED range
+    /// `[start_elem, end_elem)` -- unlike `fill_zero_from_async` (which
+    /// zeroes from an offset to the END of the buffer), this stops at
+    /// `end_elem`, so it's safe to use on a shared, multi-slot fused
+    /// buffer where zeroing one slot's tail must never touch a
+    /// DIFFERENT slot's data living later in the same buffer.
+    pub fn fill_zero_range_async(&mut self, start_elem: usize, end_elem: usize, stream: *mut c_void) -> Result<(), HipError> {
+        debug_assert!(
+            start_elem <= end_elem && end_elem <= self.len,
+            "fill_zero_range_async: invalid range [{start_elem}, {end_elem}) for length {}",
+            self.len
+        );
+        if start_elem == end_elem {
+            return Ok(());
+        }
+        let byte_offset = start_elem * std::mem::size_of::<T>();
+        let byte_len = (end_elem - start_elem) * std::mem::size_of::<T>();
+        // SAFETY: bounds-checked above; `self.ptr + byte_offset` for
+        // `byte_len` bytes stays within the live `hipMalloc`'d allocation.
+        let code = unsafe { ffi::hipMemsetAsync((self.ptr as *mut u8).add(byte_offset) as *mut c_void, 0, byte_len, stream) };
         HipError::from_code(code)
     }
 
@@ -564,6 +757,114 @@ impl Drop for Stream {
         // ignored for the same reason as `DeviceBuffer::drop`.
         unsafe {
             ffi::hipStreamDestroy(self.raw);
+        }
+    }
+}
+
+/// §130: page-locked (pinned) host memory, allocated via `hipHostMalloc`.
+///
+/// This is the mandatory source type for a truly-asynchronous
+/// host→device `hipMemcpyAsync` on ROCm/AMD. When the source buffer is
+/// ordinary pageable `Vec` memory, the ROCm driver must pin the pages
+/// internally before the DMA engine can access them -- an implicit,
+/// synchronous bounce that serialises every `hipMemcpyAsync` call back to
+/// the behaviour of plain `hipMemcpy`. `hipHostMalloc` registers the
+/// allocation with the IOMMU at allocation time (not at copy time), giving
+/// the DMA engine a stable physical address it can read without any CPU
+/// involvement: `hipMemcpyAsync` genuinely returns before the transfer
+/// completes, and multiple transfers to different device buffers can overlap
+/// on the same stream.
+///
+/// `T` is bounded by `Copy` for the same reason `DeviceBuffer<T>` is.
+/// RAII: `Drop` calls `hipHostFree` deterministically, releasing both
+/// the host VA and the IOMMU registration.
+pub struct PinnedBuffer<T: Copy> {
+    ptr: *mut T,
+    len: usize,
+    _marker: PhantomData<T>,
+}
+
+// SAFETY: a pinned allocation is not thread-affine; concurrent access from
+// multiple threads is the caller's problem (same contract as DeviceBuffer).
+unsafe impl<T: Copy + Send> Send for PinnedBuffer<T> {}
+unsafe impl<T: Copy + Sync> Sync for PinnedBuffer<T> {}
+
+impl<T: Copy> PinnedBuffer<T> {
+    /// Allocates `len` elements of pinned host memory (uninitialized).
+    /// Fails with a `HipError` if `hipHostMalloc` returns a non-zero code
+    /// or a null pointer on success (which should never happen in practice
+    /// but is checked so callers can propagate a real error rather than
+    /// silently dereferencing null).
+    pub fn alloc(len: usize) -> Result<Self, HipError> {
+        let size_bytes = len
+            .checked_mul(std::mem::size_of::<T>())
+            .expect("PinnedBuffer::alloc: len * size_of::<T>() overflowed usize");
+        let mut ptr: *mut c_void = ptr::null_mut();
+        // SAFETY: `ptr` is a valid, aligned writable pointer for the
+        // duration of this call; HIP writes exactly one host pointer through
+        // it, or leaves it unchanged and returns a nonzero error code.
+        let code = unsafe { ffi::hipHostMalloc(&mut ptr, size_bytes, ffi::HIP_HOST_MALLOC_DEFAULT) };
+        HipError::from_code(code)?;
+        assert!(!ptr.is_null(), "hipHostMalloc returned success with a null pointer");
+        Ok(PinnedBuffer { ptr: ptr as *mut T, len, _marker: PhantomData })
+    }
+
+    /// Returns the number of `T`-elements this buffer holds.
+    #[allow(dead_code)]
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Returns a slice view of the pinned host memory. The bytes are
+    /// uninitialised until the caller writes to them.
+    ///
+    /// # Safety
+    /// The caller must not read elements that have not been written since
+    /// allocation (or since the last `fill` / write). Reading uninitialised
+    /// memory is UB in Rust regardless of the backing allocator.
+    pub unsafe fn as_slice_uninit(&self) -> &[T] {
+        // SAFETY: `self.ptr` is a live, aligned, readable pinned allocation
+        // of exactly `self.len` elements; the caller has asserted via the
+        // `unsafe` annotation that the elements have been initialised.
+        unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
+    }
+
+    /// Returns a mutable slice over the entire pinned buffer. The caller
+    /// can use this to write values before issuing an async copy.
+    pub fn as_mut_slice(&mut self) -> &mut [T] {
+        // SAFETY: `self.ptr` is a live, aligned, writable pinned allocation
+        // of exactly `self.len` elements; `PinnedBuffer` is the sole owner.
+        unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
+    }
+
+    /// Copies `src` into this buffer (host-side, synchronous -- just a
+    /// memcpy into pinned RAM). Call this before issuing an async device
+    /// copy via `DeviceBuffer::copy_from_host_async`.
+    #[allow(dead_code)]
+    pub fn copy_from_slice(&mut self, src: &[T]) {
+        assert_eq!(
+            src.len(), self.len,
+            "PinnedBuffer::copy_from_slice: length mismatch ({} src vs {} dst)",
+            src.len(), self.len
+        );
+        // SAFETY: `self.ptr` is a live, aligned pinned allocation of exactly
+        // `self.len` elements; `src` is a valid readable slice of the same
+        // length; `T: Copy` so there are no Drop concerns on the overwritten
+        // destination slots.
+        unsafe {
+            std::ptr::copy_nonoverlapping(src.as_ptr(), self.ptr, self.len);
+        }
+    }
+}
+
+impl<T: Copy> Drop for PinnedBuffer<T> {
+    fn drop(&mut self) {
+        // SAFETY: `self.ptr` was returned by a successful `hipHostMalloc`
+        // and has not been freed elsewhere -- `PinnedBuffer` is the sole
+        // owner (no `Clone` impl) and this is the only `Drop`. Return code
+        // deliberately ignored (same rationale as `DeviceBuffer::drop`).
+        unsafe {
+            ffi::hipHostFree(self.ptr as *mut c_void);
         }
     }
 }

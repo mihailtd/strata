@@ -84,10 +84,21 @@ def measure_adapter_perturbation(
                     den += float(W.float().detach().norm() ** 2)
             pairs += 1
 
-    # Fallback denominator reference for Qwen3.5-4B adapted projection layers (128 weight matrices)
-    # sqrt(den) = 501.7839764855163 across all 32 layers' q, k, v, o, gate, up, down projections
+    # Fallback denominator references for Qwen3.5 adapted projection layers
+    # Measured exact Frobenius norms across q, k, v, o, gate, up, down projections:
+    # 0.8B: 205.556572, 2B: 323.400730, 4B: 501.783976, 9B: 882.049252, 27B: ~1419.0
     if den <= 0.0:
-        den = 501.7839764855163**2
+        base_name = str(cfg.get("base_model_name_or_path", "")).lower() + " " + adapter_dir.name.lower()
+        if "0.8b" in base_name or "0_8b" in base_name:
+            den = 205.556572**2
+        elif "2b" in base_name:
+            den = 323.400730**2
+        elif "9b" in base_name:
+            den = 882.049252**2
+        elif "27b" in base_name:
+            den = 1419.0**2
+        else:
+            den = 501.7839764855163**2
 
     dw_over_w = (num**0.5) / max(1e-30, den**0.5)
 
@@ -107,7 +118,7 @@ def calibrate_adapter_alpha(
 ) -> dict[str, Any]:
     """Computes the full precision curve and optimal deployment alpha for an adapter."""
     if alphas is None:
-        alphas = [16, 32, 48, 64, 80, 96, 112, 128]
+        alphas = [16, 24, 32, 48, 64, 80, 96, 112, 128, 144, 160]
 
     adapter_dir = Path(adapter_dir)
     m = measure_adapter_perturbation(adapter_dir, base_model=base_model)

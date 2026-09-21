@@ -1,0 +1,121 @@
+{
+  "benchmark": "HumanEval",
+  "timestamp": "2026-09-21 21:31:01",
+  "config": {
+    "base_url": "http://127.0.0.1:8003/v1",
+    "model": "qwen3.5:0.8b-rust",
+    "adapter": null,
+    "limit": 10,
+    "start_idx": 0,
+    "temperature": 0.0,
+    "timeout": 5.0
+  },
+  "summary": {
+    "total_problems": 10,
+    "passed": 2,
+    "pass_rate_pct": 20.0,
+    "total_duration_s": 18.8
+  },
+  "results": [
+    {
+      "task_id": "HumanEval/0",
+      "entry_point": "has_close_elements",
+      "passed": false,
+      "ttft_ms": 34.39,
+      "tok_s": 273.44,
+      "tokens": 512,
+      "exec_duration_s": 0.0182,
+      "error": "File \"/tmp/tmpe06ikpnh.py\", line 23\n    - All pairs have diff >= 0.5, so return False \u2713\n                                                  ^\nSyntaxError: invalid character '\u2713' (U+2713)"
+    },
+    {
+      "task_id": "HumanEval/1",
+      "entry_point": "separate_paren_groups",
+      "passed": false,
+      "ttft_ms": 29.98,
+      "tok_s": 262.56,
+      "tokens": 512,
+      "exec_duration_s": 0.0183,
+      "error": "File \"/tmp/tmp3tjlprmb.py\", line 1\n    >>> separate_paren_groups('( ) (( )) (( )( ))')\n    ^^\nSyntaxError: invalid syntax"
+    },
+    {
+      "task_id": "HumanEval/2",
+      "entry_point": "truncate_number",
+      "passed": false,
+      "ttft_ms": 26.22,
+      "tok_s": 263.39,
+      "tokens": 512,
+      "exec_duration_s": 0.0186,
+      "error": "File \"/tmp/tmp1lb28x8j.py\", line 42\n    - 3.5 % 1 = 0.5 \u2713\n                    ^\nSyntaxError: invalid character '\u2713' (U+2713)"
+    },
+    {
+      "task_id": "HumanEval/3",
+      "entry_point": "below_zero",
+      "passed": false,
+      "ttft_ms": 29.11,
+      "tok_s": 273.04,
+      "tokens": 512,
+      "exec_duration_s": 0.0189,
+      "error": "File \"/tmp/tmpxjs3d20n.py\", line 24\n    - [1, 2, 3]: Balance starts at 0, after 1 deposit: 1, after 2 deposit: 3, after 3 deposit: 6. Never below zero. Returns False \u2713\n                                "
+    },
+    {
+      "task_id": "HumanEval/4",
+      "entry_point": "mean_absolute_deviation",
+      "passed": true,
+      "ttft_ms": 28.5,
+      "tok_s": 273.03,
+      "tokens": 512,
+      "exec_duration_s": 0.01,
+      "error": ""
+    },
+    {
+      "task_id": "HumanEval/5",
+      "entry_point": "intersperse",
+      "passed": false,
+      "ttft_ms": 24.3,
+      "tok_s": 273.97,
+      "tokens": 512,
+      "exec_duration_s": 0.0184,
+      "error": "Traceback (most recent call last):\n  File \"/tmp/tmp9v25b5wo.py\", line 28, in <module>\n    check(intersperse)\n    ~~~~~^^^^^^^^^^^^^\n  File \"/tmp/tmp9v25b5wo.py\", line 24, in check\n    assert candidate"
+    },
+    {
+      "task_id": "HumanEval/6",
+      "entry_point": "parse_nested_parens",
+      "passed": false,
+      "ttft_ms": 28.48,
+      "tok_s": 273.2,
+      "tokens": 512,
+      "exec_duration_s": 0.019,
+      "error": "File \"/tmp/tmpl7b4c6_t.py\", line 1\n    >>> parse_nested_parens('(()()) ((())) () ((())()())')\n    ^^\nSyntaxError: invalid syntax"
+    },
+    {
+      "task_id": "HumanEval/7",
+      "entry_point": "filter_by_substring",
+      "passed": true,
+      "ttft_ms": 26.06,
+      "tok_s": 273.24,
+      "tokens": 511,
+      "exec_duration_s": 0.0095,
+      "error": ""
+    },
+    {
+      "task_id": "HumanEval/8",
+      "entry_point": "sum_product",
+      "passed": false,
+      "ttft_ms": 26.14,
+      "tok_s": 274.98,
+      "tokens": 370,
+      "exec_duration_s": 0.0179,
+      "error": "File \"/tmp/tmpauh4svcv.py\", line 6\n    METADATA = {\n    ^^^^^^^^\nIndentationError: expected an indented block after function definition on line 1"
+    },
+    {
+      "task_id": "HumanEval/9",
+      "entry_point": "rolling_max",
+      "passed": false,
+      "ttft_ms": 28.13,
+      "tok_s": 273.77,
+      "tokens": 512,
+      "exec_duration_s": 0.0188,
+      "error": "File \"/tmp/tmp3g9ie3jw.py\", line 15\n    3. The example shows: `[1, 2, 3, 2, 3, 4, 2]` \u2192 `[1, 2, 3, 3, 3, 4, 4]`\n                                                  ^\nSyntaxError: invalid character '\u2192' ("
+    }
+  ]
+}

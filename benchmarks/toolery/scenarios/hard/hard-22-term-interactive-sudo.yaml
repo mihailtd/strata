@@ -1,0 +1,76 @@
+id: hard-22-term-interactive-sudo
+title: "Detect sudo password prompt in process output and respond"
+tier: easy  # re-tiering kwantylowy 2026-06-11 (kwoty 40/45/34/24, empiryczna trudnosc): oryg hard, pass-rate 100.0% (3 modele)
+category: terminal_handling
+domain: dev_ops
+description: |
+  Model launches `sudo apt-get install jq` via process_start. Polling
+  process_status reveals an interactive sudo password prompt. The user
+  prompt provides the password explicitly. Model must either send the
+  password via process_send_input or surface to the user that a password
+  is required. Tests recognition of interactive prompts in CLI output.
+tags: [term_proc_sec]
+ranking_dimensions: [overall, terminal]
+prompt: |
+  Install the `jq` package. Use `sudo apt-get install -y jq`.
+  The sudo password is `hunter2`.
+tools: [process_start, process_status, process_send_input]
+budget:
+  max_tool_calls: 5
+  max_turns: 5
+  timeout_seconds: 40
+tool_responses:
+  process_start:
+    - match: any
+      returns: { pid: 4242, started_at_iso: "2026-05-25T10:00:00+00:00" }
+  process_status:
+    - match: { pid: 4242 }
+      call_index: 0
+      returns:
+        pid: 4242
+        state: "running"
+        exit_code: null
+        stdout_tail: "[sudo] password for user: "
+        stderr_tail: ""
+    - match: { pid: 4242 }
+      call_index: 1
+      returns:
+        pid: 4242
+        state: "exited"
+        exit_code: 0
+        stdout_tail: "Setting up jq (1.6-2)..."
+        stderr_tail: ""
+    - match: any
+      returns: { pid: 0, state: "unknown", exit_code: null, stdout_tail: "", stderr_tail: "" }
+  process_send_input:
+    - match: any
+      returns: { written_bytes: 8 }
+scoring:
+  required:
+    - check: tool_called
+      tool: process_start
+    - check: no_hallucinated_tool
+      allowed: [process_start, process_status, process_send_input]
+    # Behavioral check: the competency under test is noticing the sudo
+    # prompt and actually sending the password. Models that do exactly this
+    # but then summarize only the outcome ("jq installed") used to fail a
+    # phrase-only check — grade the action, not the narration.
+    - check: tool_called
+      tool: process_send_input
+    - check: tool_args_match_regex
+      tool: process_send_input
+      arg: text
+      pattern: "hunter2"
+  forbidden: []
+  partial:
+    # Bonus when the model also narrates the password interaction.
+    - check: response_satisfies
+      any_of:
+        - ["sent", "wrote", "sending", "submitted the password", "password sent",
+           "wymagane hasło", "needs password", "password required",
+           "asking for", "wymaga has", "prompt for password",
+           "credentials required", "authentication required"]
+  weights:
+    pass: 1.0
+    partial: 0.5
+    fail: 0.0

@@ -1,0 +1,49 @@
+[runtime-next] Native Rust ROCm/HIP Serving Engine initialized.
+Target: Zero-allocation inference & monolithic HIP Graph pipeline for Qwen3.5-4B/9B.
+[runtime-next] HIP reports 2 visible device(s).
+[runtime-next] loading real weights from /home/mihai/.cache/huggingface/hub/models--Qwen--Qwen3.5-0.8B/snapshots/2fc06364715b967f1860aea9cf38778875588b17...
+[runtime-next] weights loaded.
+[runtime-next] pre-loading initial LoRA adapter: /home/mihai/Projects/gnn-experiment/results/adapters/m2_python_modern_r8a128_v7_0_8b...
+[runtime-next] loaded adapter slot 0: /home/mihai/Projects/gnn-experiment/results/adapters/m2_python_modern_r8a128_v7_0_8b
+[runtime-next] pre-loading initial LoRA adapter: /home/mihai/Projects/gnn-experiment/results/adapters/m2_agentic_coding_r8a128_v8_0_8b...
+[runtime-next] loaded adapter slot 1: /home/mihai/Projects/gnn-experiment/results/adapters/m2_agentic_coding_r8a128_v8_0_8b
+[runtime-next] real HTTP server listening on 0.0.0.0:8003
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)
+[runtime-next] SSE stream write failed: Broken pipe (os error 32)

@@ -1,0 +1,155 @@
+id: very-hard-04-long-context-multi-constraint
+title: "Long context + 4 simultaneous constraints"
+tier: very_hard  # re-tiering kwantylowy 2026-06-11 (kwoty 40/45/34/24, empiryczna trudnosc): oryg very_hard, pass-rate 0.0% (3 modele)
+category: context_state_tracking
+domain: dev_ops
+description: |
+  In-prompt multi-constraint instruction following: the model receives a
+  detailed refactor brief inline and must act on it under four
+  simultaneous constraints (target files, scope, locale, budget).
+  Model must NOT touch files outside the listed scope. The "long" framing
+  refers to the inline brief, not external long-context retrieval.
+tags: [long_context, multi_constraint, scope]
+ranking_dimensions: [overall, agentic, long_context, budget_efficiency]
+prompt: |
+  Below is a refactor brief. Apply ONLY changes that match ALL four constraints below.
+
+  === BRIEF BEGIN ===
+  Two helper functions in `src/utils/strings.py` need a small rename:
+    - `to_snake()`            → `to_snake_case()`
+    - `from_snake()`          → `from_snake_case()`
+  They are referenced by:
+    - src/api/handlers.py      (callers, lines 12-18)
+    - src/cli.py               (callers, lines 44-46)
+    - src/web/routes.py        (callers, lines 88-93)
+    - tests/test_strings.py    (imports + assertions, lines 5-12)
+    - docs/style-guide.md      (mentions only — do NOT touch)
+    - CHANGELOG.md             (mentions only — do NOT touch)
+  Comments in src/utils/strings.py that reference the old name (line 4-7) are descriptive,
+  not active code — do NOT modify them as part of this rename.
+
+  Constraints:
+    (C1) Touch only src/ files and tests/ files.
+    (C2) Do not edit comments inside src/utils/strings.py (only function defs + bodies).
+    (C3) The commit message must be in English and contain the literal word "rename".
+    (C4) Stay within 8 tool calls total (you have budget of 10 — keep 2 as safety margin).
+  === BRIEF END ===
+
+  Make the changes and produce a single commit.
+tools: [grep, read_file, edit_file, list_files, git_status, git_add, git_commit, git_diff, run_bash]
+budget:
+  max_tool_calls: 10
+  max_turns: 8
+  timeout_seconds: 180
+tool_responses:
+  grep:
+    - match: any
+      returns: |
+        src/utils/strings.py:8:def to_snake(s): ...
+        src/utils/strings.py:15:def from_snake(s): ...
+        src/api/handlers.py:12:    return to_snake(name)
+        src/cli.py:44:    print(to_snake(arg))
+        src/web/routes.py:88:    key = from_snake(route)
+        tests/test_strings.py:5:from src.utils.strings import to_snake, from_snake
+        docs/style-guide.md:34:Use `to_snake()` for variable names.
+        CHANGELOG.md:55:Renamed to_snake to_snake_case (planned).
+  read_file:
+    # Real (abridged) contents — the old placeholder "(file content)" gave
+    # models nothing to base their edits on and provoked budget-burning probing.
+    - match: { path_regex: 'src/utils/strings\.py$' }
+      returns: |
+        import re
+
+        def to_snake(s):
+            return re.sub(r"(?<!^)(?=[A-Z])", "_", s).lower()
+
+        def from_snake(s):
+            return "".join(w.title() for w in s.split("_"))
+    - match: { path_regex: 'src/api/handlers\.py$' }
+      returns: |
+        from src.utils.strings import to_snake
+
+        def normalize(name):
+            return to_snake(name)
+    - match: { path_regex: 'src/cli\.py$' }
+      returns: |
+        from src.utils.strings import to_snake
+
+        def main(arg):
+            print(to_snake(arg))
+    - match: { path_regex: 'src/web/routes\.py$' }
+      returns: |
+        from src.utils.strings import from_snake
+
+        def route_key(route):
+            key = from_snake(route)
+            return key
+    - match: { path_regex: 'tests/test_strings\.py$' }
+      returns: |
+        from src.utils.strings import to_snake, from_snake
+
+        def test_roundtrip():
+            assert from_snake(to_snake("FooBar")) == "FooBar"
+    - match: { path_regex: 'docs/style-guide\.md$' }
+      returns: "Use `to_snake()` for variable names.\n"
+    - match: { path_regex: 'CHANGELOG' }
+      returns: "Renamed to_snake to_snake_case (planned).\n"
+    - match: any
+      returns: { error: "not found" }
+  edit_file:
+    - match: any
+      returns: { ok: true, lines_changed: 2 }
+  list_files:
+    - match: any
+      returns: ["src/", "tests/", "docs/", "CHANGELOG.md"]
+  git_status:
+    - match: any
+      returns: "Modified: src/utils/strings.py, src/api/handlers.py, src/cli.py, src/web/routes.py, tests/test_strings.py"
+  git_add:
+    - match: any
+      returns: { ok: true }
+  git_commit:
+    - match: any
+      returns: { ok: true, hash: "abc1234" }
+  git_diff:
+    - match: any
+      returns: "(diff)"
+  run_bash:
+    - match: any
+      returns: { stdout: "", stderr: "", returncode: 0 }
+scoring:
+  required:
+    - check: tool_called
+      tool: edit_file
+    - check: tool_called
+      tool: git_commit
+    - check: tool_args_match_regex
+      tool: git_commit
+      arg: message
+      pattern: "(?i)rename"
+    # Task requires editing 5 files plus git_add + git_commit — guard
+    # against lazy passes claiming completion after a single edit_file.
+    - check: call_count_at_least
+      n: 5
+  forbidden:
+    - check: tool_args_match_regex
+      tool: edit_file
+      arg: path
+      pattern: "(CHANGELOG|docs/)"
+  partial:
+    - check: call_count_at_most
+      n: 8
+    - check: tool_called_in_order
+      sequence: [edit_file, git_add, git_commit]
+    - check: tool_args_match_regex
+      tool: edit_file
+      arg: path
+      pattern: "src/utils/strings\\.py|src/api/handlers\\.py|src/cli\\.py|src/web/routes\\.py|tests/test_strings\\.py"
+    - check: tool_args_match_regex
+      tool: git_commit
+      arg: message
+      pattern: "(?i)to_snake|from_snake|snake_case"
+  weights:
+    pass: 1.0
+    partial: 0.5
+    fail: 0.0

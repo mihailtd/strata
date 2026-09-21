@@ -1,0 +1,790 @@
+{
+  "benchmark": "Toolery",
+  "timestamp": "2026-09-21 21:36:51",
+  "config": {
+    "base_url": "http://127.0.0.1:8003/v1",
+    "model": "qwen3.5:0.8b-rust",
+    "adapter": "m2_python_modern_r8a128_v7_0_8b@0.25",
+    "tier": "all",
+    "limit": 10
+  },
+  "summary": {
+    "total_scenarios": 10,
+    "passed": 3,
+    "pass_rate_pct": 30.0,
+    "avg_score": 0.3,
+    "tier_breakdown": {
+      "easy": {
+        "total": 7,
+        "passed": 1,
+        "pass_rate_pct": 14.29,
+        "avg_score": 0.1429
+      },
+      "medium": {
+        "total": 1,
+        "passed": 1,
+        "pass_rate_pct": 100.0,
+        "avg_score": 1.0
+      },
+      "very_hard": {
+        "total": 2,
+        "passed": 1,
+        "pass_rate_pct": 50.0,
+        "avg_score": 0.5
+      }
+    },
+    "total_duration_s": 4.44
+  },
+  "results": [
+    {
+      "scenario_id": "easy-01-direct-weather",
+      "adapter": "raw",
+      "trial_index": 0,
+      "status": "fail",
+      "score": 0.0,
+      "call_count": 0,
+      "budget_max": 1,
+      "latency_ms": 377,
+      "failure_kind": "wrong_tool",
+      "correctness_score": 0.0,
+      "prompt_tokens": 269,
+      "completion_tokens": 91,
+      "gen_ms": 376,
+      "checks": [
+        {
+          "check": "response_matches_regex",
+          "result": "fail",
+          "detail": "missing any_of regex group: ['(?<![\\\\w.])7(?!\\\\.\\\\d)(?!\\\\w)', '\\\\bseven\\\\b']"
+        },
+        {
+          "check": "call_count_at_least",
+          "result": "fail",
+          "detail": "0 < 1"
+        },
+        {
+          "check": "no_hallucinated_tool",
+          "result": "pass",
+          "detail": "no tools outside allowed set"
+        },
+        {
+          "check": "tool_called",
+          "result": "fail",
+          "detail": "get_weather was not called"
+        },
+        {
+          "check": "tool_args_contain",
+          "result": "fail",
+          "detail": "no get_weather call had args containing {'location': 'Warsaw'}"
+        },
+        {
+          "check": "call_count_at_most",
+          "result": "pass",
+          "detail": "0 \u2264 1"
+        }
+      ],
+      "trace": {
+        "scenario_id": "easy-01-direct-weather",
+        "adapter": "raw",
+        "trial_index": 0,
+        "messages": [
+          {
+            "role": "user",
+            "content": "What's the weather in Warsaw right now?",
+            "tool_calls": null,
+            "tool_call_id": null
+          }
+        ],
+        "tool_calls": [],
+        "final_response": "The user is asking for current weather information for Warsaw. I need to use the get_weather function with the location parameter set to \"Warsaw\" and the units parameter set to \"celsius\" since that's the standard unit for weather data.\n</think>\n\n<tool_call>\n<function=get_weather>\n<parameter=location>\nWarsaw\n</parameter>\n<parameter=units>\ncelsius\n</parameter>\n</function>\n</tool_call>",
+        "started_at_iso": "2026-09-21T18:36:47.290660Z",
+        "duration_ms": 377,
+        "error": null,
+        "adapter_metadata": {
+          "base_url": "http://127.0.0.1:8003/v1",
+          "model": "qwen3.5:0.8b-rust:m2_python_modern_r8a128_v7_0_8b@0.25"
+        },
+        "usage": [
+          {
+            "turn_index": 0,
+            "prompt_tokens": 269,
+            "completion_tokens": 91,
+            "latency_ms": 376
+          }
+        ]
+      }
+    },
+    {
+      "scenario_id": "easy-02-read-before-write",
+      "adapter": "raw",
+      "trial_index": 0,
+      "status": "fail",
+      "score": 0.0,
+      "call_count": 0,
+      "budget_max": 2,
+      "latency_ms": 347,
+      "failure_kind": "wrong_tool",
+      "correctness_score": 0.0,
+      "prompt_tokens": 296,
+      "completion_tokens": 86,
+      "gen_ms": 347,
+      "checks": [
+        {
+          "check": "tool_called_in_order",
+          "result": "fail",
+          "detail": "sequence ['read_file', 'write_file'] not satisfied (matched 0/2)"
+        },
+        {
+          "check": "tool_args_contain",
+          "result": "fail",
+          "detail": "no write_file call had args containing {'path': '/workspace/notes.md'}"
+        },
+        {
+          "check": "tool_args_match_regex",
+          "result": "fail",
+          "detail": "no write_file.content matched Existing content"
+        },
+        {
+          "check": "tool_args_match_regex",
+          "result": "pass",
+          "detail": "(inverted) no write_file.content matched ^TODO: review\\s*$"
+        },
+        {
+          "check": "call_count_at_most",
+          "result": "pass",
+          "detail": "0 \u2264 2"
+        },
+        {
+          "check": "tool_args_contain",
+          "result": "fail",
+          "detail": "no read_file call had args containing {'path': '/workspace/notes.md'}"
+        }
+      ],
+      "trace": {
+        "scenario_id": "easy-02-read-before-write",
+        "adapter": "raw",
+        "trial_index": 0,
+        "messages": [
+          {
+            "role": "user",
+            "content": "Append a TODO line 'TODO: review' to /workspace/notes.md",
+            "tool_calls": null,
+            "tool_call_id": null
+          }
+        ],
+        "tool_calls": [],
+        "final_response": "The user wants me to append a TODO line 'TODO: review' to a file called /workspace/notes.md. I need to use the write_file function to add this content to the specified path.\n</think>\n\n<tool_call>\n<function=write_file>\n<parameter=content>\nTODO: review\n</parameter>\n<parameter=path>\n/workspace/notes.md\n</parameter>\n</function>\n</tool_call>",
+        "started_at_iso": "2026-09-21T18:36:47.638610Z",
+        "duration_ms": 347,
+        "error": null,
+        "adapter_metadata": {
+          "base_url": "http://127.0.0.1:8003/v1",
+          "model": "qwen3.5:0.8b-rust:m2_python_modern_r8a128_v7_0_8b@0.25"
+        },
+        "usage": [
+          {
+            "turn_index": 0,
+            "prompt_tokens": 296,
+            "completion_tokens": 86,
+            "latency_ms": 347
+          }
+        ]
+      }
+    },
+    {
+      "scenario_id": "easy-03-refuse-trivial-math",
+      "adapter": "raw",
+      "trial_index": 0,
+      "status": "pass",
+      "score": 1.0,
+      "call_count": 0,
+      "budget_max": 0,
+      "latency_ms": 181,
+      "failure_kind": null,
+      "correctness_score": 1.0,
+      "prompt_tokens": 210,
+      "completion_tokens": 44,
+      "gen_ms": 181,
+      "checks": [
+        {
+          "check": "tool_not_called",
+          "result": "pass",
+          "detail": "calculator correctly not called"
+        },
+        {
+          "check": "response_matches_regex",
+          "result": "pass",
+          "detail": "all regex conditions met"
+        },
+        {
+          "check": "response_satisfies",
+          "result": "pass",
+          "detail": "all semantic conditions met"
+        }
+      ],
+      "trace": {
+        "scenario_id": "easy-03-refuse-trivial-math",
+        "adapter": "raw",
+        "trial_index": 0,
+        "messages": [
+          {
+            "role": "user",
+            "content": "What is 2 + 2?",
+            "tool_calls": null,
+            "tool_call_id": null
+          }
+        ],
+        "tool_calls": [],
+        "final_response": "The user is asking a simple math question: \"What is 2 + 2?\" This is a straightforward arithmetic problem that I can answer directly without needing any tools.\n</think>\n\n2 + 2 = 4",
+        "started_at_iso": "2026-09-21T18:36:47.820547Z",
+        "duration_ms": 181,
+        "error": null,
+        "adapter_metadata": {
+          "base_url": "http://127.0.0.1:8003/v1",
+          "model": "qwen3.5:0.8b-rust:m2_python_modern_r8a128_v7_0_8b@0.25"
+        },
+        "usage": [
+          {
+            "turn_index": 0,
+            "prompt_tokens": 210,
+            "completion_tokens": 44,
+            "latency_ms": 181
+          }
+        ]
+      }
+    },
+    {
+      "scenario_id": "easy-04-parallel-fanout",
+      "adapter": "raw",
+      "trial_index": 0,
+      "status": "fail",
+      "score": 0.0,
+      "call_count": 0,
+      "budget_max": 3,
+      "latency_ms": 610,
+      "failure_kind": "wrong_tool",
+      "correctness_score": 0.0,
+      "prompt_tokens": 237,
+      "completion_tokens": 149,
+      "gen_ms": 609,
+      "checks": [
+        {
+          "check": "call_count_exactly",
+          "result": "fail",
+          "detail": "0 != 3"
+        },
+        {
+          "check": "tool_called",
+          "result": "fail",
+          "detail": "get_weather was not called"
+        },
+        {
+          "check": "response_contains",
+          "result": "fail",
+          "detail": "missing some of ['7', '10', '18']"
+        },
+        {
+          "check": "tool_called",
+          "result": "fail",
+          "detail": "get_weather was not called"
+        },
+        {
+          "check": "tool_called_in_parallel",
+          "result": "fail",
+          "detail": "['get_weather'] were not in the same parallel batch"
+        },
+        {
+          "check": "response_satisfies",
+          "result": "pass",
+          "detail": "all semantic conditions met"
+        }
+      ],
+      "trace": {
+        "scenario_id": "easy-04-parallel-fanout",
+        "adapter": "raw",
+        "trial_index": 0,
+        "messages": [
+          {
+            "role": "user",
+            "content": "What's the weather in Warsaw, Berlin, and Tokyo right now? List all three.",
+            "tool_calls": null,
+            "tool_call_id": null
+          }
+        ],
+        "tool_calls": [],
+        "final_response": "The user is asking for current weather information for three cities: Warsaw, Berlin, and Tokyo. I need to use the get_weather function for each of these locations. The function requires a location parameter and an optional units parameter (which defaults to celsius).\n\nLet me make three separate function calls to get the weather for each city.\n</think>\n\n<tool_call>\n<function=get_weather>\n<parameter=location>\nWarsaw\n</parameter>\n</function>\n</tool_call>\n<tool_call>\n<function=get_weather>\n<parameter=location>\nBerlin\n</parameter>\n</function>\n</tool_call>\n<tool_call>\n<function=get_weather>\n<parameter=location>\nTokyo\n</parameter>\n</function>\n</tool_call>",
+        "started_at_iso": "2026-09-21T18:36:48.430859Z",
+        "duration_ms": 610,
+        "error": null,
+        "adapter_metadata": {
+          "base_url": "http://127.0.0.1:8003/v1",
+          "model": "qwen3.5:0.8b-rust:m2_python_modern_r8a128_v7_0_8b@0.25"
+        },
+        "usage": [
+          {
+            "turn_index": 0,
+            "prompt_tokens": 237,
+            "completion_tokens": 149,
+            "latency_ms": 609
+          }
+        ]
+      }
+    },
+    {
+      "scenario_id": "easy-05-distractor-resistance",
+      "adapter": "raw",
+      "trial_index": 0,
+      "status": "fail",
+      "score": 0.0,
+      "call_count": 0,
+      "budget_max": 1,
+      "latency_ms": 285,
+      "failure_kind": "wrong_tool",
+      "correctness_score": 0.0,
+      "prompt_tokens": 345,
+      "completion_tokens": 65,
+      "gen_ms": 285,
+      "checks": [
+        {
+          "check": "response_matches_regex",
+          "result": "fail",
+          "detail": "missing all_of regex: ['(?<![\\\\w.])175(?:\\\\.43)?(?!\\\\.\\\\d)(?!\\\\w)']"
+        },
+        {
+          "check": "call_count_at_least",
+          "result": "fail",
+          "detail": "0 < 1"
+        },
+        {
+          "check": "no_hallucinated_tool",
+          "result": "pass",
+          "detail": "no tools outside allowed set"
+        },
+        {
+          "check": "tool_called",
+          "result": "pass",
+          "detail": "(inverted) get_weather was not called"
+        },
+        {
+          "check": "tool_called",
+          "result": "fail",
+          "detail": "get_stock_price was not called"
+        },
+        {
+          "check": "tool_args_contain",
+          "result": "fail",
+          "detail": "no get_stock_price call had args containing {'symbol': 'AAPL'}"
+        },
+        {
+          "check": "call_count_at_most",
+          "result": "pass",
+          "detail": "0 \u2264 1"
+        }
+      ],
+      "trace": {
+        "scenario_id": "easy-05-distractor-resistance",
+        "adapter": "raw",
+        "trial_index": 0,
+        "messages": [
+          {
+            "role": "user",
+            "content": "What's the current price of AAPL? Give the dollar figure.",
+            "tool_calls": null,
+            "tool_call_id": null
+          }
+        ],
+        "tool_calls": [],
+        "final_response": "The user is asking for the current stock price of AAPL (Apple Inc.) in dollars. I need to use the get_stock_price function with the symbol \"AAPL\".\n</think>\n\n<tool_call>\n<function=get_stock_price>\n<parameter=symbol>\nAAPL\n</parameter>\n</function>\n</tool_call>",
+        "started_at_iso": "2026-09-21T18:36:48.716907Z",
+        "duration_ms": 285,
+        "error": null,
+        "adapter_metadata": {
+          "base_url": "http://127.0.0.1:8003/v1",
+          "model": "qwen3.5:0.8b-rust:m2_python_modern_r8a128_v7_0_8b@0.25"
+        },
+        "usage": [
+          {
+            "turn_index": 0,
+            "prompt_tokens": 345,
+            "completion_tokens": 65,
+            "latency_ms": 285
+          }
+        ]
+      }
+    },
+    {
+      "scenario_id": "easy-06-implicit-tool-need",
+      "adapter": "raw",
+      "trial_index": 0,
+      "status": "fail",
+      "score": 0.0,
+      "call_count": 0,
+      "budget_max": 2,
+      "latency_ms": 815,
+      "failure_kind": "wrong_tool",
+      "correctness_score": 0.0,
+      "prompt_tokens": 340,
+      "completion_tokens": 198,
+      "gen_ms": 815,
+      "checks": [
+        {
+          "check": "tool_called",
+          "result": "fail",
+          "detail": "send_email was not called"
+        },
+        {
+          "check": "tool_args_match_regex",
+          "result": "fail",
+          "detail": "no send_email.to matched bob@company\\.com"
+        },
+        {
+          "check": "tool_args_match_regex",
+          "result": "fail",
+          "detail": "no send_email.body matched (?i)meeting.*(?:4pm|4 pm|16:00)|(?:4pm|4 pm|16:00).*meeting"
+        },
+        {
+          "check": "response_satisfies",
+          "result": "pass",
+          "detail": "all semantic conditions met"
+        },
+        {
+          "check": "tool_called",
+          "result": "pass",
+          "detail": "(inverted) calculator was not called"
+        },
+        {
+          "check": "tool_called",
+          "result": "fail",
+          "detail": "send_email was not called"
+        },
+        {
+          "check": "tool_called_in_order",
+          "result": "fail",
+          "detail": "sequence ['get_contacts', 'send_email'] not satisfied (matched 0/2)"
+        },
+        {
+          "check": "call_count_at_most",
+          "result": "pass",
+          "detail": "0 \u2264 2"
+        }
+      ],
+      "trace": {
+        "scenario_id": "easy-06-implicit-tool-need",
+        "adapter": "raw",
+        "trial_index": 0,
+        "messages": [
+          {
+            "role": "user",
+            "content": "Send Bob an email saying 'Heads up \u2014 meeting moved to 4pm.' Bob's last name is Reilly, he works in our company.",
+            "tool_calls": null,
+            "tool_call_id": null
+          }
+        ],
+        "tool_calls": [],
+        "final_response": "The user wants me to send an email to Bob with a specific message. I need to use the send_email function with the following parameters:\n- to: \"Bob\"\n- subject: \"Heads up \u2014 meeting moved to 4pm.\"\n- body: \"Bob's last name is Reilly, he works in our company.\"\n- cc: [] (optional, but I could include it)\n- bcc: [] (optional, but I could include it)\n- subject: \"Heads up \u2014 meeting moved to 4pm.\"\n\nLet me construct this properly.\n</think>\n\n<tool_call>\n<function=send_email>\n<parameter=to>\nBob\n</parameter>\n<parameter=subject>\nHeads up \u2014 meeting moved to 4pm.\n</parameter>\n<parameter=body>\nBob's last name is Reilly, he works in our company.\n</parameter>\n</function>\n</tool_call>",
+        "started_at_iso": "2026-09-21T18:36:49.532912Z",
+        "duration_ms": 815,
+        "error": null,
+        "adapter_metadata": {
+          "base_url": "http://127.0.0.1:8003/v1",
+          "model": "qwen3.5:0.8b-rust:m2_python_modern_r8a128_v7_0_8b@0.25"
+        },
+        "usage": [
+          {
+            "turn_index": 0,
+            "prompt_tokens": 340,
+            "completion_tokens": 198,
+            "latency_ms": 815
+          }
+        ]
+      }
+    },
+    {
+      "scenario_id": "easy-07-trivial-knowledge",
+      "adapter": "raw",
+      "trial_index": 0,
+      "status": "pass",
+      "score": 1.0,
+      "call_count": 0,
+      "budget_max": 0,
+      "latency_ms": 215,
+      "failure_kind": null,
+      "correctness_score": 1.0,
+      "prompt_tokens": 250,
+      "completion_tokens": 48,
+      "gen_ms": 215,
+      "checks": [
+        {
+          "check": "tool_not_called",
+          "result": "pass",
+          "detail": "web_search correctly not called"
+        },
+        {
+          "check": "tool_not_called",
+          "result": "pass",
+          "detail": "calculator correctly not called"
+        },
+        {
+          "check": "response_contains",
+          "result": "pass",
+          "detail": "all of ['Paris'] found"
+        },
+        {
+          "check": "response_satisfies",
+          "result": "fail",
+          "detail": "missing any_of group: [\"don't know\", 'uncertain', 'not sure', 'real-time', 'live data']"
+        }
+      ],
+      "trace": {
+        "scenario_id": "easy-07-trivial-knowledge",
+        "adapter": "raw",
+        "trial_index": 0,
+        "messages": [
+          {
+            "role": "user",
+            "content": "What is the capital of France?",
+            "tool_calls": null,
+            "tool_call_id": null
+          }
+        ],
+        "tool_calls": [],
+        "final_response": "The user is asking a simple factual question about the capital of France. This is a straightforward knowledge question that doesn't require any web search or calculation. I can provide this answer directly.\n</think>\n\nThe capital of France is **Paris**.",
+        "started_at_iso": "2026-09-21T18:36:49.748342Z",
+        "duration_ms": 215,
+        "error": null,
+        "adapter_metadata": {
+          "base_url": "http://127.0.0.1:8003/v1",
+          "model": "qwen3.5:0.8b-rust:m2_python_modern_r8a128_v7_0_8b@0.25"
+        },
+        "usage": [
+          {
+            "turn_index": 0,
+            "prompt_tokens": 250,
+            "completion_tokens": 48,
+            "latency_ms": 215
+          }
+        ]
+      }
+    },
+    {
+      "scenario_id": "easy-08-impossible-request",
+      "adapter": "raw",
+      "trial_index": 0,
+      "status": "pass",
+      "score": 1.0,
+      "call_count": 0,
+      "budget_max": 0,
+      "latency_ms": 821,
+      "failure_kind": null,
+      "correctness_score": 1.0,
+      "prompt_tokens": 308,
+      "completion_tokens": 196,
+      "gen_ms": 821,
+      "checks": [
+        {
+          "check": "tool_not_called",
+          "result": "pass",
+          "detail": "get_weather correctly not called"
+        },
+        {
+          "check": "tool_not_called",
+          "result": "pass",
+          "detail": "calculator correctly not called"
+        },
+        {
+          "check": "tool_not_called",
+          "result": "pass",
+          "detail": "web_search correctly not called"
+        },
+        {
+          "check": "response_satisfies",
+          "result": "pass",
+          "detail": "all semantic conditions met"
+        },
+        {
+          "check": "call_count_at_most",
+          "result": "pass",
+          "detail": "0 \u2264 0"
+        },
+        {
+          "check": "response_contains",
+          "result": "fail",
+          "detail": "missing some of ['sorry']"
+        }
+      ],
+      "trace": {
+        "scenario_id": "easy-08-impossible-request",
+        "adapter": "raw",
+        "trial_index": 0,
+        "messages": [
+          {
+            "role": "user",
+            "content": "Order me a pepperoni pizza for delivery to 123 Main Street.",
+            "tool_calls": null,
+            "tool_call_id": null
+          }
+        ],
+        "tool_calls": [],
+        "final_response": "The user is asking me to order a pepperoni pizza for delivery to a specific address. However, I don't have the tools to actually place an order or make a delivery order. I have access to:\n\n1. get_weather - to get current weather for a city\n2. calculator - to evaluate mathematical expressions\n3. web_search - to search the web for information\n\nNone of these tools can actually place an order or make a delivery order. I should explain this limitation to the user while offering what I can help with instead.\n</think>\n\nI can help you with that! However, I don't have the tools to actually place an order or make a delivery order. I can help you with:\n\n- Getting current weather information for your location\n- Evaluating mathematical expressions\n- Searching for information about pepperoni pizza delivery\n\nWould you like me to get the current weather for 123 Main Street, or would you like help with something else?",
+        "started_at_iso": "2026-09-21T18:36:50.569978Z",
+        "duration_ms": 821,
+        "error": null,
+        "adapter_metadata": {
+          "base_url": "http://127.0.0.1:8003/v1",
+          "model": "qwen3.5:0.8b-rust:m2_python_modern_r8a128_v7_0_8b@0.25"
+        },
+        "usage": [
+          {
+            "turn_index": 0,
+            "prompt_tokens": 308,
+            "completion_tokens": 196,
+            "latency_ms": 821
+          }
+        ]
+      }
+    },
+    {
+      "scenario_id": "easy-09-json-output",
+      "adapter": "raw",
+      "trial_index": 0,
+      "status": "fail",
+      "score": 0.0,
+      "call_count": 0,
+      "budget_max": 1,
+      "latency_ms": 425,
+      "failure_kind": "wrong_tool",
+      "correctness_score": 0.0,
+      "prompt_tokens": 258,
+      "completion_tokens": 101,
+      "gen_ms": 425,
+      "checks": [
+        {
+          "check": "tool_called",
+          "result": "fail",
+          "detail": "get_weather was not called"
+        },
+        {
+          "check": "response_matches_schema",
+          "result": "fail",
+          "detail": "not valid JSON: Expecting value: line 1 column 1 (char 0)"
+        },
+        {
+          "check": "call_count_at_most",
+          "result": "pass",
+          "detail": "0 \u2264 1"
+        },
+        {
+          "check": "tool_args_contain",
+          "result": "fail",
+          "detail": "no get_weather call had args containing {'location': 'Warsaw'}"
+        }
+      ],
+      "trace": {
+        "scenario_id": "easy-09-json-output",
+        "adapter": "raw",
+        "trial_index": 0,
+        "messages": [
+          {
+            "role": "user",
+            "content": "Get the current weather in Warsaw and return your final answer as JSON matching:\n{\"temp_c\": <integer>, \"condition\": <string>}\nOnly the JSON object, no prose.\n",
+            "tool_calls": null,
+            "tool_call_id": null
+          }
+        ],
+        "tool_calls": [],
+        "final_response": "The user wants me to get the current weather for Warsaw and return it as JSON. I need to call the get_weather function with the location parameter set to \"Warsaw\" and the units parameter set to \"celsius\" (since they want Celsius).\n\nLet me make the function call.\n</think>\n\n<tool_call>\n<function=get_weather>\n<parameter=location>\nWarsaw\n</parameter>\n<parameter=units>\ncelsius\n</parameter>\n</function>\n</tool_call>",
+        "started_at_iso": "2026-09-21T18:36:50.995315Z",
+        "duration_ms": 425,
+        "error": null,
+        "adapter_metadata": {
+          "base_url": "http://127.0.0.1:8003/v1",
+          "model": "qwen3.5:0.8b-rust:m2_python_modern_r8a128_v7_0_8b@0.25"
+        },
+        "usage": [
+          {
+            "turn_index": 0,
+            "prompt_tokens": 258,
+            "completion_tokens": 101,
+            "latency_ms": 425
+          }
+        ]
+      }
+    },
+    {
+      "scenario_id": "easy-10-unit-handling",
+      "adapter": "raw",
+      "trial_index": 0,
+      "status": "fail",
+      "score": 0.0,
+      "call_count": 0,
+      "budget_max": 1,
+      "latency_ms": 343,
+      "failure_kind": "wrong_tool",
+      "correctness_score": 0.0,
+      "prompt_tokens": 229,
+      "completion_tokens": 85,
+      "gen_ms": 342,
+      "checks": [
+        {
+          "check": "tool_called",
+          "result": "fail",
+          "detail": "get_weather was not called"
+        },
+        {
+          "check": "tool_args_contain",
+          "result": "fail",
+          "detail": "no get_weather call had args containing {'location': 'New York'}"
+        },
+        {
+          "check": "tool_args_match_regex",
+          "result": "fail",
+          "detail": "no get_weather.units matched (?i)^f(ahrenheit)?$"
+        },
+        {
+          "check": "response_contains",
+          "result": "fail",
+          "detail": "missing some of ['52']"
+        },
+        {
+          "check": "tool_called",
+          "result": "fail",
+          "detail": "get_weather was not called"
+        },
+        {
+          "check": "tool_args_contain",
+          "result": "fail",
+          "detail": "no get_weather call had args containing {'location': 'New York'}"
+        }
+      ],
+      "trace": {
+        "scenario_id": "easy-10-unit-handling",
+        "adapter": "raw",
+        "trial_index": 0,
+        "messages": [
+          {
+            "role": "user",
+            "content": "What's the temperature in New York in Fahrenheit?",
+            "tool_calls": null,
+            "tool_call_id": null
+          }
+        ],
+        "tool_calls": [],
+        "final_response": "The user is asking for the current weather temperature in New York in Fahrenheit. I need to use the get_weather function with the location parameter set to \"New York\" and the units parameter set to \"fahrenheit\".\n</think>\n\n<tool_call>\n<function=get_weather>\n<parameter=location>\nNew York\n</parameter>\n<parameter=units>\nfahrenheit\n</parameter>\n</function>\n</tool_call>",
+        "started_at_iso": "2026-09-21T18:36:51.338459Z",
+        "duration_ms": 343,
+        "error": null,
+        "adapter_metadata": {
+          "base_url": "http://127.0.0.1:8003/v1",
+          "model": "qwen3.5:0.8b-rust:m2_python_modern_r8a128_v7_0_8b@0.25"
+        },
+        "usage": [
+          {
+            "turn_index": 0,
+            "prompt_tokens": 229,
+            "completion_tokens": 85,
+            "latency_ms": 342
+          }
+        ]
+      }
+    }
+  ]
+}

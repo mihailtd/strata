@@ -1,0 +1,63 @@
+id: hard-26-recover-then-format
+title: "Switch tool after error, format result as JSON"
+tier: easy  # re-tiering kwantylowy 2026-06-11 (kwoty 40/45/34/24, empiryczna trudnosc): oryg hard, pass-rate 100.0% (3 modele)
+category: error_recovery
+domain: generic
+description: |
+  http_get for the primary API fails with 503. Model must switch to
+  http_get on a backup endpoint (different host), then format the response
+  as the requested JSON shape.
+tags: [recovery, fallback, structured_output]
+ranking_dimensions: [overall, structured_output, tool_selection, error_recovery]
+prompt: |
+  Fetch the `auth` service status from the API and format it as JSON {"service": "auth", "status": <str>, "version": <str>}.
+  Primary: https://api.acme.com/health/auth
+  Backup:  https://api-backup.acme.com/health/auth
+  If the primary fails, use the backup.
+tools: [http_get]
+budget:
+  max_tool_calls: 3
+  max_turns: 2
+  timeout_seconds: 45
+tool_responses:
+  http_get:
+    - match: { url: "https://api.acme.com/health/auth" }
+      returns: { status: 503, body: "service_unavailable" }
+    - match: { url: "https://api-backup.acme.com/health/auth" }
+      returns: { status: 200, body: "{\"status\": \"ok\", \"version\": \"3.1.0\"}" }
+    - match: any
+      returns: { status: 404, body: "" }
+scoring:
+  required:
+    - check: tool_args_contain
+      tool: http_get
+      args: { url: "https://api.acme.com/health/auth" }
+    - check: tool_args_contain
+      tool: http_get
+      args: { url: "https://api-backup.acme.com/health/auth" }
+    - check: response_matches_schema
+      schema:
+        type: object
+        required: [service, status, version]
+        additionalProperties: false
+        properties:
+          service: { type: string, const: "auth" }
+          status: { type: string, const: "ok" }
+          version: { type: string, const: "3.1.0" }
+    - check: call_count_at_most
+      n: 3
+  forbidden: []
+  partial:
+    - check: tool_called
+      tool: http_get
+    - check: response_matches_schema
+      schema:
+        type: object
+        required: [status, version]
+        properties:
+          status: { type: string }
+          version: { type: string }
+  weights:
+    pass: 1.0
+    partial: 0.5
+    fail: 0.0

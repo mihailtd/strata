@@ -1,0 +1,63 @@
+id: hard-03-async-polling
+title: "Submit async job and poll until done"
+tier: easy  # re-tiering kwantylowy 2026-06-11 (kwoty 40/45/34/24, empiryczna trudnosc): oryg hard, pass-rate 100.0% (3 modele)
+category: multi_step_chains
+domain: dev_ops
+description: |
+  Submit a batch job (run_bash), the first status check returns "pending",
+  subsequent ones return "complete". Model must keep polling, not just submit and stop.
+tags: [async, polling, chain]
+ranking_dimensions: [overall, agentic]
+prompt: |
+  Submit a backup job by running `backup_script.sh start`. It runs asynchronously.
+  Then poll its status with `backup_script.sh status` until it reports complete,
+  and tell me the result. Don't run more than 4 status checks.
+# Use bash_exec (canonical shell primitive — args key "command:") instead of
+# run_bash (which uses "cmd:" and doesn't pair with command_regex_match).
+# Original used run_bash with match keyed on "command:" — model called with
+# "cmd:" per schema, mock fell through to "unknown cmd", scenario was unable
+# to test polling at all.
+tools: [bash_exec]
+budget:
+  max_tool_calls: 5
+  max_turns: 5
+  timeout_seconds: 90
+tool_responses:
+  bash_exec:
+    # Accept idiomatic variants: bare path, ./prefix, bash/sh wrappers.
+    - match: { command_regex: "(?:\\./|bash\\s+|sh\\s+)?backup_script\\.sh\\s+start\\b" }
+      returns: { stdout: "submitted job_id=4271", stderr: "", exit_code: 0 }
+    # First two status polls report pending; third+ reports complete. Uses
+    # match_index (per-status-call counter) so models can poll robustly
+    # without the result depending on what other commands they ran first.
+    - match: { command_regex: "(?:\\./|bash\\s+|sh\\s+)?backup_script\\.sh\\s+status\\b" }
+      match_index: ">=2"
+      returns: { stdout: "complete: 14.2 GB written", stderr: "", exit_code: 0 }
+    - match: { command_regex: "(?:\\./|bash\\s+|sh\\s+)?backup_script\\.sh\\s+status\\b" }
+      returns: { stdout: "pending", stderr: "", exit_code: 0 }
+    - match: any
+      returns: { stdout: "", stderr: "unknown cmd", exit_code: 1 }
+scoring:
+  required:
+    - check: tool_called
+      tool: bash_exec
+    - check: call_count_at_least
+      n: 3
+    - check: response_contains
+      patterns: ["complete"]
+    - check: response_contains
+      patterns: ["14.2 GB"]
+  forbidden: []
+  partial:
+    - check: call_count_at_most
+      n: 5
+    - check: command_regex_match
+      tool: bash_exec
+      pattern: "backup_script\\.sh start"
+    - check: command_regex_match
+      tool: bash_exec
+      pattern: "backup_script\\.sh status"
+  weights:
+    pass: 1.0
+    partial: 0.5
+    fail: 0.0

@@ -1,0 +1,121 @@
+{
+  "benchmark": "HumanEval",
+  "timestamp": "2026-09-21 21:36:41",
+  "config": {
+    "base_url": "http://127.0.0.1:8003/v1",
+    "model": "qwen3.5:0.8b-rust",
+    "adapter": "m2_python_modern_r8a128_v7_0_8b@0.25",
+    "limit": 10,
+    "start_idx": 0,
+    "temperature": 0.0,
+    "timeout": 5.0
+  },
+  "summary": {
+    "total_problems": 10,
+    "passed": 5,
+    "pass_rate_pct": 50.0,
+    "total_duration_s": 18.19
+  },
+  "results": [
+    {
+      "task_id": "HumanEval/0",
+      "entry_point": "has_close_elements",
+      "passed": true,
+      "ttft_ms": 34.36,
+      "tok_s": 273.01,
+      "tokens": 512,
+      "exec_duration_s": 0.0091,
+      "error": ""
+    },
+    {
+      "task_id": "HumanEval/1",
+      "entry_point": "separate_paren_groups",
+      "passed": false,
+      "ttft_ms": 26.18,
+      "tok_s": 274.21,
+      "tokens": 512,
+      "exec_duration_s": 0.0196,
+      "error": "Traceback (most recent call last):\n  File \"/tmp/tmp2etde7j5.py\", line 28, in <module>\n    check(separate_paren_groups)\n    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/tmp2etde7j5.py\", line 25, in check\n"
+    },
+    {
+      "task_id": "HumanEval/2",
+      "entry_point": "truncate_number",
+      "passed": false,
+      "ttft_ms": 27.58,
+      "tok_s": 275.93,
+      "tokens": 392,
+      "exec_duration_s": 0.0204,
+      "error": "Traceback (most recent call last):\n  File \"/tmp/tmpcb31zk6o.py\", line 26, in <module>\n    check(truncate_number)\n    ~~~~~^^^^^^^^^^^^^^^^^\n  File \"/tmp/tmpcb31zk6o.py\", line 21, in check\n    assert c"
+    },
+    {
+      "task_id": "HumanEval/3",
+      "entry_point": "below_zero",
+      "passed": false,
+      "ttft_ms": 29.76,
+      "tok_s": 274.51,
+      "tokens": 512,
+      "exec_duration_s": 0.02,
+      "error": "Traceback (most recent call last):\n  File \"/tmp/tmp6qa41x2t.py\", line 41, in <module>\n    check(below_zero)\n    ~~~~~^^^^^^^^^^^^\n  File \"/tmp/tmp6qa41x2t.py\", line 33, in check\n    assert candidate(["
+    },
+    {
+      "task_id": "HumanEval/4",
+      "entry_point": "mean_absolute_deviation",
+      "passed": true,
+      "ttft_ms": 29.83,
+      "tok_s": 275.22,
+      "tokens": 446,
+      "exec_duration_s": 0.0088,
+      "error": ""
+    },
+    {
+      "task_id": "HumanEval/5",
+      "entry_point": "intersperse",
+      "passed": true,
+      "ttft_ms": 23.99,
+      "tok_s": 274.1,
+      "tokens": 512,
+      "exec_duration_s": 0.0084,
+      "error": ""
+    },
+    {
+      "task_id": "HumanEval/6",
+      "entry_point": "parse_nested_parens",
+      "passed": false,
+      "ttft_ms": 25.83,
+      "tok_s": 273.57,
+      "tokens": 512,
+      "exec_duration_s": 0.0187,
+      "error": "File \"/tmp/tmpznjrn7x6.py\", line 28\n    - `)` is at depth 3\n       ^\nSyntaxError: unmatched ')'"
+    },
+    {
+      "task_id": "HumanEval/7",
+      "entry_point": "filter_by_substring",
+      "passed": true,
+      "ttft_ms": 27.1,
+      "tok_s": 275.41,
+      "tokens": 451,
+      "exec_duration_s": 0.0097,
+      "error": ""
+    },
+    {
+      "task_id": "HumanEval/8",
+      "entry_point": "sum_product",
+      "passed": false,
+      "ttft_ms": 26.02,
+      "tok_s": 273.18,
+      "tokens": 512,
+      "exec_duration_s": 0.0191,
+      "error": "File \"/tmp/tmpu1szftqj.py\", line 6\n    METADATA = {\n    ^^^^^^^^\nIndentationError: expected an indented block after function definition on line 1"
+    },
+    {
+      "task_id": "HumanEval/9",
+      "entry_point": "rolling_max",
+      "passed": true,
+      "ttft_ms": 27.3,
+      "tok_s": 274.77,
+      "tokens": 512,
+      "exec_duration_s": 0.0093,
+      "error": ""
+    }
+  ]
+}

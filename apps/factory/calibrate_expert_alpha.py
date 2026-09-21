@@ -67,8 +67,9 @@ def measure_dw_over_w(adapter_dir: Path) -> dict:
     sd = load_file(adapter_dir / "adapter_model.safetensors")
     cfg = json.loads((adapter_dir / "adapter_config.json").read_text())
     r, alpha = cfg["r"], cfg["lora_alpha"]
+    base_model_id = cfg.get("base_model_name_or_path", "Qwen/Qwen3.5-4B")
     model = AutoModelForCausalLM.from_pretrained(
-        "Qwen/Qwen3.5-4B", dtype=torch.bfloat16, device_map="cpu", trust_remote_code=True
+        base_model_id, dtype=torch.bfloat16, device_map="cpu", trust_remote_code=True
     )
     named = dict(model.named_parameters())
     num = den = 0.0

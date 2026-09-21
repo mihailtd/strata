@@ -63,6 +63,10 @@ node_modules/
 **/node_modules
 target/
 **/target/
+target*/
+**/target*/
+.rocprofv3/
+**/.rocprofv3/
 
 # Fetched on demand by apps/runtime-llama/setup.sh (git clone --depth 1 +
 # local cmake build) -- not our code, not tracked. This repo has no

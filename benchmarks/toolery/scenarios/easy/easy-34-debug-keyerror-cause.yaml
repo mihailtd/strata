@@ -1,0 +1,67 @@
+id: easy-34-debug-keyerror-cause
+title: "KeyError → identify the missing dict key access"
+tier: hard  # re-tiering kwantylowy 2026-06-11 (kwoty 40/45/34/24, empiryczna trudnosc): oryg easy, pass-rate 73.3% (3 modele)
+category: debugging
+domain: dev_ops
+description: |
+  `KeyError: 'user_id'` at runtime. Model gets the source and must identify
+  the line that assumes the key exists (vs lines using `.get()` which are
+  safe). Single read_file call expected.
+tags: [debugging, error_to_code, single_turn]
+ranking_dimensions: [overall, debugging, coding]
+prompt: |
+  Production is crashing with `KeyError: 'user_id'` in src/auth.py.
+  Read src/auth.py and tell me which line raises the KeyError (just the
+  line number) and the one-line fix.
+tools: [read_file]
+budget:
+  max_tool_calls: 2
+  max_turns: 2
+  timeout_seconds: 45
+tool_responses:
+  read_file:
+    - match: { path: "src/auth.py" }
+      returns: |
+        def authorize(request_body: dict) -> bool:
+            # Line 2
+            session = request_body.get('session')
+            # Line 4
+            if not session:
+                return False
+            # Line 7
+            user = request_body['user_id']
+            # Line 9
+            roles = request_body.get('roles', [])
+            return user in roles
+    - match: any
+      returns: { error: "not found" }
+scoring:
+  required:
+    - check: tool_called
+      tool: read_file
+    - check: response_satisfies
+      all_of: ["line 7"]
+    # Catch only DIRECT attribution of the bug to line 2/4/9 — not a correct
+    # answer that cites those lines as the SAFE .get() contrast (e.g. "line 7
+    # raises KeyError, unlike .get() on line 2"). Bounded to a single clause
+    # ([^.]*) and requires the line number to be the subject/object of the
+    # bug claim, not merely co-occur with "raises" somewhere in the sentence.
+    - check: response_matches_regex
+      none_of:
+        - "(?:the\\s+)?(?:bug|culprit|problem|error)\\s+(?:is\\s+)?(?:on|at|in)?\\s*line\\s*[249]\\b"
+        - "\\bline\\s*[249]\\b[^.]*(?:is\\s+the\\s+(?:bug|culprit|problem)|needs\\s+the\\s+fix|to\\s+fix\\b)"
+        - "fix\\s+(?:is\\s+(?:on|at)\\s+)?line\\s*[249]\\b"
+  forbidden:
+    - check: response_contains
+      patterns: ["request_body.get('roles'"]
+  partial:
+    - check: response_satisfies
+      any_of:
+        - ["get('user_id'"]
+        - [".get(", "user_id"]
+    - check: call_count_at_most
+      n: 1
+  weights:
+    pass: 1.0
+    partial: 0.5
+    fail: 0.0

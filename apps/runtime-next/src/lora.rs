@@ -70,6 +70,7 @@ pub struct LoraLayer {
 }
 
 pub struct LoraAdapter {
+    #[allow(dead_code)]
     pub name: String,
     /// `lora_alpha / r` -- the real scaling multiplier applied to every
     /// `B@A` fold (see `adapter_config.json`'s own `lora_alpha`/`r`).
@@ -135,14 +136,31 @@ impl LoraAdapter {
     }
 }
 
+/// A pristine buffer backup that resides either in device VRAM (for models that fit, e.g. 4B)
+/// or host RAM (for larger models like 9B/27B where duplicate weight copies exceed VRAM capacity).
+pub enum PristineBuffer {
+    Device(DeviceBuffer<u16>),
+    Host(Vec<u16>),
+}
+
+impl PristineBuffer {
+    #[inline]
+    pub fn restore_into(&self, dst: &mut DeviceBuffer<u16>) -> Result<(), HipError> {
+        match self {
+            PristineBuffer::Device(d) => dst.copy_from_device(d),
+            PristineBuffer::Host(h) => dst.copy_from_host(h),
+        }
+    }
+}
+
 /// One layer's real pristine (never-adapted) copy of every buffer LoRA
 /// folding ever touches. `qkv_proj`/`o_proj` are `Some` only for the real
 /// full-attention layers, mirroring `LoraLayer::attn`.
 pub struct PristineLayer {
-    pub gate_up_proj: DeviceBuffer<u16>,
-    pub down_proj: DeviceBuffer<u16>,
-    pub qkv_proj: Option<DeviceBuffer<u16>>,
-    pub o_proj: Option<DeviceBuffer<u16>>,
+    pub gate_up_proj: PristineBuffer,
+    pub down_proj: PristineBuffer,
+    pub qkv_proj: Option<PristineBuffer>,
+    pub o_proj: Option<PristineBuffer>,
 }
 
 /// The real, mandatory bit-exact-idempotence anchor every `activate`/
@@ -153,16 +171,28 @@ pub struct PristineWeights {
     pub layers: Vec<PristineLayer>,
 }
 
-fn copy_new(src: &DeviceBuffer<u16>) -> Result<DeviceBuffer<u16>, HipError> {
-    let mut dst: DeviceBuffer<u16> = DeviceBuffer::alloc(src.len())?;
-    dst.copy_from_device(src)?;
-    Ok(dst)
+fn copy_new(src: &DeviceBuffer<u16>) -> Result<PristineBuffer, HipError> {
+    // For 9B / 27B models, storing a duplicate set of weights in VRAM exceeds 24GB.
+    // Store pristine weights in Host RAM when running large models or when free VRAM < 8 GB.
+    let prefer_host = cfg!(any(feature = "qwen35_9b", feature = "qwen35_27b"))
+        || hip::mem_info().map(|(free, _)| free < 8 * 1024 * 1024 * 1024).unwrap_or(false);
+
+    if !prefer_host {
+        if let Ok(mut dst) = DeviceBuffer::alloc(src.len()) {
+            if dst.copy_from_device(src).is_ok() {
+                return Ok(PristineBuffer::Device(dst));
+            }
+        }
+    }
+
+    let mut host = vec![0u16; src.len()];
+    src.copy_to_host(&mut host)?;
+    Ok(PristineBuffer::Host(host))
 }
 
 impl PristineWeights {
-    /// Real, one-time device-to-device snapshot of every LoRA-touched
-    /// weight buffer in `weights` -- no host round-trip (both source and
-    /// destination already live in VRAM).
+    /// Real, one-time snapshot of every LoRA-touched weight buffer in `weights`.
+    /// On 4B, snapshots stay directly in VRAM. On 9B/27B, snapshots are stored in Host RAM.
     pub fn capture(weights: &ModelWeights) -> Result<Self, HipError> {
         let mut layers = Vec::with_capacity(NUM_LAYERS);
         for layer in &weights.layers {
@@ -186,22 +216,24 @@ impl PristineWeights {
     }
 
     /// Restores every touched buffer to its real pristine (unadapted)
-    /// state, in place, entirely on-device. The FIRST step of every real
-    /// `activate_adapter` call (never accumulate onto a possibly-already-
-    /// adapted buffer -- the mandatory idempotence invariant), and also a
-    /// real "switch back to the base model" operation on its own.
+    /// state, in place. The FIRST step of every real `activate_adapter` call
+    /// (never accumulate onto a possibly-already-adapted buffer -- the
+    /// mandatory idempotence invariant), and also a real "switch back to the
+    /// base model" operation on its own.
     pub fn restore(&self, weights: &mut ModelWeights) -> Result<(), HipError> {
         for (layer, pristine) in weights.layers.iter_mut().zip(self.layers.iter()) {
             match layer {
                 LayerWeights::Gdn(g) => {
-                    g.gate_up_proj.as_bf16_mut().copy_from_device(&pristine.gate_up_proj)?;
-                    g.down_proj.as_bf16_mut().copy_from_device(&pristine.down_proj)?;
+                    pristine.gate_up_proj.restore_into(g.gate_up_proj.as_bf16_mut())?;
+                    pristine.down_proj.restore_into(g.down_proj.as_bf16_mut())?;
                 }
                 LayerWeights::Attn(a) => {
-                    a.gate_up_proj.as_bf16_mut().copy_from_device(&pristine.gate_up_proj)?;
-                    a.down_proj.as_bf16_mut().copy_from_device(&pristine.down_proj)?;
-                    a.qkv_proj.as_bf16_mut().copy_from_device(pristine.qkv_proj.as_ref().expect("attn layer's pristine snapshot is missing qkv_proj"))?;
-                    a.o_proj.as_bf16_mut().copy_from_device(pristine.o_proj.as_ref().expect("attn layer's pristine snapshot is missing o_proj"))?;
+                    pristine.gate_up_proj.restore_into(a.gate_up_proj.as_bf16_mut())?;
+                    pristine.down_proj.restore_into(a.down_proj.as_bf16_mut())?;
+                    pristine.qkv_proj.as_ref().expect("attn layer's pristine snapshot is missing qkv_proj")
+                        .restore_into(a.qkv_proj.as_bf16_mut())?;
+                    pristine.o_proj.as_ref().expect("attn layer's pristine snapshot is missing o_proj")
+                        .restore_into(a.o_proj.as_bf16_mut())?;
                 }
             }
         }
@@ -267,25 +299,44 @@ fn fold_attn(handle_raw: blas_ffi::HipblasHandle, a: &mut AttnLayerWeights, attn
 /// invariant; see this module's own header doc). Synchronizes the GPU
 /// once, at the end (matching every other real weight-mutation operation
 /// in this crate -- correctness of the swap is a real gate here, not a
+/// §100: folds `adapter`'s real LoRA factors into `weights`' live
+/// buffers, IN PLACE, via real hipBLAS accumulate GEMMs -- ALWAYS from a
+/// pristine restore first (the mandatory bit-exact-idempotence
+/// invariant; see this module's own header doc). Synchronizes the GPU
+/// once, at the end (matching every other real weight-mutation operation
+/// in this crate -- correctness of the swap is a real gate here, not a
 /// hot per-token path that would need to avoid it).
 pub fn activate_adapter(handle: &BlasHandle, weights: &mut ModelWeights, pristine: &PristineWeights, adapter: &LoraAdapter) -> Result<(), HipError> {
-    pristine.restore(weights)?;
+    activate_adapter_scaled(handle, weights, pristine, adapter, adapter.scale)
+}
+
+/// §100/§133: folds `adapter`'s real LoRA factors scaled by `scale` into
+/// `weights`' live buffers WITHOUT restoring pristine first (accumulates with beta=1.0).
+pub fn fold_adapter_into(handle: &BlasHandle, weights: &mut ModelWeights, adapter: &LoraAdapter, scale: f32) -> Result<(), HipError> {
     let handle_raw = handle.raw();
     for (layer, lora_layer) in weights.layers.iter_mut().zip(adapter.layers.iter()) {
         match layer {
             LayerWeights::Gdn(g) => {
-                fold_mlp(handle_raw, g.gate_up_proj.as_bf16_mut(), g.down_proj.as_bf16_mut(), &lora_layer.mlp, adapter.scale);
+                fold_mlp(handle_raw, g.gate_up_proj.as_bf16_mut(), g.down_proj.as_bf16_mut(), &lora_layer.mlp, scale);
             }
             LayerWeights::Attn(a) => {
-                fold_mlp(handle_raw, a.gate_up_proj.as_bf16_mut(), a.down_proj.as_bf16_mut(), &lora_layer.mlp, adapter.scale);
+                fold_mlp(handle_raw, a.gate_up_proj.as_bf16_mut(), a.down_proj.as_bf16_mut(), &lora_layer.mlp, scale);
                 let attn_factors = lora_layer.attn.as_ref().expect("full-attention layer's LoraLayer is missing its attn factors");
-                fold_attn(handle_raw, a, attn_factors, adapter.scale);
+                fold_attn(handle_raw, a, attn_factors, scale);
             }
         }
     }
     hip::check_last_error()?;
     hip::device_synchronize()
 }
+
+/// §100/§133: folds `adapter`'s real LoRA factors scaled by `scale` into
+/// `weights`' live buffers from a pristine restore.
+pub fn activate_adapter_scaled(handle: &BlasHandle, weights: &mut ModelWeights, pristine: &PristineWeights, adapter: &LoraAdapter, scale: f32) -> Result<(), HipError> {
+    pristine.restore(weights)?;
+    fold_adapter_into(handle, weights, adapter, scale)
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -504,13 +555,18 @@ mod tests {
         let pristine = PristineWeights::capture(&weights).expect("PristineWeights::capture failed");
 
         let adapters_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../results/adapters");
-        let astral = LoraAdapter::load_from_dir(&adapters_root.join("m2_astral_r8a128_v7"), "astral").expect("loading astral adapter failed");
-        let postgresql_dir = adapters_root.join("m2_postgresql_r8a128_v7");
-        let second = if postgresql_dir.is_dir() {
-            LoraAdapter::load_from_dir(&postgresql_dir, "postgresql").expect("loading postgresql adapter failed")
+        #[cfg(feature = "qwen35_9b")]
+        let (name_a, name_b) = ("m2_astral_r8a128_v7_9b", "m2_postgresql_r8a128_v7_9b");
+        #[cfg(not(feature = "qwen35_9b"))]
+        let (name_a, name_b) = ("m2_astral_r8a128_v7", "m2_postgresql_r8a128_v7");
+
+        let astral = LoraAdapter::load_from_dir(&adapters_root.join(name_a), "astral").expect("loading adapter a failed");
+        let second_dir = adapters_root.join(name_b);
+        let second = if second_dir.is_dir() {
+            LoraAdapter::load_from_dir(&second_dir, "postgresql").expect("loading adapter b failed")
         } else {
-            eprintln!("m2_postgresql_r8a128_v7 not found on this machine, reusing astral for both sides of the swap (still a real full restore+fold each call, just not a domain-distinct pair)");
-            LoraAdapter::load_from_dir(&adapters_root.join("m2_astral_r8a128_v7"), "astral2").expect("loading astral adapter (2nd copy) failed")
+            eprintln!("second adapter not found, reusing adapter a for both sides of the swap");
+            LoraAdapter::load_from_dir(&adapters_root.join(name_a), "astral2").expect("loading adapter a (2nd copy) failed")
         };
 
         // Warmup: first call on a never-before-seen GEMM shape can pay a
@@ -526,6 +582,76 @@ mod tests {
         }
         let elapsed = start.elapsed();
         let per_swap_ms = elapsed.as_secs_f64() * 1000.0 / cycles as f64;
-        eprintln!("REAL measured adapter swap latency ({cycles} alternating cycles, restore+fold(32 layers) each): {per_swap_ms:.3} ms/swap");
+        eprintln!("REAL measured adapter swap latency ({cycles} alternating cycles, restore+fold({} layers) each): {per_swap_ms:.3} ms/swap", crate::model::NUM_LAYERS);
+    }
+
+    /// §104 / Tier 0 (T0-4): real decode-throughput measurement for
+    /// In-Place Weight Folding (IPWF) -- WITHOUT vs. WITH a real folded
+    /// adapter (r=8, alpha=128).
+    ///
+    /// Theory: Section 3 claims "0% decode tax" because the adapter delta
+    /// is pre-folded directly into the active weight buffers -- during the
+    /// decode loop, the GEMM kernel dimensions and memory footprints are
+    /// bit-for-bit identical to the unadapted model (unlike unmerged LoRA
+    /// branches which launch extra GEMM kernels per token).
+    /// This benchmark verifies that claim with real hardware telemetry.
+    #[test]
+    #[ignore]
+    fn bench_real_adapter_decode_overhead() {
+        if hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let snapshot = locate_model_snapshot().expect("no real model snapshot found on this machine");
+        let mut weights = ModelWeights::load(&snapshot).expect("real weight loading failed");
+        let handle = BlasHandle::create().expect("real hipblasCreate failed");
+        let pristine = PristineWeights::capture(&weights).expect("PristineWeights::capture failed");
+
+        let adapters_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../results/adapters");
+        #[cfg(feature = "qwen35_9b")]
+        let adapter_name = "m2_astral_r8a128_v7_9b";
+        #[cfg(not(feature = "qwen35_9b"))]
+        let adapter_name = "m2_astral_r8a128_v7";
+
+        let prompt_ids: [i32; 5] = [760, 6511, 314, 9338, 369];
+        let max_seq_len = 64usize;
+        let warmup = 3usize;
+        let timed_tokens = 20usize;
+
+        let run_decode_bench = |weights: &ModelWeights| -> f64 {
+            let mut state = crate::model::DecodeState::new(max_seq_len).expect("DecodeState allocation failed");
+            let mut logits: DeviceBuffer<u16> = DeviceBuffer::alloc(crate::model::VOCAB_SIZE).unwrap();
+            for &token_id in prompt_ids.iter() {
+                crate::model::forward_one_token(&handle, weights, &mut state, token_id, &mut logits).unwrap();
+            }
+            for _ in 0..warmup {
+                let next_id = crate::model::argmax_sample(&logits).unwrap();
+                crate::model::forward_one_token(&handle, weights, &mut state, next_id, &mut logits).unwrap();
+            }
+            let t0 = std::time::Instant::now();
+            for _ in 0..timed_tokens {
+                let next_id = crate::model::argmax_sample(&logits).unwrap();
+                crate::model::forward_one_token(&handle, weights, &mut state, next_id, &mut logits).unwrap();
+            }
+            timed_tokens as f64 / t0.elapsed().as_secs_f64()
+        };
+
+        let base_tps = run_decode_bench(&weights);
+        eprintln!("WITHOUT adapter (pristine base weights): {base_tps:.2} tok/s");
+
+        let adapter = LoraAdapter::load_from_dir(&adapters_root.join(adapter_name), "astral").expect("loading adapter failed");
+        activate_adapter(&handle, &mut weights, &pristine, &adapter).expect("activate_adapter failed");
+        let adapted_tps = run_decode_bench(&weights);
+        eprintln!("WITH adapter active (in-place weight folded): {adapted_tps:.2} tok/s");
+
+        pristine.restore(&mut weights).expect("restore failed");
+
+        let overhead_pct = (base_tps - adapted_tps) / base_tps * 100.0;
+        eprintln!(
+            "REAL measured IPWF decode overhead ({} layers, BF16): {overhead_pct:.2}% ({base_tps:.2} -> {adapted_tps:.2} tok/s)",
+            crate::model::NUM_LAYERS
+        );
     }
 }

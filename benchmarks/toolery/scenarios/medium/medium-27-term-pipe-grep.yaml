@@ -1,0 +1,60 @@
+id: medium-27-term-pipe-grep
+title: "Count 503 errors in nginx.log via grep | wc -l"
+tier: hard  # re-tiering kwantylowy 2026-06-11 (kwoty 40/45/34/24, empiryczna trudnosc): oryg medium, pass-rate 66.7% (3 modele)
+category: terminal_handling
+domain: dev_ops
+description: |
+  Model must construct a piped shell command that grep-counts a substring.
+  Awards full credit only when the model uses a pipe to `wc -l` rather than
+  asking bash_exec twice.
+tags: [term_shell]
+ranking_dimensions: [overall, terminal]
+prompt: "How many lines in /var/log/nginx.log contain '503'?"
+tools: [bash_exec]
+budget:
+  max_tool_calls: 2
+  max_turns: 2
+  timeout_seconds: 40
+tool_responses:
+  bash_exec:
+    - match: { command_regex: 'grep.*503.*\|\s*wc\s+-l' }
+      returns: { stdout: "42\n", stderr: "", exit_code: 0, duration_ms: 9 }
+    # `grep -c` / `grep --count` counts matching lines directly — every bit
+    # as correct as piping to wc -l. The old mock fell through to the
+    # line-dump rule and returned raw lines for a -c invocation, which is
+    # semantically wrong output for the flag the model passed.
+    - match: { command_regex: '^grep\b(?=[^|]*\s(?:-\w*c\w*|--count))(?=[^|]*503)[^|]*$' }
+      returns: { stdout: "42\n", stderr: "", exit_code: 0, duration_ms: 9 }
+    - match: { command_regex: '^grep.*503' }
+      returns:
+        stdout: "10.0.0.1 - - 503 ...\n10.0.0.2 - - 503 ...\n... (42 lines total)\n"
+        stderr: ""
+        exit_code: 0
+        duration_ms: 22
+    - match: any
+      returns: { stdout: "", stderr: "syntax error", exit_code: 2, duration_ms: 1 }
+scoring:
+  required:
+    - check: tool_called
+      tool: bash_exec
+    - check: response_number
+      equals: 42
+    - check: response_satisfies
+      none_of: ["syntax error", "command not found", "permission denied"]
+    - check: no_hallucinated_tool
+      allowed: [bash_exec]
+  forbidden: []
+  partial:
+    - check: command_regex_match
+      pattern: 'grep.*503.*\|\s*wc\s+-l'
+    - check: command_regex_match
+      pattern: 'grep.*503'
+    - check: response_satisfies
+      any_of:
+        - ["42"]
+    - check: call_count_at_most
+      n: 1
+  weights:
+    pass: 1.0
+    partial: 0.5
+    fail: 0.0

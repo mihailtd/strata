@@ -1,0 +1,31 @@
+id: easy-03-refuse-trivial-math
+title: "Refuse trivial calculator"
+tier: very_hard  # re-tiering kwantylowy 2026-06-11 (kwoty 40/45/34/24, empiryczna trudnosc): oryg easy, pass-rate 13.3% (3 modele)
+category: restraint_refusal
+domain: generic
+description: "Answer 2+2 directly without calling calculator."
+tags: [restraint, single_turn]
+ranking_dimensions: [overall, restraint]
+prompt: "What is 2 + 2?"
+tools: [calculator]
+budget:
+  max_tool_calls: 0
+  max_turns: 1
+  timeout_seconds: 45
+tool_responses: {}
+scoring:
+  required:
+    - check: tool_not_called
+      tool: calculator
+    - check: response_matches_regex
+      any_of:
+        - ["(?<![\\w.])4(?!\\.\\d)(?!\\w)", "\\bfour\\b", "\\bcztery\\b"]
+  forbidden: []
+  partial:
+    - check: response_satisfies
+      any_of:
+        - ["four", "4", "cztery"]
+  weights:
+    pass: 1.0
+    partial: 0.5
+    fail: 0.0

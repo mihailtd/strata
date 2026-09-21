@@ -1,0 +1,111 @@
+{
+  "benchmark": "BFCL",
+  "timestamp": "2026-09-21 21:36:46",
+  "config": {
+    "base_url": "http://127.0.0.1:8003/v1",
+    "model": "qwen3.5:0.8b-rust",
+    "adapter": "m2_python_modern_r8a128_v7_0_8b@0.25",
+    "categories": [
+      "simple"
+    ],
+    "limit": 10
+  },
+  "summary": {
+    "total_cases": 10,
+    "passed": 0,
+    "accuracy_pct": 0.0,
+    "total_duration_s": 4.86
+  },
+  "results": [
+    {
+      "id": "simple_0",
+      "category": "simple",
+      "passed": false,
+      "latency_ms": 580.64,
+      "tok_s": 254.89,
+      "tool_calls": [],
+      "error": "Count mismatch: generated 0 calls, expected 1"
+    },
+    {
+      "id": "simple_1",
+      "category": "simple",
+      "passed": false,
+      "latency_ms": 236.07,
+      "tok_s": 254.16,
+      "tool_calls": [],
+      "error": "Count mismatch: generated 0 calls, expected 1"
+    },
+    {
+      "id": "simple_2",
+      "category": "simple",
+      "passed": false,
+      "latency_ms": 943.75,
+      "tok_s": 263.84,
+      "tool_calls": [],
+      "error": "Count mismatch: generated 0 calls, expected 1"
+    },
+    {
+      "id": "simple_3",
+      "category": "simple",
+      "passed": false,
+      "latency_ms": 464.22,
+      "tok_s": 256.34,
+      "tool_calls": [],
+      "error": "Count mismatch: generated 0 calls, expected 1"
+    },
+    {
+      "id": "simple_4",
+      "category": "simple",
+      "passed": false,
+      "latency_ms": 546.15,
+      "tok_s": 260.0,
+      "tool_calls": [],
+      "error": "Count mismatch: generated 0 calls, expected 1"
+    },
+    {
+      "id": "simple_5",
+      "category": "simple",
+      "passed": false,
+      "latency_ms": 535.44,
+      "tok_s": 254.0,
+      "tool_calls": [],
+      "error": "Count mismatch: generated 0 calls, expected 1"
+    },
+    {
+      "id": "simple_6",
+      "category": "simple",
+      "passed": false,
+      "latency_ms": 527.93,
+      "tok_s": 259.51,
+      "tool_calls": [],
+      "error": "Count mismatch: generated 0 calls, expected 1"
+    },
+    {
+      "id": "simple_7",
+      "category": "simple",
+      "passed": false,
+      "latency_ms": 386.69,
+      "tok_s": 256.02,
+      "tool_calls": [],
+      "error": "Count mismatch: generated 0 calls, expected 1"
+    },
+    {
+      "id": "simple_8",
+      "category": "simple",
+      "passed": false,
+      "latency_ms": 329.16,
+      "tok_s": 261.27,
+      "tool_calls": [],
+      "error": "Count mismatch: generated 0 calls, expected 1"
+    },
+    {
+      "id": "simple_9",
+      "category": "simple",
+      "passed": false,
+      "latency_ms": 307.69,
+      "tok_s": 260.01,
+      "tool_calls": [],
+      "error": "Count mismatch: generated 0 calls, expected 1"
+    }
+  ]
+}

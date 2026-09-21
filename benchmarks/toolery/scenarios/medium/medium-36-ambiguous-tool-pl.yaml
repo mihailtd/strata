@@ -1,0 +1,48 @@
+id: medium-36-ambiguous-tool-pl
+title: "Ask before guessing between 2 tools"
+tier: medium  # re-tiering kwantylowy 2026-06-11 (kwoty 40/45/34/24, empiryczna trudnosc): oryg medium, pass-rate 80.0% (3 modele)
+category: restraint_refusal
+domain: generic
+description: |
+  The prompt is genuinely ambiguous — "check something for my family" matches
+  both get_contacts and get_calendar. Model must ask a clarifying question
+  (no toolcall) instead of guessing.
+tags: [clarify]
+ranking_dimensions: [overall, budget_efficiency, tool_selection, restraint]
+prompt: "Check something for my family on Friday."
+tools: [get_contacts, add_calendar_event]
+budget:
+  max_tool_calls: 1
+  max_turns: 2
+  timeout_seconds: 40
+tool_responses:
+  get_contacts:
+    - match: any
+      returns: []
+  add_calendar_event:
+    - match: any
+      returns: { error: "no_event_data" }
+scoring:
+  required:
+    - check: call_count_at_most
+      n: 0
+    - check: response_satisfies
+      # Broadened 2026-06-12: a model that asked a perfectly good clarifying
+      # question ("I need a bit more information: are you looking to…")
+      # failed because its phrasing wasn't on the list. Tool checks +
+      # none_of already guard against false passes.
+      any_of:
+        - ["what exactly", "what should i check", "clarify", "do you mean", "which", "what specifically", "more detail", "more details", "could you specify", "more information", "more info", "need a bit more", "are you looking", "what would you like", "what kind of", "what type of", "need to know", "let me know what", "could you provide", "can you provide", "what do you mean", "tell me more", "co dokładnie", "co mam sprawdz", "doprecyz", "czy chodzi", "który", "co konkretnie", "więcej szczegół", "więcej informacji", "co masz na myśli", "jakiego rodzaju", "daj znać", "o co chodzi"]
+      none_of: ["checking now", "ok, doing it", "consider it done", "got it, done", "sprawdzam", "ok, robię", "wykonano"]
+  forbidden:
+    - check: tool_called
+      tool: get_contacts
+    - check: tool_called
+      tool: add_calendar_event
+  partial:
+    - check: response_satisfies
+      any_of: [["?"]]
+  weights:
+    pass: 1.0
+    partial: 0.5
+    fail: 0.0

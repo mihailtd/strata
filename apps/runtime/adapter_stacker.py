@@ -112,15 +112,22 @@ class DynamicAdapterStacker:
                 first_a = a_parts[0]
                 first_b = b_parts[0]
 
-                if first_a.shape[1] == first_b.shape[0]:
+                if first_a.shape[0] == first_b.shape[1] and (
+                    first_a.shape[1] != first_b.shape[0] or first_a.shape[0] < first_a.shape[1]
+                ):
+                    # Standard HuggingFace PEFT format: A is (r, in_features), B is (out_features, r)
+                    # Concat A along dim=0 (rank rows), Concat B along dim=1 (rank cols)
+                    a_fused = torch.cat(a_parts, dim=0)
+                    b_fused = torch.cat(b_parts, dim=1)
+                    total_rank = a_fused.shape[0]
+                elif first_a.shape[1] == first_b.shape[0]:
                     # Native 27B GGUF format: A is (in_features, r), B is (r, out_features)
                     # Concat A along dim=1 (rank cols), Concat B along dim=0 (rank rows)
                     a_fused = torch.cat(a_parts, dim=1)
                     b_fused = torch.cat(b_parts, dim=0)
                     total_rank = a_fused.shape[1]
                 elif first_a.shape[0] == first_b.shape[1]:
-                    # Standard HuggingFace PEFT format: A is (r, in_features), B is (out_features, r)
-                    # Concat A along dim=0 (rank rows), Concat B along dim=1 (rank cols)
+                    # Fallback HuggingFace PEFT format
                     a_fused = torch.cat(a_parts, dim=0)
                     b_fused = torch.cat(b_parts, dim=1)
                     total_rank = a_fused.shape[0]
@@ -152,10 +159,17 @@ class DynamicAdapterStacker:
 
         # 6. Save if output path provided
         if output_path is not None:
-            out_file = Path(output_path)
-            out_file.parent.mkdir(parents=True, exist_ok=True)
+            out_path = Path(output_path)
+            if out_path.is_dir() or not out_path.suffix:
+                out_path.mkdir(parents=True, exist_ok=True)
+                config_file = out_path / "adapter_config.json"
+                out_file = out_path / "adapter_model.safetensors"
+            else:
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                config_file = out_path.parent / "adapter_config.json"
+                out_file = out_path
             save_file(fused_state_dict, str(out_file))
-            with open(out_file.parent / "adapter_config.json", "w") as f:
+            with open(config_file, "w") as f:
                 json.dump(fused_config, f, indent=2)
             print(f"💾 Saved stacked adapter to: {out_file}")
 

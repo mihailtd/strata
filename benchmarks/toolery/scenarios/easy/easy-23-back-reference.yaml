@@ -1,0 +1,44 @@
+id: easy-23-back-reference
+title: "Summarize the third point from a list in a document"
+tier: easy  # re-tiering kwantylowy 2026-06-11 (kwoty 40/45/34/24, empiryczna trudnosc): oryg easy, pass-rate 100.0% (3 modele)
+category: context_state_tracking
+domain: generic
+description: |
+  Pre-filled context contains a numbered list of 5 items inside a ~600-token
+  doc. User asks for "the third point". Model must resolve positional
+  reference within the in-prompt context.
+tags: [in_context, positional_ref]
+ranking_dimensions: [overall, context_state_tracking, long_context]
+prompt: |
+  Document:
+  ---
+  Project X — meeting notes (2026-04-12). Present: A, B, C, D. Scope of the
+  meeting: discuss status and priorities. Decisions:
+  1. Accelerate work on the auth module by the end of May.
+  2. Pause work on the legacy migration until Q3.
+  3. Choose Postgres 16 as the target database version instead of the previously considered MySQL 8.
+  4. Form a security sub-team (3 people).
+  5. Organize an observability training in June.
+  Next steps set for 2026-04-19.
+  ---
+  Summarize the third item in one line.
+tools: []
+budget:
+  max_tool_calls: 0
+  max_turns: 1
+  timeout_seconds: 45
+tool_responses: {}
+scoring:
+  required:
+    - check: response_satisfies
+      any_of: [["Postgres", "PostgreSQL"]]
+      all_of: ["MySQL"]
+      none_of: ["auth module", "legacy migration", "observability training", "security sub-team", "security subteam"]
+  forbidden: []
+  partial:
+    - check: response_satisfies
+      any_of: [["16", "MySQL"]]
+  weights:
+    pass: 1.0
+    partial: 0.5
+    fail: 0.0

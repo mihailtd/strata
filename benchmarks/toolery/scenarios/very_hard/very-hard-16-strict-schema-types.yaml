@@ -1,0 +1,67 @@
+id: very-hard-16-strict-schema-types
+title: "JSON with null + enum — missing fields as null, don't invent"
+tier: medium  # re-tiering kwantylowy 2026-06-11 (kwoty 40/45/34/24, empiryczna trudnosc): oryg very_hard, pass-rate 100.0% (3 modele)
+category: structured_output
+domain: generic
+description: |
+  Strict JSON schema with required fields including `severity: enum
+  ("low"|"medium"|"high")` and `cve_id: string|null`. Input doc omits cve_id
+  — model must emit null, not invent a CVE.
+tags: [json_schema, typed, hallucination]
+ranking_dimensions: [overall, hallucination, parameter_precision, structured_output]
+prompt: |
+  From the security report below, return JSON per this schema:
+    {
+      "title": <str>,
+      "severity": <"low"|"medium"|"high">,
+      "cve_id": <str|null>,
+      "affected_versions": <str>
+    }
+  Missing field in source → null. The `severity` field must be from the enum. JSON only.
+  ---
+  Report: An issue was detected in the auth component of module v1.2.x — on
+  some code paths the session token was not being refreshed. Impact: medium
+  risk of user privilege loss. Versions: 1.2.0-1.2.7. No CVE identifier has
+  been assigned.
+  ---
+tools: []
+budget:
+  max_tool_calls: 0
+  max_turns: 1
+  timeout_seconds: 40
+tool_responses: {}
+scoring:
+  required:
+    - check: response_matches_schema
+      schema:
+        type: object
+        required: [title, severity, cve_id, affected_versions]
+        additionalProperties: false
+        properties:
+          title: { type: string, minLength: 1 }
+          severity: { type: string, enum: ["low", "medium", "high"], const: "medium" }
+          cve_id: { type: "null" }
+          affected_versions:
+            type: string
+            pattern: "1\\.2\\."
+    - check: response_satisfies
+      none_of: ["CVE-202"]
+  forbidden:
+    - check: response_contains
+      patterns: ["CVE-2025"]
+    - check: response_contains
+      patterns: ["CVE-2026"]
+  partial:
+    - check: response_matches_schema
+      schema:
+        type: object
+        required: [title, severity, cve_id, affected_versions]
+        properties:
+          title: { type: string }
+          severity: { type: string }
+          cve_id: {}
+          affected_versions: { type: string }
+  weights:
+    pass: 1.0
+    partial: 0.5
+    fail: 0.0

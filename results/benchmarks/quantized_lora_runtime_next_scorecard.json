@@ -1,0 +1,38 @@
+{
+  "0.8B": {
+    "swap_latency_ms": 2.176,
+    "without_tok_s": 257.13,
+    "with_tok_s": 292.22,
+    "ttft_overhead_pct": -0.18,
+    "decode_overhead_pct": -13.65,
+    "note": "active-vs-inactive delta is noise at this size/token-rate; both pay the same fixed kernel-launch cost regardless of adapter state"
+  },
+  "2B": {
+    "swap_latency_ms": 2.472,
+    "without_tok_s": 213.25,
+    "with_tok_s": 212.89,
+    "ttft_overhead_pct": 0.2,
+    "decode_overhead_pct": 0.17
+  },
+  "4B": {
+    "swap_latency_ms": 3.602,
+    "without_tok_s": 129.76,
+    "with_tok_s": 129.78,
+    "ttft_overhead_pct": -0.19,
+    "decode_overhead_pct": -0.02
+  },
+  "9B": {
+    "swap_latency_ms": 4.101,
+    "without_tok_s": 104.25,
+    "with_tok_s": 104.15,
+    "ttft_overhead_pct": 0.63,
+    "decode_overhead_pct": 0.1
+  },
+  "27B": {
+    "swap_latency_ms": 9.155,
+    "without_tok_s": 34.82,
+    "with_tok_s": 34.74,
+    "ttft_overhead_pct": 0.3,
+    "decode_overhead_pct": 0.22
+  }
+}

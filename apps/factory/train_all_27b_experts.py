@@ -42,6 +42,7 @@ EXPERT_DOMAINS = [
     ("python_modern", "results/adapters/m2_python_modern_r8a128_v7_27b_qlora"),
     ("duckdb", "results/adapters/m2_duckdb_r8a128_v7_27b_qlora"),
     ("financial_planning", "results/adapters/m2_financial_r8a128_v7_27b_qlora"),
+    ("agentic_coding", "results/adapters/m2_agentic_coding_r8a128_v8_27b"),
 ]
 
 
@@ -56,7 +57,7 @@ def is_adapter_trained(adapter_dir: Path) -> bool:
 def train_expert(
     domain: str,
     out_dir: Path,
-    model_id: str = "Qwen/Qwen2.5-32B-Instruct",
+    model_id: str = "Qwen/Qwen3.8-27B",
     vram_cap: float = 22.0,
 ) -> dict[str, Any]:
     print("\n" + "=" * 90)
