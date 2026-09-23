@@ -740,7 +740,16 @@ pub(crate) mod raw {
         kernel_size: i32,
         stream: *mut c_void,
     ) {
-        unsafe { kernels_ffi::launch_causal_conv1d_update_bf16(hidden_states, conv_state, weight, out, batch, conv_dim, kernel_size, stream) };
+        unsafe { kernels_ffi::launch_causal_conv1d_update_bf16(hidden_states, conv_state, weight, out, batch, conv_dim, kernel_size, conv_dim as i64, 0, stream) };
+    }
+
+    /// §16: like `causal_conv1d_update`, but reads its input out of a WIDER
+    /// source row (the combined in_proj output) instead of a tightly-packed
+    /// `[batch, conv_dim]` buffer -- so batched decode does not need to gather
+    /// qkv first. Mirrors what `causal_conv1d_prefill` already accepts.
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn causal_conv1d_update_strided(hidden_states: *const c_void, conv_state: *mut c_void, weight: *const c_void, out: *mut c_void, batch: i32, conv_dim: i32, kernel_size: i32, src_stride: i64, src_offset: i32, stream: *mut c_void) {
+        unsafe { kernels_ffi::launch_causal_conv1d_update_bf16(hidden_states, conv_state, weight, out, batch, conv_dim, kernel_size, src_stride, src_offset, stream) };
     }
 
     /// §103: raw (unsynced) hot-path counterpart of
@@ -836,6 +845,28 @@ pub(crate) mod raw {
         // this needed no kernel-logic change, only this launch-config one.
         let threads = ((head_dim as u32).next_power_of_two() * 8).min(1024) as i32;
         unsafe { kernels_ffi::launch_gdn_recurrent_decode_bf16(q, k, v, g, beta, state, out, num_heads, num_k_heads, head_dim, threads, stream) };
+    }
+
+    /// §16: batched counterparts -- one launch over `batch` sequences.
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn gdn_recurrent_decode_batched(q: *const c_void, k: *const c_void, v: *const c_void, g: *const f32, beta: *const f32, state: *mut f32, out: *mut c_void, num_heads: i32, num_k_heads: i32, head_dim: i32, batch: i32, qkv_stride: i64, stream: *mut c_void) {
+        let threads = if head_dim < 256 { head_dim } else { 256 };
+        unsafe { kernels_ffi::launch_gdn_recurrent_decode_batched_bf16(q, k, v, g, beta, state, out, num_heads, num_k_heads, head_dim, threads, batch, qkv_stride, stream) };
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn gdn_gate_beta_batched(a: *const c_void, b: *const c_void, a_log: *const f32, dt_bias: *const f32, g_out: *mut f32, beta_out: *mut f32, num_heads: i32, batch: i32, a_stride: i64, out_stride: i64, stream: *mut c_void) {
+        unsafe { kernels_ffi::launch_gdn_gate_beta_batched_bf16(a, b, a_log, dt_bias, g_out, beta_out, num_heads, batch, a_stride, out_stride, stream) };
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn kv_cache_append_batched(new_k: *const c_void, new_v: *const c_void, k_cache: *mut c_void, v_cache: *mut c_void, num_kv_heads: i32, max_seq_len: i32, head_dim: i32, position: *const i32, batch: i32, cache_stride: i64, stream: *mut c_void) {
+        unsafe { kernels_ffi::launch_kv_cache_append_batched_bf16(new_k, new_v, k_cache, v_cache, num_kv_heads, max_seq_len, head_dim, position, batch, cache_stride, stream) };
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn attention_decode_split_batched(q: *const c_void, k: *const c_void, v: *const c_void, out: *mut c_void, num_q_heads: i32, num_kv_heads: i32, position: *const i32, kv_stride: i32, head_dim: i32, scaling: f32, batch: i32, cache_stride: i64, q_stride: i64, stream: *mut c_void) {
+        unsafe { kernels_ffi::launch_attention_decode_split_batched_bf16(q, k, v, out, num_q_heads, num_kv_heads, position, kv_stride, head_dim, super::ATTENTION_DECODE_KV_SPLIT as i32, scaling, batch, cache_stride, q_stride, stream) };
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1510,6 +1541,20 @@ impl ModelWeights {
     /// quantized, see `quantize_w4a16.py`'s own scope decision) --
     /// matching HF `transformers`' `tie_word_embeddings` semantics
     /// exactly, not a guess.
+    /// Batched `lm_head`: `rows` hidden states -> `rows * VOCAB_SIZE` logits
+    /// in ONE GEMM. Worth a dedicated path because `lm_head` is by far the
+    /// widest matrix in the model (HIDDEN_SIZE x VOCAB_SIZE), so applying it
+    /// per row re-reads those weights once per sequence -- at B=8 that is more
+    /// memory traffic than the entire rest of the decode step combined.
+    pub unsafe fn lm_head_apply_rows(&self, handle: blas_ffi::HipblasHandle, x: *const c_void, y: *mut c_void, rows: i32, stream: *mut c_void) {
+        match &self.lm_head {
+            Some(w) => unsafe { w.apply_prefill(handle, x, y, rows, HIDDEN_SIZE as i32, VOCAB_SIZE as i32, stream) },
+            None => unsafe {
+                raw::gemm(handle, x, self.embed_tokens.as_device_ptr(), y, rows, HIDDEN_SIZE as i32, VOCAB_SIZE as i32, stream);
+            },
+        }
+    }
+
     pub unsafe fn lm_head_apply(&self, x: *const c_void, y: *mut c_void, stream: *mut c_void) {
         match &self.lm_head {
             Some(w) => unsafe { w.apply(x, y, HIDDEN_SIZE as i32, VOCAB_SIZE as i32, stream) },
@@ -3165,6 +3210,397 @@ pub fn forward_prefill(
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Batched decode (B independent sequences, one token each per step).
+//
+// Why this is mostly orchestration rather than new kernels: a decode step at
+// B sequences has the SAME GEMM shapes as a prefill of B tokens -- one pass
+// over every weight, B rows of activations. `MEASURED_FINDINGS` §9 and this
+// crate's own `diagnose_batching_headroom_via_batched_prefill_scaling` both
+// show those GEMMs are memory-bound, so the weight read amortises across the
+// batch and ms/step stays ~flat from B=2..16.
+//
+// Only two things genuinely differ from prefill, and both are per-sequence:
+//   * KV append / attention read a DIFFERENT cache per sequence
+//   * GDN's conv + recurrent state are per-sequence
+// Everything else (norms, qkv/in_proj, fused qkv prep, RoPE, gating, o_proj,
+// the whole MLP) is already position-aware and already batched -- `rope_prefill`
+// and `kv_cache_append_prefill` even read a per-row position out of
+// `position_buf`, which is exactly what B independent sequences need.
+//
+// So the per-sequence loops below cover 5 small kernels (2 attention, 3 GDN),
+// which this repo's own rocprof run puts at under 10% of decode time, while
+// the ~90% that is projections goes through one batched GEMM each.
+// ---------------------------------------------------------------------------
+
+/// Per-layer state for the WHOLE batch, laid out contiguously so the batched
+/// kernels can index sequence `b` by a fixed stride instead of chasing a
+/// per-slot pointer. This is the layout change that lets the five formerly
+/// per-sequence kernels collapse into one launch each.
+pub enum BatchedLayerState {
+    Attn { k_cache: DeviceBuffer<u16>, v_cache: DeviceBuffer<u16> },
+    Gdn { conv_state: DeviceBuffer<u16>, recurrent_state: DeviceBuffer<f32> },
+}
+
+/// `DecodeState`'s batched counterpart: N independent sequences sharing one
+/// set of batch-width scratch buffers and one batch-contiguous state buffer
+/// per layer. `PrefillScratch` is already sized for `MAX_PREFILL_CHUNK` rows,
+/// so it is reused as-is and bounds the batch.
+pub struct BatchedDecodeState {
+    pub layers: Vec<BatchedLayerState>,
+    pub positions: Vec<usize>,
+    pub scratch: PrefillScratch,
+    pub max_seq_len: usize,
+    pub batch: usize,
+}
+
+impl BatchedDecodeState {
+    pub fn attn_cache_stride(max_seq_len: usize) -> usize {
+        ATTN_NUM_KV_HEADS * max_seq_len * ATTN_HEAD_DIM
+    }
+    pub fn gdn_conv_stride() -> usize {
+        GDN_CONV_DIM * (GDN_CONV_KERNEL_SIZE - 1)
+    }
+    pub fn gdn_recurrent_stride() -> usize {
+        GDN_NUM_V_HEADS * GDN_HEAD_DIM * GDN_HEAD_DIM
+    }
+
+    pub fn new(batch: usize, max_seq_len: usize) -> Result<Self, HipError> {
+        assert!(batch >= 1, "BatchedDecodeState: batch must be >= 1");
+        assert!(
+            batch <= MAX_PREFILL_CHUNK,
+            "BatchedDecodeState: batch {batch} exceeds MAX_PREFILL_CHUNK ({MAX_PREFILL_CHUNK}), which sizes the shared scratch"
+        );
+        let mut layers = Vec::with_capacity(NUM_LAYERS);
+        for i in 0..NUM_LAYERS {
+            if is_full_attention_layer(i) {
+                let n = batch * Self::attn_cache_stride(max_seq_len);
+                let mut k_cache: DeviceBuffer<u16> = DeviceBuffer::alloc(n)?;
+                let mut v_cache: DeviceBuffer<u16> = DeviceBuffer::alloc(n)?;
+                k_cache.fill_zero()?;
+                v_cache.fill_zero()?;
+                layers.push(BatchedLayerState::Attn { k_cache, v_cache });
+            } else {
+                let mut conv_state: DeviceBuffer<u16> = DeviceBuffer::alloc(batch * Self::gdn_conv_stride())?;
+                conv_state.fill_zero()?;
+                let mut recurrent_state: DeviceBuffer<f32> = DeviceBuffer::alloc(batch * Self::gdn_recurrent_stride())?;
+                recurrent_state.fill_zero()?;
+                layers.push(BatchedLayerState::Gdn { conv_state, recurrent_state });
+            }
+        }
+        Ok(BatchedDecodeState {
+            layers,
+            positions: vec![0; batch],
+            scratch: PrefillScratch::new(max_seq_len)?,
+            max_seq_len,
+            batch,
+        })
+    }
+
+    pub fn batch(&self) -> usize {
+        self.batch
+    }
+
+    /// Copies one already-prefilled single-sequence `DecodeState` into slot
+    /// `b`. Device-to-device, so the prefill path stays entirely unchanged --
+    /// batching only ever owns the DECODE step.
+    pub fn load_slot(&mut self, b: usize, src: &DecodeState) -> Result<(), HipError> {
+        assert!(b < self.batch, "load_slot: slot {b} out of range for batch {}", self.batch);
+        assert_eq!(src.max_seq_len, self.max_seq_len, "load_slot: max_seq_len mismatch");
+        for (dst, s) in self.layers.iter_mut().zip(src.layers.iter()) {
+            match (dst, s) {
+                (BatchedLayerState::Attn { k_cache, v_cache }, LayerState::Attn(a)) => {
+                    let off = b * Self::attn_cache_stride(self.max_seq_len);
+                    k_cache.copy_into_offset_from(off, &a.k_cache)?;
+                    v_cache.copy_into_offset_from(off, &a.v_cache)?;
+                }
+                (BatchedLayerState::Gdn { conv_state, recurrent_state }, LayerState::Gdn(g)) => {
+                    conv_state.copy_into_offset_from(b * Self::gdn_conv_stride(), &g.conv_state)?;
+                    recurrent_state.copy_into_offset_from(b * Self::gdn_recurrent_stride(), &g.recurrent_state)?;
+                }
+                _ => panic!("load_slot: layer type mismatch between batched and single state"),
+            }
+        }
+        self.positions[b] = src.position;
+        Ok(())
+    }
+}
+
+/// GDN layer over B sequences, one launch per kernel. `causal_conv1d_update`
+/// was already batch-aware (`blockIdx.y`, `conv_state[batch, ...]`); the gate
+/// and recurrent kernels gained the same `blockIdx.y` dimension so that all
+/// three now cover the whole batch in a single launch instead of B.
+#[allow(clippy::too_many_arguments)]
+fn gdn_layer_forward_batched(
+    handle_raw: blas_ffi::HipblasHandle,
+    hidden_in_ptr: *const c_void,
+    hidden_out_ptr: *mut c_void,
+    w: &GdnLayerWeights,
+    conv_state: &mut DeviceBuffer<u16>,
+    recurrent_state: &mut DeviceBuffer<f32>,
+    batch: usize,
+    s: &mut PrefillScratch,
+    stream: *mut c_void,
+) {
+    let b = batch as i32;
+    unsafe {
+        raw::rmsnorm(hidden_in_ptr, w.input_layernorm.as_device_ptr(), s.normed.as_device_ptr_mut(), b, HIDDEN_SIZE as i32, RMS_EPS, stream);
+        w.in_proj_combined.apply_prefill(handle_raw, s.normed.as_device_ptr(), s.gdn_in_proj_out.as_device_ptr_mut(), b, HIDDEN_SIZE as i32, GDN_IN_PROJ_COMBINED_DIM as i32, stream);
+
+        // `in_proj_combined`'s output is [batch, GDN_IN_PROJ_COMBINED_DIM], so
+        // qkv/z/b/a are offsets WITHIN a row; the batch stride is the row width.
+        let row = GDN_IN_PROJ_COMBINED_DIM;
+        raw::causal_conv1d_update_strided(
+            s.gdn_in_proj_out.as_device_ptr(),
+            conv_state.as_device_ptr_mut(),
+            w.conv1d_weight.as_device_ptr(),
+            s.gdn_mixed_qkv.as_device_ptr_mut(),
+            b,
+            GDN_CONV_DIM as i32,
+            GDN_CONV_KERNEL_SIZE as i32,
+            row as i64,
+            0,
+            stream,
+        );
+
+        raw::gdn_gate_beta_batched(
+            s.gdn_in_proj_out.as_device_ptr_at(GDN_CONV_DIM + GDN_VALUE_DIM + GDN_NUM_V_HEADS),
+            s.gdn_in_proj_out.as_device_ptr_at(GDN_CONV_DIM + GDN_VALUE_DIM),
+            w.a_log.as_device_ptr() as *const f32,
+            w.dt_bias.as_device_ptr() as *const f32,
+            s.gdn_g.as_device_ptr_mut() as *mut f32,
+            s.gdn_beta.as_device_ptr_mut() as *mut f32,
+            GDN_NUM_V_HEADS as i32,
+            b,
+            row as i64,
+            GDN_NUM_V_HEADS as i64,
+            stream,
+        );
+
+        raw::gdn_recurrent_decode_batched(
+            s.gdn_mixed_qkv.as_device_ptr(),
+            s.gdn_mixed_qkv.as_device_ptr_at(GDN_KEY_DIM),
+            s.gdn_mixed_qkv.as_device_ptr_at(2 * GDN_KEY_DIM),
+            s.gdn_g.as_device_ptr() as *const f32,
+            s.gdn_beta.as_device_ptr() as *const f32,
+            recurrent_state.as_device_ptr_mut() as *mut f32,
+            s.gdn_out.as_device_ptr_mut(),
+            GDN_NUM_V_HEADS as i32,
+            GDN_NUM_K_HEADS as i32,
+            GDN_HEAD_DIM as i32,
+            b,
+            GDN_CONV_DIM as i64,
+            stream,
+        );
+
+        // `rmsnorm_gated` treats its input as [num_rows, hidden]; a batch of B
+        // sequences is just B*num_v_heads rows of head_dim. z still lives
+        // inside the in_proj row, so it is gathered to match that layout.
+        raw::extract_range(s.gdn_in_proj_out.as_device_ptr(), s.gdn_z.as_device_ptr_mut(), b, row as i32, GDN_CONV_DIM as i32, GDN_VALUE_DIM as i32, stream);
+        raw::rmsnorm_gated(
+            s.gdn_out.as_device_ptr(),
+            s.gdn_z.as_device_ptr(),
+            w.norm_weight.as_device_ptr() as *const f32,
+            s.gdn_normed_gated.as_device_ptr_mut(),
+            (batch * GDN_NUM_V_HEADS) as i32,
+            GDN_HEAD_DIM as i32,
+            RMS_EPS,
+            stream,
+        );
+
+        w.out_proj.apply_prefill(handle_raw, s.gdn_normed_gated.as_device_ptr(), s.gdn_mixer_out.as_device_ptr_mut(), b, GDN_VALUE_DIM as i32, HIDDEN_SIZE as i32, stream);
+        raw::add(hidden_in_ptr, s.gdn_mixer_out.as_device_ptr(), s.after_mixer.as_device_ptr_mut(), (batch * HIDDEN_SIZE) as i32, stream);
+    }
+
+    let after = s.after_mixer.as_device_ptr();
+    mlp_block_prefill_into(handle_raw, after, hidden_out_ptr, &w.post_attention_layernorm, &w.gate_up_proj, &w.down_proj, batch, s, stream);
+}
+
+/// Attention layer over B sequences. Everything up to the KV append is a
+/// single batched launch (RoPE already reads a per-row position); only the
+/// cache append and the attention read itself are per sequence.
+#[allow(clippy::too_many_arguments)]
+fn attn_layer_forward_batched(
+    handle_raw: blas_ffi::HipblasHandle,
+    hidden_in_ptr: *const c_void,
+    hidden_out_ptr: *mut c_void,
+    w: &AttnLayerWeights,
+    k_cache: &mut DeviceBuffer<u16>,
+    v_cache: &mut DeviceBuffer<u16>,
+    batch: usize,
+    max_seq_len: usize,
+    s: &mut PrefillScratch,
+    stream: *mut c_void,
+) {
+    let b = batch as i32;
+    let q_row = ATTN_NUM_HEADS * ATTN_HEAD_DIM;
+    unsafe {
+        raw::rmsnorm(hidden_in_ptr, w.input_layernorm.as_device_ptr(), s.normed.as_device_ptr_mut(), b, HIDDEN_SIZE as i32, RMS_EPS, stream);
+        w.qkv_proj.apply_prefill(handle_raw, s.normed.as_device_ptr(), s.attn_qkv_out.as_device_ptr_mut(), b, HIDDEN_SIZE as i32, ATTN_QKV_COMBINED_DIM as i32, stream);
+
+        raw::fused_attn_qkv_prep(
+            s.attn_qkv_out.as_device_ptr(),
+            w.q_norm.as_device_ptr(),
+            w.k_norm.as_device_ptr(),
+            s.attn_query_normed.as_device_ptr_mut(),
+            s.attn_gate.as_device_ptr_mut(),
+            s.attn_key_normed.as_device_ptr_mut(),
+            s.attn_v_raw.as_device_ptr_mut(),
+            b,
+            ATTN_NUM_HEADS as i32,
+            ATTN_NUM_KV_HEADS as i32,
+            ATTN_HEAD_DIM as i32,
+            RMS_EPS,
+            stream,
+        );
+
+        // `rope_prefill` reads row i's own absolute position from
+        // `position_buf[i]` -- for a batch those are B unrelated positions,
+        // which is exactly the semantics needed here.
+        let position_buf_ptr = s.position_buf.as_device_ptr() as *const i32;
+        raw::rope_prefill(s.attn_query_normed.as_device_ptr(), s.attn_query_roped.as_device_ptr_mut(), b, ATTN_NUM_HEADS as i32, ATTN_HEAD_DIM as i32, ATTN_ROTARY_DIM as i32, ATTN_ROPE_THETA, position_buf_ptr, stream);
+        raw::rope_prefill(s.attn_key_normed.as_device_ptr(), s.attn_key_roped.as_device_ptr_mut(), b, ATTN_NUM_KV_HEADS as i32, ATTN_HEAD_DIM as i32, ATTN_ROTARY_DIM as i32, ATTN_ROPE_THETA, position_buf_ptr, stream);
+
+        let scaling = (ATTN_HEAD_DIM as f32).powf(-0.5);
+        let cache_stride = (ATTN_NUM_KV_HEADS * max_seq_len * ATTN_HEAD_DIM) as i64;
+        raw::kv_cache_append_batched(
+            s.attn_key_roped.as_device_ptr(),
+            s.attn_v_raw.as_device_ptr(),
+            k_cache.as_device_ptr_mut(),
+            v_cache.as_device_ptr_mut(),
+            ATTN_NUM_KV_HEADS as i32,
+            max_seq_len as i32,
+            ATTN_HEAD_DIM as i32,
+            position_buf_ptr,
+            b,
+            cache_stride,
+            stream,
+        );
+        raw::attention_decode_split_batched(
+            s.attn_query_roped.as_device_ptr(),
+            k_cache.as_device_ptr(),
+            v_cache.as_device_ptr(),
+            s.attn_out.as_device_ptr_mut(),
+            ATTN_NUM_HEADS as i32,
+            ATTN_NUM_KV_HEADS as i32,
+            position_buf_ptr,
+            max_seq_len as i32,
+            ATTN_HEAD_DIM as i32,
+            scaling,
+            b,
+            cache_stride,
+            q_row as i64,
+            stream,
+        );
+
+        raw::sigmoid_gate(s.attn_out.as_device_ptr(), s.attn_gate.as_device_ptr(), s.attn_gated.as_device_ptr_mut(), (batch * q_row) as i32, stream);
+        w.o_proj.apply_prefill(handle_raw, s.attn_gated.as_device_ptr(), s.attn_mixer_out.as_device_ptr_mut(), b, q_row as i32, HIDDEN_SIZE as i32, stream);
+        raw::add(hidden_in_ptr, s.attn_mixer_out.as_device_ptr(), s.after_mixer.as_device_ptr_mut(), (batch * HIDDEN_SIZE) as i32, stream);
+    }
+
+    let after = s.after_mixer.as_device_ptr();
+    mlp_block_prefill_into(handle_raw, after, hidden_out_ptr, &w.post_attention_layernorm, &w.gate_up_proj, &w.down_proj, batch, s, stream);
+}
+
+/// `mlp_block_prefill` writing through a raw out-pointer instead of a
+/// `&mut DeviceBuffer`, so the batched layer drivers can ping-pong between
+/// two scratch buffers that both live inside `s`.
+#[allow(clippy::too_many_arguments)]
+fn mlp_block_prefill_into(
+    handle_raw: blas_ffi::HipblasHandle,
+    hidden_in_ptr: *const c_void,
+    hidden_out_ptr: *mut c_void,
+    post_attention_layernorm: &DeviceBuffer<u16>,
+    gate_up_proj: &LinearWeight,
+    down_proj: &LinearWeight,
+    num_tokens: usize,
+    s: &mut PrefillScratch,
+    stream: *mut c_void,
+) {
+    let t = num_tokens as i32;
+    unsafe {
+        raw::rmsnorm(hidden_in_ptr, post_attention_layernorm.as_device_ptr(), s.normed2.as_device_ptr_mut(), t, HIDDEN_SIZE as i32, RMS_EPS, stream);
+        gate_up_proj.apply_prefill(handle_raw, s.normed2.as_device_ptr(), s.gate_up_out.as_device_ptr_mut(), t, HIDDEN_SIZE as i32, GATE_UP_COMBINED_DIM as i32, stream);
+        // At rows>1 the combined gate|up output is row-interleaved, so the
+        // halves must be physically gathered before SwiGLU -- the same reason
+        // `mlp_block_prefill` does it (see `extract_range.hip`).
+        raw::extract_range(s.gate_up_out.as_device_ptr(), s.swiglu_out.as_device_ptr_mut(), t, GATE_UP_COMBINED_DIM as i32, 0, INTERMEDIATE_SIZE as i32, stream);
+        raw::extract_range(s.gate_up_out.as_device_ptr(), s.mlp_out.as_device_ptr_mut(), t, GATE_UP_COMBINED_DIM as i32, INTERMEDIATE_SIZE as i32, INTERMEDIATE_SIZE as i32, stream);
+        raw::swiglu(s.swiglu_out.as_device_ptr(), s.mlp_out.as_device_ptr(), s.gate_up_out.as_device_ptr_mut(), (num_tokens * INTERMEDIATE_SIZE) as i32, stream);
+        down_proj.apply_prefill(handle_raw, s.gate_up_out.as_device_ptr(), s.mlp_out.as_device_ptr_mut(), t, INTERMEDIATE_SIZE as i32, HIDDEN_SIZE as i32, stream);
+        raw::add(hidden_in_ptr, s.mlp_out.as_device_ptr(), hidden_out_ptr, (num_tokens * HIDDEN_SIZE) as i32, stream);
+    }
+}
+
+/// One decode step for every sequence in the batch. `token_ids[i]` is fed to
+/// slot `i`; `logits_out` must hold `batch * VOCAB_SIZE` entries, row `i`
+/// being slot `i`'s logits. Advances each slot's own position by one.
+pub fn forward_batched_decode(
+    handle: &BlasHandle,
+    weights: &ModelWeights,
+    state: &mut BatchedDecodeState,
+    token_ids: &[i32],
+    logits_out: &mut DeviceBuffer<u16>,
+) -> Result<(), HipError> {
+    let batch = state.batch();
+    assert_eq!(token_ids.len(), batch, "forward_batched_decode: one token per slot required");
+    for (i, p) in state.positions.iter().enumerate() {
+        assert!(
+            p + 1 <= state.max_seq_len,
+            "forward_batched_decode: slot {i} at position {p} would exceed max_seq_len ({})",
+            state.max_seq_len
+        );
+    }
+    let max_seq_len = state.max_seq_len;
+    let handle_raw = handle.raw();
+    let stream = std::ptr::null_mut();
+
+    state.scratch.token_ids_dev.copy_from_host_prefix(token_ids)?;
+    let positions: Vec<i32> = state.positions.iter().map(|&p| p as i32).collect();
+    state.scratch.position_buf.copy_from_host_prefix(&positions)?;
+
+    let s = &mut state.scratch;
+    let mut cur = s.hidden_a.as_device_ptr_mut();
+    let mut nxt = s.hidden_b.as_device_ptr_mut();
+    unsafe {
+        raw::embedding_lookup(
+            weights.embed_tokens.as_device_ptr(),
+            s.token_ids_dev.as_device_ptr() as *const i32,
+            cur,
+            batch as i32,
+            HIDDEN_SIZE as i32,
+            stream,
+        );
+    }
+
+    for (li, layer_weights) in weights.layers.iter().enumerate() {
+        match (layer_weights, &mut state.layers[li]) {
+            (LayerWeights::Gdn(w), BatchedLayerState::Gdn { conv_state, recurrent_state }) => {
+                gdn_layer_forward_batched(handle_raw, cur as *const c_void, nxt, w, conv_state, recurrent_state, batch, s, stream);
+            }
+            (LayerWeights::Attn(w), BatchedLayerState::Attn { k_cache, v_cache }) => {
+                attn_layer_forward_batched(handle_raw, cur as *const c_void, nxt, w, k_cache, v_cache, batch, max_seq_len, s, stream);
+            }
+            _ => panic!("layer {li}: weight/state type mismatch"),
+        }
+        std::mem::swap(&mut cur, &mut nxt);
+    }
+
+    // Logits for EVERY row (prefill only ever needs the last one, so this
+    // tail is genuinely different).
+    unsafe {
+        raw::rmsnorm(cur as *const c_void, weights.final_norm.as_device_ptr(), s.normed.as_device_ptr_mut(), batch as i32, HIDDEN_SIZE as i32, RMS_EPS, stream);
+        weights.lm_head_apply_rows(handle_raw, s.normed.as_device_ptr(), logits_out.as_device_ptr_mut(), batch as i32, stream);
+    }
+
+    hip::check_last_error()?;
+    hip::device_synchronize()?;
+    for p in state.positions.iter_mut() {
+        *p += 1;
+    }
+    Ok(())
+}
+
 /// The actual decode-step body: embedding lookup -> all 32 real layers ->
 /// final norm -> lm_head (tied to `embed_tokens`) -> real vocab logits.
 /// Extracted from `forward_one_token` (§93) so it can be reused UNCHANGED
@@ -3401,6 +3837,11 @@ impl GraphedDecodeState {
 /// the SAME lesson applies: never assume a bucket schedule is safe
 /// without a real measurement, see this section's own future benchmark
 /// work before this ships).
+/// The top entry is NOT arbitrary: `attention_decode_split.hip` sizes its
+/// shared memory by the full kv_stride, so gfx1100's 64 KB LDS caps any
+/// window at 14080 (see `server::DEFAULT_MAX_SEQ_LEN`). 12288 is the largest
+/// aligned bucket that fits. Adding larger entries here would hand the
+/// speculative path shapes the hardware cannot launch.
 pub const KV_LEN_BUCKETS: [usize; 8] = [128, 256, 512, 1024, 2048, 4096, 8192, 12288];
 
 /// Smallest real bucket that can hold `real_kv_len` real positions.

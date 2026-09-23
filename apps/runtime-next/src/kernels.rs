@@ -120,6 +120,8 @@ pub(crate) mod ffi {
             batch: c_int,
             conv_dim: c_int,
             kernel_size: c_int,
+            src_stride: i64,
+            src_offset: c_int,
             stream: *mut c_void,
         );
 
@@ -240,6 +242,80 @@ pub(crate) mod ffi {
             num_k_heads: c_int,
             head_dim: c_int,
             threads: c_int,
+            stream: *mut c_void,
+        );
+
+        /// Batched counterparts of the five per-sequence decode kernels: one
+        /// launch covering `batch` independent sequences (`blockIdx.y`)
+        /// instead of `batch` launches. Each sequence owns a contiguous slice
+        /// of the shared state/scratch allocations. See
+        /// `MEASURED_FINDINGS` §16 for why these exist: the per-sequence loop
+        /// they replace was `88 x B` extra launches per decode step, which is
+        /// where batched decode's missing speedup went.
+        #[allow(clippy::too_many_arguments)]
+        pub fn launch_gdn_recurrent_decode_batched_bf16(
+            q: *const c_void,
+            k: *const c_void,
+            v: *const c_void,
+            g: *const c_float,
+            beta: *const c_float,
+            state: *mut c_float,
+            out: *mut c_void,
+            num_heads: c_int,
+            num_k_heads: c_int,
+            head_dim: c_int,
+            threads: c_int,
+            batch: c_int,
+            qkv_stride: i64,
+            stream: *mut c_void,
+        );
+
+        #[allow(clippy::too_many_arguments)]
+        pub fn launch_gdn_gate_beta_batched_bf16(
+            a: *const c_void,
+            b: *const c_void,
+            a_log: *const c_float,
+            dt_bias: *const c_float,
+            g_out: *mut c_float,
+            beta_out: *mut c_float,
+            num_heads: c_int,
+            batch: c_int,
+            a_stride: i64,
+            out_stride: i64,
+            stream: *mut c_void,
+        );
+
+        #[allow(clippy::too_many_arguments)]
+        pub fn launch_kv_cache_append_batched_bf16(
+            new_k: *const c_void,
+            new_v: *const c_void,
+            k_cache: *mut c_void,
+            v_cache: *mut c_void,
+            num_kv_heads: c_int,
+            max_seq_len: c_int,
+            head_dim: c_int,
+            position: *const c_int,
+            batch: c_int,
+            cache_stride: i64,
+            stream: *mut c_void,
+        );
+
+        #[allow(clippy::too_many_arguments)]
+        pub fn launch_attention_decode_split_batched_bf16(
+            q: *const c_void,
+            k: *const c_void,
+            v: *const c_void,
+            out: *mut c_void,
+            num_q_heads: c_int,
+            num_kv_heads: c_int,
+            position: *const c_int,
+            kv_stride: c_int,
+            head_dim: c_int,
+            kv_split: c_int,
+            scaling: f32,
+            batch: c_int,
+            cache_stride: i64,
+            q_stride: i64,
             stream: *mut c_void,
         );
 
@@ -919,6 +995,8 @@ pub fn causal_conv1d_update_bf16(
             batch as i32,
             conv_dim as i32,
             kernel_size as i32,
+            conv_dim as i64,
+            0,
             std::ptr::null_mut(),
         );
     }
@@ -3899,6 +3977,8 @@ mod tests {
                         batch as i32,
                         conv_dim as i32,
                         kernel_size as i32,
+                        conv_dim as i64,
+                        0,
                         std::ptr::null_mut(),
                     );
                 }

@@ -54,18 +54,35 @@
 
 #include "bf16_utils.hip"
 
+extern "C" void launch_gdn_recurrent_decode_batched_bf16(
+    const void* q, const void* k, const void* v, const float* g, const float* beta,
+    float* state, void* out, int num_heads, int num_k_heads, int head_dim,
+    int threads, int batch, long long qkv_stride, void* stream);
+
 extern "C" __global__ void gdn_recurrent_decode_bf16_kernel(
-    const unsigned short* __restrict__ q,  // [num_k_heads, head_dim]
-    const unsigned short* __restrict__ k,  // [num_k_heads, head_dim]
-    const unsigned short* __restrict__ v,  // [num_heads, head_dim]
-    const float* __restrict__ g,           // [num_heads], pre-exp log-decay
-    const float* __restrict__ beta,        // [num_heads]
-    float* __restrict__ state,             // [num_heads, head_dim, head_dim], read+write in place
-    unsigned short* __restrict__ out,      // [num_heads, head_dim]
+    const unsigned short* q,  // [num_k_heads, head_dim]
+    const unsigned short* k,  // [num_k_heads, head_dim]
+    const unsigned short* v,  // [num_heads, head_dim]
+    const float* g,           // [num_heads], pre-exp log-decay
+    const float* beta,        // [num_heads]
+    float* state,             // [num_heads, head_dim, head_dim], read+write in place
+    unsigned short* out,      // [num_heads, head_dim]
     int num_heads,
     int num_k_heads,
-    int head_dim
+    int head_dim,
+    long long qkv_stride   // elements between sequences in q/k/v (their shared row width)
 ) {
+    // blockIdx.y is the sequence. Every input/output and the recurrent state
+    // itself is a contiguous per-sequence slice, so the strides are derived
+    // from the dims rather than passed in.
+    const int seq = blockIdx.y;
+    q = q + (size_t)seq * (size_t)qkv_stride;
+    k = k + (size_t)seq * (size_t)qkv_stride;
+    v = v + (size_t)seq * (size_t)qkv_stride;
+    g = g + (size_t)seq * (size_t)num_heads;
+    beta = beta + (size_t)seq * (size_t)num_heads;
+    state = state + (size_t)seq * (size_t)num_heads * (size_t)head_dim * (size_t)head_dim;
+    out = out + (size_t)seq * (size_t)num_heads * (size_t)head_dim;
     extern __shared__ float shared[];
     float* q_shared = shared;                      // [head_dim]
     float* k_shared = q_shared + head_dim;           // [head_dim]
@@ -173,11 +190,31 @@ extern "C" void launch_gdn_recurrent_decode_bf16(
     int threads,
     void* stream
 ) {
+    launch_gdn_recurrent_decode_batched_bf16(q, k, v, g, beta, state, out, num_heads, num_k_heads, head_dim, threads, 1, 0, stream);
+}
+
+// Batched: `batch` independent sequences, each with its own recurrent state.
+extern "C" void launch_gdn_recurrent_decode_batched_bf16(
+    const void* q,
+    const void* k,
+    const void* v,
+    const float* g,
+    const float* beta,
+    float* state,
+    void* out,
+    int num_heads,
+    int num_k_heads,
+    int head_dim,
+    int threads,
+    int batch,
+    long long qkv_stride,
+    void* stream
+) {
     size_t shmem_bytes = (size_t)(4 * head_dim + threads) * sizeof(float);
     hipLaunchKernelGGL(
         gdn_recurrent_decode_bf16_kernel,
-        dim3(num_heads), dim3(threads), shmem_bytes, (hipStream_t)stream,
+        dim3(num_heads, batch), dim3(threads), shmem_bytes, (hipStream_t)stream,
         (const unsigned short*)q, (const unsigned short*)k, (const unsigned short*)v,
-        g, beta, state, (unsigned short*)out, num_heads, num_k_heads, head_dim
+        g, beta, state, (unsigned short*)out, num_heads, num_k_heads, head_dim, qkv_stride
     );
 }

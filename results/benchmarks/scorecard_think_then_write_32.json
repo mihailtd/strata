@@ -1,0 +1,1083 @@
+{
+  "scale": "0.5",
+  "humaneval_subset": [
+    "HumanEval/19",
+    "HumanEval/26",
+    "HumanEval/40",
+    "HumanEval/54",
+    "HumanEval/64",
+    "HumanEval/65",
+    "HumanEval/70",
+    "HumanEval/74",
+    "HumanEval/76",
+    "HumanEval/83",
+    "HumanEval/86",
+    "HumanEval/89",
+    "HumanEval/90",
+    "HumanEval/91",
+    "HumanEval/93",
+    "HumanEval/101",
+    "HumanEval/115",
+    "HumanEval/118",
+    "HumanEval/119",
+    "HumanEval/126"
+  ],
+  "arms": [
+    {
+      "label": "A0: python_modern @1.0 alone (5 code attempts)",
+      "passed": 17,
+      "total": 32,
+      "turn_offset": 0,
+      "tasks": [
+        {
+          "task": "bank_account",
+          "passed": false,
+          "pass_turn": 0,
+          "total_turns": 5,
+          "total_tokens": 1774,
+          "handoff_ok": true
+        },
+        {
+          "task": "binary_search",
+          "passed": false,
+          "pass_turn": 0,
+          "total_turns": 5,
+          "total_tokens": 853,
+          "handoff_ok": true
+        },
+        {
+          "task": "grains",
+          "passed": false,
+          "pass_turn": 0,
+          "total_turns": 5,
+          "total_tokens": 635,
+          "handoff_ok": true
+        },
+        {
+          "task": "hello_world",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 58,
+          "handoff_ok": true
+        },
+        {
+          "task": "leap",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 93,
+          "handoff_ok": true
+        },
+        {
+          "task": "matching_brackets",
+          "passed": false,
+          "pass_turn": 0,
+          "total_turns": 5,
+          "total_tokens": 811,
+          "handoff_ok": true
+        },
+        {
+          "task": "reverse_string",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 49,
+          "handoff_ok": true
+        },
+        {
+          "task": "robot_simulator",
+          "passed": false,
+          "pass_turn": 0,
+          "total_turns": 5,
+          "total_tokens": 1678,
+          "handoff_ok": true
+        },
+        {
+          "task": "two_fer",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 118,
+          "handoff_ok": true
+        },
+        {
+          "task": "word_count",
+          "passed": false,
+          "pass_turn": 0,
+          "total_turns": 5,
+          "total_tokens": 953,
+          "handoff_ok": true
+        },
+        {
+          "task": "accumulate",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 79,
+          "handoff_ok": true
+        },
+        {
+          "task": "acronym",
+          "passed": false,
+          "pass_turn": 0,
+          "total_turns": 5,
+          "total_tokens": 548,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_19",
+          "passed": false,
+          "pass_turn": 0,
+          "total_turns": 5,
+          "total_tokens": 740,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_26",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 174,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_40",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 311,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_54",
+          "passed": false,
+          "pass_turn": 0,
+          "total_turns": 5,
+          "total_tokens": 442,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_64",
+          "passed": true,
+          "pass_turn": 5,
+          "total_turns": 5,
+          "total_tokens": 1296,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_65",
+          "passed": false,
+          "pass_turn": 0,
+          "total_turns": 5,
+          "total_tokens": 1390,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_70",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 215,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_74",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 309,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_76",
+          "passed": false,
+          "pass_turn": 0,
+          "total_turns": 5,
+          "total_tokens": 1177,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_83",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 1581,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_86",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 456,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_89",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 364,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_90",
+          "passed": true,
+          "pass_turn": 4,
+          "total_turns": 4,
+          "total_tokens": 675,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_91",
+          "passed": false,
+          "pass_turn": 0,
+          "total_turns": 5,
+          "total_tokens": 1028,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_93",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 453,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_101",
+          "passed": false,
+          "pass_turn": 0,
+          "total_turns": 5,
+          "total_tokens": 869,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_115",
+          "passed": false,
+          "pass_turn": 0,
+          "total_turns": 5,
+          "total_tokens": 393,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_118",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 189,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_119",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 433,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_126",
+          "passed": false,
+          "pass_turn": 0,
+          "total_turns": 5,
+          "total_tokens": 1881,
+          "handoff_ok": true
+        }
+      ]
+    },
+    {
+      "label": "A: python_modern@0.5 alone (5 code attempts)",
+      "passed": 28,
+      "total": 32,
+      "turn_offset": 0,
+      "tasks": [
+        {
+          "task": "bank_account",
+          "passed": false,
+          "pass_turn": 0,
+          "total_turns": 5,
+          "total_tokens": 2064,
+          "handoff_ok": true
+        },
+        {
+          "task": "binary_search",
+          "passed": false,
+          "pass_turn": 0,
+          "total_turns": 5,
+          "total_tokens": 1120,
+          "handoff_ok": true
+        },
+        {
+          "task": "grains",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 272,
+          "handoff_ok": true
+        },
+        {
+          "task": "hello_world",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 81,
+          "handoff_ok": true
+        },
+        {
+          "task": "leap",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 196,
+          "handoff_ok": true
+        },
+        {
+          "task": "matching_brackets",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 225,
+          "handoff_ok": true
+        },
+        {
+          "task": "reverse_string",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 77,
+          "handoff_ok": true
+        },
+        {
+          "task": "robot_simulator",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 1196,
+          "handoff_ok": true
+        },
+        {
+          "task": "two_fer",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 110,
+          "handoff_ok": true
+        },
+        {
+          "task": "word_count",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 406,
+          "handoff_ok": true
+        },
+        {
+          "task": "accumulate",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 131,
+          "handoff_ok": true
+        },
+        {
+          "task": "acronym",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 288,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_19",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 324,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_26",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 195,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_40",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 430,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_54",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 814,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_64",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 736,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_65",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 621,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_70",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 459,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_74",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 327,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_76",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 565,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_83",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 1099,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_86",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 494,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_89",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 529,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_90",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 392,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_91",
+          "passed": false,
+          "pass_turn": 0,
+          "total_turns": 5,
+          "total_tokens": 1342,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_93",
+          "passed": false,
+          "pass_turn": 0,
+          "total_turns": 5,
+          "total_tokens": 1795,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_101",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 508,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_115",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 880,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_118",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 416,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_119",
+          "passed": true,
+          "pass_turn": 3,
+          "total_turns": 3,
+          "total_tokens": 974,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_126",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 796,
+          "handoff_ok": true
+        }
+      ]
+    },
+    {
+      "label": "B: base THINKS -> python_modern@0.5 writes (1 think + 4 code, tensor handoff)",
+      "passed": 27,
+      "total": 32,
+      "turn_offset": 1,
+      "tasks": [
+        {
+          "task": "bank_account",
+          "passed": false,
+          "pass_turn": 0,
+          "total_turns": 5,
+          "total_tokens": 3622,
+          "handoff_ok": false
+        },
+        {
+          "task": "binary_search",
+          "passed": false,
+          "pass_turn": 0,
+          "total_turns": 5,
+          "total_tokens": 3267,
+          "handoff_ok": false
+        },
+        {
+          "task": "grains",
+          "passed": true,
+          "pass_turn": 3,
+          "total_turns": 3,
+          "total_tokens": 1579,
+          "handoff_ok": false
+        },
+        {
+          "task": "hello_world",
+          "passed": true,
+          "pass_turn": 4,
+          "total_turns": 4,
+          "total_tokens": 783,
+          "handoff_ok": false
+        },
+        {
+          "task": "leap",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 1036,
+          "handoff_ok": false
+        },
+        {
+          "task": "matching_brackets",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 1377,
+          "handoff_ok": false
+        },
+        {
+          "task": "reverse_string",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 1354,
+          "handoff_ok": false
+        },
+        {
+          "task": "robot_simulator",
+          "passed": true,
+          "pass_turn": 5,
+          "total_turns": 5,
+          "total_tokens": 2729,
+          "handoff_ok": false
+        },
+        {
+          "task": "two_fer",
+          "passed": true,
+          "pass_turn": 3,
+          "total_turns": 3,
+          "total_tokens": 1101,
+          "handoff_ok": false
+        },
+        {
+          "task": "word_count",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 1370,
+          "handoff_ok": false
+        },
+        {
+          "task": "accumulate",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 431,
+          "handoff_ok": false
+        },
+        {
+          "task": "acronym",
+          "passed": false,
+          "pass_turn": 0,
+          "total_turns": 5,
+          "total_tokens": 3194,
+          "handoff_ok": false
+        },
+        {
+          "task": "he_19",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 1312,
+          "handoff_ok": false
+        },
+        {
+          "task": "he_26",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 1416,
+          "handoff_ok": false
+        },
+        {
+          "task": "he_40",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 1121,
+          "handoff_ok": false
+        },
+        {
+          "task": "he_54",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 1406,
+          "handoff_ok": false
+        },
+        {
+          "task": "he_64",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 1438,
+          "handoff_ok": false
+        },
+        {
+          "task": "he_65",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 1415,
+          "handoff_ok": false
+        },
+        {
+          "task": "he_70",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 1512,
+          "handoff_ok": false
+        },
+        {
+          "task": "he_74",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 1607,
+          "handoff_ok": false
+        },
+        {
+          "task": "he_76",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 1468,
+          "handoff_ok": false
+        },
+        {
+          "task": "he_83",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 1826,
+          "handoff_ok": false
+        },
+        {
+          "task": "he_86",
+          "passed": true,
+          "pass_turn": 3,
+          "total_turns": 3,
+          "total_tokens": 2148,
+          "handoff_ok": false
+        },
+        {
+          "task": "he_89",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 1518,
+          "handoff_ok": false
+        },
+        {
+          "task": "he_90",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 1474,
+          "handoff_ok": false
+        },
+        {
+          "task": "he_91",
+          "passed": false,
+          "pass_turn": 0,
+          "total_turns": 5,
+          "total_tokens": 2203,
+          "handoff_ok": false
+        },
+        {
+          "task": "he_93",
+          "passed": false,
+          "pass_turn": 0,
+          "total_turns": 5,
+          "total_tokens": 2544,
+          "handoff_ok": false
+        },
+        {
+          "task": "he_101",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 1458,
+          "handoff_ok": false
+        },
+        {
+          "task": "he_115",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 1389,
+          "handoff_ok": false
+        },
+        {
+          "task": "he_118",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 1227,
+          "handoff_ok": false
+        },
+        {
+          "task": "he_119",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 1774,
+          "handoff_ok": false
+        },
+        {
+          "task": "he_126",
+          "passed": true,
+          "pass_turn": 5,
+          "total_turns": 5,
+          "total_tokens": 2582,
+          "handoff_ok": false
+        }
+      ]
+    },
+    {
+      "label": "C: base alone (5 code attempts)",
+      "passed": 29,
+      "total": 32,
+      "turn_offset": 0,
+      "tasks": [
+        {
+          "task": "bank_account",
+          "passed": false,
+          "pass_turn": 0,
+          "total_turns": 5,
+          "total_tokens": 3729,
+          "handoff_ok": true
+        },
+        {
+          "task": "binary_search",
+          "passed": false,
+          "pass_turn": 0,
+          "total_turns": 5,
+          "total_tokens": 1306,
+          "handoff_ok": true
+        },
+        {
+          "task": "grains",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 265,
+          "handoff_ok": true
+        },
+        {
+          "task": "hello_world",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 76,
+          "handoff_ok": true
+        },
+        {
+          "task": "leap",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 236,
+          "handoff_ok": true
+        },
+        {
+          "task": "matching_brackets",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 231,
+          "handoff_ok": true
+        },
+        {
+          "task": "reverse_string",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 121,
+          "handoff_ok": true
+        },
+        {
+          "task": "robot_simulator",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 1285,
+          "handoff_ok": true
+        },
+        {
+          "task": "two_fer",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 294,
+          "handoff_ok": true
+        },
+        {
+          "task": "word_count",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 1494,
+          "handoff_ok": true
+        },
+        {
+          "task": "accumulate",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 128,
+          "handoff_ok": true
+        },
+        {
+          "task": "acronym",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 277,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_19",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 431,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_26",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 303,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_40",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 1430,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_54",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 1199,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_64",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 449,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_65",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 624,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_70",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 533,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_74",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 736,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_76",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 1113,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_83",
+          "passed": true,
+          "pass_turn": 3,
+          "total_turns": 3,
+          "total_tokens": 2277,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_86",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 571,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_89",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 571,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_90",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 423,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_91",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 888,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_93",
+          "passed": false,
+          "pass_turn": 0,
+          "total_turns": 5,
+          "total_tokens": 2276,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_101",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 269,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_115",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 900,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_118",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 1179,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_119",
+          "passed": true,
+          "pass_turn": 1,
+          "total_turns": 1,
+          "total_tokens": 604,
+          "handoff_ok": true
+        },
+        {
+          "task": "he_126",
+          "passed": true,
+          "pass_turn": 2,
+          "total_turns": 2,
+          "total_tokens": 1806,
+          "handoff_ok": true
+        }
+      ]
+    }
+  ]
+}

@@ -25,14 +25,21 @@ def clean_code(raw_response: str, entry_point: str, prompt: str) -> str:
     """Extracts executable Python code from raw model response."""
     text = raw_response.strip()
 
+    # Thinking-mode models emit scratch drafts inside <think>...</think> before
+    # the real answer. Scoring the first draft instead of the final answer
+    # penalizes models that explore more, so grade only what follows </think>.
+    if "</think>" in text:
+        text = text.rsplit("</think>", 1)[1].strip() or text
+
     # If wrapped in markdown code blocks, extract the python block
     code_blocks = re.findall(r"```(?:python)?\s*\n(.*?)```", text, re.DOTALL)
     if code_blocks:
-        # Choose block containing entry_point if possible
-        for block in code_blocks:
+        # The model's final answer is its last word on the problem, so prefer
+        # the LAST block defining the entry point over any earlier revision.
+        for block in reversed(code_blocks):
             if f"def {entry_point}" in block:
                 return block
-        return code_blocks[0]
+        return code_blocks[-1]
 
     # If it begins with def entry_point or has it
     if f"def {entry_point}" in text:

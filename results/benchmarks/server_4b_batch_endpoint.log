@@ -1,0 +1,7 @@
+[runtime-next] Native Rust ROCm/HIP Serving Engine initialized.
+Target: Zero-allocation inference & monolithic HIP Graph pipeline for Qwen3.5-4B/9B.
+[runtime-next] HIP reports 2 visible device(s).
+[runtime-next] loading real weights from /home/mihai/.cache/huggingface/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a...
+[runtime-next] weights loaded.
+[runtime-next] context window 12288 tokens; decode state cost 530 MB measured (15.3 GB of 24.0 GB free remaining)
+[runtime-next] real HTTP server listening on 0.0.0.0:8003

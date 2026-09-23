@@ -1,0 +1,108 @@
+{
+  "n_samples": 8,
+  "resample_temp": 0.8,
+  "targets": [
+    "HumanEval/32",
+    "HumanEval/38",
+    "HumanEval/50",
+    "HumanEval/55",
+    "HumanEval/67",
+    "HumanEval/108",
+    "HumanEval/113",
+    "HumanEval/120",
+    "HumanEval/125",
+    "HumanEval/130",
+    "HumanEval/132",
+    "HumanEval/145",
+    "HumanEval/147",
+    "HumanEval/163"
+  ],
+  "converted": 0,
+  "baseline_passed": 150,
+  "rows": [
+    {
+      "task_id": "HumanEval/32",
+      "passed": false,
+      "accepted_sample": null,
+      "gate_note": "round(find_zero([-6, 11, -6, 1]), 2) # (x - 1) * (x - 2) * (x - 3) = -6 + 11x - 6x^2 + x^3 -> 1.0 != 1.0\n\"\"\""
+    },
+    {
+      "task_id": "HumanEval/38",
+      "passed": false,
+      "accepted_sample": null,
+      "gate_note": "no-spec"
+    },
+    {
+      "task_id": "HumanEval/50",
+      "passed": false,
+      "accepted_sample": null,
+      "gate_note": "no-spec"
+    },
+    {
+      "task_id": "HumanEval/55",
+      "passed": false,
+      "accepted_sample": null,
+      "gate_note": "fib(10) -> 34 != 55"
+    },
+    {
+      "task_id": "HumanEval/67",
+      "passed": false,
+      "accepted_sample": null,
+      "gate_note": "no-spec"
+    },
+    {
+      "task_id": "HumanEval/108",
+      "passed": false,
+      "accepted_sample": null,
+      "gate_note": "count_nums([1, 1, 2]) == 3 -> True != \"\"\""
+    },
+    {
+      "task_id": "HumanEval/113",
+      "passed": false,
+      "accepted_sample": null,
+      "gate_note": "odd_count(['1234567']) -> None != [\"the number of odd elements 4n the str4ng 4 of the 4nput.\"]"
+    },
+    {
+      "task_id": "HumanEval/120",
+      "passed": false,
+      "accepted_sample": null,
+      "gate_note": "no-spec"
+    },
+    {
+      "task_id": "HumanEval/125",
+      "passed": false,
+      "accepted_sample": null,
+      "gate_note": "no-spec"
+    },
+    {
+      "task_id": "HumanEval/130",
+      "passed": false,
+      "accepted_sample": null,
+      "gate_note": "no-spec"
+    },
+    {
+      "task_id": "HumanEval/132",
+      "passed": false,
+      "accepted_sample": null,
+      "gate_note": "no-spec"
+    },
+    {
+      "task_id": "HumanEval/145",
+      "passed": false,
+      "accepted_sample": null,
+      "gate_note": "order_by_points([]) == [] -> True != \"\"\""
+    },
+    {
+      "task_id": "HumanEval/147",
+      "passed": false,
+      "accepted_sample": null,
+      "gate_note": "no-spec"
+    },
+    {
+      "task_id": "HumanEval/163",
+      "passed": false,
+      "accepted_sample": null,
+      "gate_note": "no-spec"
+    }
+  ]
+}

@@ -152,10 +152,17 @@ class SnapshotClient:
             return False, str(e)
 
     def delete(self, name: str) -> None:
-        """Best-effort delete of a named snapshot."""
+        """Best-effort delete of a named snapshot.
+
+        The engine serves DELETE on the plural path while create is singular;
+        sending DELETE to the singular path 404s. The engine has no TTL and
+        never evicts, so a missed delete leaks the slot permanently, and once
+        MAX_SNAPSHOTS accumulate every later task silently loses tensor
+        handoff (and with it the feedback messages, per run_task's fallback).
+        """
         payload = json.dumps({"name": name}).encode("utf-8")
         req = urllib.request.Request(
-            self.snapshot_url,
+            f"{self.snapshot_url}s",
             data=payload,
             headers={
                 "Content-Type": "application/json",
@@ -434,28 +441,33 @@ class DirectHarness:
         # Snapshot name for this task instance (unique per task run)
         snap_name = f"bench_{task.name}_{uuid.uuid4().hex[:8]}"
         snap_taken = False
+        prev_adapter: str | None = None
+        # Real accumulated conversation. The handoff path never sends this --
+        # the KV cache carries it -- but an adapter switch invalidates that
+        # cache (the engine refuses to resume a snapshot captured under
+        # different folded weights), so the full history has to be replayable.
+        history: list[dict[str, str]] = list(turn1_messages)
 
         for turn_idx in range(1, self.max_turns + 1):
             t_turn_start = time.perf_counter()
             turn_adapter = self._resolve_turn_adapter(turn_idx)
+            adapter_changed = turn_idx > 1 and turn_adapter != prev_adapter
             used_resume = False
             active_snapshot: str | None = None
 
             # Determine messages and resume target for this turn
-            if turn_idx == 1 or not snap_taken:
-                # Cold prefill: send full message history
-                messages_to_send = turn1_messages
+            if turn_idx == 1:
+                messages_to_send = history
                 resume_name = None
             else:
-                # Tensor handoff: send only the new incremental feedback message.
-                # The engine will restore KV+GDN state from the snapshot and
-                # prefill only this one feedback message.
-                #
                 # If the previous turn was an analysis-only response (no code fence),
                 # prepend it as a diagnosis hint so the generation adapter has context.
+                # Only needed when re-prefilling, since on the handoff path the
+                # analysis is already in the restored cache AND in history.
                 analysis_prefix = ""
-                if "_analysis_context" in dir() and _analysis_context:  # type: ignore[used-before-assignment]
-                    analysis_prefix = f"Diagnosis from previous analysis:\n{_analysis_context}\n\n"
+                if not (adapter_changed or not snap_taken):
+                    if "_analysis_context" in dir() and _analysis_context:  # type: ignore[used-before-assignment]
+                        analysis_prefix = f"Diagnosis from previous analysis:\n{_analysis_context}\n\n"
 
                 if not success:  # type: ignore[used-before-assignment]
                     if edit_error:  # type: ignore[used-before-assignment]
@@ -481,10 +493,26 @@ class DirectHarness:
                         f"{analysis_prefix}Verification failed. Please output the corrected complete Python file "
                         "inside a ```python ... ``` block."
                     )
-                messages_to_send = [{"role": "user", "content": feedback_content}]
-                resume_name = snap_name
-                used_resume = True
-                active_snapshot = snap_name
+                history.append({"role": "user", "content": feedback_content})
+
+                if adapter_changed or not snap_taken:
+                    # State from the previous adapter cannot be handed to this
+                    # one: the cached K/V hold W_k/W_v products of the OLD
+                    # folded weights. Re-prefill the whole conversation so all
+                    # of it is encoded under the adapter actually decoding it.
+                    if snap_taken:
+                        self.snapshot_client.delete(snap_name)
+                        snap_taken = False
+                    messages_to_send = history
+                    resume_name = None
+                else:
+                    # Tensor handoff: send only the new incremental feedback
+                    # message; the engine restores KV+GDN state and prefills
+                    # just this one message.
+                    messages_to_send = [{"role": "user", "content": feedback_content}]
+                    resume_name = snap_name
+                    used_resume = True
+                    active_snapshot = snap_name
 
             try:
                 response_text, ttft_ms, tok_s, tokens, prompt_tokens = self._call_streaming_api(
@@ -583,17 +611,22 @@ class DirectHarness:
             if on_turn_complete:
                 on_turn_complete(turn_idx, turn_data)
 
+            history.append({"role": "assistant", "content": response_text})
+            prev_adapter = turn_adapter
+
             if passed:
                 break
 
-            # After Turn 1 (regardless of pass/fail), snapshot the engine state
-            # so subsequent turns can resume from this point via incremental prefill.
-            if turn_idx == 1 and self.use_tensor_handoff and not snap_taken:
+            # Snapshot whenever we don't hold one for the CURRENT adapter --
+            # after turn 1, and again after any adapter switch forced a
+            # re-prefill. The engine upserts by name, so reusing snap_name
+            # never grows the store past one entry per task.
+            if self.use_tensor_handoff and not snap_taken:
                 ok, err = self.snapshot_client.create(snap_name)
                 if ok:
                     snap_taken = True
-                # If snapshot fails, we fall back to full history re-prefill gracefully
-                # (turn 2+ will see snap_taken=False and send full messages)
+                # If snapshot fails, turn N+1 sees snap_taken=False and
+                # re-prefills the full accumulated history instead.
 
         # Clean up snapshot after task completes (passes or exhausts turns)
         if snap_taken and self.use_tensor_handoff:

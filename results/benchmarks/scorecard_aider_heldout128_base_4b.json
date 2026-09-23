@@ -1,0 +1,1162 @@
+{
+  "benchmark": "aider_heldout_128",
+  "model": "qwen3.5:4b-rust",
+  "adapter": "base",
+  "completed": 128,
+  "total": 128,
+  "elapsed_s": 3754.3,
+  "rows": [
+    {
+      "task": "affine_cipher",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 2922,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "all_your_base",
+      "passed": true,
+      "pass_turn": 2,
+      "total_turns": 2,
+      "total_tokens": 841,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "allergies",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 517,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "alphametics",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 3657,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "anagram",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 256,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "armstrong_numbers",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 209,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "atbash_cipher",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 1481,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "beer_song",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 1720,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "binary",
+      "passed": true,
+      "pass_turn": 2,
+      "total_turns": 2,
+      "total_tokens": 833,
+      "ruff_violations": 1,
+      "handoff_ok": true
+    },
+    {
+      "task": "binary_search_tree",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 1272,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "bob",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 452,
+      "ruff_violations": 1,
+      "handoff_ok": true
+    },
+    {
+      "task": "book_store",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 7174,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "bottle_song",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 2744,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "bowling",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 6410,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "camicia",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 10785,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "change",
+      "passed": true,
+      "pass_turn": 3,
+      "total_turns": 3,
+      "total_tokens": 1270,
+      "ruff_violations": 1,
+      "handoff_ok": true
+    },
+    {
+      "task": "circular_buffer",
+      "passed": true,
+      "pass_turn": 2,
+      "total_turns": 2,
+      "total_tokens": 1289,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "clock",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 561,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "collatz_conjecture",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 213,
+      "ruff_violations": 1,
+      "handoff_ok": true
+    },
+    {
+      "task": "complex_numbers",
+      "passed": true,
+      "pass_turn": 5,
+      "total_turns": 5,
+      "total_tokens": 3192,
+      "ruff_violations": 5,
+      "handoff_ok": true
+    },
+    {
+      "task": "connect",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 2064,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "crypto_square",
+      "passed": true,
+      "pass_turn": 3,
+      "total_turns": 3,
+      "total_tokens": 1895,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "custom_set",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 561,
+      "ruff_violations": 3,
+      "handoff_ok": true
+    },
+    {
+      "task": "darts",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 231,
+      "ruff_violations": 1,
+      "handoff_ok": true
+    },
+    {
+      "task": "diamond",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 1365,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "difference_of_squares",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 480,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "diffie_hellman",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 241,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "dnd_character",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 332,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "dominoes",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 5362,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "dot_dsl",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 2909,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "eliuds_eggs",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 275,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "error_handling",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 2013,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "etl",
+      "passed": true,
+      "pass_turn": 2,
+      "total_turns": 2,
+      "total_tokens": 411,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "flatten_array",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 195,
+      "ruff_violations": 1,
+      "handoff_ok": true
+    },
+    {
+      "task": "flower_field",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 2148,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "food_chain",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 3126,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "forth",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 13381,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "game_of_life",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 492,
+      "ruff_violations": 1,
+      "handoff_ok": true
+    },
+    {
+      "task": "gigasecond",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 141,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "go_counting",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 3658,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "grade_school",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 3156,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "grep",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 976,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "hamming",
+      "passed": true,
+      "pass_turn": 2,
+      "total_turns": 2,
+      "total_tokens": 258,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "hangman",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 3635,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "hexadecimal",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 498,
+      "ruff_violations": 1,
+      "handoff_ok": true
+    },
+    {
+      "task": "high_scores",
+      "passed": true,
+      "pass_turn": 2,
+      "total_turns": 2,
+      "total_tokens": 382,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "house",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 2391,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "isbn_verifier",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 399,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "isogram",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 201,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "killer_sudoku_helper",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 412,
+      "ruff_violations": 1,
+      "handoff_ok": true
+    },
+    {
+      "task": "kindergarten_garden",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 1445,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "knapsack",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 306,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "largest_series_product",
+      "passed": true,
+      "pass_turn": 2,
+      "total_turns": 2,
+      "total_tokens": 641,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "ledger",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 1584,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "line_up",
+      "passed": true,
+      "pass_turn": 4,
+      "total_turns": 4,
+      "total_tokens": 1200,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "linked_list",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 3722,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "list_ops",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 1949,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "luhn",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 415,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "markdown",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 3615,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "matrix",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 310,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "meetup",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 3700,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "minesweeper",
+      "passed": true,
+      "pass_turn": 5,
+      "total_turns": 5,
+      "total_tokens": 2315,
+      "ruff_violations": 1,
+      "handoff_ok": true
+    },
+    {
+      "task": "nth_prime",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 1430,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "ocr_numbers",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 5252,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "octal",
+      "passed": true,
+      "pass_turn": 2,
+      "total_turns": 2,
+      "total_tokens": 771,
+      "ruff_violations": 1,
+      "handoff_ok": true
+    },
+    {
+      "task": "paasio",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 3599,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "palindrome_products",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 2976,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "pangram",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 147,
+      "ruff_violations": 1,
+      "handoff_ok": true
+    },
+    {
+      "task": "pascals_triangle",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 1734,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "perfect_numbers",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 449,
+      "ruff_violations": 1,
+      "handoff_ok": true
+    },
+    {
+      "task": "phone_number",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 3571,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "pig_latin",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 5579,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "point_mutations",
+      "passed": true,
+      "pass_turn": 3,
+      "total_turns": 3,
+      "total_tokens": 557,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "poker",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 4656,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "pov",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 4538,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "prime_factors",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 162,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "protein_translation",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 499,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "proverb",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 1414,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "pythagorean_triplet",
+      "passed": true,
+      "pass_turn": 2,
+      "total_turns": 2,
+      "total_tokens": 959,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "queen_attack",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 1364,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "rail_fence_cipher",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 600,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "raindrops",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 190,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "rational_numbers",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 1147,
+      "ruff_violations": 1,
+      "handoff_ok": true
+    },
+    {
+      "task": "react",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 2461,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "rectangles",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 1679,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "relative_distance",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 3210,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "resistor_color",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 270,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "resistor_color_duo",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 330,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "resistor_color_expert",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 1356,
+      "ruff_violations": 2,
+      "handoff_ok": true
+    },
+    {
+      "task": "resistor_color_trio",
+      "passed": true,
+      "pass_turn": 2,
+      "total_turns": 2,
+      "total_tokens": 1738,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "rest_api",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 3564,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "rna_transcription",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 164,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "robot_name",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 1671,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "roman_numerals",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 488,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "rotational_cipher",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 299,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "run_length_encoding",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 433,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "saddle_points",
+      "passed": true,
+      "pass_turn": 5,
+      "total_turns": 5,
+      "total_tokens": 1556,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "satellite",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 2285,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "say",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 3513,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "scale_generator",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 6005,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "scrabble_score",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 426,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "secret_handshake",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 1080,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "series",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 1083,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "sgf_parsing",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 2693,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "sieve",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 324,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "simple_cipher",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 529,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "simple_linked_list",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 1697,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "space_age",
+      "passed": true,
+      "pass_turn": 2,
+      "total_turns": 2,
+      "total_tokens": 1878,
+      "ruff_violations": 1,
+      "handoff_ok": true
+    },
+    {
+      "task": "spiral_matrix",
+      "passed": true,
+      "pass_turn": 2,
+      "total_turns": 2,
+      "total_tokens": 671,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "square_root",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 254,
+      "ruff_violations": 1,
+      "handoff_ok": true
+    },
+    {
+      "task": "state_of_tic_tac_toe",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 3912,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "strain",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 213,
+      "ruff_violations": 2,
+      "handoff_ok": true
+    },
+    {
+      "task": "sublist",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 586,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "sum_of_multiples",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 325,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "swift_scheduling",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 6200,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "tournament",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 730,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "transpose",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 839,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "tree_building",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 3350,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "triangle",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 601,
+      "ruff_violations": 0,
+      "handoff_ok": true
+    },
+    {
+      "task": "trinary",
+      "passed": true,
+      "pass_turn": 1,
+      "total_turns": 1,
+      "total_tokens": 295,
+      "ruff_violations": 1,
+      "handoff_ok": true
+    },
+    {
+      "task": "twelve_days",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 2253,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "two_bucket",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 6123,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "variable_length_quantity",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 5278,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "word_search",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 2115,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "wordy",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 3666,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "yacht",
+      "passed": true,
+      "pass_turn": 2,
+      "total_turns": 2,
+      "total_tokens": 1291,
+      "ruff_violations": 1,
+      "handoff_ok": true
+    },
+    {
+      "task": "zebra_puzzle",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 5475,
+      "ruff_violations": null,
+      "handoff_ok": true
+    },
+    {
+      "task": "zipper",
+      "passed": false,
+      "pass_turn": 0,
+      "total_turns": 5,
+      "total_tokens": 3148,
+      "ruff_violations": null,
+      "handoff_ok": true
+    }
+  ]
+}

@@ -187,6 +187,9 @@ def run_benchmark():
                 "tokens": tok_count,
                 "exec_duration_s": round(exec_res.duration_s, 4),
                 "error": exec_res.error[:200] if exec_res.error else "",
+                # Kept so a scoring/extraction change can be re-evaluated
+                # offline instead of re-running every generation on the GPU.
+                "completion": completion,
             })
         except Exception as exc:
             print(f"   ⚠️ ERROR: {exc}", flush=True)

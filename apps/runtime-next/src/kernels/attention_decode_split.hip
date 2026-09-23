@@ -38,25 +38,34 @@
 
 #include "bf16_utils.hip"
 
+extern "C" void launch_attention_decode_split_batched_bf16(
+    const void* q, const void* k, const void* v, void* out,
+    int num_q_heads, int num_kv_heads, const int* position, int kv_stride,
+    int head_dim, int kv_split, float scaling, int batch,
+    long long cache_stride, long long q_stride, void* stream);
+
 extern "C" __global__ void attention_decode_split_bf16_kernel(
-    const unsigned short* __restrict__ q,  // [num_q_heads, head_dim]
-    const unsigned short* __restrict__ k,  // [num_kv_heads, kv_stride, head_dim], first kv_len valid per head
-    const unsigned short* __restrict__ v,  // [num_kv_heads, kv_stride, head_dim], first kv_len valid per head
-    unsigned short* __restrict__ out,      // [num_q_heads, head_dim]
+    const unsigned short* q,  // [batch, num_q_heads, head_dim]
+    const unsigned short* k,  // [batch, num_kv_heads, kv_stride, head_dim]
+    const unsigned short* v,  // [batch, num_kv_heads, kv_stride, head_dim]
+    unsigned short* out,      // [batch, num_q_heads, head_dim]
     int num_q_heads,
     int num_kv_heads,
-    const int* __restrict__ position_ptr,  // kv_len = *position_ptr + 1
+    const int* __restrict__ position_ptr,  // [batch]; kv_len = position_ptr[b] + 1
     int kv_stride,
     int head_dim,
     int kv_split,                           // K: threads cooperating per output dim (blockDim.x == head_dim * kv_split)
-    float scaling
+    float scaling,
+    long long cache_stride,                 // elements between sequences in k/v
+    long long q_stride                      // elements between sequences in q/out
 ) {
     // Shared memory (fixed upper bound at `kv_stride`, not the real
     // `kv_len` -- same real graph-capture-safety reasoning
     // `attention_decode_bf16_kernel` already established, see its own
     // comment): q_shared[head_dim], scores[kv_stride],
     // reduce_scratch[blockDim.x], combine[head_dim*kv_split].
-    const int kv_len = *position_ptr + 1;
+    const int b = blockIdx.y;
+    const int kv_len = position_ptr[b] + 1;
     extern __shared__ float shared[];
     float* q_shared = shared;
     float* scores = shared + head_dim;
@@ -64,6 +73,12 @@ extern "C" __global__ void attention_decode_split_bf16_kernel(
     float* combine = reduce_scratch + blockDim.x; // [head_dim * kv_split]
 
     const int h = blockIdx.x;
+    // Each sequence owns a contiguous slice of the shared q/out and K/V
+    // allocations. batch=1 with zero strides is the original behaviour.
+    q = q + (size_t)b * (size_t)q_stride;
+    out = out + (size_t)b * (size_t)q_stride;
+    k = k + (size_t)b * (size_t)cache_stride;
+    v = v + (size_t)b * (size_t)cache_stride;
     const int n_rep = num_q_heads / num_kv_heads;
     const int h_kv = h / n_rep;
     const int tid = threadIdx.x;
@@ -171,12 +186,38 @@ extern "C" void launch_attention_decode_split_bf16(
     float scaling,
     void* stream
 ) {
+    launch_attention_decode_split_batched_bf16(q, k, v, out, num_q_heads, num_kv_heads, position, kv_stride, head_dim, kv_split, scaling, 1, 0, 0, stream);
+}
+
+// Batched entry point: `batch` independent sequences, each with its own
+// `position[b]` and its own `cache_stride`-element slice of the shared K/V
+// allocation. Per-block shared memory is unchanged (one block still serves one
+// (head, sequence) pair), so the gfx1100 LDS ceiling on `kv_stride` documented
+// in `server::DEFAULT_MAX_SEQ_LEN` is unaffected by batching.
+extern "C" void launch_attention_decode_split_batched_bf16(
+    const void* q,
+    const void* k,
+    const void* v,
+    void* out,
+    int num_q_heads,
+    int num_kv_heads,
+    const int* position,
+    int kv_stride,
+    int head_dim,
+    int kv_split,
+    float scaling,
+    int batch,
+    long long cache_stride,
+    long long q_stride,
+    void* stream
+) {
     int threads = head_dim * kv_split;
     size_t shmem_bytes = (size_t)(head_dim + kv_stride + threads + head_dim * kv_split) * sizeof(float);
     hipLaunchKernelGGL(
         attention_decode_split_bf16_kernel,
-        dim3(num_q_heads), dim3(threads), shmem_bytes, (hipStream_t)stream,
+        dim3(num_q_heads, batch), dim3(threads), shmem_bytes, (hipStream_t)stream,
         (const unsigned short*)q, (const unsigned short*)k, (const unsigned short*)v,
-        (unsigned short*)out, num_q_heads, num_kv_heads, position, kv_stride, head_dim, kv_split, scaling
+        (unsigned short*)out, num_q_heads, num_kv_heads, position, kv_stride, head_dim, kv_split, scaling,
+        cache_stride, q_stride
     );
 }

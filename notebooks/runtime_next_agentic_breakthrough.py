@@ -75,7 +75,7 @@ def _(mo):
     stat_prefill = mo.stat(
         value="7.6x – 10.5x",
         label="Prefill Speedup (T ≥ 2k)",
-        caption="O(1) constant-time handoff vs O(T) re-prefill",
+        caption="O(1) constant-time handoff vs O(T) re-prefill — within ONE folded adapter configuration; a swap forces a real re-prefill (§2)",
         direction="increase",
         bordered=True,
     )
@@ -126,6 +126,9 @@ def _(mo):
               achieving a REAL, adapter-ACTIVE decode overhead of **7.3%–20.9%** (still **1.25×–2× smaller** than llama.cpp's own real 11.9%–30.8% unmerged-adapter tax — see the correction note directly below for why this isn't the "0.18%" / "15–30×" figure an earlier draft of this section reported).
             * **$O(1)$ Tensor State Handoff** clones the fixed-size GatedDeltaNet recurrent state tensor ($S_t$) directly in VRAM via `hipMemcpyDtoDAsync` in **< 0.05 ms**,
               bypassing re-prefill entirely and delivering **7.6× to 10.5× prefill speedups** while saving **up to 98.4% of prompt tokens**.
+              **This holds only while the folded adapter configuration is unchanged.** A snapshot captured under one adapter (or one *scale*) and
+              resumed under another is mathematically unsound and is **refused by the engine** — the two breakthroughs above compose *within* a run of
+              same-adapter turns, not across a swap. Measured evidence and the engine guard are in §2's "Hard Constraint" subsection.
             """
         ),
         kind="success",
@@ -480,6 +483,77 @@ def _(mo):
     Instead of serializing Agent A's output to JSON/text and having Agent B re-run prefill over hundreds of tokens,
     `runtime-next`'s [`TensorStateSnapshot`](file:///home/mihai/Projects/gnn-experiment/apps/runtime-next/src/state_handoff.rs)
     clones the 55 MB device buffer directly in VRAM via `hipMemcpyDtoDAsync` in **~0.05 milliseconds**.
+
+    ---
+
+    ### ⚠️ Hard Constraint: A Snapshot Is Only Valid Under the Adapter That Captured It
+
+    **Tensor State Handoff does NOT survive a LoRA swap.** This is the one place where
+    Breakthrough 1 and Breakthrough 2 do *not* compose, and it is a mathematical limit,
+    not an implementation gap — so it is stated here rather than buried in a caveat.
+
+    A snapshot is an **activation** buffer, and those activations were produced by one
+    specific weight matrix. The KV cache holds $\mathbf{W}_k \mathbf{x}$ and
+    $\mathbf{W}_v \mathbf{x}$ for the exact folded weights that were live at capture time,
+    and every layer's hidden state carries that adapter's MLP deltas. Restoring it under a
+    *different* fold silently mixes two weight bases inside a single attention computation.
+
+    #### Measured, not argued
+
+    `diagnose_cross_adapter_handoff_divergence_against_full_reprefill` (`server.rs`) runs an
+    identical conversation with the same folded adapter for the generated turn. The two routes
+    differ **only** in how the prefix arrived — a base-captured snapshot restored under the
+    adapter, versus a full re-prefill under it:
+
+    | fold at resume | identical prefix | first divergence |
+    | :--- | :---: | :--- |
+    | `python_modern@0.5` | **1 / 32 tokens** | position 1 — `"The test"` vs `"The issue"` |
+    | `python_modern@1.0` | 8 / 32 tokens | position 8 — `"1. Parse"` vs `"1. Split"` |
+
+    **Lower scale is NOT safer.** `@0.5` forks *earlier* than `@1.0`, which retracts the
+    intuitive "smaller delta ⇒ safer handoff" guess outright. Divergence position is a
+    threshold effect on how close the top-2 logits happen to sit, not a smooth function of
+    perturbation size — so there is no delta small enough to make cross-adapter handoff sound.
+
+    And the failure mode is the dangerous kind: both continuations are *plausible*, so the
+    corruption produces a **different valid answer**, not garbage. It is invisible in aggregate
+    pass rates and total in actual behaviour.
+
+    #### Why every adapter in this repo is affected
+
+    Verified against the adapters' own tensors rather than assumed: they adapt
+    `mlp.{gate,up,down}_proj` in **all 32** layers and `self_attn.{q,k,v,o}_proj` in the **8**
+    full-attention layers (and **zero** GDN or `lm_head` tensors). Contamination therefore has
+    two channels — a direct one (adapted `k_proj`/`v_proj` write the cache) and a *larger*
+    indirect one, since the MLP carries most of the parameter mass and its shifted hidden states
+    reach even the 24 GDN layers whose own weights are never adapted.
+
+    Generalising: the residual stream globally couples layers, so **any** in-trunk delta changes
+    every downstream layer's K/V — even a query-only LoRA, via the attention output. Exact
+    cross-LoRA handoff requires an adapter that lives **outside** the trunk (an `lm_head`-only
+    adapter, or a parallel side tower). Everything in-trunk buys a *later* fork, never no fork.
+
+    ### What the engine does about it
+
+    `runtime-next` does not merely document this — it **refuses** it:
+
+    * Every snapshot records the fold it was captured under (`StoredSnapshot.adapter_sig`), with
+      **scale as part of the identity**, because folding applies $\text{scale} \cdot \frac{\alpha}{r}(B @ A)$
+      — the same adapter at a different scale is a genuinely different weight matrix.
+    * A mismatched `resume=` returns a **loud error** naming both signatures, and the now-unusable
+      snapshot is deleted so its VRAM is not stranded. The caller re-sends the full conversation
+      without `resume` and pays one honest $O(T)$ prefill.
+    * Snapshots carry a **60 s idle TTL measured from last use, not creation**. An absolute TTL
+      would kill live sessions, since a 5-turn agentic task routinely exceeds a minute.
+
+    Covered by `real_resume_across_an_adapter_swap_is_refused_and_same_adapter_resume_still_works`.
+
+    ### How to read the numbers below
+
+    The $O(T) \to O(1)$ speedups charted next are measured on **same-adapter** handoff. In a
+    multi-agent loop they are the per-turn saving *between* swaps, not across them: a turn that
+    switches adapters costs a real full prefill, and only a run of consecutive same-adapter turns
+    compounds the $O(1)$ benefit.
     """)
     return
 
@@ -576,6 +650,8 @@ def _(mo):
     **Do In-Place Weight Folding (IPWF) and Tensor State Handoff apply equally to unquantized dense BF16 models and quantized INT4 models?**
 
     The answer is nuanced: **Tensor State Handoff is 100% identical across all precisions**, while **LoRA Adapter Swapping succeeds on both but requires fundamentally different mathematical mechanisms**.
+
+    Note carefully what "identical across all precisions" does and does not claim. Precision is orthogonal to handoff validity; the **fold is not**. At *every* precision equally, a snapshot captured under one adapter configuration cannot be resumed under another — see §2's "Hard Constraint" subsection for the measurement and the engine's refusal.
     """)
     return
 
@@ -584,7 +660,7 @@ def _(mo):
 def _(mo):
     mo.accordion(
         {
-            "1. Tensor State Handoff: Universal O(1) Transfer Across All Precision Regimes": mo.md(
+            "1. Tensor State Handoff: O(1) Transfer Across All Precision Regimes (but NOT across an adapter swap)": mo.md(
                 r"""
                 **Why Tensor State Handoff works identically on Dense and Quantized models:**
 
@@ -598,6 +674,9 @@ def _(mo):
                   ($q_t, k_t, v_t, \beta_t$), the recurrent update $\mathbf{S}_t = \alpha_t \mathbf{S}_{t-1} + \beta_t (\mathbf{v}_t - \mathbf{S}_{t-1}\mathbf{k}_t)\mathbf{k}_t^T$
                   operates entirely on floating-point vectors.
                 * **Conclusion:** Whether serving a 4B BF16 model or a 27B W4A16 model, Tensor State Handoff preserves context without a single token of re-prefill.
+                * **The limit this does NOT lift:** quantization changes nothing about handoff *because* the snapshot never touches $W_0$ — but by exactly the same reasoning, the snapshot
+                  is fully determined by *which* $W_0$ produced it. A **LoRA swap changes $W_0$**, so a cross-adapter resume is unsound at BF16 and W4A16 alike, and `runtime-next` refuses it
+                  in both (`StoredSnapshot.adapter_sig`). Handoff is precision-agnostic and **fold-specific**. See §2's "Hard Constraint" subsection for the measured divergence.
                 """
             ),
             "2. LoRA Swapping: In-Place Weight Folding (Dense) vs. Additive Low-Rank Branch (Quantized)": mo.md(
@@ -641,6 +720,7 @@ def _(mo):
     | **LoRA Swap Time** | **~15–33 ms** (one-time batched GEMM fold) | **13.31 ms** (batched async PCIe 4.0 DMA transfer, 27B) |
     | **LoRA Decode Overhead** | **0.0%** (zero extra launches, merged weights) | **7.3% – 20.9%** (adapter ACTIVE, size-dependent -- smaller at larger models; still 1.25×–2× below llama.cpp's own real 11.9%–30.8% at matching sizes) |
     | **HIP Graph Pointer Stability** | Stable (pointers preserved via in-place mutation) | Stable (fixed adapter buffers, zero graph recaptures) |
+    | **Handoff Across an Adapter Swap** | **Refused** (unsound — snapshot is fold-specific) | **Refused** (unsound — same reason, same guard) — **Identical** |
     """)
     return
 

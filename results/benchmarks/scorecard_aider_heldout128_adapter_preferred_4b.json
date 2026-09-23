@@ -1,0 +1,904 @@
+{
+  "benchmark": "aider_heldout_128_adapter_preferred",
+  "adapter": "python_modern@0.5",
+  "completed": 128,
+  "rows": [
+    {
+      "task": "affine_cipher",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "all_your_base",
+      "passed": true,
+      "shipped_by": "repair(base)",
+      "calls": 3,
+      "ruff_violations": 0
+    },
+    {
+      "task": "allergies",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "alphametics",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "anagram",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "armstrong_numbers",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "atbash_cipher",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "beer_song",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "binary",
+      "passed": true,
+      "shipped_by": "repair(base)",
+      "calls": 3,
+      "ruff_violations": 0
+    },
+    {
+      "task": "binary_search_tree",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "bob",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 1
+    },
+    {
+      "task": "book_store",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "bottle_song",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "bowling",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "camicia",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "change",
+      "passed": true,
+      "shipped_by": "repair(base)",
+      "calls": 5,
+      "ruff_violations": 0
+    },
+    {
+      "task": "circular_buffer",
+      "passed": true,
+      "shipped_by": "repair(base)",
+      "calls": 3,
+      "ruff_violations": 0
+    },
+    {
+      "task": "clock",
+      "passed": true,
+      "shipped_by": "base",
+      "calls": 2,
+      "ruff_violations": 0
+    },
+    {
+      "task": "collatz_conjecture",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 1
+    },
+    {
+      "task": "complex_numbers",
+      "passed": true,
+      "shipped_by": "repair(base)",
+      "calls": 5,
+      "ruff_violations": 0
+    },
+    {
+      "task": "connect",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "crypto_square",
+      "passed": true,
+      "shipped_by": "repair(base)",
+      "calls": 3,
+      "ruff_violations": 0
+    },
+    {
+      "task": "custom_set",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "darts",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 1
+    },
+    {
+      "task": "diamond",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 1
+    },
+    {
+      "task": "difference_of_squares",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "diffie_hellman",
+      "passed": true,
+      "shipped_by": "base",
+      "calls": 2,
+      "ruff_violations": 0
+    },
+    {
+      "task": "dnd_character",
+      "passed": true,
+      "shipped_by": "base",
+      "calls": 2,
+      "ruff_violations": 0
+    },
+    {
+      "task": "dominoes",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "dot_dsl",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "eliuds_eggs",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "error_handling",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "etl",
+      "passed": true,
+      "shipped_by": "repair(base)",
+      "calls": 3,
+      "ruff_violations": 0
+    },
+    {
+      "task": "flatten_array",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 1
+    },
+    {
+      "task": "flower_field",
+      "passed": true,
+      "shipped_by": "repair(base)",
+      "calls": 5,
+      "ruff_violations": 1
+    },
+    {
+      "task": "food_chain",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "forth",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "game_of_life",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 1
+    },
+    {
+      "task": "gigasecond",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "go_counting",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "grade_school",
+      "passed": true,
+      "shipped_by": "repair(base)",
+      "calls": 3,
+      "ruff_violations": 0
+    },
+    {
+      "task": "grep",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "hamming",
+      "passed": true,
+      "shipped_by": "repair(base)",
+      "calls": 3,
+      "ruff_violations": 0
+    },
+    {
+      "task": "hangman",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "hexadecimal",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "high_scores",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "house",
+      "passed": true,
+      "shipped_by": "repair(base)",
+      "calls": 3,
+      "ruff_violations": 1
+    },
+    {
+      "task": "isbn_verifier",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 1
+    },
+    {
+      "task": "isogram",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "killer_sudoku_helper",
+      "passed": true,
+      "shipped_by": "base",
+      "calls": 2,
+      "ruff_violations": 1
+    },
+    {
+      "task": "kindergarten_garden",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "knapsack",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "largest_series_product",
+      "passed": true,
+      "shipped_by": "repair(base)",
+      "calls": 3,
+      "ruff_violations": 0
+    },
+    {
+      "task": "ledger",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "line_up",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "linked_list",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "list_ops",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "luhn",
+      "passed": true,
+      "shipped_by": "base",
+      "calls": 2,
+      "ruff_violations": 0
+    },
+    {
+      "task": "markdown",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "matrix",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "meetup",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "minesweeper",
+      "passed": true,
+      "shipped_by": "repair(base)",
+      "calls": 4,
+      "ruff_violations": 1
+    },
+    {
+      "task": "nth_prime",
+      "passed": true,
+      "shipped_by": "repair(base)",
+      "calls": 3,
+      "ruff_violations": 1
+    },
+    {
+      "task": "ocr_numbers",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "octal",
+      "passed": true,
+      "shipped_by": "repair(base)",
+      "calls": 3,
+      "ruff_violations": 0
+    },
+    {
+      "task": "paasio",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "palindrome_products",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "pangram",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 1
+    },
+    {
+      "task": "pascals_triangle",
+      "passed": true,
+      "shipped_by": "repair(base)",
+      "calls": 5,
+      "ruff_violations": 3
+    },
+    {
+      "task": "perfect_numbers",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 1
+    },
+    {
+      "task": "phone_number",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "pig_latin",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "point_mutations",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "poker",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "pov",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "prime_factors",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "protein_translation",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "proverb",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "pythagorean_triplet",
+      "passed": true,
+      "shipped_by": "repair(base)",
+      "calls": 3,
+      "ruff_violations": 0
+    },
+    {
+      "task": "queen_attack",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "rail_fence_cipher",
+      "passed": true,
+      "shipped_by": "base",
+      "calls": 2,
+      "ruff_violations": 0
+    },
+    {
+      "task": "raindrops",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "rational_numbers",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 1
+    },
+    {
+      "task": "react",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "rectangles",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "relative_distance",
+      "passed": true,
+      "shipped_by": "repair(base)",
+      "calls": 4,
+      "ruff_violations": 0
+    },
+    {
+      "task": "resistor_color",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "resistor_color_duo",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "resistor_color_expert",
+      "passed": true,
+      "shipped_by": "base",
+      "calls": 2,
+      "ruff_violations": 2
+    },
+    {
+      "task": "resistor_color_trio",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 1
+    },
+    {
+      "task": "rest_api",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "rna_transcription",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "robot_name",
+      "passed": true,
+      "shipped_by": "repair(base)",
+      "calls": 3,
+      "ruff_violations": 0
+    },
+    {
+      "task": "roman_numerals",
+      "passed": true,
+      "shipped_by": "base",
+      "calls": 2,
+      "ruff_violations": 0
+    },
+    {
+      "task": "rotational_cipher",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "run_length_encoding",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "saddle_points",
+      "passed": true,
+      "shipped_by": "repair(base)",
+      "calls": 4,
+      "ruff_violations": 0
+    },
+    {
+      "task": "satellite",
+      "passed": true,
+      "shipped_by": "repair(base)",
+      "calls": 5,
+      "ruff_violations": 0
+    },
+    {
+      "task": "say",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "scale_generator",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "scrabble_score",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "secret_handshake",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "series",
+      "passed": true,
+      "shipped_by": "repair(base)",
+      "calls": 5,
+      "ruff_violations": 0
+    },
+    {
+      "task": "sgf_parsing",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "sieve",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "simple_cipher",
+      "passed": true,
+      "shipped_by": "base",
+      "calls": 2,
+      "ruff_violations": 0
+    },
+    {
+      "task": "simple_linked_list",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "space_age",
+      "passed": true,
+      "shipped_by": "repair(base)",
+      "calls": 4,
+      "ruff_violations": 0
+    },
+    {
+      "task": "spiral_matrix",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "square_root",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 1
+    },
+    {
+      "task": "state_of_tic_tac_toe",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "strain",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 2
+    },
+    {
+      "task": "sublist",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "sum_of_multiples",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "swift_scheduling",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "tournament",
+      "passed": true,
+      "shipped_by": "base",
+      "calls": 2,
+      "ruff_violations": 0
+    },
+    {
+      "task": "transpose",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "tree_building",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "triangle",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "trinary",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 1
+    },
+    {
+      "task": "twelve_days",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "two_bucket",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "variable_length_quantity",
+      "passed": true,
+      "shipped_by": "repair(base)",
+      "calls": 3,
+      "ruff_violations": 0
+    },
+    {
+      "task": "word_search",
+      "passed": true,
+      "shipped_by": "python_modern@0.5",
+      "calls": 1,
+      "ruff_violations": 0
+    },
+    {
+      "task": "wordy",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "yacht",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "zebra_puzzle",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    },
+    {
+      "task": "zipper",
+      "passed": false,
+      "shipped_by": null,
+      "calls": 5,
+      "ruff_violations": null
+    }
+  ],
+  "elapsed_s": 3609.5
+}

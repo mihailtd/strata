@@ -1,0 +1,1033 @@
+{
+  "benchmark": "aider_heldout_128_bestofk",
+  "k_drafts": 3,
+  "max_calls": 5,
+  "completed": 128,
+  "rows": [
+    {
+      "task": "affine_cipher",
+      "passed": true,
+      "pass_call": 4,
+      "calls": 4,
+      "winning_draft": null,
+      "best_draft": "python_modern@0.5"
+    },
+    {
+      "task": "all_your_base",
+      "passed": true,
+      "pass_call": 4,
+      "calls": 4,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "allergies",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "alphametics",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "agentic_coding@0.5"
+    },
+    {
+      "task": "anagram",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "armstrong_numbers",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "atbash_cipher",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "agentic_coding@0.5"
+    },
+    {
+      "task": "beer_song",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "binary",
+      "passed": true,
+      "pass_call": 4,
+      "calls": 4,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "binary_search_tree",
+      "passed": true,
+      "pass_call": 2,
+      "calls": 2,
+      "winning_draft": "python_modern@0.5",
+      "best_draft": "python_modern@0.5"
+    },
+    {
+      "task": "bob",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "book_store",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "bottle_song",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "bowling",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "agentic_coding@0.5"
+    },
+    {
+      "task": "camicia",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "python_modern@0.5"
+    },
+    {
+      "task": "change",
+      "passed": true,
+      "pass_call": 5,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "circular_buffer",
+      "passed": true,
+      "pass_call": 4,
+      "calls": 4,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "clock",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "collatz_conjecture",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "complex_numbers",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "connect",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "agentic_coding@0.5"
+    },
+    {
+      "task": "crypto_square",
+      "passed": true,
+      "pass_call": 4,
+      "calls": 4,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "custom_set",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "darts",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "diamond",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "difference_of_squares",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "diffie_hellman",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "dnd_character",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "dominoes",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "dot_dsl",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "python_modern@0.5"
+    },
+    {
+      "task": "eliuds_eggs",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "error_handling",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "etl",
+      "passed": true,
+      "pass_call": 4,
+      "calls": 4,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "flatten_array",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "flower_field",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "python_modern@0.5"
+    },
+    {
+      "task": "food_chain",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "forth",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "python_modern@0.5"
+    },
+    {
+      "task": "game_of_life",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "gigasecond",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "go_counting",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "grade_school",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "grep",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "hamming",
+      "passed": true,
+      "pass_call": 4,
+      "calls": 4,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "hangman",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "hexadecimal",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "high_scores",
+      "passed": true,
+      "pass_call": 2,
+      "calls": 2,
+      "winning_draft": "python_modern@0.5",
+      "best_draft": "python_modern@0.5"
+    },
+    {
+      "task": "house",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "isbn_verifier",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "isogram",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "killer_sudoku_helper",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "kindergarten_garden",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "knapsack",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "largest_series_product",
+      "passed": true,
+      "pass_call": 4,
+      "calls": 4,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "ledger",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "line_up",
+      "passed": true,
+      "pass_call": 3,
+      "calls": 3,
+      "winning_draft": "agentic_coding@0.5",
+      "best_draft": "agentic_coding@0.5"
+    },
+    {
+      "task": "linked_list",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "list_ops",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "luhn",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "markdown",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "agentic_coding@0.5"
+    },
+    {
+      "task": "matrix",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "meetup",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "python_modern@0.5"
+    },
+    {
+      "task": "minesweeper",
+      "passed": true,
+      "pass_call": 5,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "nth_prime",
+      "passed": true,
+      "pass_call": 4,
+      "calls": 4,
+      "winning_draft": null,
+      "best_draft": "python_modern@0.5"
+    },
+    {
+      "task": "ocr_numbers",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "agentic_coding@0.5"
+    },
+    {
+      "task": "octal",
+      "passed": true,
+      "pass_call": 4,
+      "calls": 4,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "paasio",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "palindrome_products",
+      "passed": true,
+      "pass_call": 5,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "pangram",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "pascals_triangle",
+      "passed": true,
+      "pass_call": 4,
+      "calls": 4,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "perfect_numbers",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "phone_number",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "pig_latin",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "agentic_coding@0.5"
+    },
+    {
+      "task": "point_mutations",
+      "passed": true,
+      "pass_call": 2,
+      "calls": 2,
+      "winning_draft": "python_modern@0.5",
+      "best_draft": "python_modern@0.5"
+    },
+    {
+      "task": "poker",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "pov",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "python_modern@0.5"
+    },
+    {
+      "task": "prime_factors",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "protein_translation",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "proverb",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "pythagorean_triplet",
+      "passed": true,
+      "pass_call": 4,
+      "calls": 4,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "queen_attack",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "rail_fence_cipher",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "raindrops",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "rational_numbers",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "react",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "rectangles",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "python_modern@0.5"
+    },
+    {
+      "task": "relative_distance",
+      "passed": true,
+      "pass_call": 5,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "resistor_color",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "resistor_color_duo",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "resistor_color_expert",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "resistor_color_trio",
+      "passed": true,
+      "pass_call": 2,
+      "calls": 2,
+      "winning_draft": "python_modern@0.5",
+      "best_draft": "python_modern@0.5"
+    },
+    {
+      "task": "rest_api",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "rna_transcription",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "robot_name",
+      "passed": true,
+      "pass_call": 4,
+      "calls": 4,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "roman_numerals",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "rotational_cipher",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "run_length_encoding",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "saddle_points",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "python_modern@0.5"
+    },
+    {
+      "task": "satellite",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "say",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "scale_generator",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "python_modern@0.5"
+    },
+    {
+      "task": "scrabble_score",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "secret_handshake",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "agentic_coding@0.5"
+    },
+    {
+      "task": "series",
+      "passed": true,
+      "pass_call": 5,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "sgf_parsing",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "sieve",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "simple_cipher",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "simple_linked_list",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "agentic_coding@0.5"
+    },
+    {
+      "task": "space_age",
+      "passed": true,
+      "pass_call": 4,
+      "calls": 4,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "spiral_matrix",
+      "passed": true,
+      "pass_call": 2,
+      "calls": 2,
+      "winning_draft": "python_modern@0.5",
+      "best_draft": "python_modern@0.5"
+    },
+    {
+      "task": "square_root",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "state_of_tic_tac_toe",
+      "passed": true,
+      "pass_call": 5,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "agentic_coding@0.5"
+    },
+    {
+      "task": "strain",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "sublist",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "sum_of_multiples",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "swift_scheduling",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "tournament",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "transpose",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "tree_building",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "triangle",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "trinary",
+      "passed": true,
+      "pass_call": 1,
+      "calls": 1,
+      "winning_draft": "base",
+      "best_draft": "base"
+    },
+    {
+      "task": "twelve_days",
+      "passed": true,
+      "pass_call": 5,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "agentic_coding@0.5"
+    },
+    {
+      "task": "two_bucket",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "agentic_coding@0.5"
+    },
+    {
+      "task": "variable_length_quantity",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "python_modern@0.5"
+    },
+    {
+      "task": "word_search",
+      "passed": true,
+      "pass_call": 2,
+      "calls": 2,
+      "winning_draft": "python_modern@0.5",
+      "best_draft": "python_modern@0.5"
+    },
+    {
+      "task": "wordy",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "base"
+    },
+    {
+      "task": "yacht",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "python_modern@0.5"
+    },
+    {
+      "task": "zebra_puzzle",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "agentic_coding@0.5"
+    },
+    {
+      "task": "zipper",
+      "passed": false,
+      "pass_call": 0,
+      "calls": 5,
+      "winning_draft": null,
+      "best_draft": "agentic_coding@0.5"
+    }
+  ],
+  "elapsed_s": 3279.1
+}

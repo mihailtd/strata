@@ -48,7 +48,62 @@ const MODEL_ID: &str = "qwen3.8:27b-rust";
 /// §95/§120: LDS limit on RDNA3 (64KB) allows up to ~15232 floats in
 /// `attention_decode_split.hip`. 12288 fits comfortably in 52.5KB LDS and
 /// easily handles tool-augmented prompts with >8k tokens.
-const MAX_SEQ_LEN: usize = 8192;
+/// Default context window. Raised from 8192 after measuring what the window
+/// actually costs on this hybrid architecture: only 8 of 32 layers are full
+/// attention (`is_full_attention_layer`, `full_attention_interval=4`); the
+/// other 24 are GDN and hold a FIXED-size recurrent state that does not grow
+/// with sequence length at all. So the per-token cost is
+///   KV:          8 layers x 2 caches x ATTN_NUM_KV_HEADS x ATTN_HEAD_DIM x 2B
+///   attn_scores: MAX_PREFILL_CHUNK x 2B
+/// = ~32.5 KB/token on 4B, i.e. ~400 MB at 12288 against ~268 MB at 8192.
+/// KV size is NOT what bounds the window here, which is why this is a bigger
+/// window rather than a KV-quantization scheme -- quantizing a 268 MB cache
+/// would have solved a problem this architecture does not have.
+///
+/// What actually bounds it is `attention_decode_split.hip`, which sizes its
+/// shared memory by the FULL kv_stride:
+///   shmem = (ATTN_HEAD_DIM + kv_stride + threads + ATTN_HEAD_DIM*KV_SPLIT) * 4
+/// with `threads = ATTN_HEAD_DIM * ATTENTION_DECODE_KV_SPLIT` = 1024 (already
+/// the AMD workgroup maximum). On gfx1100 LDS is 64 KB per workgroup, so
+///   max_seq_len <= 16384 - 256 - 2*256*4 = 14080
+/// and a larger window fails the launch outright with HIP "invalid argument"
+/// partway through a generation. 12288 is the largest bucket-aligned window
+/// that fits, and it was already `KV_LEN_BUCKETS`'s top entry for exactly
+/// this reason. Going beyond needs the kernel to TILE the KV row through
+/// shared memory instead of holding all of it -- a real kernel rewrite, and
+/// the actual unlock for long context on this engine.
+const DEFAULT_MAX_SEQ_LEN: usize = 12288;
+
+/// Largest window `attention_decode_split.hip` can launch within gfx1100's
+/// 64 KB LDS budget. Derived, not guessed -- see `DEFAULT_MAX_SEQ_LEN`.
+const LDS_MAX_SEQ_LEN: usize = (65536 / 4)
+    - crate::model::ATTN_HEAD_DIM
+    - 2 * crate::model::ATTN_HEAD_DIM * crate::model::ATTENTION_DECODE_KV_SPLIT;
+
+/// Resolved once per process from `RUNTIME_NEXT_MAX_SEQ_LEN`, so a smaller
+/// card can dial it down without a rebuild. Read through `max_seq_len()`.
+static MAX_SEQ_LEN_CELL: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+
+fn max_seq_len() -> usize {
+    *MAX_SEQ_LEN_CELL.get_or_init(|| {
+        let requested = std::env::var("RUNTIME_NEXT_MAX_SEQ_LEN")
+            .ok()
+            .and_then(|s| s.trim().parse::<usize>().ok())
+            .filter(|&n| n >= 512)
+            .unwrap_or(DEFAULT_MAX_SEQ_LEN);
+        // Refuse loudly at startup rather than letting the decode kernel fail
+        // with an opaque HIP "invalid argument" thousands of tokens into a
+        // generation, which is exactly how this limit was found.
+        if requested > LDS_MAX_SEQ_LEN {
+            eprintln!(
+                "[runtime-next] RUNTIME_NEXT_MAX_SEQ_LEN={requested} exceeds what attention_decode_split can launch \
+                 within 64 KB LDS (max {LDS_MAX_SEQ_LEN}); clamping to {LDS_MAX_SEQ_LEN}"
+            );
+            return LDS_MAX_SEQ_LEN;
+        }
+        requested
+    })
+}
 const DEFAULT_MAX_TOKENS: usize = 4096;
 /// §127: real, deliberate cap on concurrently-stored state-handoff
 /// snapshots. Each real snapshot is a full device-to-device clone of
@@ -62,8 +117,27 @@ const DEFAULT_MAX_TOKENS: usize = 4096;
 /// out-of-memory crash.
 const MAX_SNAPSHOTS: usize = 8;
 
+/// Idle lifetime of a stored snapshot. Measured from its LAST use, not its
+/// creation, so an actively-resumed multi-turn session never expires
+/// mid-conversation while an abandoned one still frees its VRAM promptly.
+const SNAPSHOT_TTL_SECS: u64 = 60;
+
 fn unix_time_secs() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+}
+
+/// A stored snapshot plus the metadata needed to decide whether restoring it
+/// is actually SOUND. `adapter_sig` is the critical field: a snapshot's K/V
+/// cache holds `W_k · x` and `W_v · x` for the exact folded weights that were
+/// live when it was captured, and every layer's hidden states carry the
+/// adapter's MLP deltas too. Restoring it under different folded weights
+/// silently mixes two weight bases inside one attention computation, so the
+/// signature is recorded here and enforced on resume rather than trusted.
+struct StoredSnapshot {
+    snap: TensorStateSnapshot,
+    created: u64,
+    last_used: u64,
+    adapter_sig: String,
 }
 
 /// Everything one real decode session needs, held behind a single mutex --
@@ -110,7 +184,14 @@ struct Engine {
     /// not swapping in a second `DecodeState`, is the only safe design
     /// given `graphed`'s captured HIP graph is tied to `state`'s exact
     /// buffer addresses).
-    snapshots: HashMap<String, (TensorStateSnapshot, u64)>,
+    snapshots: HashMap<String, StoredSnapshot>,
+    /// Reused across requests: a `BatchedDecodeState`'s KV allocation is
+    /// ~400 MB per slot at a 12288 window, so it is built once per batch size
+    /// and kept. `load_slot` fully overwrites every layer, and attention only
+    /// ever reads up to each slot's own position, so no zeroing is needed
+    /// between requests (same reasoning as `DecodeState::reset`'s own note on
+    /// the KV caches).
+    batched: Option<crate::model::BatchedDecodeState>,
     /// §133: Pristine weights backup for dense BF16 In-Place Weight Folding.
     /// Captured on the first dense LoRA adapter load. Restores bit-exact
     /// pristine base weights before folding a new adapter or returning to base.
@@ -155,7 +236,21 @@ impl Engine {
         let tokenizer = ChatTokenizer::load(&snapshot)?;
         let graphed = GraphedDecodeState::new().map_err(|e| e.to_string())?;
         let blas_handle = BlasHandle::create().map_err(|e| e.to_string())?;
-        let state = DecodeState::new(MAX_SEQ_LEN).map_err(|e| e.to_string())?;
+        // Report what the context window actually costs, measured from the
+        // driver rather than computed from a formula -- this repo has been
+        // burned before by VRAM claims that were arithmetic, not observation.
+        let before = crate::hip::mem_info().ok();
+        let state = DecodeState::new(max_seq_len()).map_err(|e| e.to_string())?;
+        if let (Some((free_before, total)), Ok((free_after, _))) = (before, crate::hip::mem_info()) {
+            let used = free_before.saturating_sub(free_after);
+            eprintln!(
+                "[runtime-next] context window {} tokens; decode state cost {:.0} MB measured ({:.1} GB of {:.1} GB free remaining)",
+                max_seq_len(),
+                used as f64 / (1024.0 * 1024.0),
+                free_after as f64 / (1024.0 * 1024.0 * 1024.0),
+                total as f64 / (1024.0 * 1024.0 * 1024.0),
+            );
+        }
         let logits: DeviceBuffer<u16> = DeviceBuffer::alloc(VOCAB_SIZE).map_err(|e| e.to_string())?;
         Ok(Engine {
             weights,
@@ -168,6 +263,7 @@ impl Engine {
             rng: make_rng(None),
             logits_host_scratch: vec![0u16; VOCAB_SIZE],
             snapshots: HashMap::new(),
+            batched: None,
             pristine: None,
             adapters: Vec::new(),
             active_adapter_id: None,
@@ -387,6 +483,7 @@ impl Engine {
     /// genuinely NEW name past the cap is a real, loud error, not silent
     /// eviction of someone else's saved session.
     fn snapshot_state(&mut self, name: String) -> Result<(usize, u64), String> {
+        self.purge_expired_snapshots();
         if !self.snapshots.contains_key(&name) && self.snapshots.len() >= MAX_SNAPSHOTS {
             return Err(format!(
                 "snapshot store is full ({MAX_SNAPSHOTS} max) -- delete an existing snapshot before creating a new one (name {name:?} is new)"
@@ -395,8 +492,38 @@ impl Engine {
         let snap = TensorStateSnapshot::capture(&self.state).map_err(|e| e.to_string())?;
         let position = self.state.position;
         let created = unix_time_secs();
-        self.snapshots.insert(name, (snap, created));
+        let adapter_sig = self.active_adapter_signature();
+        self.snapshots.insert(name, StoredSnapshot { snap, created, last_used: created, adapter_sig });
         Ok((position, created))
+    }
+
+    /// Canonical identity of the currently folded adapter configuration --
+    /// what a snapshot's cached K/V and hidden states were actually computed
+    /// with. Scale is part of the identity because folding applies
+    /// `target_scale * (lora_alpha/r) * (B@A)`, so the same adapter at a
+    /// different scale is a genuinely different weight matrix.
+    fn active_adapter_signature(&self) -> String {
+        let mut active: Vec<String> = self
+            .adapters
+            .iter()
+            .filter(|a| a.scale != 0.0)
+            .map(|a| format!("{}@{}", a.name, a.scale))
+            .collect();
+        if active.is_empty() {
+            return "base".to_string();
+        }
+        active.sort();
+        active.join("+")
+    }
+
+    /// Drops snapshots idle longer than `SNAPSHOT_TTL_SECS`, freeing their
+    /// real VRAM. Returns how many were reaped.
+    fn purge_expired_snapshots(&mut self) -> usize {
+        let now = unix_time_secs();
+        let before = self.snapshots.len();
+        self.snapshots
+            .retain(|_, stored| now.saturating_sub(stored.last_used) <= SNAPSHOT_TTL_SECS);
+        before - self.snapshots.len()
     }
 
     /// Real, read-only listing for a real `GET /v1/state/snapshots`
@@ -404,7 +531,7 @@ impl Engine {
     fn list_snapshots(&self) -> Vec<(String, usize, u64)> {
         self.snapshots
             .iter()
-            .map(|(name, (snap, created))| (name.clone(), snap.position, *created))
+            .map(|(name, stored)| (name.clone(), stored.snap.position, stored.created))
             .collect()
     }
 
@@ -468,8 +595,30 @@ impl Engine {
                 0
             }
             Some(name) => {
-                let (snap, _created) = self.snapshots.get(name).ok_or_else(|| format!("no snapshot named {name:?} (see GET /v1/state/snapshots for what's available)"))?;
-                snap.restore(&mut self.state).map_err(|e| e.to_string())?;
+                self.purge_expired_snapshots();
+                // The adapter swap for THIS request has already been applied
+                // by the time we get here, so the live signature is the one
+                // the restored state would be decoded under.
+                let current = self.active_adapter_signature();
+                let captured_under = self
+                    .snapshots
+                    .get(name)
+                    .map(|stored| stored.adapter_sig.clone())
+                    .ok_or_else(|| format!("no snapshot named {name:?} (see GET /v1/state/snapshots for what's available -- note snapshots expire {SNAPSHOT_TTL_SECS}s after their last use)"))?;
+                if captured_under != current {
+                    // Refusing rather than restoring: the cache would mix two
+                    // weight bases inside one attention computation, which
+                    // degrades output subtly instead of failing loudly. Drop
+                    // the now-unusable snapshot so its VRAM is not stranded.
+                    self.snapshots.remove(name);
+                    return Err(format!(
+                        "snapshot {name:?} was captured under adapter {captured_under:?} but this request runs under {current:?}; its K/V cache and hidden states were computed with different folded weights, so restoring it would silently corrupt attention. The snapshot has been deleted -- re-send the full conversation WITHOUT `resume` to prefill it under {current:?}."
+                    ));
+                }
+                let now = unix_time_secs();
+                let stored = self.snapshots.get_mut(name).expect("presence checked above");
+                stored.last_used = now;
+                stored.snap.restore(&mut self.state).map_err(|e| e.to_string())?;
                 self.state.position
             }
         };
@@ -477,10 +626,10 @@ impl Engine {
         self.rng = make_rng(seed);
         let prompt = self.tokenizer.apply_chat_template_with_tools(messages, tools);
         let prompt_ids = self.tokenizer.encode(&prompt)?;
-        if base_position + prompt_ids.len() >= MAX_SEQ_LEN {
+        if base_position + prompt_ids.len() >= max_seq_len() {
             return Err(format!(
-                "prompt length ({} tokens) starting from position {base_position} would exceed server context limit ({MAX_SEQ_LEN})",
-                prompt_ids.len()
+                "prompt length ({} tokens) starting from position {base_position} would exceed server context limit ({})",
+                prompt_ids.len(), max_seq_len()
             ));
         }
 
@@ -507,7 +656,204 @@ impl Engine {
     /// that copy is unavoidable and why it's cheap -- the same real
     /// ~0.2ms cost `argmax_sample`'s own pre-optimization implementation
     /// already had).
+    /// Whether one more decoded token would run past the KV cache that
+    /// `DecodeState::new(MAX_SEQ_LEN)` actually allocated. Generation loops
+    /// must consult this and stop with `finish_reason="length"`; `step`
+    /// itself also refuses, so no caller can fault the GPU.
+    fn context_exhausted(&self) -> bool {
+        self.state.position + 1 >= max_seq_len()
+    }
+
+    /// Generates one completion for each of `prompts`, all decoded together in
+    /// one batch. Unlike `generate_n` (one prompt fanned out), these are N
+    /// DIFFERENT prompts of different lengths, so each slot is prefilled
+    /// separately through the ordinary single-sequence path and then copied
+    /// into its slot. Prefill is a small fraction of a generation, so the
+    /// batched decode still carries the win.
+    ///
+    /// One constraint worth stating: a batch shares ONE folded adapter,
+    /// because LoRA folding mutates the live weights (§12f). Per-slot adapters
+    /// would require per-slot weights, which is a different engine.
+    fn generate_batch(
+        &mut self,
+        prompts: &[Vec<(String, String)>],
+        tools: Option<&[serde_json::Value]>,
+        max_tokens: usize,
+        sampling: SamplingParams,
+        seed: Option<u64>,
+        ignore_eos: bool,
+    ) -> Result<(Vec<(Vec<i32>, &'static str)>, Vec<usize>), String> {
+        let n = prompts.len();
+        let needs_alloc = self.batched.as_ref().map(|b| b.batch() != n || b.max_seq_len != max_seq_len()).unwrap_or(true);
+        if needs_alloc {
+            self.batched = Some(crate::model::BatchedDecodeState::new(n, max_seq_len()).map_err(|e| e.to_string())?);
+        }
+
+        let eos = self.tokenizer.eos_token_id();
+        let mut rngs: Vec<_> = (0..n).map(|i| make_rng(Some(seed.unwrap_or(0).wrapping_add(i as u64)))).collect();
+        let mut out: Vec<(Vec<i32>, &'static str)> = (0..n).map(|_| (Vec::new(), "length")).collect();
+        let mut done = vec![false; n];
+        let mut feed = vec![0i32; n];
+        let mut prompt_tokens = vec![0usize; n];
+
+        // Prefill each prompt in turn, sampling its first token BEFORE the
+        // next prefill overwrites `self.logits`, then copy the finished state
+        // into that slot.
+        for (i, msgs) in prompts.iter().enumerate() {
+            let refs: Vec<(&str, &str)> = msgs.iter().map(|(r, c)| (r.as_str(), c.as_str())).collect();
+            prompt_tokens[i] = self.start_request(&refs, tools, sampling, seed, None)?;
+            let t = if sampling.temperature <= 0.0 {
+                argmax_sample(&self.logits).map_err(|e| e.to_string())?
+            } else {
+                self.logits.copy_to_host(&mut self.logits_host_scratch).map_err(|e| e.to_string())?;
+                sample_from_logits(&self.logits_host_scratch, &sampling, &mut rngs[i])
+            };
+            feed[i] = t;
+            if t == eos && !ignore_eos {
+                done[i] = true;
+                out[i].1 = "stop";
+            } else {
+                out[i].0.push(t);
+            }
+            self.batched.as_mut().expect("batched").load_slot(i, &self.state).map_err(|e| e.to_string())?;
+        }
+
+        let mut logits: DeviceBuffer<u16> =
+            DeviceBuffer::alloc(n * crate::model::VOCAB_SIZE).map_err(|e| e.to_string())?;
+        for _ in 1..max_tokens {
+            if done.iter().all(|d| *d) {
+                break;
+            }
+            if self.batched.as_ref().expect("batched").positions.iter().any(|&p| p + 1 >= max_seq_len()) {
+                break;
+            }
+            crate::model::forward_batched_decode(
+                &self.blas_handle,
+                &self.weights,
+                self.batched.as_mut().expect("batched"),
+                &feed,
+                &mut logits,
+            )
+            .map_err(|e| e.to_string())?;
+            for i in 0..n {
+                if done[i] {
+                    continue;
+                }
+                let t = if sampling.temperature <= 0.0 {
+                    crate::model::argmax_sample_row(&logits, i).map_err(|e| e.to_string())?
+                } else {
+                    logits.copy_row_to_host(&mut self.logits_host_scratch, i * crate::model::VOCAB_SIZE).map_err(|e| e.to_string())?;
+                    sample_from_logits(&self.logits_host_scratch, &sampling, &mut rngs[i])
+                };
+                if t == eos && !ignore_eos {
+                    done[i] = true;
+                    out[i].1 = "stop";
+                    continue;
+                }
+                out[i].0.push(t);
+                feed[i] = t;
+            }
+        }
+        Ok((out, prompt_tokens))
+    }
+
+    /// Generates `n` independent completions for the prompt ALREADY prefilled
+    /// into `self.state`, by fanning that one prefilled state out to `n` batch
+    /// slots and decoding them together. Returns each slot's token ids and
+    /// finish reason.
+    ///
+    /// Sampling is per slot with its own RNG -- at `temperature <= 0` every
+    /// slot would otherwise decode the identical greedy continuation, which
+    /// is why `n > 1` forces a real sampling temperature.
+    fn generate_n(
+        &mut self,
+        n: usize,
+        max_tokens: usize,
+        sampling: SamplingParams,
+        seed: Option<u64>,
+        ignore_eos: bool,
+    ) -> Result<Vec<(Vec<i32>, &'static str)>, String> {
+        let needs_alloc = self.batched.as_ref().map(|b| b.batch() != n || b.max_seq_len != max_seq_len()).unwrap_or(true);
+        if needs_alloc {
+            self.batched = Some(crate::model::BatchedDecodeState::new(n, max_seq_len()).map_err(|e| e.to_string())?);
+        }
+        let bstate = self.batched.as_mut().expect("just ensured");
+        for i in 0..n {
+            bstate.load_slot(i, &self.state).map_err(|e| e.to_string())?;
+        }
+
+        let mut logits: DeviceBuffer<u16> =
+            DeviceBuffer::alloc(n * crate::model::VOCAB_SIZE).map_err(|e| e.to_string())?;
+        let eos = self.tokenizer.eos_token_id();
+        let mut rngs: Vec<_> = (0..n).map(|i| make_rng(Some(seed.unwrap_or(0).wrapping_add(i as u64)))).collect();
+        let mut out: Vec<(Vec<i32>, &'static str)> = (0..n).map(|_| (Vec::new(), "length")).collect();
+        let mut done = vec![false; n];
+
+        // The prompt's own last-position logits are already in `self.logits`
+        // from the shared prefill, so slot 0..n all sample their FIRST token
+        // from that same distribution -- with different RNG draws, which is
+        // where the diversity comes from.
+        let mut feed = vec![0i32; n];
+        for i in 0..n {
+            self.logits.copy_to_host(&mut self.logits_host_scratch).map_err(|e| e.to_string())?;
+            let t = sample_from_logits(&self.logits_host_scratch, &sampling, &mut rngs[i]);
+            feed[i] = t;
+            if t == eos && !ignore_eos {
+                done[i] = true;
+                out[i].1 = "stop";
+            } else {
+                out[i].0.push(t);
+            }
+        }
+
+        for _ in 1..max_tokens {
+            if done.iter().all(|d| *d) {
+                break;
+            }
+            if self.batched.as_ref().expect("batched").positions.iter().any(|&p| p + 1 >= max_seq_len()) {
+                break;
+            }
+            crate::model::forward_batched_decode(
+                &self.blas_handle,
+                &self.weights,
+                self.batched.as_mut().expect("batched"),
+                &feed,
+                &mut logits,
+            )
+            .map_err(|e| e.to_string())?;
+            for i in 0..n {
+                if done[i] {
+                    continue;
+                }
+                logits
+                    .copy_row_to_host(&mut self.logits_host_scratch, i * crate::model::VOCAB_SIZE)
+                    .map_err(|e| e.to_string())?;
+                let t = sample_from_logits(&self.logits_host_scratch, &sampling, &mut rngs[i]);
+                if t == eos && !ignore_eos {
+                    done[i] = true;
+                    out[i].1 = "stop";
+                    continue;
+                }
+                out[i].0.push(t);
+                feed[i] = t;
+            }
+        }
+        Ok(out)
+    }
+
     fn step(&mut self) -> Result<i32, String> {
+        // `start_request` bounds the PROMPT against MAX_SEQ_LEN, but nothing
+        // bounded decode: a long generation (or a multi-turn session whose
+        // resumed position keeps accumulating) walked straight off the end of
+        // the KV cache and took the whole server down with
+        // "Memory access fault ... Page not present". Real crash, found by
+        // running the real 128-task aider suite -- see MEASURED_FINDINGS §12.
+        if self.context_exhausted() {
+            return Err(format!(
+                "context exhausted: position {} of {} -- one more token would write past the allocated KV cache",
+                self.state.position, max_seq_len()
+            ));
+        }
         let next_id = if self.sampling.temperature <= 0.0 {
             argmax_sample(&self.logits).map_err(|e| e.to_string())?
         } else {
@@ -543,6 +889,14 @@ struct ChatCompletionRequest {
     max_tokens: Option<usize>,
     #[serde(default)]
     stream: bool,
+    /// OpenAI's `n`: how many independent completions to generate for this
+    /// one prompt. Served by batched decode -- the prompt is prefilled ONCE
+    /// and fanned out to `n` slots, so the weight read is shared across all
+    /// of them (see MEASURED_FINDINGS §16). This is exactly the shape of the
+    /// repo's own best-of-K drafting (§13), which currently pays for `n`
+    /// separate full generations.
+    #[serde(default)]
+    n: Option<usize>,
     /// §118: real sampling contract, applies to BOTH bf16 and quantized
     /// checkpoints (operates purely at the logit-sampling layer, entirely
     /// agnostic of weight precision -- see `sampling.rs`). Omitted or
@@ -793,7 +1147,7 @@ fn stream_chat_completion(
         let mut prev_text_len = 0usize;
         let t0 = std::time::Instant::now();
         loop {
-            if generated_ids.len() >= max_tokens {
+            if generated_ids.len() >= max_tokens || engine.context_exhausted() {
                 let frame = sse_frame_bytes(&id, ChunkDelta { role: None, content: None }, Some("length"));
                 write_sse_frame(&mut *writer, &frame)?;
                 break;
@@ -1306,6 +1660,68 @@ fn handle_chat_completions(mut request: Request, engine: &Mutex<Engine>) {
         }
     };
 
+    // `n > 1`: one shared prefill fanned out to n batch slots (§16). Only on
+    // the non-streaming path -- interleaving n token streams over one SSE
+    // connection is not something the OpenAI wire format expresses.
+    let n = req.n.unwrap_or(1).max(1);
+    if n > 1 && !req.stream {
+        if n > crate::model::MAX_PREFILL_CHUNK {
+            let _ = request.respond(json_response(400, &serde_json::json!({
+                "error": format!("n={n} exceeds the maximum batch this engine can hold ({})", crate::model::MAX_PREFILL_CHUNK)
+            })));
+            return;
+        }
+        if sampling.temperature <= 0.0 {
+            let _ = request.respond(json_response(400, &serde_json::json!({
+                "error": "n>1 requires temperature>0: at temperature 0 every completion is the identical greedy continuation"
+            })));
+            return;
+        }
+        let t0 = std::time::Instant::now();
+        let results = match guard.generate_n(n, max_tokens, sampling, req.seed, ignore_eos) {
+            Ok(r) => r,
+            Err(e) => {
+                let _ = request.respond(json_response(500, &serde_json::json!({"error": format!("batched decode failed: {e}")})));
+                return;
+            }
+        };
+        let elapsed_s = t0.elapsed().as_secs_f64();
+        let total: usize = results.iter().map(|(ids, _)| ids.len()).sum();
+        let mut choices = Vec::with_capacity(n);
+        for (i, (ids, finish)) in results.iter().enumerate() {
+            let content = match guard.tokenizer.decode(ids) {
+                Ok(c) => c,
+                Err(e) => {
+                    let _ = request.respond(json_response(500, &serde_json::json!({"error": format!("detokenize failed: {e}")})));
+                    return;
+                }
+            };
+            choices.push(ChatCompletionChoice {
+                index: i as u32,
+                message: ResponseChatMessage { role: "assistant", content },
+                finish_reason: finish,
+            });
+        }
+        let tok_s = if elapsed_s > 0.0 && total > 0 { total as f64 / elapsed_s } else { 0.0 };
+        let body = ChatCompletionResponse {
+            id: completion_id(),
+            object: "chat.completion",
+            created: unix_time_secs(),
+            model: MODEL_ID,
+            choices,
+            usage: UsageInfo {
+                prompt_tokens,
+                completion_tokens: total,
+                total_tokens: prompt_tokens + total,
+                tokens_per_second: Some((tok_s * 100.0).round() / 100.0),
+                generation_time_ms: Some((elapsed_s * 1000.0 * 10.0).round() / 10.0),
+                adapter_swap_ms,
+            },
+        };
+        let _ = request.respond(json_response(200, &body));
+        return;
+    }
+
     if req.stream {
         // §103: bypasses `tiny_http`'s own `Response`/`respond()` path
         // entirely -- see `stream_chat_completion`'s own doc comment for
@@ -1322,6 +1738,10 @@ fn handle_chat_completions(mut request: Request, engine: &Mutex<Engine>) {
     let mut finish_reason = "length";
     let t0 = std::time::Instant::now();
     for _ in 0..max_tokens {
+        if guard.context_exhausted() {
+            finish_reason = "length";
+            break;
+        }
         let next_id = match guard.step() {
             Ok(id) => id,
             Err(e) => {
@@ -1371,6 +1791,144 @@ fn handle_chat_completions(mut request: Request, engine: &Mutex<Engine>) {
     let _ = request.respond(json_response(200, &response_body));
 }
 
+
+/// `POST /v1/chat/completions/batch` -- N INDEPENDENT prompts decoded together.
+///
+/// Static batching, deliberately: the caller already holds all N prompts (a
+/// benchmark sweep, a best-of-K fan-out, an offline eval), so there is nothing
+/// to schedule. True continuous batching -- dynamic admission of concurrent
+/// clients into a running batch -- needs a threaded scheduler and is NOT what
+/// this is; see MEASURED_FINDINGS §16h.
+fn handle_chat_completions_batch(mut request: tiny_http::Request, engine: &Mutex<Engine>) {
+    let mut body = String::new();
+    if request.as_reader().read_to_string(&mut body).is_err() {
+        let _ = request.respond(json_response(400, &serde_json::json!({"error": "could not read request body"})));
+        return;
+    }
+    let req: BatchCompletionRequest = match serde_json::from_str(&body) {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = request.respond(json_response(400, &serde_json::json!({"error": format!("invalid request JSON: {e}")})));
+            return;
+        }
+    };
+    if req.batch.is_empty() {
+        let _ = request.respond(json_response(400, &serde_json::json!({"error": "batch must contain at least one entry"})));
+        return;
+    }
+    if req.batch.len() > crate::model::MAX_PREFILL_CHUNK {
+        let _ = request.respond(json_response(400, &serde_json::json!({
+            "error": format!("batch of {} exceeds the maximum this engine can hold ({})", req.batch.len(), crate::model::MAX_PREFILL_CHUNK)
+        })));
+        return;
+    }
+
+    let prompts: Vec<Vec<(String, String)>> = req
+        .batch
+        .iter()
+        .map(|e| e.messages.iter().map(|m| (m.role.clone(), m.content.clone())).collect())
+        .collect();
+
+    let mut guard = match engine.lock() {
+        Ok(g) => g,
+        Err(_) => {
+            let _ = request.respond(json_response(500, &serde_json::json!({"error": "engine mutex poisoned"})));
+            return;
+        }
+    };
+
+    let mut adapter_swap_ms = None;
+    if let Some(target) = req.adapter.as_deref() {
+        match guard.swap_to_adapter(target) {
+            Ok((_, ms)) => adapter_swap_ms = Some((ms * 100.0).round() / 100.0),
+            Err(e) => {
+                let _ = request.respond(json_response(400, &serde_json::json!({"error": format!("adapter swap failed: {e}")})));
+                return;
+            }
+        }
+    }
+
+    let max_tokens = req.max_tokens.unwrap_or(DEFAULT_MAX_TOKENS);
+    let sampling = SamplingParams {
+        temperature: req.temperature.unwrap_or(0.0),
+        top_p: req.top_p.unwrap_or(1.0),
+        top_k: req.top_k.unwrap_or(0),
+    };
+    let t0 = std::time::Instant::now();
+    let (results, prompt_tokens) = match guard.generate_batch(&prompts, None, max_tokens, sampling, req.seed, false) {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = request.respond(json_response(500, &serde_json::json!({"error": format!("batched generation failed: {e}")})));
+            return;
+        }
+    };
+    let elapsed_s = t0.elapsed().as_secs_f64();
+    let total: usize = results.iter().map(|(ids, _)| ids.len()).sum();
+
+    let mut responses = Vec::with_capacity(results.len());
+    for (i, (ids, finish)) in results.iter().enumerate() {
+        let content = match guard.tokenizer.decode(ids) {
+            Ok(c) => c,
+            Err(e) => {
+                let _ = request.respond(json_response(500, &serde_json::json!({"error": format!("detokenize failed: {e}")})));
+                return;
+            }
+        };
+        responses.push(serde_json::json!({
+            "index": i,
+            "message": {"role": "assistant", "content": content},
+            "finish_reason": finish,
+            "usage": {
+                "prompt_tokens": prompt_tokens[i],
+                "completion_tokens": ids.len(),
+                "total_tokens": prompt_tokens[i] + ids.len(),
+            }
+        }));
+    }
+    let tok_s = if elapsed_s > 0.0 && total > 0 { total as f64 / elapsed_s } else { 0.0 };
+    let _ = request.respond(json_response(200, &serde_json::json!({
+        "object": "chat.completion.batch",
+        "id": completion_id(),
+        "created": unix_time_secs(),
+        "model": MODEL_ID,
+        "batch_size": results.len(),
+        "responses": responses,
+        "usage": {
+            "completion_tokens": total,
+            "tokens_per_second": (tok_s * 100.0).round() / 100.0,
+            "generation_time_ms": (elapsed_s * 1000.0 * 10.0).round() / 10.0,
+            "adapter_swap_ms": adapter_swap_ms,
+        }
+    })));
+}
+
+#[derive(Deserialize)]
+struct BatchCompletionEntry {
+    messages: Vec<ChatMessage>,
+}
+
+#[derive(Deserialize)]
+struct BatchCompletionRequest {
+    #[serde(default)]
+    #[allow(dead_code)]
+    model: String,
+    batch: Vec<BatchCompletionEntry>,
+    #[serde(default)]
+    max_tokens: Option<usize>,
+    #[serde(default)]
+    temperature: Option<f32>,
+    #[serde(default)]
+    top_p: Option<f32>,
+    #[serde(default)]
+    top_k: Option<i32>,
+    #[serde(default)]
+    seed: Option<u64>,
+    /// One adapter for the WHOLE batch -- folding mutates the live weights, so
+    /// per-slot adapters are not expressible here (§12f).
+    #[serde(default)]
+    adapter: Option<String>,
+}
+
 /// Loads real weights, pre-loads initial LoRA adapters if specified, starts
 /// the real HTTP server on `port`, and serves forever.
 pub fn run(port: u16, initial_loras: &[String]) -> Result<(), String> {
@@ -1398,6 +1956,7 @@ pub fn run(port: u16, initial_loras: &[String]) -> Result<(), String> {
             (Method::Post, "/lora-adapters") => handle_lora_adapters_post(request, &engine),
             (Method::Post, "/v1/adapters/swap") => handle_adapters_swap(request, &engine),
             (Method::Post, "/v1/chat/completions") => handle_chat_completions(request, &engine),
+            (Method::Post, "/v1/chat/completions/batch") => handle_chat_completions_batch(request, &engine),
             (Method::Post, "/v1/state/snapshot") => handle_state_snapshot_create(request, &engine),
             (Method::Get, "/v1/state/snapshots") => handle_state_snapshots_list(request, &engine),
             (Method::Delete, "/v1/state/snapshots") => handle_state_snapshot_delete(request, &engine),
@@ -1524,8 +2083,434 @@ mod tests {
         // Real, additional guard: the snapshot must still be usable a
         // second time (it is a named checkpoint, not a one-shot token --
         // see `start_request`'s own doc comment).
-        let position_after_restore = engine_b.snapshots.get("checkpoint").expect("snapshot should still exist after being resumed once").0.position;
+        let position_after_restore = engine_b.snapshots.get("checkpoint").expect("snapshot should still exist after being resumed once").snap.position;
         assert_eq!(position_after_restore, snapshot_position, "resuming a snapshot must not mutate the stored snapshot itself");
+    }
+
+    /// What batched decode actually buys, measured on the real decode path
+    /// (not the prefill proxy `diagnose_batching_headroom_*` used to decide
+    /// whether to build it). Gated on
+    /// `real_batched_decode_matches_sequential_single_sequence_decode` --
+    /// speed numbers for a path that is not token-identical are worthless.
+    #[test]
+    #[ignore]
+    fn bench_real_batched_decode_vs_sequential_decode() {
+        if crate::hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        crate::hip::set_device(0).expect("hipSetDevice(0) failed");
+
+        const N: usize = 32;
+        let mut engine = Engine::load().expect("real Engine::load failed");
+        let handle = BlasHandle::create().expect("real BlasHandle::create failed");
+        let prompt = "Write a Python function that reverses a string.";
+
+        // Baseline: the production single-sequence path, one sequence at a time.
+        engine
+            .start_request(&[("user", prompt)], None, SamplingParams::GREEDY, None, None)
+            .expect("start_request failed");
+        for _ in 0..4 {
+            engine.step().expect("warmup step failed");
+        }
+        let t0 = std::time::Instant::now();
+        for _ in 0..N {
+            engine.step().expect("step failed");
+        }
+        let seq_ms_per_tok = t0.elapsed().as_secs_f64() * 1000.0 / N as f64;
+        eprintln!("\n B | ms/step | tok/s aggregate | tok/s per seq | vs B=1");
+        eprintln!("---+---------+-----------------+---------------+-------");
+        eprintln!(
+            " 1 | {seq_ms_per_tok:7.2} | {:15.1} | {:13.1} | 1.00x",
+            1000.0 / seq_ms_per_tok,
+            1000.0 / seq_ms_per_tok
+        );
+
+        for &batch in &[1usize, 2, 4, 8] {
+            let mut bstate = match crate::model::BatchedDecodeState::new(batch, max_seq_len()) {
+                Ok(b) => b,
+                Err(e) => {
+                    eprintln!(" {batch} | skipped: could not allocate batch state ({e})");
+                    continue;
+                }
+            };
+            let ids = engine
+                .tokenizer
+                .encode(&engine.tokenizer.apply_chat_template_with_tools(&[("user", prompt)], None))
+                .expect("encode failed");
+            let mut feed = Vec::with_capacity(batch);
+            for i in 0..batch {
+                let mut tmp = crate::model::DecodeState::new(max_seq_len()).expect("DecodeState::new failed");
+                crate::model::forward_prefill(&handle, &engine.weights, &mut tmp, &ids, &mut engine.logits)
+                    .expect("prefill failed");
+                feed.push(crate::model::argmax_sample(&engine.logits).expect("argmax failed"));
+                bstate.load_slot(i, &tmp).expect("load_slot failed");
+            }
+            let mut logits: DeviceBuffer<u16> =
+                DeviceBuffer::alloc(batch * crate::model::VOCAB_SIZE).expect("logits alloc failed");
+
+            for _ in 0..4 {
+                crate::model::forward_batched_decode(&handle, &engine.weights, &mut bstate, &feed, &mut logits)
+                    .expect("warmup batched decode failed");
+            }
+            let t1 = std::time::Instant::now();
+            for _ in 0..N {
+                crate::model::forward_batched_decode(&handle, &engine.weights, &mut bstate, &feed, &mut logits)
+                    .expect("batched decode failed");
+            }
+            let ms_per_step = t1.elapsed().as_secs_f64() * 1000.0 / N as f64;
+            let agg = batch as f64 * 1000.0 / ms_per_step;
+            eprintln!(
+                " {batch} | {ms_per_step:7.2} | {agg:15.1} | {:13.1} | {:.2}x",
+                1000.0 / ms_per_step,
+                agg / (1000.0 / seq_ms_per_tok)
+            );
+        }
+        eprintln!();
+    }
+
+    /// THE gate for batched decode: B sequences decoded together must produce
+    /// byte-identical tokens to those same B sequences decoded one at a time
+    /// through the existing, already-validated single-sequence path.
+    ///
+    /// Batched decode reuses every existing kernel but re-derives all the
+    /// pointer arithmetic at batch width, and a single wrong row offset would
+    /// produce fluent, plausible, WRONG output -- the failure mode this repo
+    /// has now been bitten by three times in one session. Equality against the
+    /// trusted path is the only check that catches it.
+    ///
+    /// Deliberately uses DIFFERENT prompts per slot: identical prompts would
+    /// pass even if every slot were secretly reading slot 0's KV cache.
+    ///
+    /// WHAT THIS DOES *NOT* PROVE. Exact equality holds at this batch size and
+    /// horizon, and that is what makes it a sharp detector of indexing/stride
+    /// bugs (those diverge at the FIRST token of the affected slot). It is not
+    /// a claim that batched decode is bit-identical in general: changing the
+    /// batch changes the GEMM shape, hipBLAS reduces in a different order, and
+    /// a near-tied argmax can flip. Measured over HTTP at B=8 / 120 tokens,
+    /// 5 of 8 completions eventually diverged from their single-call
+    /// counterparts, the earliest 8% in. See MEASURED_FINDINGS §16h.
+    #[test]
+    #[ignore]
+    fn real_batched_decode_matches_sequential_single_sequence_decode() {
+        if crate::hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        crate::hip::set_device(0).expect("hipSetDevice(0) failed");
+
+        const N: usize = 24;
+        let prompts = [
+            "Write a Python function that reverses a string.",
+            "Explain what a hash map is in two sentences.",
+            "What is the capital of France?",
+            "Give three uses for a binary search tree.",
+        ];
+        let batch = prompts.len();
+
+        let mut engine = Engine::load().expect("real Engine::load failed");
+        let handle = BlasHandle::create().expect("real BlasHandle::create failed");
+
+        // --- Reference: each prompt decoded ALONE on the trusted path. ---
+        let mut reference: Vec<Vec<i32>> = Vec::with_capacity(batch);
+        for p in prompts.iter() {
+            engine
+                .start_request(&[("user", *p)], None, SamplingParams::GREEDY, None, None)
+                .expect("real single-sequence start_request failed");
+            let mut ids = Vec::with_capacity(N);
+            for _ in 0..N {
+                ids.push(engine.step().expect("real single-sequence step failed"));
+            }
+            reference.push(ids);
+        }
+
+        // --- Batched: all prompts prefilled into their own slot, then decoded
+        // together, one step at a time. Prefill per slot reuses the single
+        // path (batched PREFILL across different-length prompts is a separate
+        // problem); only DECODE is under test here. ---
+        let mut bstate = crate::model::BatchedDecodeState::new(batch, max_seq_len())
+            .expect("real BatchedDecodeState::new failed");
+        let mut first_tokens: Vec<i32> = Vec::with_capacity(batch);
+        for (i, p) in prompts.iter().enumerate() {
+            let prompt = engine.tokenizer.apply_chat_template_with_tools(&[("user", *p)], None);
+            let ids = engine.tokenizer.encode(&prompt).expect("encode failed");
+            // Prefill this slot's own caches by running the real prefill into
+            // a scratch DecodeState, then decoding its first token from it.
+            let mut tmp = crate::model::DecodeState::new(max_seq_len()).expect("DecodeState::new failed");
+            crate::model::forward_prefill(&handle, &engine.weights, &mut tmp, &ids, &mut engine.logits)
+                .expect("prefill failed");
+            let first = crate::model::argmax_sample(&engine.logits).expect("argmax failed");
+            first_tokens.push(first);
+            // Copy the prefilled per-layer state into this slot's slice of
+            // the batch-contiguous allocation.
+            bstate.load_slot(i, &tmp).expect("load_slot failed");
+        }
+        assert_eq!(
+            first_tokens,
+            reference.iter().map(|r| r[0]).collect::<Vec<_>>(),
+            "prefill disagreed with the reference before batched decode even started"
+        );
+
+        let mut logits: DeviceBuffer<u16> =
+            DeviceBuffer::alloc(batch * crate::model::VOCAB_SIZE).expect("logits alloc failed");
+        let mut produced: Vec<Vec<i32>> = first_tokens.iter().map(|&t| vec![t]).collect();
+        let mut feed = first_tokens.clone();
+        for _ in 1..N {
+            crate::model::forward_batched_decode(&handle, &engine.weights, &mut bstate, &feed, &mut logits)
+                .expect("real forward_batched_decode failed");
+            for i in 0..batch {
+                let row = crate::model::argmax_sample_row(&logits, i)
+                    .expect("argmax on batched logits failed");
+                produced[i].push(row);
+                feed[i] = row;
+            }
+        }
+
+        for i in 0..batch {
+            assert_eq!(
+                produced[i], reference[i],
+                "slot {i} diverged from single-sequence decode.\n  batched : {:?}\n  sequential: {:?}",
+                produced[i], reference[i]
+            );
+        }
+        eprintln!("batched decode B={batch} matched sequential decode token-for-token over {N} tokens");
+    }
+
+    /// De-risks continuous batching BEFORE any of it is built.
+    ///
+    /// MEASURED_FINDINGS §9 claims batching is nearly free (flat ms/step from
+    /// B=1 to B=4, 6.8x aggregate by B=8) -- but that was measured on the
+    /// PYTHON runtime, with different kernels. `runtime-next`'s own `gemv` is
+    /// reportedly already at 79-91% of peak bandwidth, so whether the same
+    /// headroom exists here is an open question, not an inherited fact.
+    ///
+    /// Batched decode at B=N is arithmetically the same shape as a prefill of
+    /// N tokens: one pass over every weight, N rows of activations through the
+    /// same GEMMs. So timing the EXISTING batched prefill path at T=1,2,4,8
+    /// measures the ceiling batching could reach on this engine, using code
+    /// that already exists and is already correct. Flat per-row time means the
+    /// headroom is real; linear scaling means batching would buy nothing here
+    /// and the whole build should be abandoned.
+    ///
+    /// This does NOT measure batched decode itself (attention and GDN would
+    /// need per-sequence state); it bounds what that work could win.
+    #[test]
+    #[ignore]
+    fn diagnose_batching_headroom_via_batched_prefill_scaling() {
+        if crate::hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        crate::hip::set_device(0).expect("hipSetDevice(0) failed");
+
+        let mut engine = Engine::load().expect("real Engine::load failed");
+        let handle = BlasHandle::create().expect("real BlasHandle::create failed");
+        let reps = 12;
+
+        eprintln!("\n rows | ms/call | ms per row | rows/s   | vs B=1 row-rate");
+        eprintln!("------+---------+------------+----------+----------------");
+        let mut baseline_row_ms = 0.0f64;
+        for &rows in &[1usize, 2, 4, 8, 16] {
+            let token_ids: Vec<i32> = (0..rows).map(|i| (1000 + i) as i32).collect();
+            // Warm up, then time steady state. Each rep restarts from a clean
+            // state so the KV depth is identical across row counts -- otherwise
+            // deeper caches would confound the comparison.
+            for _ in 0..3 {
+                engine.state.reset().expect("reset failed");
+                crate::model::forward_prefill(&handle, &engine.weights, &mut engine.state, &token_ids, &mut engine.logits)
+                    .expect("forward_prefill failed");
+            }
+            crate::hip::device_synchronize().expect("sync failed");
+            let t0 = std::time::Instant::now();
+            for _ in 0..reps {
+                engine.state.reset().expect("reset failed");
+                crate::model::forward_prefill(&handle, &engine.weights, &mut engine.state, &token_ids, &mut engine.logits)
+                    .expect("forward_prefill failed");
+            }
+            crate::hip::device_synchronize().expect("sync failed");
+            let ms_per_call = t0.elapsed().as_secs_f64() * 1000.0 / reps as f64;
+            let ms_per_row = ms_per_call / rows as f64;
+            if rows == 1 {
+                baseline_row_ms = ms_per_row;
+            }
+            eprintln!(
+                "{rows:5} | {ms_per_call:7.2} | {ms_per_row:10.3} | {:8.1} | {:.2}x",
+                1000.0 / ms_per_row,
+                baseline_row_ms / ms_per_row
+            );
+        }
+        eprintln!(
+            "\nflat ms/call across rows => memory-bound, batching headroom is real.\n\
+             ms/call rising ~linearly => compute-bound at B=1, batching buys little.\n"
+        );
+    }
+
+    /// Decisive regression test for a real crash: decode was unbounded.
+    /// `start_request` refused a PROMPT past `MAX_SEQ_LEN`, but nothing
+    /// stopped generation from walking off the end of the KV cache that
+    /// `DecodeState::new(MAX_SEQ_LEN)` allocated -- which killed the server
+    /// mid-run on the real 128-task aider suite with "Memory access fault by
+    /// GPU node-1 ... Page not present". Generation must now terminate
+    /// cleanly at the boundary instead.
+    #[test]
+    #[ignore]
+    fn real_decode_stops_at_context_limit_instead_of_faulting_the_gpu() {
+        if crate::hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        crate::hip::set_device(0).expect("hipSetDevice(0) failed");
+
+        let mut engine = Engine::load().expect("real Engine::load failed");
+
+        // Fill the context to just under the cap with a real prompt, so only
+        // a small number of decoded tokens remain before the boundary.
+        let mut filler = String::new();
+        while engine.tokenizer.encode(&filler).map(|v| v.len()).unwrap_or(0) < max_seq_len() - 120 {
+            filler.push_str("the quick brown fox jumps over the lazy dog. ");
+        }
+        engine
+            .start_request(&[("user", filler.as_str())], None, SamplingParams::GREEDY, None, None)
+            .expect("real start_request with a near-limit prompt failed");
+        let start_pos = engine.state.position;
+        eprintln!("prefilled to position {start_pos} of {}", max_seq_len());
+        assert!(start_pos < max_seq_len(), "prefill guard should have accepted this prompt");
+
+        // Decode far more tokens than the remaining headroom. Every call must
+        // either succeed or refuse -- never fault.
+        let mut decoded = 0usize;
+        let mut refused = false;
+        for _ in 0..(max_seq_len() - start_pos + 200) {
+            if engine.context_exhausted() {
+                refused = true;
+                break;
+            }
+            match engine.step() {
+                Ok(_) => decoded += 1,
+                Err(e) => {
+                    // An earlier version of this test accepted ANY Err as a
+                    // clean refusal, which let a real HIP launch failure
+                    // ("invalid argument", from the decode kernel exceeding
+                    // LDS at a too-large window) pass as success. Only the
+                    // engine's own bound counts as stopping cleanly.
+                    assert!(
+                        e.contains("context exhausted"),
+                        "decode failed with a real engine/HIP error rather than the context bound after {decoded} tokens: {e}"
+                    );
+                    eprintln!("real, expected refusal after {decoded} tokens: {e}");
+                    refused = true;
+                    break;
+                }
+            }
+        }
+        assert!(refused, "decode ran {decoded} tokens without ever hitting the context bound");
+        assert!(
+            engine.state.position < max_seq_len(),
+            "position {} reached max_seq_len {} -- the KV cache was written out of bounds",
+            engine.state.position, max_seq_len()
+        );
+        eprintln!("stopped cleanly at position {} after {decoded} decoded tokens", engine.state.position);
+
+        // And the engine must still be usable afterwards, not wedged.
+        engine
+            .start_request(&[("user", "Say hi.")], None, SamplingParams::GREEDY, None, None)
+            .expect("engine must still serve a fresh request after hitting the context bound");
+        engine.step().expect("engine must still decode after hitting the context bound");
+    }
+
+    /// Quantifies what the cross-adapter resume guard is actually buying.
+    /// Both routes see the IDENTICAL logical conversation and generate the
+    /// same turn under the same folded adapter; they differ only in how the
+    /// prefix got there -- a base-captured KV/GDN snapshot restored under the
+    /// adapter (the unsound route the engine now refuses) versus a full
+    /// re-prefill under the adapter (the sound route it forces instead).
+    /// Any divergence is the real, measured cost of mixing two weight bases
+    /// inside one attention computation, reported per adapter scale rather
+    /// than assumed.
+    #[test]
+    #[ignore]
+    fn diagnose_cross_adapter_handoff_divergence_against_full_reprefill() {
+        if crate::hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        crate::hip::set_device(0).expect("hipSetDevice(0) failed");
+
+        let adapter_path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../results/adapters/m2_python_modern_r8a128_v7"
+        );
+        if !std::path::Path::new(adapter_path).exists() {
+            eprintln!("skipping: real adapter not present at {adapter_path}");
+            return;
+        }
+
+        const T1_LEN: usize = 48;
+        const T2_LEN: usize = 32;
+        let system = "You are an expert Python engineer.";
+        let u1 = "Write a function `sort_numbers(numbers: str) -> str` that takes a space-separated string of number words from 'zero' to 'nine' and returns them sorted smallest to largest.";
+        let u2 = "Tests failed:\n```\nAssertionError: 'five zero' != 'zero five'\n```\nOutput the corrected complete Python file.";
+
+        let mut engine = Engine::load().expect("real Engine::load failed");
+        engine.load_adapter(adapter_path, Some("python_modern")).expect("real load_adapter failed");
+
+        for scale in ["python_modern@0.5", "python_modern@1.0"] {
+            // --- Turn 1 under BASE, identical for both routes. ---
+            engine.swap_to_adapter("base").expect("real reset to base failed");
+            engine
+                .start_request(&[("system", system), ("user", u1)], None, SamplingParams::GREEDY, None, None)
+                .expect("real turn 1 start_request failed");
+            let mut t1_ids: Vec<i32> = Vec::with_capacity(T1_LEN);
+            for _ in 0..T1_LEN {
+                t1_ids.push(engine.step().expect("real step() failed (turn 1)"));
+            }
+            let t1_text = engine.tokenizer.decode(&t1_ids).expect("real decode failed");
+            engine.snapshot_state("handoff".to_string()).expect("real snapshot_state failed");
+
+            // --- Route A: cross-adapter RESUME (what the engine now refuses). ---
+            engine.swap_to_adapter(scale).expect("real swap_to_adapter failed");
+            let current = engine.active_adapter_signature();
+            // Deliberately retag to bypass the guard: this diagnostic exists
+            // to measure the very corruption the guard prevents.
+            engine.snapshots.get_mut("handoff").expect("snapshot must exist").adapter_sig = current;
+            engine
+                .start_request(&[("user", u2)], None, SamplingParams::GREEDY, None, Some("handoff"))
+                .expect("real resumed start_request failed");
+            let mut resumed: Vec<i32> = Vec::with_capacity(T2_LEN);
+            for _ in 0..T2_LEN {
+                resumed.push(engine.step().expect("real step() failed (resumed)"));
+            }
+
+            // --- Route B: full re-prefill under the SAME adapter (the sound route). ---
+            engine
+                .start_request(
+                    &[("system", system), ("user", u1), ("assistant", &t1_text), ("user", u2)],
+                    None,
+                    SamplingParams::GREEDY,
+                    None,
+                    None,
+                )
+                .expect("real full re-prefill start_request failed");
+            let mut reprefilled: Vec<i32> = Vec::with_capacity(T2_LEN);
+            for _ in 0..T2_LEN {
+                reprefilled.push(engine.step().expect("real step() failed (re-prefill)"));
+            }
+
+            let matching = resumed.iter().zip(reprefilled.iter()).take_while(|(a, b)| a == b).count();
+            let total_same = resumed.iter().zip(reprefilled.iter()).filter(|(a, b)| a == b).count();
+            eprintln!("\n=== {scale} ===");
+            eprintln!("  cross-adapter resume : {resumed:?}");
+            eprintln!("  full re-prefill      : {reprefilled:?}");
+            eprintln!(
+                "  identical prefix     : {matching}/{T2_LEN} tokens; total positions equal: {total_same}/{T2_LEN}"
+            );
+            if matching < T2_LEN {
+                eprintln!("  FIRST DIVERGENCE at position {matching}");
+                eprintln!("    resumed  -> {:?}", engine.tokenizer.decode(&resumed[..(matching + 1).min(T2_LEN)]));
+                eprintln!("    reprefill-> {:?}", engine.tokenizer.decode(&reprefilled[..(matching + 1).min(T2_LEN)]));
+            }
+            engine.delete_snapshot("handoff");
+        }
     }
 
     /// §127 decisive test AND regression guard: the snapshot store's own
@@ -1566,6 +2551,81 @@ mod tests {
 
         engine.snapshot_state("new-after-delete".to_string()).expect("a NEW snapshot name must succeed once delete freed a real slot");
         assert_eq!(engine.snapshots.len(), MAX_SNAPSHOTS);
+    }
+
+    /// Decisive test for the real soundness boundary on tensor handoff: a
+    /// snapshot's K/V cache stores `W_k · x` / `W_v · x` for whatever LoRA
+    /// was folded into the live weights at capture time, and every layer's
+    /// hidden states carry that adapter's MLP deltas as well. Resuming it
+    /// under a DIFFERENT folded configuration therefore evaluates one
+    /// attention product across two weight bases, which degrades output
+    /// subtly rather than failing -- the worst possible failure mode. This
+    /// proves the engine refuses that resume loudly, drops the unusable
+    /// snapshot so its VRAM is not stranded, and still permits the
+    /// same-adapter resume that handoff exists for.
+    #[test]
+    #[ignore]
+    fn real_resume_across_an_adapter_swap_is_refused_and_same_adapter_resume_still_works() {
+        if crate::hip::device_count().unwrap_or(0) == 0 {
+            eprintln!("skipping: no HIP device visible on this machine");
+            return;
+        }
+        crate::hip::set_device(0).expect("hipSetDevice(0) failed on a machine that reported a device");
+
+        let adapter_path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../results/adapters/m2_python_modern_r8a128_v7"
+        );
+        if !std::path::Path::new(adapter_path).exists() {
+            eprintln!("skipping: real adapter not present at {adapter_path}");
+            return;
+        }
+
+        let mut engine = Engine::load().expect("real Engine::load failed");
+        engine.load_adapter(adapter_path, Some("python_modern")).expect("real load_adapter failed");
+
+        // Capture under base (every adapter scale still 0.0).
+        engine
+            .start_request(&[("user", "Explain what a stack is.")], None, SamplingParams::GREEDY, None, None)
+            .expect("real base start_request failed");
+        engine.snapshot_state("handoff".to_string()).expect("real snapshot_state failed");
+        assert_eq!(
+            engine.snapshots.get("handoff").expect("snapshot must exist").adapter_sig,
+            "base",
+            "a snapshot captured with every adapter scale at 0.0 must record the base signature"
+        );
+
+        // Fold the real adapter in, then attempt the cross-adapter resume.
+        engine.swap_to_adapter("python_modern").expect("real swap_to_adapter failed");
+        let err = engine
+            .start_request(&[("user", "continue")], None, SamplingParams::GREEDY, None, Some("handoff"))
+            .expect_err("resuming a base-captured snapshot under a folded adapter must be a real, loud error");
+        eprintln!("real, expected cross-adapter refusal: {err}");
+        assert!(err.contains("base"), "the error must name the signature it was captured under: {err}");
+        assert!(err.contains("python_modern"), "the error must name the signature it would run under: {err}");
+        assert!(
+            !engine.snapshots.contains_key("handoff"),
+            "a snapshot that can never be resumed again must be dropped, not left holding VRAM"
+        );
+
+        // Same-adapter resume must still work: capture under the adapter now
+        // folded in, and resume it under that same configuration.
+        engine
+            .start_request(&[("user", "Explain what a queue is.")], None, SamplingParams::GREEDY, None, None)
+            .expect("real start_request under the adapter failed");
+        engine.snapshot_state("same".to_string()).expect("real snapshot_state under adapter failed");
+        let sig = engine.snapshots.get("same").expect("snapshot must exist").adapter_sig.clone();
+        assert!(sig.starts_with("python_modern@"), "expected a real adapter signature, got {sig:?}");
+        engine
+            .start_request(&[("user", "continue")], None, SamplingParams::GREEDY, None, Some("same"))
+            .expect("resuming a snapshot under the SAME adapter must still succeed");
+
+        // Idle TTL: backdate last_used rather than sleeping, so the reaper is
+        // tested deterministically.
+        engine.snapshots.get_mut("same").expect("snapshot must exist").last_used =
+            unix_time_secs().saturating_sub(SNAPSHOT_TTL_SECS + 1);
+        assert_eq!(engine.purge_expired_snapshots(), 1, "an idle-expired snapshot must be reaped");
+        assert!(!engine.snapshots.contains_key("same"), "the expired snapshot must be gone");
     }
 
     /// §103 decisive test AND regression guard: proves the real streaming
@@ -1894,7 +2954,7 @@ mod tests {
         let blas_handle = BlasHandle::create().expect("real BlasHandle::create failed");
         used_mb("4. after Engine's own BlasHandle::create (real 3rd-ish hipBLAS handle)", &mut prev_free);
 
-        let state = DecodeState::new(MAX_SEQ_LEN).expect("real DecodeState::new failed");
+        let state = DecodeState::new(max_seq_len()).expect("real DecodeState::new failed");
         used_mb("5. after DecodeState::new (real KV caches + Scratch/PrefillScratch buffers)", &mut prev_free);
 
         let logits: DeviceBuffer<u16> = DeviceBuffer::alloc(VOCAB_SIZE).expect("real logits alloc failed");

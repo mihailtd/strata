@@ -432,6 +432,26 @@ impl<T: Copy> DeviceBuffer<T> {
         HipError::from_code(code)
     }
 
+    /// Mirror of `copy_from_device_offset`: writes `src` into this buffer
+    /// starting `dst_offset` elements in, rather than at its start. Needed to
+    /// load one sequence's prefilled state into its own slice of a shared,
+    /// batch-contiguous allocation (see `BatchedDecodeState::load_slot`).
+    pub fn copy_into_offset_from(&mut self, dst_offset: usize, src: &DeviceBuffer<T>) -> Result<(), HipError> {
+        assert!(
+            dst_offset + src.len <= self.len,
+            "DeviceBuffer::copy_into_offset_from: offset {} + src len {} exceeds dst capacity {}",
+            dst_offset,
+            src.len,
+            self.len
+        );
+        // SAFETY: both allocations are live; the bound above guarantees the
+        // destination range [dst_offset, dst_offset+src.len) is in range, and
+        // device-to-device `hipMemcpy` is well-defined for any `T: Copy`.
+        let dst = unsafe { (self.ptr as *mut T).add(dst_offset) as *mut c_void };
+        let code = unsafe { ffi::hipMemcpy(dst, src.ptr as *const c_void, src.byte_len(), ffi::HIP_MEMCPY_DEVICE_TO_DEVICE) };
+        HipError::from_code(code)
+    }
+
     /// §137: like `copy_from_device`, but reads starting at `src_offset`
     /// elements into `src` rather than `src`'s own start -- needed to
     /// pull a single row (e.g. one chunk position's hidden state) out of
@@ -496,6 +516,33 @@ impl<T: Copy> DeviceBuffer<T> {
 
     /// Copies this buffer's contents into `host_data`. `host_data.len()`
     /// must equal `self.len()`.
+    /// Copies `host_data.len()` elements starting `src_offset` elements into
+    /// this buffer out to the host -- for pulling ONE row out of a
+    /// `[rows, width]` device buffer (e.g. one sequence's logits out of a
+    /// batched decode's `[batch, VOCAB_SIZE]` output) without a host-side
+    /// allocation the size of the whole batch.
+    pub fn copy_row_to_host(&self, host_data: &mut [T], src_offset: usize) -> Result<(), HipError> {
+        assert!(
+            src_offset + host_data.len() <= self.len,
+            "DeviceBuffer::copy_row_to_host: offset {} + len {} exceeds device capacity {}",
+            src_offset,
+            host_data.len(),
+            self.len
+        );
+        // SAFETY: bound checked above; `src` stays inside the live allocation
+        // and the destination is a valid host slice of exactly that length.
+        let src = unsafe { (self.ptr as *const T).add(src_offset) as *const c_void };
+        let code = unsafe {
+            ffi::hipMemcpy(
+                host_data.as_mut_ptr() as *mut c_void,
+                src,
+                std::mem::size_of::<T>() * host_data.len(),
+                ffi::HIP_MEMCPY_DEVICE_TO_HOST,
+            )
+        };
+        HipError::from_code(code)
+    }
+
     pub fn copy_to_host(&self, host_data: &mut [T]) -> Result<(), HipError> {
         assert_eq!(
             host_data.len(),

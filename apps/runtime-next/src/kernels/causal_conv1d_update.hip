@@ -47,7 +47,9 @@ extern "C" __global__ void causal_conv1d_update_bf16_kernel(
     const unsigned short* __restrict__ weight,          // [conv_dim, kernel_size]
     unsigned short* __restrict__ out,                    // [batch, conv_dim]
     int conv_dim,
-    int kernel_size
+    int kernel_size,
+    long long src_stride,   // elements between sequences in hidden_states
+    int src_offset          // start of the qkv sub-range within a source row
 ) {
     const int batch = blockIdx.y;
     const int c = blockIdx.x * blockDim.x + threadIdx.x;
@@ -56,7 +58,7 @@ extern "C" __global__ void causal_conv1d_update_bf16_kernel(
 
     unsigned short* state_row = conv_state + ((size_t)batch * conv_dim + c) * (size_t)state_len;
     const unsigned short* w_row = weight + (size_t)c * (size_t)kernel_size;
-    const unsigned short h_new_bits = hidden_states[(size_t)batch * conv_dim + c];
+    const unsigned short h_new_bits = hidden_states[(size_t)batch * (size_t)src_stride + (size_t)src_offset + c];
     const float h_new = bf16_bits_to_f32(h_new_bits);
 
     // catted = [state[0..state_len), h_new]; raw = sum(catted[k] * w[k])
@@ -94,6 +96,8 @@ extern "C" void launch_causal_conv1d_update_bf16(
     int batch,
     int conv_dim,
     int kernel_size,
+    long long src_stride,
+    int src_offset,
     void* stream
 ) {
     int threads = conv_dim < 256 ? conv_dim : 256;
@@ -105,6 +109,6 @@ extern "C" void launch_causal_conv1d_update_bf16(
         (unsigned short*)conv_state,
         (const unsigned short*)weight,
         (unsigned short*)out,
-        conv_dim, kernel_size
+        conv_dim, kernel_size, src_stride, src_offset
     );
 }

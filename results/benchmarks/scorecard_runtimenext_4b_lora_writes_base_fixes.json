@@ -1,0 +1,79 @@
+[
+  {
+    "label": "C: python_modern writes -> base fixes (round 2+)",
+    "pass_rate": 8,
+    "pass_at_1": 4,
+    "tasks": [
+      {
+        "task": "bank_account",
+        "passed": false,
+        "pass_turn": 0,
+        "total_turns": 5,
+        "total_tokens": 3206
+      },
+      {
+        "task": "binary_search",
+        "passed": false,
+        "pass_turn": 0,
+        "total_turns": 5,
+        "total_tokens": 1269
+      },
+      {
+        "task": "grains",
+        "passed": true,
+        "pass_turn": 2,
+        "total_turns": 2,
+        "total_tokens": 376
+      },
+      {
+        "task": "hello_world",
+        "passed": true,
+        "pass_turn": 1,
+        "total_turns": 1,
+        "total_tokens": 58
+      },
+      {
+        "task": "leap",
+        "passed": true,
+        "pass_turn": 1,
+        "total_turns": 1,
+        "total_tokens": 93
+      },
+      {
+        "task": "matching_brackets",
+        "passed": true,
+        "pass_turn": 2,
+        "total_turns": 2,
+        "total_tokens": 549
+      },
+      {
+        "task": "reverse_string",
+        "passed": true,
+        "pass_turn": 1,
+        "total_turns": 1,
+        "total_tokens": 49
+      },
+      {
+        "task": "robot_simulator",
+        "passed": true,
+        "pass_turn": 2,
+        "total_turns": 2,
+        "total_tokens": 903
+      },
+      {
+        "task": "two_fer",
+        "passed": true,
+        "pass_turn": 1,
+        "total_turns": 1,
+        "total_tokens": 118
+      },
+      {
+        "task": "word_count",
+        "passed": true,
+        "pass_turn": 5,
+        "total_turns": 5,
+        "total_tokens": 1792
+      }
+    ]
+  }
+]

@@ -713,3 +713,686 @@ headroom to resolve regardless of statistics -- the base model already scores
 83.33% and 51.33%. Astral (base 12.08%) is currently the only domain that can
 answer the question. Making the other two testable requires eval sets on which
 the base model scores low, which is a data task, not a benchmarking one.
+
+---
+
+### 12. Opinionated adapters: measured on both axes for the first time — style works, correctness pays for it 🔴
+
+The `python_modern` / `agentic_coding` adapters were built to make the model
+write modern, idiomatic Python without a large system prompt. Until this
+session nobody had measured **either** axis of that claim on a real benchmark:
+not the correctness cost, and not the style benefit they exist to deliver.
+Measured both, on real hardware, 4B, `runtime-next` over real HTTP.
+
+Two harness bugs had to be fixed first; both silently moved numbers, so
+everything below post-dates the fixes.
+
+#### 12a. Two harness bugs that were corrupting results
+
+**`benchmarks/humaneval/executor.py` graded rejected drafts.** `clean_code`
+returned the **first** markdown block containing `def <entry_point>`. For a
+thinking model that block is typically a scratch draft inside `<think>`, not
+the answer. On `HumanEval/5`, `python_modern` wrote a correct final solution
+and was scored on a broken comprehension it had explicitly abandoned
+mid-thought ("Actually, I need to be more careful here"). The bug penalised the
+*more exploratory* arms hardest, i.e. exactly where the comparison lived. Now
+grades what follows `</think>`, preferring the last block defining the entry
+point. Effect: base 147→**150**, python_modern 101→**107**, agentic_coding
+95→**98**. The pre-fix numbers are void, not merely noisy.
+`runner.py` now also stores the raw completion so a scoring change can be
+re-evaluated offline instead of re-running 164 generations on the GPU.
+
+**`SnapshotClient.delete` never deleted anything.** It sent `DELETE` to
+`/v1/state/snapshot` (singular); the engine routes `DELETE` on
+`/v1/state/snapshot**s**`. The 404 was swallowed as "best-effort", with a
+comment claiming a TTL would clean up. There was no TTL — the engine
+deliberately never evicts. So snapshots leaked for the server's lifetime, and
+once `MAX_SNAPSHOTS = 8` accumulated, `create()` failed and `run_task`'s
+fallback re-sent the **initial prompt** every turn instead of the pytest
+feedback. The repair loop silently degraded into asking the same question five
+times. Only tasks that fail turn 1 leak a snapshot (the `passed` break precedes
+snapshot creation), so a single 10-task arm stayed under the cap, but any run
+of two arms in one server process crossed it partway through the second.
+**Any multi-arm aider result produced in one server process before this fix
+should be treated as contaminated.**
+
+#### 12b. Correctness: the adapters are a large, one-directional regression
+
+HumanEval, all 164 problems, single-shot, temperature 0, deterministic:
+
+| arm | pass@1 | mean tokens | mean thinking |
+| :--- | :---: | :---: | :---: |
+| base | **150/164 (91.5%)** | 914 | 1934 chars |
+| `python_modern` | 107/164 (65.2%) | 434 | 823 chars |
+| `agentic_coding` | 98/164 (59.8%) | 184 | 226 chars |
+
+Almost perfectly one-directional: `python_modern` loses 45 problems base
+passed and wins back 2 (**net −43**); `agentic_coding` loses 55 and wins 3
+(**net −52**). 26 problems fail under both adapters and pass on base. At n=164
+this is not sampling noise.
+
+#### 12c. Style: the adapters deliver exactly what they were built for
+
+Same solutions, scored with `ruff check --select UP,C4,SIM,PTH,PERF,RET`, and
+**only on solutions that pass their tests** so pretty-but-broken earns nothing:
+
+| arm | ruff violations per passing solution | correct **and** style-clean |
+| :--- | :---: | :---: |
+| base | 0.60 | **98/164** |
+| `python_modern` | **0.20** (3× cleaner) | 92/164 |
+| `agentic_coding` | **0.06** (10× cleaner) | 92/164 |
+
+So the style training genuinely works — this is the first positive evidence for
+these adapters, on the axis they were designed for, which had never been
+measured. But base still wins the combined metric, because its correctness edge
+outweighs its style deficit.
+
+**The prize is quantified by this table**: an adapter with base's correctness
+and `agentic_coding`'s style rate scores ≈**142/164** against base's 98. The
+style half is solved; correctness preservation is the whole remaining problem.
+
+Base's style deficit is also shallower than "style" suggests: `UP006` (24×,
+`List[int]`→`list[int]`), `UP035` (21×, deprecated `typing` imports), `RET505`
+(14×, unnecessary `else` after `return`). That is legacy typing syntax and a
+return-shape nit — token-level lexical choices, not algorithmic style. The
+current adapters rewrite all 32 MLPs to achieve it.
+
+#### 12d. Root cause is in the training data, not the serving path
+
+Audited the actual datasets rather than inferring from behaviour:
+
+| | `python_modern` | `agentic_coding` |
+| :--- | :---: | :---: |
+| records | 1418 | 1193 |
+| completions containing `<think>` | **0** | **0** |
+| completions emitting SEARCH/REPLACE | 0 | 605 (51%) |
+| user turns mentioning pytest/traceback | **0** | 257 |
+| median completion | 351 chars | 214 chars |
+
+With `completion_only_loss: true`, those completions *are* the entire training
+signal. Observed thinking length tracks trained completion length almost
+exactly (`agentic_coding`: 214 chars trained → 226 chars of thinking observed).
+The model learned the response *format* of its data, and that format has no
+reasoning in it. This is format collapse, not destroyed capability — 143/164
+and 153/164 responses still emit a `</think>`, so the machinery is intact and
+merely suppressed, which is why it is likely recoverable without retraining.
+
+Two distribution mismatches also invalidate much of how these adapters have
+been benchmarked historically:
+
+- `python_modern` has **zero** examples of "here is a failing test, fix it",
+  yet turns 2–5 of the aider loop are nothing but error-feedback repair. Turn 1
+  is in-distribution (100% markdown fence = `whole` format); nothing after it
+  is. This explains the session's oddest result — "LoRA drafts, base repairs"
+  (8/10) beating "base drafts, LoRA repairs" (6/10). That was the distribution
+  boundary, found by accident.
+- `agentic_coding` emits SEARCH/REPLACE in **51%** of its data and is 29%
+  shell / 20% regex, yet every run this session used `edit_format="whole"` on
+  pure-Python tasks. Most of its training distribution has never been tested.
+
+#### 12e. Damage is proportional to adapter scale
+
+Same harness, same 5 attempts, same feedback; only the fold scale differs
+(`swap_to_adapter` supports `name@scale`, applied as
+`target_scale · (α/r) · BA`):
+
+| arm | 20 problems | 32 problems | mean code attempts | 1st-attempt solves |
+| :--- | :---: | :---: | :---: | :---: |
+| `python_modern@1.0` | 10/20 | 17/32 (53%) | 1.65 | 11/17 |
+| `python_modern@0.5` | **18/20** | **28/32 (88%)** | **1.21** | 23/28 |
+| base thinks → `@0.5` writes | 17/20 | 27/32 (84%) | 1.41 | 21/27 |
+| base alone | 17/20 | **29/32 (91%)** | 1.24 | 23/29 |
+
+Halving the scale recovers 11 of 32. Cost asymmetry is stark too: `@1.0` burned
+75 turns on 15 unsolved problems, base 15 turns on 3. The `@0.5`-vs-base
+ordering **flipped** between the 20- and 32-problem sets, which is the useful
+result: a diluted adapter is statistically indistinguishable from base, i.e.
+the reward for no longer hurting is parity, not gain.
+
+The "base deliberates, adapter writes" arm (turn 1 = base, prompted to analyse
+only, never graded) did **not** beat base. Discounting its think turn it needed
+*more* code attempts (1.41 vs 1.21/1.24) and its first code attempt succeeded
+21/27 vs `@0.5`'s 23/28 — plausibly because a context full of base's verbose
+deliberation is off-distribution for an adapter trained on short prompt → short
+patch.
+
+#### 12f. Cross-adapter tensor handoff forks the output immediately — and lower scale is NOT safer
+
+`diagnose_cross_adapter_handoff_divergence_against_full_reprefill` (server.rs).
+Identical conversation, same folded adapter for the generated turn; the two
+routes differ only in how the prefix arrived — a base-captured KV/GDN snapshot
+restored under the adapter, versus a full re-prefill under it:
+
+| scale | identical prefix | first divergence |
+| :--- | :---: | :--- |
+| `python_modern@0.5` | **1/32 tokens** | position 1 — `"The test"` vs `"The issue"` |
+| `python_modern@1.0` | 8/32 tokens | position 8 — `"1. Parse"` vs `"1. Split"` |
+
+**Retracts an intuition offered earlier in the same session**: that `@0.5` is
+safer because the weight bases are ~96% aligned (`dW/W = 0.072` from
+`regime.json`, halved at scale 0.5). It is not. `@0.5` diverges *earlier*.
+Divergence position is a threshold effect on how close the top-2 logits happen
+to be, not a smooth function of perturbation size, so there is no "small enough
+delta" that makes cross-adapter handoff safe.
+
+It also reframes why this was dangerous: both continuations are *plausible*, so
+the corruption produces a **different valid answer**, not garbage — invisible
+in aggregate pass rates (arm B scored the same with and without it) and total
+in actual behaviour.
+
+Mechanism, verified against the adapter's own tensors rather than assumed:
+`mlp.{gate,up,down}_proj` in **all 32** layers, `self_attn.{q,k,v,o}_proj` in
+**8** (the full-attention layers), and **zero** GDN or `lm_head` tensors. So
+contamination has two channels — direct (adapted `k_proj`/`v_proj`) and, larger
+because the MLP carries most of the parameter mass, indirect: shifted hidden
+states reach even the 24 GDN layers whose own weights are never adapted.
+
+**Engine fix.** Snapshots now record the folded configuration they were
+captured under (`StoredSnapshot.adapter_sig`, with scale part of the identity).
+A mismatched resume is refused with a loud error naming both signatures and the
+stale snapshot is dropped so its VRAM is not stranded. Idle TTL of 60s measured
+from **last use, not creation** — an absolute TTL would kill active sessions,
+since a 5-turn task routinely exceeds a minute. `harness_direct.py` now
+accumulates real conversation history and, on an adapter switch, deletes the old
+snapshot and re-prefills everything under the new adapter; handoff is used only
+within a run of same-adapter turns. Covered by
+`real_resume_across_an_adapter_swap_is_refused_and_same_adapter_resume_still_works`.
+
+**Consequence for architecture.** Exact KV invariance is impossible for any
+adapter that touches the trunk: the residual stream globally couples layers, so
+any delta anywhere changes every downstream layer's K/V — even a query-only
+LoRA, via the attention output. And approximate correction cannot rescue it,
+because greedy decoding forks wherever top-2 logits sit inside the residual
+error. Exact cross-LoRA handoff therefore requires the adapter to live
+**outside** the trunk (output head, or a parallel side tower for real depth);
+everything in-trunk buys a later fork, never no fork.
+
+#### 12g. Spec-gated best-of-N does not rescue the residual — but the test was weak
+
+On exactly base's 14 HumanEval failures, best-of-8 (greedy, then temp 0.8),
+accepting the first candidate satisfying the problem's **own docstring
+examples** (visible spec, never the hidden tests): **0/14 converted, 0/14
+accepted by the gate.**
+
+Reported with its limitation, which is large: 9/14 of those problems have no
+doctests at all, and the gate itself mis-parsed 3–4 more (HumanEval's docstring
+formatting makes `doctest` capture the closing `"""` as expected output). Only
+`HumanEval/55` had a working gate — and there it correctly rejected all 8
+samples (`fib(10) → 34`, want `55`, the same off-by-one every time). So the
+mechanism is largely **untested**, not disproven; what *is* established is that
+this particular residual is a capability wall rather than sampling variance,
+which best-of-N cannot move.
+
+Also note the methodological limit: the 14 targets were selected *because* the
+hidden tests said base failed them. That makes this a mechanism diagnostic, not
+a pass@1 — and the projection printed by the script is invalid for the same
+reason, since applied to all 164 the gate could also reject a correct greedy
+answer and accept a wrong resample.
+
+#### 12h. What this says to do next
+
+- **Don't serve these adapters at `@1.0`.** It costs 26–32 points of pass@1 for
+  a style gain worth ~6 points on the combined metric.
+- **Fix the recipe, not the serving path.** Rejection sampling is the direct
+  fix for the measured failure: generate candidates with *base* over the ~300
+  verifiable problems already in the repo, keep only those that pass their tests
+  **and** score cleaner on ruff, and train on those. Correctness-preserving by
+  construction (every target passed), thinking-preserving for free (targets are
+  base's own generations, so they already contain `<think>`), and style-directed
+  by a programmatic reward instead of hand-written demonstrations.
+- **Style belongs at the head.** The measured deficit is token-level lexical
+  choice, so an `lm_head`-only adapter is expressively sufficient, cannot damage
+  reasoning (the trunk is untouched), and is KV-invariant by construction so
+  cross-adapter handoff becomes exactly sound. `fold_adapter_into` currently
+  only iterates `weights.layers`, so `lm_head` is not yet a fold target — a
+  small additive change, since it is already a `LinearWeight`.
+- **Generalise `adapter_sig` to a compatibility class** keyed on *which modules*
+  an adapter touches rather than which adapter it is. Two head-only adapters
+  would then be mutually resumable, making the guard precise rather than
+  conservative.
+- **Report both axes from now on.** Pass rate alone cannot see a style adapter
+  succeeding, and ruff alone cannot see it failing. 142/164 is the number to beat.
+- **Stop tuning on HumanEval and the 10 core aider tasks.** Both are now burnt
+  as instruments — not by model contamination but by us designing against their
+  known failure modes all session. The 128 aider tasks outside the core suite
+  are untouched and carry real headroom; every future mechanism claim should be
+  a delta measured there against a base-only baseline.
+
+---
+
+### 13. At fixed compute budget the optimum is a MIX — pure breadth and pure depth both lose 🟢
+
+First mechanism this session to beat base on ground neither the author nor the
+agent had inspected, with paired significance tests rather than raw score
+comparison — and a live example of why testing the endpoint matters.
+
+**Setup.** The 128 aider tasks outside the 10-task core suite: never run
+before, so not shaped by anyone's knowledge of their failure modes. 4B, no
+adapter, `runtime-next` over real HTTP, on the binary with §14's decode bound
+already fixed. Every arm makes **exactly five model calls**, so this is a pure
+*allocation* comparison, not extra compute.
+
+| allocation | pass rate |
+| :--- | :---: |
+| K=1 draft + up to 4 sequential repairs (the default loop) | 67/128 (52.3%) |
+| **K=3 drafts + up to 2 repairs on the best** | **78/128 (60.9%)** |
+| K=5 drafts + 0 repairs (pure sampling) | 58/128 (45.3%) |
+
+Paired (McNemar exact, two-sided):
+
+| comparison | gained | lost | net | p |
+| :--- | :---: | :---: | :---: | :---: |
+| K=1 → K=3 | 13 | 2 | **+11** | **0.0074** |
+| K=1 → K=5 | 6 | 15 | −9 | 0.078 |
+| K=5 → K=3 | 22 | 2 | **+20** | **0.00004** |
+
+**The optimum is interior, and that is the finding.** Sequential repair alone
+(67) beats parallel sampling alone (58); the mix beats both by a wide,
+highly-significant margin. Breadth and depth are complementary here, not
+substitutes.
+
+**Retraction of an intermediate claim.** After K=3 came back at +11, this
+section was first written up as *"sampling diversity beats iterative repair"*,
+with a proposed post titled "Breadth Beats Depth". K=5 falsified it: strip the
+repair turns entirely and the score falls **below** the original baseline.
+Had the endpoint not been run, this repo would have published a claim that its
+own next experiment disproves. Test the endpoint of any allocation curve before
+naming the trend.
+
+**Why this was tried — the diagnosis, not a hunch.** The baseline's own failure
+distribution pointed at it:
+
+- **All 61 failures exhausted the full 5-turn budget.** None failed early.
+- Passes by turn were **47 / 13 / 3 / 1 / 3** — 90% of wins land on turns 1–2,
+  while turns 3–5 rescued 7 tasks out of 128 and consumed most of the compute.
+- Failures generate ~7× the tokens of passes (median 3126 vs 452), with 7 tasks
+  past 6000 tokens and one at 13,381 — a doom-loop signature, not convergence.
+
+So the *marginal* return on repair collapses after turn 2 — which is a
+different statement from repair being worthless, as K=5 proves. In the winning
+arm, 56 of 78 solves came from drafting and 22 from repair; both phases carry
+real weight.
+
+**Selection signal.** Candidates are ranked by their pytest result (collection
+error worse than assertion failures; fewer failures better). In aider-style
+evaluation the harness already feeds test failures back between turns — test
+feedback *is* the benchmark's defined iteration signal — so this reads the same
+signal the baseline already had. The hidden grader is never consulted for
+selection, and the test file is never shown to the model.
+
+**Stated limitations.**
+- Drafts 2..K sample at temperature 0.8, so these arms are stochastic; a rerun
+  draws different candidates. McNemar establishes that an allocation beat
+  another *on these tasks with these samples*; it does not bound run-to-run
+  variance in effect size. The 13-vs-2 and 22-vs-2 lopsidedness is what makes
+  the result credible, more than the p-values alone.
+- Only K ∈ {1,3,5} were measured. K=2 and K=4 are unmeasured, so "K=3 is
+  optimal" is not established — only that the optimum lies strictly inside the
+  range.
+
+**Why it plausibly generalises.** Nothing here is aider-specific or
+benchmark-shaped: "generate a few candidates, keep the one that passes the most
+tests, then fix it" is what a developer does, and it needs only a test command.
+It also runs against where effort usually goes — the field builds ever-deeper
+agentic repair loops, and on a 4B at fixed budget, spending the whole budget on
+depth costs 11 tasks against a balanced split.
+
+**Prior context that now reads differently.** §12e found that adapter ordering,
+scale dilution, and a base-deliberates/adapter-writes handoff all failed to beat
+base. Every one of those was a variation on *how to spend sequential turns*. The
+allocation between drafting and repair was the unexamined variable, and moving
+it was worth more than every adapter configuration tested combined.
+
+---
+
+### 14. Decode was unbounded: a GPU page fault reachable from an ordinary HTTP request 🔴
+
+`start_request` validated the **prompt** against `MAX_SEQ_LEN` (8192):
+
+```rust
+if base_position + prompt_ids.len() >= MAX_SEQ_LEN { return Err(...) }
+```
+
+Nothing validated **decode**. `step()` → `forward_one_token` advanced
+`state.position` with no bound, so a long enough generation walked straight off
+the end of the KV cache that `DecodeState::new(MAX_SEQ_LEN)` had allocated:
+
+```
+Memory access fault by GPU node-1 (Agent handle: 0x...) on address 0x7f54d9c00000.
+Reason: Page not present or supervisor privilege.
+```
+
+An out-of-bounds GPU write reachable from a normal `/v1/chat/completions`
+request. It takes down the whole server process, not just the request.
+
+**How it surfaced.** The first attempt at the §13 held-out baseline. The server
+died on task 12 of 128 and the harness kept recording failures against a dead
+endpoint, producing **6/128 (4.7%)** — a number that looks like a
+catastrophically hard benchmark and is in fact a crashed process. Only tasks
+1–11 were real (6/11). The integrity check added for §12's snapshot bug flagged
+113 tasks as having lost tensor handoff, which is what identified this as
+systemic rather than a hard benchmark.
+
+**Trigger.** `beer_song` — a 3,022-token prompt that burned all 5 turns. With
+tensor handoff, position accumulates *across* turns within a task, so a large
+prompt plus repeated generations against `max_tokens=4096` blows through 8192.
+Any sufficiently long multi-turn session hits this.
+
+**Fix.** `Engine::context_exhausted()`, consulted by both generation loops so
+they terminate with `finish_reason="length"` (semantically correct — generation
+did stop because the context ran out), plus a hard refusal inside `step()` so no
+other caller can fault the GPU. Regression test
+`real_decode_stops_at_context_limit_instead_of_faulting_the_gpu` prefills to
+8091, decodes exactly 100 tokens, stops at 8191, and asserts the engine still
+serves a fresh request afterwards.
+
+**Standing note on proportion.** `max_tokens` defaults to 4096 against an 8192
+window — half the context per turn. For multi-turn work that is badly
+proportioned: a few held-out tasks legitimately need a larger window rather than
+a better model. Raising `MAX_SEQ_LEN` costs KV-cache VRAM and is a deliberate
+trade, not a free fix.
+
+**Methodological point.** Three result-corrupting bugs were found in a single
+session — this one, the HumanEval executor grading rejected drafts (§12a), and
+the 404'd snapshot delete that silently killed the repair loop (§12a). All three
+produced *plausible numbers*. None announced themselves. The habit that caught
+all three was the same: when a number is surprising, verify the apparatus before
+believing the number.
+
+---
+
+### 15. Long context is blocked by LDS in one decode kernel, not by KV size 🔴
+
+Asked to port `apps/runtime/long_context_engine.py`'s "4-bit quantized KV /
+32k context" into `runtime-next`. Two things were found before any port
+happened, and both changed the task.
+
+**There is nothing to port.** That module's entire import list is `json`,
+`time`, `urllib.request`, `typing` — no torch, no HIP, nothing that can touch
+a cache. `PinnedPrefixCache` stores a string, estimates tokens as
+`len(split())*2`, and reports `"status": "PINNED_IN_GPU_VRAM"` as a hardcoded
+literal. `LongContextVRAMManager` is arithmetic about a cache it never
+allocates. `context_shift_if_needed` truncates a Python **message list**, not a
+KV cache. `stream_chat` POSTs to `127.0.0.1:11434` — Ollama. The docstring
+describes a system the file does not contain; porting it would have
+manufactured exactly the facade `AGENTS.md`'s Zero-Mock Invariant forbids.
+
+**KV quantization would solve a problem this architecture does not have.**
+Only 8 of 32 layers are full attention; the other 24 are GDN with a FIXED-size
+recurrent state that does not grow with sequence length. Measured cost per
+token on 4B:
+
+| component | per token |
+| :--- | ---: |
+| KV cache (8 layers x 2 x 4 heads x 256 dim x 2 B) | 32 KB |
+| `attn_scores` (`MAX_PREFILL_CHUNK=256` x 2 B) | 0.5 KB |
+| **total** | **~32.5 KB** |
+
+So the whole KV cache is ~268 MB at 8192 on a 24 GB card running a model that
+measures 14.4 GB. A conventional 32-layer transformer would be ~512 KB/token
+here — 16x more — which is why KV quantization matters elsewhere and not here.
+
+**The real ceiling is shared memory in `attention_decode_split.hip`**, which
+sizes its LDS allocation by the full kv_stride:
+
+```c
+size_t shmem_bytes = (head_dim + kv_stride + threads + head_dim*kv_split) * sizeof(float);
+```
+
+With `threads = ATTN_HEAD_DIM * ATTENTION_DECODE_KV_SPLIT = 1024` (already the
+AMD workgroup maximum), gfx1100's 64 KB LDS per workgroup gives
+
+```
+max_seq_len <= 16384 - 256 - 2*256*4 = 14080
+```
+
+Found the hard way: the window was raised to 32768, prefill to 32661 worked
+fine, and then the first decode step failed with HIP `invalid argument` —
+a 132 KB LDS request against a 64 KB budget. `KV_LEN_BUCKETS`'s top entry of
+12288 was never arbitrary; it was this limit all along.
+
+**Shipped:** window raised 8192 -> **12288** (largest bucket-aligned value that
+fits), made runtime-configurable via `RUNTIME_NEXT_MAX_SEQ_LEN` with a startup
+clamp and a loud message rather than an opaque mid-generation HIP failure, and
+the decode state's real cost is now **measured** at startup via
+`hip::mem_info()` rather than computed:
+
+```
+[runtime-next] context window 12288 tokens; decode state cost 530 MB measured (15.3 GB of 24.0 GB free remaining)
+```
+
+**A test bug is retracted here too.** §14's regression test accepted ANY `Err`
+from `step()` as a clean refusal, so the 32768 attempt went green on a real HIP
+launch failure. It now asserts the error is the engine's own `context
+exhausted`, and fails on anything else. A test that passes on a crash is worse
+than no test.
+
+**The actual unlock for long context** is rewriting
+`attention_decode_split.hip` to TILE the KV row through shared memory instead
+of holding all of it — then the window is bounded by VRAM (~32.5 KB/token, so
+32k costs ~1 GB) rather than by 64 KB of LDS. That is a real kernel rewrite and
+is not done.
+
+---
+
+### 16. Batched decode: built, proven exact, and worth 2.7x — not the 5.6x the proxy promised 🟡
+
+§9 called continuous batching "the largest unclaimed win ... requiring no new
+math", measured on the *Python* runtime. This is that claim tested on
+`runtime-next`'s own kernels, then built, then measured on the real decode
+path rather than a proxy.
+
+#### 16a. The proxy said build it
+
+Batched decode at B=N has the same GEMM shapes as a prefill of N tokens, so
+timing the EXISTING batched prefill path bounds what batching could win before
+writing any of it (`diagnose_batching_headroom_via_batched_prefill_scaling`):
+
+| rows | ms/call | ms/row | vs B=1 |
+| ---: | ---: | ---: | ---: |
+| 1 | 19.73 | 19.73 | 1.00x |
+| 2 | 27.14 | 13.57 | 1.45x |
+| 4 | 27.37 | 6.84 | 2.88x |
+| 8 | 28.07 | 3.51 | 5.63x |
+| 16 | 28.13 | 1.76 | **11.23x** |
+
+`ms/call` flat from 2 to 16 (+3.6% for 8x the work) — textbook memory-bound,
+and better scaling than §9's Python numbers, which bent at B=8 with +17%.
+
+#### 16b. What was built
+
+`BatchedDecodeState` (N independent `SequenceSlot`s, each reusing `LayerState`
+unchanged) plus `forward_batched_decode`. **No new kernels.** The insight that
+made it small: `rope_prefill` and `kv_cache_append_prefill` already read a
+PER-ROW position out of `position_buf`, which is exactly what B unrelated
+sequences need. So norms, qkv/in_proj, fused qkv prep, RoPE, gating, o_proj and
+the whole MLP are one batched launch each; only 5 kernels are per-sequence
+(attention: kv append + attention read; GDN: conv1d, gate/beta, recurrent),
+because those touch that slot's own cache/recurrent state.
+
+#### 16c. Gated on exactness, not plausibility
+
+`real_batched_decode_matches_sequential_single_sequence_decode`: 4 DIFFERENT
+prompts (identical ones would pass even if every slot secretly read slot 0's
+cache), 24 tokens each, asserting batched output is **token-for-token
+identical** to the same prompts decoded alone on the trusted path. It passes.
+Batched decode re-derives every pointer offset at batch width, and a single
+wrong row would produce fluent, plausible, wrong text — the failure mode this
+session hit three separate times.
+
+#### 16d. First cut: correct, but only 2.7x
+
+The first working version batched the projections and MLP but kept the five
+state-touching kernels (attention: kv append + attention read; GDN: conv1d,
+gate/beta, recurrent) in a per-sequence loop, and applied `lm_head` per row.
+
+| B | ms/step | tok/s aggregate | tok/s per sequence |
+| ---: | ---: | ---: | ---: |
+| 1 (graphed, production path) | 11.94 | 83.7 | 83.7 |
+| 1 (eager, batched path) | 12.63 | 79.2 | 79.2 |
+| 2 | 22.27 | 89.8 | 44.9 |
+| 4 | 27.39 | 146.0 | 36.5 |
+| 8 | 37.47 | 213.5 | 26.7 |
+
+2.70x against the honest eager-vs-eager baseline — less than half the proxy's
+5.63x. The HIP graph was NOT the difference (11.94 vs 12.63 ms, ~6%). The
+B=1->B=2 step (+76% ms/step) was the tell.
+
+#### 16e. Closing the gap: batched kernels, then the real culprit
+
+**Step 1 — batch the five per-sequence kernels.** `causal_conv1d_update` was
+*already* batch-aware (`blockIdx.y`, `conv_state[batch, ...]`); the other four
+gained the same `blockIdx.y` dimension plus an explicit stride, and per-layer
+state moved to one batch-contiguous allocation so a sequence is addressed by
+stride rather than a per-slot pointer. Result: 213.5 -> **246.5 tok/s** at B=8
+(2.70x -> 3.54x). Real, but still short.
+
+**Two stride bugs were caught here by the equality gate, not by inspection**,
+and both were invisible at slot 0 (the only slot whose offset is zero):
+`causal_conv1d_update` indexes its source with stride `conv_dim`, but was being
+handed the combined in_proj output whose stride is `GDN_IN_PROJ_COMBINED_DIM`;
+and `gdn_recurrent` derived q/k/v strides from head dims when those tensors
+live inside a `GDN_CONV_DIM`-wide row. Both produced fluent, wrong text from
+slot 1 onward. This is precisely the class of bug the gate exists for.
+
+**Step 2 — the actual bottleneck was `lm_head`.** It was still applied once per
+row. It is the widest matrix in the model (`HIDDEN_SIZE x VOCAB_SIZE` = 2560 x
+248320, ~1.27 GB in bf16), so a per-row apply re-reads all of it per sequence:
+at B=8 that is more memory traffic than the entire rest of the decode step
+combined. One batched GEMM instead:
+
+| B | ms/step | tok/s aggregate | tok/s per sequence |
+| ---: | ---: | ---: | ---: |
+| 1 (graphed, production path) | 12.27 | 81.5 | 81.5 |
+| 1 (eager, batched path) | 13.97 | 71.6 | 71.6 |
+| 2 | 22.16 | 90.3 | 45.1 |
+| 4 | 22.40 | 178.6 | 44.6 |
+| 8 | **23.27** | **343.8** | 43.0 |
+
+**ms/step is now flat from B=2 to B=8** (22.16 -> 23.27, +5% for 4x the work) —
+the memory-bound signature 16a predicted. Against eager-vs-eager:
+**1.26x / 2.49x / 4.80x** at B=2/4/8, against the proxy's 5.63x ceiling.
+
+Progression, all gated on token-identical output: **2.70x -> 3.54x -> 4.80x**.
+
+#### 16f. What remains, and the honest tradeoff
+
+Per-sequence latency still degrades: 71.6 -> 43.0 tok/s at B=8 (1.67x slower,
+much improved from the first cut's 3x). Aggregate throughput is bought with
+per-user latency; B~4 remains the balanced point (2.49x aggregate for 1.6x
+per-sequence slowdown).
+
+The residual gap to 5.63x is the B=1->B=2 step (13.97 -> 22.16 ms). That is the
+GEMV->GEMM crossover: B=1 uses a matrix-VECTOR fast path that batching gives
+up, visible in 16a's proxy too (19.73 -> 27.14 at rows 1->2). It is a property
+of the shape change, not of this implementation.
+
+For the repo's own best-of-K drafting (§13, K=3 generations from one prompt),
+the realistic win is the B=4 column: **~2.5x wall-clock**.
+
+**Not done:** batched PREFILL across different-length prompts (each slot is
+still prefilled through the single-sequence path, then copied in via
+`load_slot`), a scheduler, and HIP-graph capture of the batched path.
+
+#### 16g. Shipped as OpenAI `n` — best-of-K in one call
+
+Batched decode is only useful if something can reach it. The natural wire-level
+fit was OpenAI's `n` parameter (N completions for one prompt), because that is
+*exactly* the shape of §13's best-of-K drafting, which currently pays for N
+separate full generations.
+
+`POST /v1/chat/completions` with `"n": 4` now prefills the prompt ONCE and fans
+that single prefilled state out to 4 batch slots via `load_slot`, then decodes
+them together with an independent RNG per slot. Measured over real HTTP, same
+prompt, `temperature=0.8`, `max_tokens=120`:
+
+| | wall clock | tokens | throughput |
+| :--- | ---: | ---: | ---: |
+| 4 x sequential `n=1` calls (today's best-of-K) | 6.44 s | 480 | 74.5 tok/s |
+| one `n=4` call | **3.08 s** | 480 | **157.4 tok/s** |
+
+**2.09x wall-clock**, four genuinely distinct completions. Slightly under the
+2.49x the B=4 microbenchmark shows, the difference being the shared prefill and
+HTTP framing — still the real end-to-end number a caller sees.
+
+Two deliberate restrictions, both returning a real 400 rather than doing
+something surprising:
+- **`n > 1` requires `temperature > 0`.** All slots start from the identical
+  prefilled state, so at temperature 0 every completion would be the same
+  greedy continuation. Diversity comes from per-slot RNG draws, nothing else.
+- **`n > 1` is non-streaming only.** Interleaving N token streams over one SSE
+  connection is not something the OpenAI wire format expresses.
+
+The `BatchedDecodeState` is cached on the `Engine` and reused across requests
+(rebuilt only when `n` changes): its KV allocation is ~400 MB per slot at a
+12288 window, far too expensive to build per request. No zeroing is needed
+between requests because `load_slot` fully overwrites every layer and attention
+only ever reads up to each slot's own position — the same reasoning
+`DecodeState::reset` already documents for the single-sequence KV caches.
+
+#### 16h. Multi-prompt batch endpoint — and the limit it exposed 🔴
+
+`POST /v1/chat/completions/batch` takes N INDEPENDENT prompts (different
+content, different lengths) and decodes them together. Each slot is prefilled
+through the ordinary single-sequence path and copied in via `load_slot`;
+prefill is a small fraction of a generation, so the batched decode still
+carries the win. Measured over real HTTP, 4 prompts of 17-31 prompt tokens,
+`max_tokens=100`:
+
+| | wall clock | throughput |
+| :--- | ---: | ---: |
+| 4 separate sequential calls | 5.08 s | 78.7 tok/s |
+| one batched call | **2.34 s** | **170.7 tok/s** |
+
+**2.17x wall-clock.** This is static batching, deliberately: the caller already
+holds all N prompts (a benchmark sweep, an offline eval), so there is nothing
+to schedule.
+
+**But verifying it against sequential output found a real limit, and it is not
+an indexing bug.** At `temperature=0`, batched output does NOT always match the
+same prompt run alone. Isolated:
+
+| check | result |
+| :--- | :--- |
+| batch-of-1 vs sequential | **identical** |
+| batch-of-4 slot 0 vs sequential | **diverged** |
+| all 4 slots, identical prompts, equal to each other | **yes** |
+| repeatable across runs | **yes** |
+
+Per-slot indexing is therefore exactly right and the path is deterministic; the
+divergence tracks the BATCH SHAPE. Changing the batch changes the GEMM's `M`,
+hipBLAS reduces in a different order, the logits differ in their last bits, and
+a near-tied argmax flips. Same non-associativity class as §136.
+
+**It is common, not marginal.** At B=8, `max_tokens=120`, temperature 0:
+
+```
+identical to sequential : 3/8
+diverged                : 5/8
+  first difference at 66%, 8%, 80%, 10%, 38% through the output
+```
+
+**Consequence a caller must know:** batching is *not* a transparent speedup for
+a temperature-0 A/B comparison. Running §13's 128-task sweep through the batch
+endpoint would produce results that are **not directly comparable** to the
+67/128 sequential baseline, because some tasks would take a different (equally
+valid, equally deterministic) decode path. Use batching to generate, not to
+re-measure an existing baseline — or re-run the baseline at the same batch size.
+
+For the intended uses this is a non-issue: best-of-K drafting (§13) runs at
+`temperature=0.8` and wants diversity, and `n>1` already requires
+`temperature>0` for exactly that reason.
+
+**`real_batched_decode_matches_sequential_single_sequence_decode` still asserts
+exact equality** at B=4 / 24 tokens, and is kept that way on purpose: indexing
+and stride bugs diverge at the FIRST token of the affected slot (both bugs in
+16e did), so exact equality at a short horizon is the sharp detector. Its doc
+now states plainly that it does not prove bit-identity in general.
+
+**Still not done:** true continuous batching -- dynamic admission of concurrent
+clients into a running batch. The server's accept loop is single-threaded
+(`for request in server.incoming_requests()`, handled inline), so that needs a
+threaded scheduler with a request queue and per-request channels, not another
+kernel. It is the one remaining item whose failure modes are threading bugs
+rather than numerical ones, and it is worth far less to a single-user workload
+than the static batching above.
