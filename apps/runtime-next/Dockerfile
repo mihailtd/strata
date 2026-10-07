@@ -54,3 +54,4 @@ EXPOSE 8003
 
 ENTRYPOINT ["/app/strata"]
 CMD ["--port", "8003"]
+

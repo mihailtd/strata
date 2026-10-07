@@ -27,3 +27,4 @@ jobs:
 
       - name: Check Formatting
         run: cargo fmt --manifest-path apps/runtime-next/Cargo.toml --check
+
