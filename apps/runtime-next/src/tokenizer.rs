@@ -25,9 +25,32 @@
 use std::path::Path;
 use tokenizers::Tokenizer;
 
+/// Plain text of a message's `content`: a string, or the concatenated `text`
+/// parts of structured content; `null`/absent is empty.
+pub fn message_text(m: &serde_json::Value) -> String {
+    match m.get("content") {
+        Some(serde_json::Value::String(s)) => s.clone(),
+        Some(serde_json::Value::Array(parts)) => parts
+            .iter()
+            .filter_map(|p| p.get("text").and_then(|t| t.as_str()))
+            .collect::<Vec<_>>()
+            .join(""),
+        _ => String::new(),
+    }
+}
+
 pub struct ChatTokenizer {
     inner: Tokenizer,
     eos_token_id: i32,
+    /// Every token id that ends a generation: the tokenizer's own `eos_token`
+    /// plus every id in `generation_config.json`'s `eos_token_id` (int or list).
+    /// MiMo-V2.6-Distill-Qwen-9B declares `[<|im_end|>, <|endoftext|>]`; stopping
+    /// on only the first would run such a generation on to `max_tokens`.
+    stop_ids: Vec<i32>,
+    /// The model's OWN chat template (`chat_template::ChatTemplate`), rendered
+    /// with HF parity. `None` only when the snapshot ships no template, in which
+    /// case the built-in Qwen3.5 rendering below is the fallback.
+    template: Option<crate::chat_template::ChatTemplate>,
 }
 
 impl ChatTokenizer {
@@ -43,16 +66,89 @@ impl ChatTokenizer {
         // tokenizer_config.json's own `eos_token` field -- read from the
         // tokenizer's own vocab (not hand-copied as a numeric literal that
         // could silently drift from the real vocab).
+        //
+        // The EOS text now comes from the model's own tokenizer_config.json
+        // (`eos_token`, a string or an AddedToken dict); `<|im_end|>` remains
+        // the fallback for snapshots that do not declare one.
+        let cfg: serde_json::Value = std::fs::read_to_string(snapshot_dir.join("tokenizer_config.json"))
+            .ok()
+            .and_then(|t| serde_json::from_str(&t).ok())
+            .unwrap_or(serde_json::Value::Null);
+        let eos_text = match cfg.get("eos_token") {
+            Some(serde_json::Value::String(s)) => s.clone(),
+            Some(serde_json::Value::Object(o)) => o.get("content").and_then(|v| v.as_str()).unwrap_or("<|im_end|>").to_string(),
+            _ => "<|im_end|>".to_string(),
+        };
         let eos_token_id = inner
-            .token_to_id("<|im_end|>")
-            .ok_or_else(|| "real tokenizer.json has no <|im_end|> token -- wrong tokenizer for this model".to_string())?
+            .token_to_id(&eos_text)
+            .ok_or_else(|| format!("tokenizer.json has no {eos_text:?} token (the model's declared eos_token)"))?
             as i32;
 
-        Ok(ChatTokenizer { inner, eos_token_id })
+        let mut stop_ids = vec![eos_token_id];
+        let generation_cfg: serde_json::Value = std::fs::read_to_string(snapshot_dir.join("generation_config.json"))
+            .ok()
+            .and_then(|t| serde_json::from_str(&t).ok())
+            .unwrap_or(serde_json::Value::Null);
+        match generation_cfg.get("eos_token_id") {
+            Some(serde_json::Value::Number(n)) => stop_ids.extend(n.as_i64().map(|v| v as i32)),
+            Some(serde_json::Value::Array(a)) => stop_ids.extend(a.iter().filter_map(|v| v.as_i64()).map(|v| v as i32)),
+            _ => {}
+        }
+        stop_ids.sort_unstable();
+        stop_ids.dedup();
+
+        let template = crate::chat_template::ChatTemplate::load(snapshot_dir)?;
+        Ok(ChatTokenizer { inner, eos_token_id, stop_ids, template })
     }
 
     pub fn eos_token_id(&self) -> i32 {
         self.eos_token_id
+    }
+
+    /// True for every token the model declares as ending a generation.
+    pub fn is_stop(&self, id: i32) -> bool {
+        self.stop_ids.contains(&id)
+    }
+
+    pub fn stop_ids(&self) -> &[i32] {
+        &self.stop_ids
+    }
+
+    /// Where the chat template in use came from (`None` = built-in fallback).
+    pub fn template_source(&self) -> Option<&str> {
+        self.template.as_ref().map(|t| t.source.as_str())
+    }
+
+    /// Renders a conversation for generation with the model's OWN template.
+    ///
+    /// `messages` are full OpenAI message objects -- `tool_calls`, `tool` results,
+    /// `content: null` and structured content reach the template untouched.
+    /// `kwargs` are the request's `chat_template_kwargs` (e.g. `enable_thinking`),
+    /// passed through to the template exactly as HF/vLLM/SGLang do.
+    pub fn render_chat(
+        &self,
+        messages: &[serde_json::Value],
+        tools: Option<&[serde_json::Value]>,
+        kwargs: Option<&serde_json::Map<String, serde_json::Value>>,
+    ) -> Result<String, String> {
+        if let Some(t) = &self.template {
+            return t.render(messages, tools, true, kwargs);
+        }
+        // Fallback for snapshots without a template: the built-in Qwen3.5
+        // rendering, which only understands (role, text) pairs.
+        let pairs: Vec<(String, String)> = messages
+            .iter()
+            .map(|m| {
+                let role = m.get("role").and_then(|v| v.as_str()).unwrap_or("user").to_string();
+                (role, message_text(m))
+            })
+            .collect();
+        let refs: Vec<(&str, &str)> = pairs.iter().map(|(r, c)| (r.as_str(), c.as_str())).collect();
+        let thinking = kwargs
+            .and_then(|k| k.get("enable_thinking"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+        Ok(self.apply_chat_template_full(&refs, tools, thinking))
     }
 
     /// Real BPE encode. `add_special_tokens=false`: the real ChatML special
@@ -99,6 +195,21 @@ impl ChatTokenizer {
         &self,
         messages: &[(&str, &str)],
         tools: Option<&[serde_json::Value]>,
+    ) -> String {
+        self.apply_chat_template_full(messages, tools, true)
+    }
+
+    /// The full template, including Qwen3.5's own `enable_thinking` switch.
+    /// `false` reproduces the upstream template's `enable_thinking is false`
+    /// branch exactly: the generation prompt ends `<think>\n\n</think>\n\n`,
+    /// so the model answers directly instead of reasoning first. Used where the
+    /// visible output IS the product (e.g. writing a rationale for a training
+    /// record), and reasoning would only spend the token budget.
+    pub fn apply_chat_template_full(
+        &self,
+        messages: &[(&str, &str)],
+        tools: Option<&[serde_json::Value]>,
+        enable_thinking: bool,
     ) -> String {
         let mut out = String::new();
         let tools_text = if let Some(ts) = tools {
@@ -152,13 +263,51 @@ impl ChatTokenizer {
             }
         }
 
-        out.push_str("<|im_start|>assistant\n<think>\n");
+        if enable_thinking {
+            out.push_str("<|im_start|>assistant\n<think>\n");
+        } else {
+            out.push_str("<|im_start|>assistant\n<think>\n\n</think>\n\n");
+        }
         out
     }
 }
 
 #[cfg(test)]
 mod tests {
+
+    /// The engine's own entry point, end to end on the CPU: a Qwen3.5 fine-tune
+    /// that ships its OWN template and TWO stop tokens (MiMo-V2.6-Distill-Qwen-9B)
+    /// must be rendered with that template -- not the built-in Qwen3.5 one -- and
+    /// stop on both ids. Skips (loudly) when the snapshot is not downloaded.
+    #[test]
+    fn a_fine_tune_is_rendered_with_its_own_template_and_stop_set() {
+        let hub = std::path::PathBuf::from(std::env::var("HOME").unwrap())
+            .join(".cache/huggingface/hub/models--XiaomiMiMo--MiMo-V2.6-Distill-Qwen-9B/snapshots");
+        let Some(snap) = std::fs::read_dir(&hub).ok().and_then(|d| d.flatten().map(|e| e.path()).max()) else {
+            eprintln!("SKIP: MiMo snapshot not downloaded");
+            return;
+        };
+        let tok = ChatTokenizer::load(&snap).unwrap();
+        assert!(tok.template_source().unwrap().ends_with("chat_template.jinja"), "must use the model's own template");
+        assert_eq!(tok.stop_ids(), &[248044, 248046], "<|endoftext|> and <|im_end|>, from generation_config.json");
+        assert!(tok.is_stop(248044) && tok.is_stop(248046));
+
+        let goldens: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/chat_template_goldens.json")).unwrap(),
+        )
+        .unwrap();
+        let case = goldens["models"]["mimo-v2.6-distill-qwen-9b"]["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["name"] == "tool_round_trip_null_content")
+            .unwrap();
+        let rendered = tok
+            .render_chat(case["messages"].as_array().unwrap(), case["tools"].as_array().map(|v| v.as_slice()), None)
+            .unwrap();
+        assert_eq!(rendered, case["expected"].as_str().unwrap());
+    }
+
     use super::*;
     use crate::model_loader::locate_model_snapshot;
 

@@ -25,7 +25,7 @@ This is a Moon-orchestrated monorepo: `apps/*` are independently-managed project
 | [`apps/runtime-llama`](apps/runtime-llama/) | Upstream `llama.cpp` baseline (HIP build) | 8001 | [README](apps/runtime-llama/README.md) |
 | [`apps/runtime-ollama`](apps/runtime-ollama/) | Upstream `ollama` baseline | 11434 | [README](apps/runtime-ollama/README.md) |
 | [`apps/runtime-vllm`](apps/runtime-vllm/) | Upstream `vllm` baseline (ROCm) | 8004 | [README](apps/runtime-vllm/README.md) |
-| [`apps/runtime-next`](apps/runtime-next/) | Experimental Rust/HIP rewrite (skeleton only) | 8003 | — |
+| [`apps/runtime-next`](apps/runtime-next/) | **Strata** — High-throughput native Rust/HIP serving engine for Qwen 3.5 | 8003 | [README](apps/runtime-next/README.md) |
 
 Never run two of these against the GPU at once — see [apps/RUNTIME.md](apps/RUNTIME.md)'s "Single-GPU discipline."
 

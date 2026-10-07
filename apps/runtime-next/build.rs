@@ -68,9 +68,12 @@ fn build_hip_kernels() {
     // a target nothing here runs on. Pin to the one real target instead
     // of guarding every RDNA3-only kernel with `#ifdef`s for a device
     // this crate never uses.
-    let offload_arch = std::env::var("RUNTIME_NEXT_OFFLOAD_ARCH").unwrap_or_else(|_| "gfx1100".to_string());
+    let offload_arch = std::env::var("RUNTIME_NEXT_OFFLOAD_ARCH")
+        .or_else(|_| std::env::var("ROCM_TARGET"))
+        .unwrap_or_else(|_| "gfx1100".to_string());
     cmd.arg(format!("--offload-arch={offload_arch}"));
     println!("cargo:rerun-if-env-changed=RUNTIME_NEXT_OFFLOAD_ARCH");
+    println!("cargo:rerun-if-env-changed=ROCM_TARGET");
     cmd.arg("-fPIC").arg("-shared").arg("-O2");
     for f in &hip_files {
         println!("cargo:rerun-if-changed={}", f.display());
@@ -89,5 +92,8 @@ fn build_hip_kernels() {
     println!("cargo:rustc-link-lib=dylib=runtime_next_kernels");
     // Also needed at runtime (not just link time) unless installed into the
     // default loader search path -- cargo test/run both need to find it.
+    // Adding $ORIGIN ensures portability when distributed with its shared lib.
+    println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN");
+    println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN/../lib");
     println!("cargo:rustc-link-arg=-Wl,-rpath,{out_dir}");
 }

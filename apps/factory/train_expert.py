@@ -133,11 +133,66 @@ def _gen_table(corpus_ver: str, adapter_ver: str) -> dict[str, tuple[str, str]]:
 # ╚════════════════════════════════════════════════════════════════════════════╝
 DOMAINS_V6 = _gen_table("v5", "v6")
 DOMAINS_V7 = _gen_table("v6", "v7")
+# Adapter v9 <- corpus v7 (= corpus v6 + a model-written <think> per record,
+# apps/factory/corpus/add_thinking.py), trained with --chat-format qwen. v8 is
+# skipped because agentic_coding already shipped a v8 on corpus v6; one number
+# per generation across every domain keeps the changelog readable.
+DOMAINS_V9 = _gen_table("v7", "v9")
+# Adapter v10 <- the SAME corpus v7 and served format as v9; the only intended
+# change is a smaller weight update (the pipeline passes a lower
+# --stop-at-dw-over-w). v9 at 4B kept v7's ||dW||/||W|| ~0.072 and lost
+# significant HumanEval correctness in 3 of 7 domains; §12 found half-strength
+# serving recovers correctness. v10 tests that lever with nothing else changed.
+DOMAINS_V10 = _gen_table("v7", "v10")
 
 FAIR_STEPS = {"merged_sql": 326, "merged_all": 481}
 
 
 ANSWER_MARKER = "\n\n### Answer:\n"
+
+
+QWEN_PROMPT = "<|im_start|>user\n{u}<|im_end|>\n<|im_start|>assistant\n<think>\n"
+QWEN_COMPLETION = "{thinking}\n</think>\n\n{answer}<|im_end|>"
+
+
+def load_qwen_chat_records(path: Path) -> tuple[list[dict], int]:
+    """Render records EXACTLY as the served model sees them.
+
+    Byte-identical to Qwen3.5's own chat template for a single-turn exchange
+    (the final assistant turn keeps its reasoning: `<think>\n{r}\n</think>\n\n{c}`)
+    and to `runtime-next`'s `apply_chat_template_with_tools`, which ends every
+    prompt with `<|im_start|>assistant\n<think>\n`. The legacy
+    `### Question / ### Answer` rendering trained the adapter in a position the
+    served model is never in.
+
+    The completion ends with `<|im_end|>` so the adapter learns to STOP, and it
+    requires a `thinking` field (see `apps/factory/corpus/add_thinking.py`):
+    records without one are skipped, not trained with an empty think block --
+    `<think>\n\n</think>` is precisely the "answer without reasoning" habit this
+    format exists to remove. Returns (records, skipped_without_thinking).
+    """
+    records, skipped = [], 0
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        d = json.loads(line)
+        thinking = (d.get("thinking") or "").strip()
+        if "messages" in d:
+            u, a = d["messages"][0]["content"], d["messages"][1]["content"]
+        elif ANSWER_MARKER in d.get("text", ""):
+            head, a = d["text"].split(ANSWER_MARKER, 1)
+            u = head.removeprefix("### Question:\n")
+        else:
+            skipped += 1
+            continue
+        if not thinking:
+            skipped += 1
+            continue
+        records.append({
+            "prompt": QWEN_PROMPT.format(u=u),
+            "completion": QWEN_COMPLETION.format(thinking=thinking, answer=a.strip()),
+        })
+    return records, skipped
 
 
 def load_dataset_records(path: Path, completion_only: bool = True):
@@ -670,7 +725,7 @@ def main():
     # union of both tables: --v6 swaps DOMAINS for DOMAINS_V6, but argparse
     # validates BEFORE that happens, so restricting to the v4 keys rejected
     # python_modern/python_web with exit 2 before the model ever loaded.
-    ap.add_argument("--domain", required=True, choices=sorted(set(DOMAINS) | set(DOMAINS_V6) | set(DOMAINS_V7)))
+    ap.add_argument("--domain", required=True, choices=sorted(set(DOMAINS) | set(DOMAINS_V6) | set(DOMAINS_V7) | set(DOMAINS_V9) | set(DOMAINS_V10)))
     ap.add_argument("--model-id", default="Qwen/Qwen3.5-4B")
     ap.add_argument("--rank", type=int, default=8)
     ap.add_argument(
@@ -691,6 +746,14 @@ def main():
             "(peft's path_initial_model_for_weight_conversion). That conversion emits "
             "rank 2r, not r -- see the printed warning."
         ),
+    )
+    ap.add_argument(
+        "--chat-format",
+        choices=["legacy", "qwen"],
+        default="legacy",
+        help="legacy = '### Question/### Answer' (how every adapter up to v8 was trained; kept "
+        "so they stay reproducible). qwen = the real Qwen3.5 chat template with a <think> block, "
+        "byte-identical to what runtime-next serves; requires records with a `thinking` field.",
     )
     ap.add_argument(
         "--dataset",
@@ -731,6 +794,24 @@ def main():
         "capability records) -> results/adapters/*_v7. This is "
         "already the default when CANON.ADAPTER_VERSION == 'v7' -- "
         "pass explicitly only to be unambiguous in a script.",
+    )
+    ap.add_argument(
+        "--v9",
+        action="store_true",
+        help="adapter v9 <- corpus v7 (corpus v6 + model-written reasoning per record). "
+        "Pair with --chat-format qwen: the corpus exists to be rendered in the served format.",
+    )
+    ap.add_argument(
+        "--v10",
+        action="store_true",
+        help="adapter v10 <- corpus v7, same as v9 except the pipeline's smaller ||dW||/||W|| target.",
+    )
+    ap.add_argument(
+        "--skip-alpha-calibration",
+        action="store_true",
+        help="do not rewrite the adapter's alpha after training. The served v7 adapters predate "
+        "post-train calibration (their config alpha == trained alpha), so a like-for-like v9 must "
+        "skip it or it changes a second variable.",
     )
     ap.add_argument(
         "--stop-at-dw-over-w",
@@ -834,11 +915,13 @@ def main():
     # silently reinterprets every result the repo has ever produced"), never a
     # hardcoded local default. --v4/--v6/--v7 remain explicit opt-ins for a
     # deliberate, labelled ablation against a non-canonical version.
-    _version_flags = [v for v in ("v4", "v6", "v7") if getattr(args, v)]
+    _version_flags = [v for v in ("v4", "v6", "v7", "v9", "v10") if getattr(args, v)]
     if len(_version_flags) > 1:
-        raise SystemExit(f"  pass at most one of --v4/--v6/--v7 (got {', '.join('--' + v for v in _version_flags)})")
+        raise SystemExit(f"  pass at most one version flag (got {', '.join('--' + v for v in _version_flags)})")
     version = _version_flags[0] if _version_flags else CANON.ADAPTER_VERSION
-    _version_tables = {"v4": DOMAINS, "v6": DOMAINS_V6, "v7": DOMAINS_V7}
+    if version in ("v9", "v10") and args.chat_format != "qwen":
+        raise SystemExit(f"  --{version} requires --chat-format qwen (corpus v7 exists to be rendered in the served format)")
+    _version_tables = {"v4": DOMAINS, "v6": DOMAINS_V6, "v7": DOMAINS_V7, "v9": DOMAINS_V9, "v10": DOMAINS_V10}
     if version not in _version_tables:
         raise SystemExit(
             f"  CANON.ADAPTER_VERSION={CANON.ADAPTER_VERSION!r} has no "
@@ -857,6 +940,12 @@ def main():
         )
     if args.dataset:
         data_rel = args.dataset
+    if args.chat_format == "qwen" and args.max_length == 512:
+        # 512 was sized for terse legacy answers. With a ~280-token reasoning
+        # block in front, the median record no longer fits and truncation would
+        # cut the answer's end -- including the <|im_end|> the adapter must learn.
+        args.max_length = 2048
+        print("  [chat-format qwen] --max-length 512 -> 2048 (room for the <think> block)")
     dataset_path = REPO_ROOT / data_rel
     out_dir = Path(args.out) if args.out else REPO_ROOT / out_rel
     out_dir.parent.mkdir(parents=True, exist_ok=True)
@@ -999,7 +1088,15 @@ def main():
     from datasets import Dataset
 
     completion_only = not args.no_completion_only
-    records = load_dataset_records(dataset_path, completion_only=completion_only)
+    if args.chat_format == "qwen":
+        if not completion_only:
+            raise SystemExit("--chat-format qwen requires completion-only loss (the prompt is not a target)")
+        records, skipped = load_qwen_chat_records(dataset_path)
+        print(f"  [chat-format qwen] {len(records)} records rendered, {skipped} skipped (no thinking / no split)")
+        if not records:
+            raise SystemExit(f"no records with a `thinking` field in {dataset_path} -- run add_thinking.py first")
+    else:
+        records = load_dataset_records(dataset_path, completion_only=completion_only)
     n_split = sum(1 for r in records if "prompt" in r)
     print(f"Loaded {len(records)} records from {dataset_path}")
     print(
@@ -1271,6 +1368,8 @@ def main():
     # AUTOMATIC POST-TRAIN ALPHA CALIBRATION
     # Calibrate alpha dynamically based on actual learned B@A perturbation magnitude
     try:
+        if args.skip_alpha_calibration:
+            raise RuntimeError("disabled by --skip-alpha-calibration (config alpha stays == trained alpha)")
         from runtime.alpha_calibration import calibrate_adapter_alpha
         calib = calibrate_adapter_alpha(out_dir, base_model=model, apply=True)
         print(
@@ -1344,6 +1443,8 @@ def main():
                 "liger_fused_kernels": liger_applied,
                 "gradient_checkpointing": args.gradient_checkpointing,
                 "completion_only_loss": completion_only,
+                "chat_format": args.chat_format,
+                "alpha_calibration_skipped": args.skip_alpha_calibration,
                 "prompt_mask_verified": mask_report,
                 "subspace_geometry": geometry_report(out_dir),
                 "merge_precision": precision_report(),

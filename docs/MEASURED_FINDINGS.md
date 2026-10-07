@@ -1396,3 +1396,113 @@ threaded scheduler with a request queue and per-request channels, not another
 kernel. It is the one remaining item whose failure modes are threading bugs
 rather than numerical ones, and it is worth far less to a single-user workload
 than the static batching above.
+
+---
+
+### 17. Tool calling: the 0/10 was the harness. Small models are capable — 4B is the knee 🟢
+
+The only prior tool-calling measurement, `scorecard_bfcl_0.8b_{base,modern,combined}.json`,
+reported **0/10 on every arm**, every case `"tool_calls": []`. It was read as "small
+models cannot call tools." It was three bugs, none in the model.
+
+#### 17a. Why every call was discarded
+
+1. **The engine never emitted `tool_calls`.** `runtime-next` accepted `tools` and
+   rendered them into the prompt, but returned only `content`. No OpenAI client —
+   OpenHands, LiteLLM, the `openai` SDK — could receive a call from it.
+2. **The harness parsed the wrong format.** Qwen3.5's own chat template (reproduced
+   faithfully in `tokenizer.rs`) tells the model to reply in **XML**:
+   `<tool_call><function=f><parameter=x>…</parameter></function></tool_call>`.
+   `benchmarks/bfcl/runner.py` ran `json.loads` on that body, which fails on every
+   well-formed call, inside `except Exception: pass`. A correct call and no call
+   were indistinguishable, and no raw completion was stored to tell them apart.
+3. **The evaluator could not match nested arguments.** BFCL's answer key encodes a
+   dict argument as per-leaf allowed lists (`{"name": ["John Doe"]}`); the evaluator
+   compared the model's dict to that with `==`, so a correct nested call could never
+   pass. Found by reading raw failures — `simple_89/94/96` were all exactly right.
+
+Fixes: `src/tool_parse.rs` parses both the XML and JSON forms, coerces arguments by
+the request's own schema, ignores calls rehearsed inside `<think>`, and never
+completes a truncated call; `server.rs` emits OpenAI `tool_calls` +
+`finish_reason: "tool_calls"` on the non-streaming, streaming (per-call `index`) and
+`n>1` paths, and omits the key entirely when no tools were sent (plain completions
+are byte-identical to before). Verified with the official `openai` SDK on both paths.
+The runner now stores every raw completion and buckets each failure; the evaluator
+descends into nested structures (`benchmarks/bfcl/rescore.py` re-graded all 16
+scorecards with one evaluator version).
+
+#### 17b. Results — 4,000 cases, greedy, 4096-token budget
+
+`benchmarks/bfcl/run_size_sweep.py`, one engine at a time, GPU verified free between
+sizes. BFCL v3 non-live AST categories, all cases, 1,000 per size.
+
+| size | simple | multiple | parallel | parallel_multiple | **overall** | truncated | no_call | median latency |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.8B | 78.8% | 81.5% | 69.5% | 63.0% | **74.3%** | 17 | 28 | 743 ms |
+| 2B | 90.5% | 89.0% | 82.5% | 79.0% | **86.3%** | 1 | 10 | 1,210 ms |
+| 4B | 93.0% | 93.0% | 85.5% | 86.0% | **90.1%** | 2 | 3 | 2,391 ms |
+| 9B | 93.8% | 91.5% | 87.0% | 83.0% | **89.8%** | 18 | 4 | 4,140 ms |
+
+Paired exact McNemar on identical cases: 0.8B→2B p=2×10⁻²⁰, 2B→4B p=2.5×10⁻⁴,
+**4B vs 9B p=0.81 — a tie**, at 1.7× the latency. 9B's 18 truncations (11 in
+`parallel_multiple`) are budget, not capability: it reasons longer and runs out of
+the 4,096 tokens. It may pull ahead with a larger budget; that is unmeasured.
+
+**Unparseable failures: 0 of 4,000.** Every size, every category. Grammar-constrained
+decoding fixes exactly that bucket, so on this benchmark it would recover nothing.
+The failures that remain are capability — wrong argument values (`7.0` for `0.07`,
+`x^2` where the schema wants Python `x**2`), wrong function among several, wrong
+number of parallel calls — plus budget truncation at the extremes.
+
+#### 17c. What these numbers are not
+
+- **Not leaderboard-comparable.** The local evaluator is a reimplementation of BFCL's
+  AST checker, not the official one; Java and JavaScript are excluded.
+- **No irrelevance category.** Every case here *should* call a tool, so a model that
+  over-calls is never penalized. False-positive calling is unmeasured.
+- **Single-turn only.** Multi-turn agentic tool use — the actual target — is not yet measured here.
+
+---
+
+### 18. The engine now renders each model's OWN chat template — and the hand-written one was not faithful 🟡
+
+`runtime-next` built prompts from a hand-written copy of Qwen3.5's template
+(`tokenizer.rs`, documented as reproducing it). Adding a second model exposed
+both problems with that design at once.
+
+**It could not serve a fine-tune with its own template.** MiMo-V2.6-Distill-Qwen-9B
+is architecturally identical to Qwen3.5-9B (760/760 tensor names, every config value
+that affects the math, identical special-token ids), but its template differs: a
+different tools preamble, no newline between turns, no forced `<think>`, and a
+second stop token (`generation_config.json`: `[<|im_end|>, <|endoftext|>]`) the
+engine ignored.
+
+**It was not byte-faithful to Qwen3.5 either.** Checked against real
+`transformers.apply_chat_template` (5.17.0) on 10 conversation shapes:
+
+| shape | hand-written == HF |
+| :--- | :---: |
+| user / system+user / unicode / thinking off | ✅ |
+| tools offered | ❌ HF renders the whole `{"type": "function", "function": …}` object with Python `json.dumps` spacing; the copy rendered only the inner function, compact |
+| multi-turn with prior reasoning | ❌ HF keeps/strips historical `<think>` per the template's own rules |
+
+**Consequence for §17:** the BFCL tool-calling numbers were measured with a tools
+prompt the model was not trained on. They are a lower-fidelity measurement, not
+void, and are being re-run under the correct template (`--tag hftemplate`).
+Single-turn prompts are unchanged, so HumanEval, the adapter style evals and the
+corpus-v7 generation are unaffected (verified byte-identical).
+
+**Fix:** `src/chat_template.rs` renders the snapshot's own `chat_template.jinja` /
+`tokenizer_config.json` template with minijinja, configured for HF parity
+(`trim_blocks`, `lstrip_blocks`, loop controls, Python string/dict methods,
+`raise_exception`, `strftime_now`, `tojson` = Python `json.dumps`, special tokens
+overlaid by `chat_template_kwargs`, `{% generation %}` preserved). Requests keep
+messages as raw JSON, so `tool_calls`, `tool` results and `content: null` reach the
+template intact (previously an assistant turn with `content: null` was rejected with
+a 400). Stop tokens are the model's declared set.
+
+Pinned by `chat_template_goldens_match_transformers`: **20/20 renders byte-identical**
+to `transformers` across both models (fixture generator:
+`tests/fixtures/gen_chat_template_goldens.py`). The first run caught a real semantic
+gap — minijinja treats `none` as iterable, Jinja2 does not — fixed by giving
+`iterable` Python semantics. One documented deviation: `strftime_now` uses UTC.

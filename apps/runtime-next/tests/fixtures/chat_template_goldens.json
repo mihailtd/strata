@@ -1,0 +1,721 @@
+{
+ "transformers_version": "5.17.0",
+ "models": {
+  "qwen3.5-9b": {
+   "repo_dir": "models--Qwen--Qwen3.5-9B",
+   "cases": [
+    {
+     "name": "plain_user",
+     "messages": [
+      {
+       "role": "user",
+       "content": "Say hi."
+      }
+     ],
+     "tools": null,
+     "kwargs": {},
+     "add_generation_prompt": true,
+     "expected": "<|im_start|>user\nSay hi.<|im_end|>\n<|im_start|>assistant\n<think>\n"
+    },
+    {
+     "name": "system_user",
+     "messages": [
+      {
+       "role": "system",
+       "content": "You are terse."
+      },
+      {
+       "role": "user",
+       "content": "Explain uv in one line."
+      }
+     ],
+     "tools": null,
+     "kwargs": {},
+     "add_generation_prompt": true,
+     "expected": "<|im_start|>system\nYou are terse.<|im_end|>\n<|im_start|>user\nExplain uv in one line.<|im_end|>\n<|im_start|>assistant\n<think>\n"
+    },
+    {
+     "name": "tools_offered",
+     "messages": [
+      {
+       "role": "user",
+       "content": "What's the weather in Paris?"
+      }
+     ],
+     "tools": [
+      {
+       "type": "function",
+       "function": {
+        "name": "get_weather",
+        "description": "Current weather for a city. Température in °C by default.",
+        "parameters": {
+         "type": "object",
+         "properties": {
+          "city": {
+           "type": "string",
+           "description": "City name"
+          },
+          "unit": {
+           "type": "string",
+           "enum": [
+            "celsius",
+            "fahrenheit"
+           ]
+          },
+          "days": {
+           "type": "integer",
+           "minimum": 1
+          }
+         },
+         "required": [
+          "city"
+         ]
+        }
+       }
+      },
+      {
+       "type": "function",
+       "function": {
+        "name": "search_code",
+        "description": "Search the repository.",
+        "parameters": {
+         "type": "object",
+         "properties": {
+          "query": {
+           "type": "string"
+          },
+          "filters": {
+           "type": "object"
+          },
+          "limit": {
+           "type": "number"
+          }
+         },
+         "required": [
+          "query"
+         ]
+        }
+       }
+      }
+     ],
+     "kwargs": {},
+     "add_generation_prompt": true,
+     "expected": "<|im_start|>system\n# Tools\n\nYou have access to the following functions:\n\n<tools>\n{\"type\": \"function\", \"function\": {\"name\": \"get_weather\", \"description\": \"Current weather for a city. Température in °C by default.\", \"parameters\": {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\", \"description\": \"City name\"}, \"unit\": {\"type\": \"string\", \"enum\": [\"celsius\", \"fahrenheit\"]}, \"days\": {\"type\": \"integer\", \"minimum\": 1}}, \"required\": [\"city\"]}}}\n{\"type\": \"function\", \"function\": {\"name\": \"search_code\", \"description\": \"Search the repository.\", \"parameters\": {\"type\": \"object\", \"properties\": {\"query\": {\"type\": \"string\"}, \"filters\": {\"type\": \"object\"}, \"limit\": {\"type\": \"number\"}}, \"required\": [\"query\"]}}}\n</tools>\n\nIf you choose to call a function ONLY reply in the following format with NO suffix:\n\n<tool_call>\n<function=example_function_name>\n<parameter=example_parameter_1>\nvalue_1\n</parameter>\n<parameter=example_parameter_2>\nThis is the value for the second parameter\nthat can span\nmultiple lines\n</parameter>\n</function>\n</tool_call>\n\n<IMPORTANT>\nReminder:\n- Function calls MUST follow the specified format: an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags\n- Required parameters MUST be specified\n- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after\n- If there is no function call available, answer the question like normal with your current knowledge and do not tell the user about function calls\n</IMPORTANT><|im_end|>\n<|im_start|>user\nWhat's the weather in Paris?<|im_end|>\n<|im_start|>assistant\n<think>\n"
+    },
+    {
+     "name": "system_and_tools",
+     "messages": [
+      {
+       "role": "system",
+       "content": "Be precise."
+      },
+      {
+       "role": "user",
+       "content": "Weather in Oslo for 3 days?"
+      }
+     ],
+     "tools": [
+      {
+       "type": "function",
+       "function": {
+        "name": "get_weather",
+        "description": "Current weather for a city. Température in °C by default.",
+        "parameters": {
+         "type": "object",
+         "properties": {
+          "city": {
+           "type": "string",
+           "description": "City name"
+          },
+          "unit": {
+           "type": "string",
+           "enum": [
+            "celsius",
+            "fahrenheit"
+           ]
+          },
+          "days": {
+           "type": "integer",
+           "minimum": 1
+          }
+         },
+         "required": [
+          "city"
+         ]
+        }
+       }
+      }
+     ],
+     "kwargs": {},
+     "add_generation_prompt": true,
+     "expected": "<|im_start|>system\n# Tools\n\nYou have access to the following functions:\n\n<tools>\n{\"type\": \"function\", \"function\": {\"name\": \"get_weather\", \"description\": \"Current weather for a city. Température in °C by default.\", \"parameters\": {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\", \"description\": \"City name\"}, \"unit\": {\"type\": \"string\", \"enum\": [\"celsius\", \"fahrenheit\"]}, \"days\": {\"type\": \"integer\", \"minimum\": 1}}, \"required\": [\"city\"]}}}\n</tools>\n\nIf you choose to call a function ONLY reply in the following format with NO suffix:\n\n<tool_call>\n<function=example_function_name>\n<parameter=example_parameter_1>\nvalue_1\n</parameter>\n<parameter=example_parameter_2>\nThis is the value for the second parameter\nthat can span\nmultiple lines\n</parameter>\n</function>\n</tool_call>\n\n<IMPORTANT>\nReminder:\n- Function calls MUST follow the specified format: an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags\n- Required parameters MUST be specified\n- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after\n- If there is no function call available, answer the question like normal with your current knowledge and do not tell the user about function calls\n</IMPORTANT>\n\nBe precise.<|im_end|>\n<|im_start|>user\nWeather in Oslo for 3 days?<|im_end|>\n<|im_start|>assistant\n<think>\n"
+    },
+    {
+     "name": "multi_turn_with_reasoning",
+     "messages": [
+      {
+       "role": "user",
+       "content": "2+2?"
+      },
+      {
+       "role": "assistant",
+       "content": "<think>\nsimple addition\n</think>\n\n4"
+      },
+      {
+       "role": "user",
+       "content": "and 3+3?"
+      }
+     ],
+     "tools": null,
+     "kwargs": {},
+     "add_generation_prompt": true,
+     "expected": "<|im_start|>user\n2+2?<|im_end|>\n<|im_start|>assistant\n4<|im_end|>\n<|im_start|>user\nand 3+3?<|im_end|>\n<|im_start|>assistant\n<think>\n"
+    },
+    {
+     "name": "tool_round_trip_null_content",
+     "messages": [
+      {
+       "role": "user",
+       "content": "Weather in Paris?"
+      },
+      {
+       "role": "assistant",
+       "content": null,
+       "tool_calls": [
+        {
+         "id": "call_1",
+         "type": "function",
+         "function": {
+          "name": "get_weather",
+          "arguments": {
+           "city": "Paris",
+           "unit": "celsius"
+          }
+         }
+        }
+       ]
+      },
+      {
+       "role": "tool",
+       "tool_call_id": "call_1",
+       "content": "{\"temp\": 18, \"sky\": \"clear\"}"
+      }
+     ],
+     "tools": [
+      {
+       "type": "function",
+       "function": {
+        "name": "get_weather",
+        "description": "Current weather for a city. Température in °C by default.",
+        "parameters": {
+         "type": "object",
+         "properties": {
+          "city": {
+           "type": "string",
+           "description": "City name"
+          },
+          "unit": {
+           "type": "string",
+           "enum": [
+            "celsius",
+            "fahrenheit"
+           ]
+          },
+          "days": {
+           "type": "integer",
+           "minimum": 1
+          }
+         },
+         "required": [
+          "city"
+         ]
+        }
+       }
+      }
+     ],
+     "kwargs": {},
+     "add_generation_prompt": true,
+     "expected": "<|im_start|>system\n# Tools\n\nYou have access to the following functions:\n\n<tools>\n{\"type\": \"function\", \"function\": {\"name\": \"get_weather\", \"description\": \"Current weather for a city. Température in °C by default.\", \"parameters\": {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\", \"description\": \"City name\"}, \"unit\": {\"type\": \"string\", \"enum\": [\"celsius\", \"fahrenheit\"]}, \"days\": {\"type\": \"integer\", \"minimum\": 1}}, \"required\": [\"city\"]}}}\n</tools>\n\nIf you choose to call a function ONLY reply in the following format with NO suffix:\n\n<tool_call>\n<function=example_function_name>\n<parameter=example_parameter_1>\nvalue_1\n</parameter>\n<parameter=example_parameter_2>\nThis is the value for the second parameter\nthat can span\nmultiple lines\n</parameter>\n</function>\n</tool_call>\n\n<IMPORTANT>\nReminder:\n- Function calls MUST follow the specified format: an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags\n- Required parameters MUST be specified\n- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after\n- If there is no function call available, answer the question like normal with your current knowledge and do not tell the user about function calls\n</IMPORTANT><|im_end|>\n<|im_start|>user\nWeather in Paris?<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n<tool_call>\n<function=get_weather>\n<parameter=city>\nParis\n</parameter>\n<parameter=unit>\ncelsius\n</parameter>\n</function>\n</tool_call><|im_end|>\n<|im_start|>user\n<tool_response>\n{\"temp\": 18, \"sky\": \"clear\"}\n</tool_response><|im_end|>\n<|im_start|>assistant\n<think>\n"
+    },
+    {
+     "name": "tool_call_nested_typed_args",
+     "messages": [
+      {
+       "role": "user",
+       "content": "Find the entry point."
+      },
+      {
+       "role": "assistant",
+       "content": "Searching.",
+       "tool_calls": [
+        {
+         "id": "call_2",
+         "type": "function",
+         "function": {
+          "name": "search_code",
+          "arguments": {
+           "query": "def main",
+           "filters": {
+            "lang": [
+             "py",
+             "rs"
+            ],
+            "exact": true
+           },
+           "limit": 0.07
+          }
+         }
+        }
+       ]
+      },
+      {
+       "role": "tool",
+       "tool_call_id": "call_2",
+       "content": "src/main.rs:17"
+      },
+      {
+       "role": "user",
+       "content": "Open it."
+      }
+     ],
+     "tools": [
+      {
+       "type": "function",
+       "function": {
+        "name": "search_code",
+        "description": "Search the repository.",
+        "parameters": {
+         "type": "object",
+         "properties": {
+          "query": {
+           "type": "string"
+          },
+          "filters": {
+           "type": "object"
+          },
+          "limit": {
+           "type": "number"
+          }
+         },
+         "required": [
+          "query"
+         ]
+        }
+       }
+      }
+     ],
+     "kwargs": {},
+     "add_generation_prompt": true,
+     "expected": "<|im_start|>system\n# Tools\n\nYou have access to the following functions:\n\n<tools>\n{\"type\": \"function\", \"function\": {\"name\": \"search_code\", \"description\": \"Search the repository.\", \"parameters\": {\"type\": \"object\", \"properties\": {\"query\": {\"type\": \"string\"}, \"filters\": {\"type\": \"object\"}, \"limit\": {\"type\": \"number\"}}, \"required\": [\"query\"]}}}\n</tools>\n\nIf you choose to call a function ONLY reply in the following format with NO suffix:\n\n<tool_call>\n<function=example_function_name>\n<parameter=example_parameter_1>\nvalue_1\n</parameter>\n<parameter=example_parameter_2>\nThis is the value for the second parameter\nthat can span\nmultiple lines\n</parameter>\n</function>\n</tool_call>\n\n<IMPORTANT>\nReminder:\n- Function calls MUST follow the specified format: an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags\n- Required parameters MUST be specified\n- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after\n- If there is no function call available, answer the question like normal with your current knowledge and do not tell the user about function calls\n</IMPORTANT><|im_end|>\n<|im_start|>user\nFind the entry point.<|im_end|>\n<|im_start|>assistant\nSearching.\n\n<tool_call>\n<function=search_code>\n<parameter=query>\ndef main\n</parameter>\n<parameter=filters>\n{\"lang\": [\"py\", \"rs\"], \"exact\": true}\n</parameter>\n<parameter=limit>\n0.07\n</parameter>\n</function>\n</tool_call><|im_end|>\n<|im_start|>user\n<tool_response>\nsrc/main.rs:17\n</tool_response><|im_end|>\n<|im_start|>user\nOpen it.<|im_end|>\n<|im_start|>assistant\n<think>\n"
+    },
+    {
+     "name": "thinking_disabled",
+     "messages": [
+      {
+       "role": "user",
+       "content": "Say hi."
+      }
+     ],
+     "tools": null,
+     "kwargs": {
+      "enable_thinking": false
+     },
+     "add_generation_prompt": true,
+     "expected": "<|im_start|>user\nSay hi.<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+    },
+    {
+     "name": "unicode",
+     "messages": [
+      {
+       "role": "system",
+       "content": "Réponds en français."
+      },
+      {
+       "role": "user",
+       "content": "Café naïve 日本語 😀 \"quoted\" \\ back"
+      }
+     ],
+     "tools": null,
+     "kwargs": {},
+     "add_generation_prompt": true,
+     "expected": "<|im_start|>system\nRéponds en français.<|im_end|>\n<|im_start|>user\nCafé naïve 日本語 😀 \"quoted\" \\ back<|im_end|>\n<|im_start|>assistant\n<think>\n"
+    },
+    {
+     "name": "full_conversation_no_generation_prompt",
+     "messages": [
+      {
+       "role": "user",
+       "content": "Install httpx."
+      },
+      {
+       "role": "assistant",
+       "content": "<think>\nThe project uses uv.\n</think>\n\nRun `uv add httpx`."
+      }
+     ],
+     "tools": null,
+     "kwargs": {},
+     "add_generation_prompt": false,
+     "expected": "<|im_start|>user\nInstall httpx.<|im_end|>\n<|im_start|>assistant\n<think>\nThe project uses uv.\n</think>\n\nRun `uv add httpx`.<|im_end|>\n"
+    }
+   ]
+  },
+  "mimo-v2.6-distill-qwen-9b": {
+   "repo_dir": "models--XiaomiMiMo--MiMo-V2.6-Distill-Qwen-9B",
+   "cases": [
+    {
+     "name": "plain_user",
+     "messages": [
+      {
+       "role": "user",
+       "content": "Say hi."
+      }
+     ],
+     "tools": null,
+     "kwargs": {},
+     "add_generation_prompt": true,
+     "expected": "<|im_start|>user\nSay hi.<|im_end|><|im_start|>assistant\n"
+    },
+    {
+     "name": "system_user",
+     "messages": [
+      {
+       "role": "system",
+       "content": "You are terse."
+      },
+      {
+       "role": "user",
+       "content": "Explain uv in one line."
+      }
+     ],
+     "tools": null,
+     "kwargs": {},
+     "add_generation_prompt": true,
+     "expected": "<|im_start|>system\nYou are terse.<|im_end|><|im_start|>user\nExplain uv in one line.<|im_end|><|im_start|>assistant\n"
+    },
+    {
+     "name": "tools_offered",
+     "messages": [
+      {
+       "role": "user",
+       "content": "What's the weather in Paris?"
+      }
+     ],
+     "tools": [
+      {
+       "type": "function",
+       "function": {
+        "name": "get_weather",
+        "description": "Current weather for a city. Température in °C by default.",
+        "parameters": {
+         "type": "object",
+         "properties": {
+          "city": {
+           "type": "string",
+           "description": "City name"
+          },
+          "unit": {
+           "type": "string",
+           "enum": [
+            "celsius",
+            "fahrenheit"
+           ]
+          },
+          "days": {
+           "type": "integer",
+           "minimum": 1
+          }
+         },
+         "required": [
+          "city"
+         ]
+        }
+       }
+      },
+      {
+       "type": "function",
+       "function": {
+        "name": "search_code",
+        "description": "Search the repository.",
+        "parameters": {
+         "type": "object",
+         "properties": {
+          "query": {
+           "type": "string"
+          },
+          "filters": {
+           "type": "object"
+          },
+          "limit": {
+           "type": "number"
+          }
+         },
+         "required": [
+          "query"
+         ]
+        }
+       }
+      }
+     ],
+     "kwargs": {},
+     "add_generation_prompt": true,
+     "expected": "<|im_start|>system\nYou are provided with the following tools:\n\n<tools>\n{\"type\": \"function\", \"function\": {\"name\": \"get_weather\", \"description\": \"Current weather for a city. Température in °C by default.\", \"parameters\": {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\", \"description\": \"City name\"}, \"unit\": {\"type\": \"string\", \"enum\": [\"celsius\", \"fahrenheit\"]}, \"days\": {\"type\": \"integer\", \"minimum\": 1}}, \"required\": [\"city\"]}}}\n{\"type\": \"function\", \"function\": {\"name\": \"search_code\", \"description\": \"Search the repository.\", \"parameters\": {\"type\": \"object\", \"properties\": {\"query\": {\"type\": \"string\"}, \"filters\": {\"type\": \"object\"}, \"limit\": {\"type\": \"number\"}}, \"required\": [\"query\"]}}}\n</tools><|im_end|><|im_start|>user\nWhat's the weather in Paris?<|im_end|><|im_start|>assistant\n"
+    },
+    {
+     "name": "system_and_tools",
+     "messages": [
+      {
+       "role": "system",
+       "content": "Be precise."
+      },
+      {
+       "role": "user",
+       "content": "Weather in Oslo for 3 days?"
+      }
+     ],
+     "tools": [
+      {
+       "type": "function",
+       "function": {
+        "name": "get_weather",
+        "description": "Current weather for a city. Température in °C by default.",
+        "parameters": {
+         "type": "object",
+         "properties": {
+          "city": {
+           "type": "string",
+           "description": "City name"
+          },
+          "unit": {
+           "type": "string",
+           "enum": [
+            "celsius",
+            "fahrenheit"
+           ]
+          },
+          "days": {
+           "type": "integer",
+           "minimum": 1
+          }
+         },
+         "required": [
+          "city"
+         ]
+        }
+       }
+      }
+     ],
+     "kwargs": {},
+     "add_generation_prompt": true,
+     "expected": "<|im_start|>system\nYou are provided with the following tools:\n\n<tools>\n{\"type\": \"function\", \"function\": {\"name\": \"get_weather\", \"description\": \"Current weather for a city. Température in °C by default.\", \"parameters\": {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\", \"description\": \"City name\"}, \"unit\": {\"type\": \"string\", \"enum\": [\"celsius\", \"fahrenheit\"]}, \"days\": {\"type\": \"integer\", \"minimum\": 1}}, \"required\": [\"city\"]}}}\n</tools><|im_end|><|im_start|>system\nBe precise.<|im_end|><|im_start|>user\nWeather in Oslo for 3 days?<|im_end|><|im_start|>assistant\n"
+    },
+    {
+     "name": "multi_turn_with_reasoning",
+     "messages": [
+      {
+       "role": "user",
+       "content": "2+2?"
+      },
+      {
+       "role": "assistant",
+       "content": "<think>\nsimple addition\n</think>\n\n4"
+      },
+      {
+       "role": "user",
+       "content": "and 3+3?"
+      }
+     ],
+     "tools": null,
+     "kwargs": {},
+     "add_generation_prompt": true,
+     "expected": "<|im_start|>user\n2+2?<|im_end|><|im_start|>assistant\n<think></think><think>\nsimple addition\n</think>\n\n4<|im_end|><|im_start|>user\nand 3+3?<|im_end|><|im_start|>assistant\n"
+    },
+    {
+     "name": "tool_round_trip_null_content",
+     "messages": [
+      {
+       "role": "user",
+       "content": "Weather in Paris?"
+      },
+      {
+       "role": "assistant",
+       "content": null,
+       "tool_calls": [
+        {
+         "id": "call_1",
+         "type": "function",
+         "function": {
+          "name": "get_weather",
+          "arguments": {
+           "city": "Paris",
+           "unit": "celsius"
+          }
+         }
+        }
+       ]
+      },
+      {
+       "role": "tool",
+       "tool_call_id": "call_1",
+       "content": "{\"temp\": 18, \"sky\": \"clear\"}"
+      }
+     ],
+     "tools": [
+      {
+       "type": "function",
+       "function": {
+        "name": "get_weather",
+        "description": "Current weather for a city. Température in °C by default.",
+        "parameters": {
+         "type": "object",
+         "properties": {
+          "city": {
+           "type": "string",
+           "description": "City name"
+          },
+          "unit": {
+           "type": "string",
+           "enum": [
+            "celsius",
+            "fahrenheit"
+           ]
+          },
+          "days": {
+           "type": "integer",
+           "minimum": 1
+          }
+         },
+         "required": [
+          "city"
+         ]
+        }
+       }
+      }
+     ],
+     "kwargs": {},
+     "add_generation_prompt": true,
+     "expected": "<|im_start|>system\nYou are provided with the following tools:\n\n<tools>\n{\"type\": \"function\", \"function\": {\"name\": \"get_weather\", \"description\": \"Current weather for a city. Température in °C by default.\", \"parameters\": {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\", \"description\": \"City name\"}, \"unit\": {\"type\": \"string\", \"enum\": [\"celsius\", \"fahrenheit\"]}, \"days\": {\"type\": \"integer\", \"minimum\": 1}}, \"required\": [\"city\"]}}}\n</tools><|im_end|><|im_start|>user\nWeather in Paris?<|im_end|><|im_start|>assistant\n<think></think><tool_call><function=get_weather><parameter=city>Paris</parameter><parameter=unit>celsius</parameter></function></tool_call><|im_end|><|im_start|>tool\n{\"temp\": 18, \"sky\": \"clear\"}<|im_end|><|im_start|>assistant\n"
+    },
+    {
+     "name": "tool_call_nested_typed_args",
+     "messages": [
+      {
+       "role": "user",
+       "content": "Find the entry point."
+      },
+      {
+       "role": "assistant",
+       "content": "Searching.",
+       "tool_calls": [
+        {
+         "id": "call_2",
+         "type": "function",
+         "function": {
+          "name": "search_code",
+          "arguments": {
+           "query": "def main",
+           "filters": {
+            "lang": [
+             "py",
+             "rs"
+            ],
+            "exact": true
+           },
+           "limit": 0.07
+          }
+         }
+        }
+       ]
+      },
+      {
+       "role": "tool",
+       "tool_call_id": "call_2",
+       "content": "src/main.rs:17"
+      },
+      {
+       "role": "user",
+       "content": "Open it."
+      }
+     ],
+     "tools": [
+      {
+       "type": "function",
+       "function": {
+        "name": "search_code",
+        "description": "Search the repository.",
+        "parameters": {
+         "type": "object",
+         "properties": {
+          "query": {
+           "type": "string"
+          },
+          "filters": {
+           "type": "object"
+          },
+          "limit": {
+           "type": "number"
+          }
+         },
+         "required": [
+          "query"
+         ]
+        }
+       }
+      }
+     ],
+     "kwargs": {},
+     "add_generation_prompt": true,
+     "expected": "<|im_start|>system\nYou are provided with the following tools:\n\n<tools>\n{\"type\": \"function\", \"function\": {\"name\": \"search_code\", \"description\": \"Search the repository.\", \"parameters\": {\"type\": \"object\", \"properties\": {\"query\": {\"type\": \"string\"}, \"filters\": {\"type\": \"object\"}, \"limit\": {\"type\": \"number\"}}, \"required\": [\"query\"]}}}\n</tools><|im_end|><|im_start|>user\nFind the entry point.<|im_end|><|im_start|>assistant\n<think></think>Searching.<tool_call><function=search_code><parameter=query>def main</parameter><parameter=filters>{\"lang\": [\"py\", \"rs\"], \"exact\": true}</parameter><parameter=limit>0.07</parameter></function></tool_call><|im_end|><|im_start|>tool\nsrc/main.rs:17<|im_end|><|im_start|>user\nOpen it.<|im_end|><|im_start|>assistant\n"
+    },
+    {
+     "name": "thinking_disabled",
+     "messages": [
+      {
+       "role": "user",
+       "content": "Say hi."
+      }
+     ],
+     "tools": null,
+     "kwargs": {
+      "enable_thinking": false
+     },
+     "add_generation_prompt": true,
+     "expected": "<|im_start|>user\nSay hi.<|im_end|><|im_start|>assistant\n<think></think>"
+    },
+    {
+     "name": "unicode",
+     "messages": [
+      {
+       "role": "system",
+       "content": "Réponds en français."
+      },
+      {
+       "role": "user",
+       "content": "Café naïve 日本語 😀 \"quoted\" \\ back"
+      }
+     ],
+     "tools": null,
+     "kwargs": {},
+     "add_generation_prompt": true,
+     "expected": "<|im_start|>system\nRéponds en français.<|im_end|><|im_start|>user\nCafé naïve 日本語 😀 \"quoted\" \\ back<|im_end|><|im_start|>assistant\n"
+    },
+    {
+     "name": "full_conversation_no_generation_prompt",
+     "messages": [
+      {
+       "role": "user",
+       "content": "Install httpx."
+      },
+      {
+       "role": "assistant",
+       "content": "<think>\nThe project uses uv.\n</think>\n\nRun `uv add httpx`."
+      }
+     ],
+     "tools": null,
+     "kwargs": {},
+     "add_generation_prompt": false,
+     "expected": "<|im_start|>user\nInstall httpx.<|im_end|><|im_start|>assistant\n<think></think><think>\nThe project uses uv.\n</think>\n\nRun `uv add httpx`.<|im_end|>"
+    }
+   ]
+  }
+ }
+}

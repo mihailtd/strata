@@ -20,10 +20,47 @@ def _normalize_name(name: str) -> str:
     return name.strip().lower().replace(".", "_").replace("-", "_")
 
 
+def _structure_matches(actual_val: Any, expected: Any) -> bool | None:
+    """Matches one BFCL answer candidate that is itself a STRUCTURE.
+
+    BFCL's possible-answer format encodes nested values with per-leaf allowed
+    lists: a dict parameter's candidate is `{"name": ["John Doe"], ...}` and a
+    list-of-dicts candidate is `[{"field": ["age"], ...}, ...]`. Comparing the
+    model's `{"name": "John Doe"}` to that with `==` can never succeed, which
+    silently failed every correct nested-argument call (found by reading the
+    raw failures: simple_89/94/96 were all exactly right). This descends the
+    way the official AST checker does.
+
+    Returns None when `expected` is not a structure this function owns, so the
+    caller falls through to its scalar comparisons.
+    """
+    if isinstance(expected, dict):
+        if not isinstance(actual_val, dict):
+            return False
+        for key, allowed in expected.items():
+            allowed_list = allowed if isinstance(allowed, list) else [allowed]
+            if key in actual_val:
+                if not _arg_matches(actual_val[key], allowed_list):
+                    return False
+            elif "" not in allowed_list and None not in allowed_list:
+                return False
+        # A key the answer key never mentions is a hallucinated argument.
+        return all(key in expected for key in actual_val)
+    if isinstance(expected, list) and expected and all(isinstance(e, dict) for e in expected):
+        if not isinstance(actual_val, list) or len(actual_val) != len(expected):
+            return False
+        return all(_structure_matches(a, e) for a, e in zip(actual_val, expected, strict=True))
+    return None
+
+
 def _arg_matches(actual_val: Any, allowed_list: list[Any]) -> bool:
     """Checks if actual argument value matches any of the allowed values."""
     if actual_val in allowed_list:
         return True
+
+    for expected in allowed_list:
+        if _structure_matches(actual_val, expected):
+            return True
 
     # Numeric comparison with type flexibility (e.g. 5.0 == 5)
     if isinstance(actual_val, (int, float)):

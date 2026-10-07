@@ -15,7 +15,7 @@ switch.
 | [`runtime-llama`](runtime-llama/) | Upstream `llama.cpp` baseline (HIP build) | 8001 | No — shell wrapper only |
 | [`runtime-ollama`](runtime-ollama/) | Upstream `ollama` baseline | 11434 | No — shell wrapper only |
 | [`runtime-vllm`](runtime-vllm/) | Upstream `vllm` baseline (ROCm) | 8004 | Yes |
-| [`runtime-next`](runtime-next/) | Experimental from-scratch Rust/HIP engine (skeleton only) | 8003 | n/a (Cargo, not uv) |
+| [`runtime-next`](runtime-next/) | **Strata** — High-throughput native Rust/HIP serving engine for Qwen 3.5 | 8003 | n/a (Cargo, not uv) |
 
 Non-runtime projects that also live in `apps/`: [`factory`](factory/) (the
 training pipeline — builds the LoRA adapters every engine above loads),
@@ -71,12 +71,12 @@ routing/speculation library (`novel_peft`, `cuda_graph`, `fused_norm`,
 Depends on `runtime-common` only, same as `runtime-triton` — does **not**
 import from `apps/runtime`.
 
-### `runtime-next` — experimental Rust rewrite
-A Cargo project, currently just a startup print statement and a handful of
-smoke tests (including one asserting its reserved port, 8003, to avoid
-collisions with everything else in this table). Exists to explore a
-zero-allocation, monolithic-HIP-Graph pipeline in Rust instead of Python —
-not yet a working engine.
+### `runtime-next` (`strata`) — Native Rust/HIP Serving Engine
+A native Rust engine with hand-written HIP device kernels for Qwen 3.5's hybrid
+Gated DeltaNet linear attention + full attention architecture on AMD hardware
+(`gfx1100`, `gfx90a`, `gfx942`). Zero heap allocation per token, byte-identical
+Jinja chat templating, tool calling, and dynamic In-Place Weight Folding (IPWF).
+See [`apps/runtime-next/README.md`](runtime-next/README.md) for architecture and build details.
 
 ### `runtime-common`
 Not a server. Just `canon.py` (the single source of truth for

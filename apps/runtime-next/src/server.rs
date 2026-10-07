@@ -251,6 +251,11 @@ impl Engine {
                 total as f64 / (1024.0 * 1024.0 * 1024.0),
             );
         }
+        eprintln!(
+            "[runtime-next] chat template: {} | stop token ids: {:?}",
+            tokenizer.template_source().unwrap_or("built-in Qwen3.5 fallback (snapshot ships none)"),
+            tokenizer.stop_ids()
+        );
         let logits: DeviceBuffer<u16> = DeviceBuffer::alloc(VOCAB_SIZE).map_err(|e| e.to_string())?;
         Ok(Engine {
             weights,
@@ -589,6 +594,23 @@ impl Engine {
         seed: Option<u64>,
         resume: Option<&str>,
     ) -> Result<usize, String> {
+        let json: Vec<serde_json::Value> =
+            messages.iter().map(|(r, c)| serde_json::json!({"role": r, "content": c})).collect();
+        self.start_request_json(&json, tools, sampling, seed, resume, None)
+    }
+
+    /// The general form: full OpenAI message objects rendered with the model's
+    /// OWN chat template (`ChatTokenizer::render_chat`), plus the request's
+    /// `chat_template_kwargs` passed through to the template.
+    fn start_request_json(
+        &mut self,
+        messages: &[serde_json::Value],
+        tools: Option<&[serde_json::Value]>,
+        sampling: SamplingParams,
+        seed: Option<u64>,
+        resume: Option<&str>,
+        template_kwargs: Option<&serde_json::Map<String, serde_json::Value>>,
+    ) -> Result<usize, String> {
         let base_position = match resume {
             None => {
                 self.state.reset().map_err(|e| e.to_string())?;
@@ -624,7 +646,7 @@ impl Engine {
         };
         self.sampling = sampling;
         self.rng = make_rng(seed);
-        let prompt = self.tokenizer.apply_chat_template_with_tools(messages, tools);
+        let prompt = self.tokenizer.render_chat(messages, tools, template_kwargs)?;
         let prompt_ids = self.tokenizer.encode(&prompt)?;
         if base_position + prompt_ids.len() >= max_seq_len() {
             return Err(format!(
@@ -676,8 +698,9 @@ impl Engine {
     /// would require per-slot weights, which is a different engine.
     fn generate_batch(
         &mut self,
-        prompts: &[Vec<(String, String)>],
+        prompts: &[Vec<serde_json::Value>],
         tools: Option<&[serde_json::Value]>,
+        template_kwargs: Option<&serde_json::Map<String, serde_json::Value>>,
         max_tokens: usize,
         sampling: SamplingParams,
         seed: Option<u64>,
@@ -686,10 +709,15 @@ impl Engine {
         let n = prompts.len();
         let needs_alloc = self.batched.as_ref().map(|b| b.batch() != n || b.max_seq_len != max_seq_len()).unwrap_or(true);
         if needs_alloc {
+            // Free the old state BEFORE allocating the new one. Assigning
+            // `Some(new(..))` directly builds the new state while the old is
+            // still alive, so a size change briefly holds both: at 9B an 8-slot
+            // state (~4.3 GB) plus a 7-slot one OOMs with ~6.5 GB free. Measured
+            // 2026-09-24: every file's final, partial batch of the corpus
+            // generator failed this way.
+            self.batched = None;
             self.batched = Some(crate::model::BatchedDecodeState::new(n, max_seq_len()).map_err(|e| e.to_string())?);
         }
-
-        let eos = self.tokenizer.eos_token_id();
         let mut rngs: Vec<_> = (0..n).map(|i| make_rng(Some(seed.unwrap_or(0).wrapping_add(i as u64)))).collect();
         let mut out: Vec<(Vec<i32>, &'static str)> = (0..n).map(|_| (Vec::new(), "length")).collect();
         let mut done = vec![false; n];
@@ -700,8 +728,7 @@ impl Engine {
         // next prefill overwrites `self.logits`, then copy the finished state
         // into that slot.
         for (i, msgs) in prompts.iter().enumerate() {
-            let refs: Vec<(&str, &str)> = msgs.iter().map(|(r, c)| (r.as_str(), c.as_str())).collect();
-            prompt_tokens[i] = self.start_request(&refs, tools, sampling, seed, None)?;
+            prompt_tokens[i] = self.start_request_json(msgs, tools, sampling, seed, None, template_kwargs)?;
             let t = if sampling.temperature <= 0.0 {
                 argmax_sample(&self.logits).map_err(|e| e.to_string())?
             } else {
@@ -709,7 +736,7 @@ impl Engine {
                 sample_from_logits(&self.logits_host_scratch, &sampling, &mut rngs[i])
             };
             feed[i] = t;
-            if t == eos && !ignore_eos {
+            if self.tokenizer.is_stop(t) && !ignore_eos {
                 done[i] = true;
                 out[i].1 = "stop";
             } else {
@@ -745,7 +772,7 @@ impl Engine {
                     logits.copy_row_to_host(&mut self.logits_host_scratch, i * crate::model::VOCAB_SIZE).map_err(|e| e.to_string())?;
                     sample_from_logits(&self.logits_host_scratch, &sampling, &mut rngs[i])
                 };
-                if t == eos && !ignore_eos {
+                if self.tokenizer.is_stop(t) && !ignore_eos {
                     done[i] = true;
                     out[i].1 = "stop";
                     continue;
@@ -775,6 +802,13 @@ impl Engine {
     ) -> Result<Vec<(Vec<i32>, &'static str)>, String> {
         let needs_alloc = self.batched.as_ref().map(|b| b.batch() != n || b.max_seq_len != max_seq_len()).unwrap_or(true);
         if needs_alloc {
+            // Free the old state BEFORE allocating the new one. Assigning
+            // `Some(new(..))` directly builds the new state while the old is
+            // still alive, so a size change briefly holds both: at 9B an 8-slot
+            // state (~4.3 GB) plus a 7-slot one OOMs with ~6.5 GB free. Measured
+            // 2026-09-24: every file's final, partial batch of the corpus
+            // generator failed this way.
+            self.batched = None;
             self.batched = Some(crate::model::BatchedDecodeState::new(n, max_seq_len()).map_err(|e| e.to_string())?);
         }
         let bstate = self.batched.as_mut().expect("just ensured");
@@ -784,7 +818,6 @@ impl Engine {
 
         let mut logits: DeviceBuffer<u16> =
             DeviceBuffer::alloc(n * crate::model::VOCAB_SIZE).map_err(|e| e.to_string())?;
-        let eos = self.tokenizer.eos_token_id();
         let mut rngs: Vec<_> = (0..n).map(|i| make_rng(Some(seed.unwrap_or(0).wrapping_add(i as u64)))).collect();
         let mut out: Vec<(Vec<i32>, &'static str)> = (0..n).map(|_| (Vec::new(), "length")).collect();
         let mut done = vec![false; n];
@@ -798,7 +831,7 @@ impl Engine {
             self.logits.copy_to_host(&mut self.logits_host_scratch).map_err(|e| e.to_string())?;
             let t = sample_from_logits(&self.logits_host_scratch, &sampling, &mut rngs[i]);
             feed[i] = t;
-            if t == eos && !ignore_eos {
+            if self.tokenizer.is_stop(t) && !ignore_eos {
                 done[i] = true;
                 out[i].1 = "stop";
             } else {
@@ -829,7 +862,7 @@ impl Engine {
                     .copy_row_to_host(&mut self.logits_host_scratch, i * crate::model::VOCAB_SIZE)
                     .map_err(|e| e.to_string())?;
                 let t = sample_from_logits(&self.logits_host_scratch, &sampling, &mut rngs[i]);
-                if t == eos && !ignore_eos {
+                if self.tokenizer.is_stop(t) && !ignore_eos {
                     done[i] = true;
                     out[i].1 = "stop";
                     continue;
@@ -872,11 +905,19 @@ impl Engine {
 // apps/runtime-triton/server.py's real shape).
 // ---------------------------------------------------------------------------
 
-#[derive(Deserialize)]
-struct ChatMessage {
-    role: String,
-    #[serde(default)]
-    content: String,
+/// Messages are kept as raw JSON objects so everything an OpenAI client sends
+/// (`tool_calls`, `tool_call_id`, `content: null`, structured content parts)
+/// reaches the model's chat template intact. Only `role` is required.
+fn validate_messages(messages: &[serde_json::Value]) -> Result<(), String> {
+    if messages.is_empty() {
+        return Err("messages must not be empty".into());
+    }
+    for (i, m) in messages.iter().enumerate() {
+        if m.get("role").and_then(serde_json::Value::as_str).is_none() {
+            return Err(format!("messages[{i}] must be an object with a string \"role\""));
+        }
+    }
+    Ok(())
 }
 
 #[derive(Deserialize)]
@@ -884,7 +925,7 @@ struct ChatCompletionRequest {
     #[serde(default)]
     #[allow(dead_code)]
     model: String,
-    messages: Vec<ChatMessage>,
+    messages: Vec<serde_json::Value>,
     #[serde(default)]
     max_tokens: Option<usize>,
     #[serde(default)]
@@ -950,12 +991,76 @@ struct ChatCompletionRequest {
     /// (matching benchmark throughput measurement harnesses).
     #[serde(default)]
     ignore_eos: Option<bool>,
+    /// Extra chat-template variables, same field name and meaning as vLLM and
+    /// SGLang. Only `enable_thinking` (default true) is honoured.
+    #[serde(default)]
+    chat_template_kwargs: Option<serde_json::Value>,
 }
+
 
 #[derive(Serialize)]
 struct ResponseChatMessage {
     role: &'static str,
     content: String,
+    /// §137: real OpenAI `tool_calls`. Omitted entirely when the model made no
+    /// call, so a plain completion's wire format is byte-identical to what
+    /// this server has always returned -- this field is strictly ADDITIVE and
+    /// `content` still carries the full raw generation (including `<think>`),
+    /// which every existing benchmark in this repo already parses itself.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_calls: Option<Vec<ToolCallOut>>,
+}
+
+/// OpenAI's wire shape for one tool call. `arguments` is a JSON **string**
+/// (not an object) -- that is the actual OpenAI contract, and clients like
+/// OpenHands call `json.loads` on it, so encoding it any other way would break
+/// them.
+#[derive(Serialize)]
+struct ToolCallFunction {
+    name: String,
+    arguments: String,
+}
+
+#[derive(Serialize)]
+struct ToolCallOut {
+    id: String,
+    #[serde(rename = "type")]
+    kind: &'static str,
+    function: ToolCallFunction,
+}
+
+/// Turns one real generation into real OpenAI tool calls, or `None` when the
+/// model genuinely made no call. See `tool_parse` for why the server has to do
+/// this at all (the Qwen3.5 template's own format is XML, not JSON).
+fn build_tool_calls(
+    content: &str,
+    tools: Option<&[serde_json::Value]>,
+    id_seed: &str,
+) -> Option<Vec<ToolCallOut>> {
+    // No `tools` on the request means the model was never shown any, so any
+    // `<tool_call>`-looking text is ordinary prose and must stay prose.
+    tools?;
+    let parsed = crate::tool_parse::parse_tool_calls(content, tools);
+    if parsed.is_empty() {
+        return None;
+    }
+    Some(
+        parsed
+            .into_iter()
+            .enumerate()
+            .map(|(i, c)| ToolCallOut {
+                id: format!("call_{id_seed}_{i}"),
+                kind: "function",
+                function: ToolCallFunction {
+                    name: c.name,
+                    // Serializing an object we just built cannot fail; the
+                    // fallback keeps this total rather than panicking a server.
+                    arguments: serde_json::to_string(&c.arguments)
+                        .unwrap_or_else(|_| "{}".to_string()),
+                },
+            })
+            .collect(),
+    )
 }
 
 #[derive(Serialize)]
@@ -994,6 +1099,21 @@ struct ChunkDelta {
     role: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
+    /// §137: streamed tool calls. Emitted once, complete, at the end of the
+    /// stream (see `stream_chat_completion`), never in fragments.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_calls: Option<Vec<ToolCallDeltaOut>>,
+}
+
+/// Streaming form of `ToolCallOut`: OpenAI's delta protocol adds `index` so a
+/// client can accumulate fragments per call. Sending each call whole in one
+/// delta is a valid use of that protocol -- a client that concatenates
+/// fragments receives exactly one fragment per index.
+#[derive(Serialize)]
+struct ToolCallDeltaOut {
+    index: u32,
+    #[serde(flatten)]
+    call: ToolCallOut,
 }
 
 #[derive(Serialize)]
@@ -1131,6 +1251,7 @@ fn stream_chat_completion(
     prompt_tokens: usize,
     max_tokens: usize,
     ignore_eos: bool,
+    tools: Option<&[serde_json::Value]>,
 ) {
     let write_result = (|| -> std::io::Result<()> {
         write!(
@@ -1139,30 +1260,25 @@ fn stream_chat_completion(
         )?;
 
         let id = completion_id();
-        let role_frame = sse_frame_bytes(&id, ChunkDelta { role: Some("assistant"), content: None }, None);
+        let role_frame = sse_frame_bytes(&id, ChunkDelta { role: Some("assistant"), content: None, tool_calls: None }, None);
         write_sse_frame(&mut *writer, &role_frame)?;
-
-        let eos = engine.tokenizer.eos_token_id();
         let mut generated_ids: Vec<i32> = Vec::new();
         let mut prev_text_len = 0usize;
+        let mut full_text = String::new();
         let t0 = std::time::Instant::now();
-        loop {
+        let mut finish: &'static str = loop {
             if generated_ids.len() >= max_tokens || engine.context_exhausted() {
-                let frame = sse_frame_bytes(&id, ChunkDelta { role: None, content: None }, Some("length"));
-                write_sse_frame(&mut *writer, &frame)?;
-                break;
+                break "length";
             }
             let next_id = match engine.step() {
                 Ok(next_id) => next_id,
                 Err(e) => return Err(std::io::Error::other(e)),
             };
-            if next_id == eos && !ignore_eos {
-                let frame = sse_frame_bytes(&id, ChunkDelta { role: None, content: None }, Some("stop"));
-                write_sse_frame(&mut *writer, &frame)?;
-                break;
+            if engine.tokenizer.is_stop(next_id) && !ignore_eos {
+                break "stop";
             }
             generated_ids.push(next_id);
-            let full_text = engine.tokenizer.decode(&generated_ids).map_err(std::io::Error::other)?;
+            full_text = engine.tokenizer.decode(&generated_ids).map_err(std::io::Error::other)?;
             // Emit only the new suffix -- decoding the whole growing
             // sequence each step (not token-by-token) correctly handles
             // multi-token UTF-8/BPE merge boundaries.
@@ -1171,9 +1287,27 @@ fn stream_chat_completion(
             if delta_text.is_empty() {
                 continue;
             }
-            let frame = sse_frame_bytes(&id, ChunkDelta { role: None, content: Some(delta_text) }, None);
+            let frame = sse_frame_bytes(&id, ChunkDelta { role: None, content: Some(delta_text), tool_calls: None }, None);
             write_sse_frame(&mut *writer, &frame)?;
+        };
+
+        // §137: tool calls are parsed from the COMPLETE text, once. Parsing
+        // incrementally would mean emitting a call before its closing tag
+        // proves it complete -- exactly the fabrication `tool_parse` refuses.
+        // Content was already streamed unchanged above, so a client that
+        // ignores `tool_calls` sees the same stream it always did.
+        if let Some(calls) = build_tool_calls(&full_text, tools, &unix_time_secs().to_string()) {
+            let deltas = calls
+                .into_iter()
+                .enumerate()
+                .map(|(i, call)| ToolCallDeltaOut { index: i as u32, call })
+                .collect();
+            let frame = sse_frame_bytes(&id, ChunkDelta { role: None, content: None, tool_calls: Some(deltas) }, None);
+            write_sse_frame(&mut *writer, &frame)?;
+            finish = "tool_calls";
         }
+        let finish_frame = sse_frame_bytes(&id, ChunkDelta { role: None, content: None, tool_calls: None }, Some(finish));
+        write_sse_frame(&mut *writer, &finish_frame)?;
 
         let elapsed = t0.elapsed();
         let elapsed_s = elapsed.as_secs_f64();
@@ -1602,7 +1736,11 @@ fn handle_chat_completions(mut request: Request, engine: &Mutex<Engine>) {
             return;
         }
     };
-    let messages: Vec<(&str, &str)> = req.messages.iter().map(|m| (m.role.as_str(), m.content.as_str())).collect();
+    if let Err(e) = validate_messages(&req.messages) {
+        let _ = request.respond(json_response(400, &serde_json::json!({"error": e})));
+        return;
+    }
+    let template_kwargs = req.chat_template_kwargs.as_ref().and_then(serde_json::Value::as_object);
     let max_tokens = req.max_tokens.unwrap_or(DEFAULT_MAX_TOKENS);
     let ignore_eos = req.ignore_eos.unwrap_or(false);
 
@@ -1652,7 +1790,14 @@ fn handle_chat_completions(mut request: Request, engine: &Mutex<Engine>) {
     }
 
     let tools = req.tools.as_deref();
-    let prompt_tokens = match guard.start_request(&messages, tools, sampling, req.seed, req.resume.as_deref()) {
+    let prompt_tokens = match guard.start_request_json(
+        &req.messages,
+        tools,
+        sampling,
+        req.seed,
+        req.resume.as_deref(),
+        template_kwargs,
+    ) {
         Ok(n) => n,
         Err(e) => {
             let _ = request.respond(json_response(500, &serde_json::json!({"error": format!("prefill failed: {e}")})));
@@ -1696,10 +1841,12 @@ fn handle_chat_completions(mut request: Request, engine: &Mutex<Engine>) {
                     return;
                 }
             };
+            let tool_calls = build_tool_calls(&content, req.tools.as_deref(), &format!("{}_{i}", unix_time_secs()));
+            let finish_reason = if tool_calls.is_some() { "tool_calls" } else { finish };
             choices.push(ChatCompletionChoice {
                 index: i as u32,
-                message: ResponseChatMessage { role: "assistant", content },
-                finish_reason: finish,
+                message: ResponseChatMessage { role: "assistant", content, tool_calls },
+                finish_reason,
             });
         }
         let tok_s = if elapsed_s > 0.0 && total > 0 { total as f64 / elapsed_s } else { 0.0 };
@@ -1727,14 +1874,13 @@ fn handle_chat_completions(mut request: Request, engine: &Mutex<Engine>) {
         // entirely -- see `stream_chat_completion`'s own doc comment for
         // why (that path's chunked writer buffers 8KB with no flush).
         let writer = request.into_writer();
-        stream_chat_completion(writer, guard, prompt_tokens, max_tokens, ignore_eos);
+        stream_chat_completion(writer, guard, prompt_tokens, max_tokens, ignore_eos, req.tools.as_deref());
         return;
     }
 
     // Non-streaming: run the full decode loop to completion, then return
     // one JSON response.
     let mut generated_ids: Vec<i32> = Vec::new();
-    let eos = guard.tokenizer.eos_token_id();
     let mut finish_reason = "length";
     let t0 = std::time::Instant::now();
     for _ in 0..max_tokens {
@@ -1749,7 +1895,7 @@ fn handle_chat_completions(mut request: Request, engine: &Mutex<Engine>) {
                 return;
             }
         };
-        if next_id == eos && !ignore_eos {
+        if guard.tokenizer.is_stop(next_id) && !ignore_eos {
             finish_reason = "stop";
             break;
         }
@@ -1769,6 +1915,15 @@ fn handle_chat_completions(mut request: Request, engine: &Mutex<Engine>) {
             return;
         }
     };
+    // §137: a real tool call ends the turn with OpenAI's own
+    // `finish_reason="tool_calls"`, which is what agent loops (OpenHands
+    // included) branch on to execute the call instead of treating the turn as
+    // a final answer. A call cut off by `max_tokens` never parses (no closing
+    // tag), so "length" is preserved exactly when it is true.
+    let tool_calls = build_tool_calls(&content, req.tools.as_deref(), &unix_time_secs().to_string());
+    if tool_calls.is_some() {
+        finish_reason = "tool_calls";
+    }
     let response_body = ChatCompletionResponse {
         id: completion_id(),
         object: "chat.completion",
@@ -1776,7 +1931,7 @@ fn handle_chat_completions(mut request: Request, engine: &Mutex<Engine>) {
         model: MODEL_ID,
         choices: vec![ChatCompletionChoice {
             index: 0,
-            message: ResponseChatMessage { role: "assistant", content },
+            message: ResponseChatMessage { role: "assistant", content, tool_calls },
             finish_reason,
         }],
         usage: UsageInfo {
@@ -1823,11 +1978,14 @@ fn handle_chat_completions_batch(mut request: tiny_http::Request, engine: &Mutex
         return;
     }
 
-    let prompts: Vec<Vec<(String, String)>> = req
-        .batch
-        .iter()
-        .map(|e| e.messages.iter().map(|m| (m.role.clone(), m.content.clone())).collect())
-        .collect();
+    for (i, e) in req.batch.iter().enumerate() {
+        if let Err(err) = validate_messages(&e.messages) {
+            let _ = request.respond(json_response(400, &serde_json::json!({"error": format!("batch[{i}]: {err}")})));
+            return;
+        }
+    }
+    let prompts: Vec<Vec<serde_json::Value>> = req.batch.iter().map(|e| e.messages.clone()).collect();
+    let template_kwargs = req.chat_template_kwargs.as_ref().and_then(serde_json::Value::as_object);
 
     let mut guard = match engine.lock() {
         Ok(g) => g,
@@ -1855,7 +2013,7 @@ fn handle_chat_completions_batch(mut request: tiny_http::Request, engine: &Mutex
         top_k: req.top_k.unwrap_or(0),
     };
     let t0 = std::time::Instant::now();
-    let (results, prompt_tokens) = match guard.generate_batch(&prompts, None, max_tokens, sampling, req.seed, false) {
+    let (results, prompt_tokens) = match guard.generate_batch(&prompts, None, template_kwargs, max_tokens, sampling, req.seed, false) {
         Ok(r) => r,
         Err(e) => {
             let _ = request.respond(json_response(500, &serde_json::json!({"error": format!("batched generation failed: {e}")})));
@@ -1904,7 +2062,7 @@ fn handle_chat_completions_batch(mut request: tiny_http::Request, engine: &Mutex
 
 #[derive(Deserialize)]
 struct BatchCompletionEntry {
-    messages: Vec<ChatMessage>,
+    messages: Vec<serde_json::Value>,
 }
 
 #[derive(Deserialize)]
@@ -1927,6 +2085,9 @@ struct BatchCompletionRequest {
     /// per-slot adapters are not expressible here (§12f).
     #[serde(default)]
     adapter: Option<String>,
+    /// See `ChatCompletionRequest::chat_template_kwargs`.
+    #[serde(default)]
+    chat_template_kwargs: Option<serde_json::Value>,
 }
 
 /// Loads real weights, pre-loads initial LoRA adapters if specified, starts
@@ -1972,6 +2133,65 @@ pub fn run(port: u16, initial_loras: &[String]) -> Result<(), String> {
 mod tests {
     use super::*;
     use std::io::Cursor;
+
+    /// §137: pins the exact OpenAI wire shape of a tool call -- `arguments` is
+    /// a JSON STRING, `type` is "function", ids are unique per call -- since
+    /// that shape, not the parser, is the contract every client relies on.
+    #[test]
+    fn tool_calls_serialize_in_the_exact_openai_wire_shape() {
+        let tools = vec![serde_json::json!({"type": "function", "function": {
+            "name": "calculate_triangle_area",
+            "parameters": {"properties": {"base": {"type": "integer"}, "height": {"type": "integer"}}}
+        }})];
+        let content = "<think>\nok\n</think>\n<tool_call>\n<function=calculate_triangle_area>\n\
+            <parameter=base>\n10\n</parameter>\n<parameter=height>\n5\n</parameter>\n</function>\n</tool_call>";
+        let calls = build_tool_calls(content, Some(&tools), "t").expect("one call");
+        let msg = ResponseChatMessage { role: "assistant", content: content.to_string(), tool_calls: Some(calls) };
+        let v = serde_json::to_value(&msg).unwrap();
+        let call = &v["tool_calls"][0];
+        assert_eq!(call["type"], "function");
+        assert_eq!(call["id"], "call_t_0");
+        assert_eq!(call["function"]["name"], "calculate_triangle_area");
+        let args = call["function"]["arguments"].as_str().expect("arguments must be a JSON string");
+        assert_eq!(serde_json::from_str::<serde_json::Value>(args).unwrap(), serde_json::json!({"base": 10, "height": 5}));
+    }
+
+    /// Without `tools` on the request the model was never offered any, so the
+    /// response must be byte-identical to before §137: no `tool_calls` key.
+    #[test]
+    fn no_tools_on_the_request_means_no_tool_calls_key_at_all() {
+        let content = "<tool_call>\n<function=f>\n</function>\n</tool_call>";
+        assert!(build_tool_calls(content, None, "t").is_none());
+        let msg = ResponseChatMessage { role: "assistant", content: content.to_string(), tool_calls: None };
+        let v = serde_json::to_value(&msg).unwrap();
+        assert!(v.get("tool_calls").is_none(), "plain completions must keep their old wire shape");
+    }
+
+    /// `chat_template_kwargs.enable_thinking=false` must reproduce the upstream
+    /// Qwen3.5 template's `enable_thinking is false` branch byte-for-byte:
+    /// `{{- '<think>\n\n</think>\n\n' }}` after the assistant header.
+    #[test]
+    fn enable_thinking_switch_matches_the_upstream_template_branches() {
+        let tok = crate::tokenizer::ChatTokenizer::load(&crate::model_loader::locate_model_snapshot().unwrap()).unwrap();
+        let on = tok.apply_chat_template_full(&[("user", "hi")], None, true);
+        let off = tok.apply_chat_template_full(&[("user", "hi")], None, false);
+        assert_eq!(on, "<|im_start|>user\nhi<|im_end|>\n<|im_start|>assistant\n<think>\n");
+        assert_eq!(off, "<|im_start|>user\nhi<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n");
+        assert_eq!(tok.apply_chat_template_with_tools(&[("user", "hi")], None), on, "default path unchanged");
+    }
+
+    /// Streaming deltas carry OpenAI's per-call `index` alongside the flattened call.
+    #[test]
+    fn streamed_tool_call_delta_carries_index_and_flattened_call() {
+        let tools = vec![serde_json::json!({"name": "f", "parameters": {"properties": {}}})];
+        let calls = build_tool_calls("<tool_call>\n<function=f>\n</function>\n</tool_call>", Some(&tools), "t").unwrap();
+        let deltas: Vec<ToolCallDeltaOut> =
+            calls.into_iter().enumerate().map(|(i, call)| ToolCallDeltaOut { index: i as u32, call }).collect();
+        let v = serde_json::to_value(ChunkDelta { role: None, content: None, tool_calls: Some(deltas) }).unwrap();
+        assert_eq!(v["tool_calls"][0]["index"], 0);
+        assert_eq!(v["tool_calls"][0]["function"]["name"], "f");
+        assert_eq!(v["tool_calls"][0]["function"]["arguments"], "{}");
+    }
 
     /// §127 decisive test: the real, server-level state-handoff capability
     /// (`Engine::snapshot_state` + `start_request`'s own `resume`
@@ -2699,7 +2919,7 @@ mod tests {
             let full_text = engine.tokenizer.decode(&generated_ids).expect("real decode failed");
             let delta_text = full_text.get(prev_text_len..).unwrap_or("").to_string();
             prev_text_len = full_text.len();
-            let frame = sse_frame_bytes(&id, ChunkDelta { role: None, content: Some(delta_text) }, None);
+            let frame = sse_frame_bytes(&id, ChunkDelta { role: None, content: Some(delta_text), tool_calls: None }, None);
             std::hint::black_box(&frame);
         }
         let b_elapsed = t0.elapsed();
@@ -2720,7 +2940,7 @@ mod tests {
             let full_text = engine.tokenizer.decode(&generated_ids).expect("real decode failed");
             let delta_text = full_text.get(prev_text_len..).unwrap_or("").to_string();
             prev_text_len = full_text.len();
-            let frame = sse_frame_bytes(&id, ChunkDelta { role: None, content: Some(delta_text) }, None);
+            let frame = sse_frame_bytes(&id, ChunkDelta { role: None, content: Some(delta_text), tool_calls: None }, None);
             write_sse_frame(&mut sink, &frame).expect("real in-memory write failed");
         }
         let c_elapsed = t0.elapsed();
@@ -2814,7 +3034,7 @@ mod tests {
 
         let engine_mutex = std::sync::Mutex::new(engine);
         let guard = engine_mutex.lock().expect("lock failed");
-        stream_chat_completion(writer, guard, prompt_tokens, 10_000, false);
+        stream_chat_completion(writer, guard, prompt_tokens, 10_000, false, None);
 
         let engine = engine_mutex.into_inner().expect("mutex poisoned");
         let tokens_generated = engine.state.position - position_before;

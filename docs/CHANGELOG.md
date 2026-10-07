@@ -19,9 +19,247 @@ the intent — several techniques here were added, measured, and abandoned.
 | ~~v5~~ | v4 | `L_inert` on in-domain prompt tokens | ❌ failed — **weights deleted** |
 | ~~v5b~~ | v4 | `L_inert` on out-of-domain replay, pads unmasked | ❌ failed — **weights deleted** |
 | ~~v5c~~ | v4 | `L_inert` pad-masked, λ=0.5 | ⚠️ lost to crash — **weights deleted** |
-| **v6** | v5 | disposition corpora + dual-criterion stopping | **CANONICAL** |
+| v6 | v5 | disposition corpora + dual-criterion stopping | superseded by v7 |
+| **v7** | v6 | round-2 corpora + two new domains; *entry reconstructed 2026-09-24* | **CANONICAL** (`CANON.ADAPTER_VERSION`) |
+| v8 | v6 | `agentic_coding` only — a re-run of v7; *entry reconstructed* | shipped for `agentic_coding` |
+| v9 | **v7** | served chat format + model-written reasoning per record | ❌ **not promoted** — style up, correctness down in 5 of 7 domains (4B) |
+
+> ⚠️ **v7 and v8 shipped without changelog entries.** The two entries below were
+> reconstructed on 2026-09-24 from the artifacts themselves (`adapter_config.json`,
+> `regime.json`, `geometry_trace.json`, file timestamps) and the §12 measurements in
+> `MEASURED_FINDINGS.md`. The training ledger (`results/factory.db`) could **not** be
+> used: it has no run matching the served 4B v7 adapters (their weights are dated
+> 2026-08-20; the earliest ledger v7 run is 2026-08-24), and several of its rows
+> report identical final geometry to eight decimal places across different runs.
+> Where a fact could not be recovered, the entry says so.
 
 ---
+
+## v9 — served chat format + reasoning in every record *(corpus v7)* ❌ NOT PROMOTED
+
+`CANON.ADAPTER_VERSION` stays **v7**. v9 improves the style axis and costs general
+correctness; it fails the "better on both axes" bar.
+
+### What changed from v7 — deliberately ONE thing
+Everything a v7 adapter was trained with is kept — r=8, α=128 (scaling 16), lr 2e-4,
+completion-only loss, and each size's own stopping rule (4B: first check with
+`‖ΔW‖/‖W‖` ≥ 0.071; 9B: 0.075, 150-step cap) — so any difference is attributable
+to the one change:
+
+**The training records are now rendered exactly as the served model sees them,
+with reasoning in the `<think>` block.**
+
+| | v7 | v9 |
+| :--- | :--- | :--- |
+| prompt | `### Question:\n{q}\n\n### Answer:\n` | `<\|im_start\|>user\n{q}<\|im_end\|>\n<\|im_start\|>assistant\n<think>\n` |
+| target | `{answer}` | `{reasoning}\n</think>\n\n{answer}<\|im_end\|>` |
+| reasoning in target | none (0 of 9,918 records) | every record |
+
+The v9 rendering is byte-identical to Qwen3.5's own chat template and to what
+`runtime-next` serves (`apps/factory/tests/test_chat_format_and_thinking.py` pins it
+against the real tokenizer). v7 was trained in a position the served model is
+never in.
+
+### Corpus v7
+Corpus v6 plus one reasoning trace per record, written by **Qwen3.5-9B itself**
+(`apps/factory/corpus/add_thinking.py`) — same model family, same voice, so the
+adapter is not taught to imitate a foreign style. The teacher sees the request and
+the known-good answer and writes the reasoning that precedes it: what the task needs,
+**which tool or idiom and why for this task** (polars vs pandas, uv vs pip, a
+dataclass and a function vs a class), then a plan. Each trace is validated: no code
+block, no reference to having seen an answer, 40–320 words.
+
+| domain | source | kept | rejected (why) | median words |
+| :--- | ---: | ---: | :--- | ---: |
+| agentic_coding | 1193 | 1179 | 14 (answer leak) | 131 |
+| python_modern | 1418 | 1384 | 34 (answer leak) | 139 |
+| python_web | 1511 | 1478 | 33 (answer leak) | 141 |
+| financial | 619 | 616 | 3 (answer leak) | 147 |
+| astral | 1396 | 1375 | 20 leak, 1 truncated | 138 |
+| duckdb | 1767 | 1743 | 23 leak, 1 too long | 142 |
+| postgresql | 2014 | 1977 | 37 (answer leak) | 142 |
+
+Rejected records are left out rather than given an empty think block. Full manifest:
+`apps/factory/data/corpus_v7_manifest.json`. Known limitation: traces are
+**rationalized** (written knowing the answer) and can state wrong things
+confidently — spot-checking found one ("a frozen `TypedDict`", which does not exist).
+
+### Measured — 4B, through the serving path
+`evals/factory/compare_adapter_generations.py`: `runtime-next`, real chat template,
+thinking on, greedy, adapters swapped per request, every raw completion stored
+(`results/benchmarks/adapter_generations_v7_vs_v9_4b.json`). Correctness = HumanEval
+pass@1 (164), paired exact McNemar. Style = the held-out disposition items scored on
+the **answer after `</think>`** (n = 7–8 per domain — one item is 12.5 points, so
+single-domain style moves are weak evidence), and for `agentic_coding` SEARCH/REPLACE
+format adherence on its 179 held-out tasks. Baseline arm = the shipped version (v8 for
+`agentic_coding`, v7 otherwise).
+
+Base: HumanEval **146/164**, ruff 0.60 findings per passing solution, median
+thinking 1,692 chars.
+
+| domain | style base / old / **v9** | HumanEval old → **v9** | paired −/+ | p | thinking chars old → v9 |
+| :--- | :---: | ---: | :---: | ---: | ---: |
+| agentic_coding | 0.00 / 0.04 / **0.50** | 100 → 100 | −19 / +19 | 1.0 | 77 → 904 |
+| python_modern | 0.25 / 0.31 / **0.44** | 110 → 103 | −30 / +23 | 0.41 | 713 → 800 |
+| python_web | 0.56 / 0.62 / 0.56 | 129 → **108** | −31 / +10 | **0.002** | 1021 → 782 |
+| astral | 0.19 / 0.56 / 0.56 | 140 → **127** | −24 / +11 | **0.04** | 1898 → 814 |
+| duckdb | 0.21 / 0.36 / **0.50** | 125 → **111** | −27 / +13 | **0.04** | 1456 → 780 |
+| postgresql | 0.44 / 0.44 / 0.50 | 136 → **112** | −35 / +11 | **0.0005** | 1678 → 796 |
+| financial | 0.56 / 0.19 / **0.56** | 141 → **122** | −22 / +3 | **0.0002** | 1645 → 776 |
+
+Mean HumanEval across the seven: v7/v8 **125.9** → v9 **111.9** (base 146).
+
+### What it means
+
+- **The format fix works — the adapters finally do what they were trained for.**
+  `agentic_coding` produced its SEARCH/REPLACE edits 3.9% → **49.7%** of the time;
+  v8 never even closed its think block on 93 of 179 tasks, v9 on 0. Style is up or
+  level in six of seven domains.
+- **It also makes the collateral damage fully live.** v7's non-code adapters barely
+  touched HumanEval (financial 141, astral 140) *because* they were trained off-position
+  and were half-inert when served. v9 is fully switched on, in both directions.
+- **v9 imposes its trace length on everything.** Every v9 adapter thinks ~800 chars on
+  HumanEval — the length of the corpus traces (~140 words) — against base's 1,692.
+  Where v7 had left thinking at base length, v9 roughly halved it, and those are the
+  domains that lost correctness.
+- **Two candidate causes, not yet separated:** (1) the weight change is too large —
+  scaling 16 at ~7% of `‖W‖`, which §12e showed matters; (2) the traces are too short,
+  so the adapter caps reasoning at half of base. `agentic_coding` is the one domain
+  where v9 *lengthened* thinking (77 → 904) and it is also the one that did not lose
+  correctness — consistent with (2).
+- **Retracted along the way:** an earlier reading of the `agentic_coding` pilot said
+  "thinking length is not the lever, magnitude is". The full table does not support
+  that; both remain open.
+
+### Measured — 9B (partial: 6 of 7 domains; evaluation paused 2026-09-24)
+Same instrument, 9B, base HumanEval **152/164**. To save GPU time the old arm's
+HumanEval was run only for `agentic_coding` and `python_modern` (see the retraction
+below for why the others were skipped).
+
+| domain | style base / old / **v9** | HumanEval old → **v9** |
+| :--- | :---: | ---: |
+| agentic_coding | 0.00 / 0.02 / **0.50** | 72 → **113** |
+| python_modern | 0.44 / 0.31 / **0.69** | 133 → **113** |
+| python_web | 0.50 / 0.44 / **0.62** | — → 115 |
+| astral | 0.31 / 0.56 / **0.69** | — → 119 |
+| duckdb | 0.29 / 0.29 / **0.50** | — → 131 |
+| postgresql | 0.38 / 0.69 / 0.69 | — → 121 |
+| financial | *not yet measured* | |
+
+At 9B, v9's style gains are larger and more uniform than at 4B (up in 5 of 6),
+and `agentic_coding` gains **41 HumanEval problems** over v8 — the think-collapse
+fix pays off more on the bigger model. But every v9 adapter still sits 21–39
+problems below base, and `python_modern` loses 20 against its v7.
+
+> ⚠️ **Retraction (2026-09-24).** An earlier version of this entry, the pipeline
+> comments and the eval-script help text said six 9B v7 adapters were "effectively
+> untrained", because their `regime.json`/`geometry_trace.json` record
+> `‖ΔW‖/‖W‖` ≈ 7×10⁻⁶. That was wrong. Measured directly from
+> `adapter_model.safetensors`, `m2_python_modern_r8a128_v7_9b` has
+> `‖Σ ΔW‖_F` = 45.78 — the same as the normally-trained v8 (45.38) and v9 (45.71)
+> — and it scores 133 on HumanEval, not base's 152. **The recorded geometry was a
+> measurement error in that training run's telemetry, not an untrained adapter.**
+> Consequence: the skipped old-arm HumanEval runs for five domains are real gaps,
+> not redundant measurements, and should be run before any 9B verdict.
+
+### Infrastructure built for v9
+- `train_expert.py --chat-format qwen` (served-format rendering, `<|im_end|>` stop,
+  records without reasoning skipped, `--max-length` 512 → 2048) and
+  `--skip-alpha-calibration` (the post-train alpha rewrite would change a second
+  variable; the served v7s predate it).
+- `runtime-next`: `chat_template_kwargs.enable_thinking` (vLLM/SGLang-compatible),
+  used to make the 9B teacher write the rationale directly — with its own reasoning
+  on, it spent all 2,048 tokens drafting and emitted nothing (32/32 in the pilot).
+- `runtime-next` bug fixed: changing batch size built the new batched decode state
+  before freeing the old one, OOMing the final partial batch at 9B.
+- The generator resumes after a crash (`--resume`); the pipeline
+  (`apps/factory/run_v9_pipeline.sh`) refuses to ship an adapter whose final
+  `‖ΔW‖/‖W‖` is below 0.01.
+- Evaluation-harness bug found and fixed before any number here was recorded: the
+  first run passed pre-cleaned code to `HumanEvalExecutor.execute`, which cleans
+  again and strips imports; every completion was re-executed from storage.
+
+### Next — v10
+Test cause (1) alone: the same corpus v7 and format, with the `‖ΔW‖/‖W‖` stopping
+target halved (0.071 → 0.036). If correctness returns and the style gains hold, v10
+ships; the thinking length it produces is also evidence on cause (2).
+
+## v8 — `agentic_coding` re-run on the same corpus *(corpus v6)* — reconstructed
+
+Only `agentic_coding` has a v8 (`m2_agentic_coding_r8a128_v8`, plus `_0_8b`, `_2b`,
+`_9b`, `_27b` size variants). Against its v7 the artifacts differ in exactly this:
+
+| | v7 | v8 |
+| :--- | ---: | ---: |
+| corpus | `agentic_coding/training_data_v6.jsonl` (1193) | same |
+| r / α / lr | 8 / 128 / 2e-4 | same |
+| stopped at step | 100 | 110 |
+| final `‖ΔW‖/‖W‖` | 0.07517 | 0.07522 |
+| relative growth at stop | 0.74% | 0.36% |
+| weights written | 2026-09-21 12:49 | 2026-09-21 14:00 |
+
+`adapter_config.json` differs only in the *order* of `target_modules`. No document,
+commit message or ledger row states why it was re-run. **Treat v8 as a re-roll of
+v7, not a new technique.** It is the version §12 measured (verified: the server log
+for that run, `results/benchmarks/server_4b_humaneval.log`, pre-loaded
+`m2_agentic_coding_r8a128_v8`).
+
+### Measured (§12, 4B, `runtime-next`, HumanEval, 164 problems)
+
+| arm | pass@1 | ruff findings / passing solution |
+| :--- | ---: | ---: |
+| base | **150** | 0.60 |
+| `agentic_coding` v8 @1.0 | 98 (**−52 net**: loses 55, wins 3) | **0.06** |
+
+Never run on a disposition eval.
+
+## v7 — round-2 corpora, two new domains *(corpus v6)* — reconstructed
+
+### Added
+- **Corpus v6** (the trainer's `--v7` help text: "round-2 rebuild: astral command
+  families, postgres asyncpg, duckdb analytics, python capability records").
+  Records per domain: astral 1396, postgresql 2014, duckdb 1767, financial 619,
+  python_modern 1418, python_web 1511, and a new **`agentic_coding`** domain, 1193.
+- **Size variants**: `_9b` and `_27b` for every domain (`agentic_coding`'s 27B is
+  v8), `_0_8b`/`_2b` for `python_modern` (and v8 `agentic_coding`), `_ornith35b` for
+  the six non-agentic domains.
+
+### Regime, as recovered from the artifacts
+r=8, α=128 (scaling **16**), lr 2e-4, completion-only loss, records rendered as
+`### Question: … ### Answer: …`. Every 4B v7 stopped at the **first geometry check
+at or above `‖ΔW‖/‖W‖` 0.071** (steps 70–80; `agentic_coding` 100). 0.071 is the only
+target consistent with all seven traces (python_modern stopped at 0.0722, which
+rules out 0.075).
+
+### ⚠️ Regression against v6, found during reconstruction
+v6's entry discarded the fixed geometric target as **under-training** and shipped
+dual-criterion stopping (plateau + ceiling). v7 went back to the fixed target: the
+trainer's defaults are `--stop-at-dw-over-w 0.065` with `--stop-at-plateau` off, and
+at the stop the large corpora were **still growing 7.8–8.2% per 10 steps** —
+the exact under-training signature v6 described. Only `agentic_coding` (0.74%) and
+`python_modern` (4.2%) were near convergence.
+
+### Measured (§12, 4B, `runtime-next`, 164 HumanEval problems + 32 aider tasks)
+
+| arm | HumanEval pass@1 | ruff / passing | aider (32, 5 turns) |
+| :--- | ---: | ---: | ---: |
+| base | **150** | 0.60 | **29** |
+| `python_modern` v7 @1.0 | 107 (**−43 net**) | **0.20** | 17 |
+| `python_modern` v7 @0.5 | — | — | 28 |
+
+**The style training works; correctness pays for it.** §12d traced the cause to the
+data: 0 of 1418 records contain reasoning, so with completion-only loss the adapter
+learned to answer without thinking (mean thinking 1934 → 823 chars). The other five
+domains were never measured on correctness, and no domain was measured on a
+disposition eval.
+
+### Known hazards in the serving path, found 2026-09-24
+- `runtime-next` resolves adapter names by **substring** (`name.contains(...)`), so
+  requesting `m2_x_r8a128_v7` after `m2_x_r8a128_v7_9b` is registered can bind the
+  wrong adapter. Several scorecards record only `"adapter": "agentic_coding"`, which
+  is ambiguous for exactly this reason.
+- Adapter state is **sticky**: a request without an `adapter` field runs under
+  whatever the previous request folded in. A "base" arm must name `"base"`.
 
 ## v6 — disposition corpora + dual-criterion stopping *(corpus v5)*
 

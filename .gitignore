@@ -1,9 +1,16 @@
+# Secrets and environment files
 .env
+.env*
+*.env
+**/.env*
+*.pem
+*.key
+id_rsa*
+.claude/
 .venv/
 __pycache__/
 *.pyc
 .python-version.local
-.claude/
 # results/ holds two very different things: 3.8 GB of adapter weights (must stay
 # out of git) and ~1.9 MB of benchmark JSON that is the actual EVIDENCE behind
 # every claim in README.md. The JSON is now tracked -- a repo that documents
@@ -74,3 +81,10 @@ target*/
 apps/runtime-llama/llama.cpp/
 .moon/cache/
 .moon/docker/
+
+# Caches and runtime logs
+.gradle/
+**/.gradle/
+apps/runtime-next/*.log
+apps/runtime-next/runtime-next.log
+*.log
