@@ -1,0 +1,29 @@
+name: Strata CI
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'apps/runtime-next/**'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'apps/runtime-next/**'
+      - '.github/workflows/ci.yml'
+
+jobs:
+  check-and-format:
+    name: Rustfmt & Clippy Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Check Formatting
+        run: cargo fmt --manifest-path apps/runtime-next/Cargo.toml --check

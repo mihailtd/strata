@@ -1,0 +1,100 @@
+name: Release Strata
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - 'strata-v*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  # ----------------------------------------------------------------------------
+  # Job 1: Build Precompiled Standalone Linux Binaries & Tarballs
+  # ----------------------------------------------------------------------------
+  build-binaries:
+    name: Build Native Binaries (${{ matrix.feature }})
+    runs-on: ubuntu-latest
+    container:
+      image: rocm/dev-ubuntu-22.04:6.2
+    strategy:
+      matrix:
+        include:
+          - feature: "qwen35_4b"
+            name: "strata-4b"
+          - feature: "qwen35_9b"
+            name: "strata-9b"
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install System Dependencies
+        run: |
+          apt-get update && apt-get install -y curl build-essential pkg-config libssl-dev hipblaslt-dev tar
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+
+      - name: Build Strata Binary
+        run: |
+          source $HOME/.cargo/env
+          cd apps/runtime-next
+          RUNTIME_NEXT_OFFLOAD_ARCH="gfx1100" cargo build --release --no-default-features --features "${{ matrix.feature }}"
+
+          mkdir -p dist
+          cp target/release/strata dist/${{ matrix.name }}
+          # Bundle the companion HIP kernel shared library
+          find target/release/build -name "libruntime_next_kernels.so" -exec cp {} dist/ \;
+
+          # Create distribution tarball
+          tar -czvf "../../${{ matrix.name }}-linux-x86_64-gfx1100.tar.gz" -C dist .
+
+      - name: Upload Artifact to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ matrix.name }}-linux-x86_64-gfx1100.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ----------------------------------------------------------------------------
+  # Job 2: Build & Publish OCI Container to GitHub Container Registry (ghcr.io)
+  # ----------------------------------------------------------------------------
+  publish-container:
+    name: Publish Container Image (ghcr.io)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Metadata & Tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/runtime-next/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            RUNTIME_NEXT_OFFLOAD_ARCH=gfx1100
+            STRATA_FEATURE=qwen35_4b
